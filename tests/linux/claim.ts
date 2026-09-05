@@ -101,6 +101,7 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
   await ui.section("Jellyfin");
   await ui.click('[data-action="jellyfin-settings"]');
   await until("physical TV input opens the real Jellyfin connection dialog", () => ui.execute("return !!document.querySelector('[role=dialog][data-tv-local-only]')"));
+  await until("Jellyfin Sources loads its protected configuration controls", () => ui.execute("return !!document.querySelector('[data-action=jellyfin-disconnect]:not(:disabled), #jellyfin-url:not(:disabled)')"));
   const jellyfin = await get("/api/jellyfin");
   const action = await ui.execute("return document.querySelector('[data-action=jellyfin-disconnect]') ? '[data-action=jellyfin-disconnect]' : '#jellyfin-url'");
   await ui.execute("window.__claimJellyfinValues = JSON.stringify([...document.querySelectorAll('.jellyfin-connect input')].map(input => input.value))");
