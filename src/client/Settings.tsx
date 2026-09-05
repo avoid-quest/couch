@@ -138,7 +138,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
       <Tabs defaultValue="general" className="min-w-0 gap-4">
-        <TabsList className="grid h-auto w-full grid-cols-2" aria-label="Settings sections">
+        <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
