@@ -61,6 +61,14 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
   await until("Radix moves remote arrow focus to the protected Sources tab without activating it", () => ui.execute("return document.activeElement?.textContent === 'Sources' && document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen'"));
   await navigate(ui, guest, until, "select");
   assert.equal(await ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen' && !document.querySelector('[aria-label=\"Jellyfin settings\"]')"), true, "Remote Enter cannot activate Sources after Radix deferred focus reaches its protected trigger");
+  await navigate(ui, guest, until, "left");
+  assert.equal(await ui.execute("return document.activeElement?.textContent === 'This screen'"), true, "Remote Left recovers the preceding ordinary tab after Sources owns Radix's only tab stop");
+  await navigate(ui, guest, until, "right");
+  await until("remote Right can focus protected Sources again", () => ui.execute("return document.activeElement?.textContent === 'Sources'"));
+  await navigate(ui, guest, until, "right");
+  assert.equal(await ui.execute("return document.activeElement?.textContent === 'Connection'"), true, "Remote Right recovers the next ordinary tab without opening Sources");
+  await navigate(ui, guest, until, "select");
+  await until("ordinary Connection tab still activates after protected-tab recovery", () => ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'Connection' && !document.querySelector('[aria-label=\"Jellyfin settings\"]')"));
   await closeSettings(ui, until);
   await ui.section("Library");
   await ui.click('[data-action="library-folders"]');

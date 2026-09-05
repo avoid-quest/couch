@@ -68,6 +68,15 @@ export function applyTvNavigation(key: NavigationKey) {
       ? document.activeElement : null;
     if (key !== "back" && target?.closest(localOnly)) {
       if (key === "select") return true;
+      const tablist = target.closest('[role="tablist"]');
+      if (tablist && target.matches('[role="tab"]') && (key === "left" || key === "right")) {
+        const tabs = [...tablist.querySelectorAll<HTMLElement>('[role="tab"]')];
+        const index = tabs.indexOf(target), direction = key === "left" ? -1 : 1;
+        for (let step = 1; step < tabs.length; step++) {
+          const candidate = tabs[(index + direction * step + tabs.length) % tabs.length]!;
+          if (visible(candidate) && !candidate.closest(localOnly)) { focus(candidate); return true; }
+        }
+      }
       target = null;
     }
     if (!target || target === scope) {
