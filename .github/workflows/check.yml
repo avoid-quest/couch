@@ -2,14 +2,22 @@ name: Check
 
 on:
   push:
+    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
 
 jobs:
   linux:
+    # Retargeting a PR changes its merge result; editing its title or body does not.
+    if: github.event.action != 'edited' || github.event.changes.base
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'linux' }}
     runs-on: ubuntu-24.04
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
