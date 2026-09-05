@@ -29,6 +29,7 @@ apt-get install -y --reinstall --no-install-recommends /qualification/couch.deb
 sha256sum -c /evidence/data-before-upgrade.sha256
 dpkg --verify couch
 dpkg-query -W couch > /evidence/installed-version.txt
+dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/production-packages.tsv
 /usr/bin/couch --version > /evidence/native-build.json
 /usr/bin/couch-server --version > /evidence/server-build.json
 cmp /evidence/native-build.json /evidence/server-build.json
@@ -39,6 +40,6 @@ dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/qualifi
 chown qualifier:qualifier /evidence
 touch /evidence/runtime-ready
 exec runuser -u qualifier -- env HOME=/home/qualifier COUCH_DATA_DIR=/home/qualifier/legacy-data \
-  COUCH_HOST=0.0.0.0 COUCH_PORT=4100 COUCH_ADVERTISE_URLS=http://127.0.0.1:44100 DISPLAY=:99 GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 \
+  COUCH_HOST=127.0.0.1 COUCH_PORT=44100 DISPLAY=:99 GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 \
   COUCH_BASIC_RENDERING=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
   dbus-run-session -- bash /qualification/display.sh

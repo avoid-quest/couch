@@ -6,5 +6,5 @@ openbox > /evidence/openbox.log 2>&1 &
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/evidence/pulseaudio.log
 pactl load-module module-null-sink sink_name=qualification > /evidence/audio-sink.txt
 pactl set-default-sink qualification
-WebKitWebDriver --host=0.0.0.0 --port=4445 > /evidence/browser-driver.log 2>&1 &
-exec /qualification/tauri-driver --host 0.0.0.0 --port 4444 > /evidence/native-driver.log 2>&1
+WebKitWebDriver --port=44445 > /evidence/browser-driver.log 2>&1 &
+exec /qualification/tauri-driver --port 44444 --native-port 44446 > /evidence/native-driver.log 2>&1

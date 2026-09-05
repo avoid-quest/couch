@@ -23,7 +23,7 @@ port and data. A failed coordinator causes the native owner to exit nonzero.
 Normal shutdown first closes the coordinator and its database. The compiled
 coordinator contains the real browser assets and serves the LAN remote on port
 4100. Packaged yt-dlp and Deno live in Tauri's resource directory under
-`/usr/lib/couch/tools`. The host passes their absolute paths to its child.
+`/usr/lib/Couch/tools`. The host passes their absolute paths to its child.
 
 The data default remains `$XDG_DATA_HOME/quest.avoid.couch`, or
 `$HOME/.local/share/quest.avoid.couch` when XDG_DATA_HOME is unset. The native host
@@ -69,7 +69,9 @@ On a configured Ubuntu build machine, `bun run package:build` prepares the
 verified helpers/notices and invokes the same locked Tauri build. Start with a
 clean committed source tree. `tests/package/qualify.ts` accepts the emitted Debian
 file and uses Docker plus the official tauri-driver 2.0.6 on the build machine.
-The Bun test runner stays outside the destination container.
+The Bun test runner stays outside the destination container. Linux Docker host
+networking connects that runner to tauri-driver's loopback-only listener. The
+native proxy, native WebDriver and HTTP-browser WebDriver use separate ports.
 
 The clean container first installs only the package's production closure through
 APT, records it and checks for forbidden development commands/libraries. It then
