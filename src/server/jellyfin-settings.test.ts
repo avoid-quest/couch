@@ -12,7 +12,7 @@ const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const userId = "b".repeat(32);
 
-function server(authWait?: () => Promise<void>) {
+function server(authWait?: () => Promise<void>, logoutWait?: () => Promise<void>) {
   let health = 200;
   let logins = 0;
   let logouts = 0;
@@ -28,7 +28,7 @@ function server(authWait?: () => Promise<void>) {
     if (!request.headers.get("Authorization")?.includes('Token="private-token"')) return new Response(null, { status: 401 });
     if (path === "/Users/Me") return health === 200 ? Response.json({ Id: userId, Name: "Family" }) : new Response("private upstream failure", { status: health });
     if (path === "/Items") return Response.json({ Items: [{ Id: "a".repeat(32), Name: "Family movie", Type: "Movie" }], TotalRecordCount: 1 });
-    if (path === "/Sessions/Logout") { logouts++; return new Response(null, { status: 204 }); }
+    if (path === "/Sessions/Logout") { logouts++; await logoutWait?.(); return new Response(null, { status: 204 }); }
     return new Response(null, { status: 404 });
   } });
   cleanup.push(() => upstream.stop(true));
@@ -45,14 +45,15 @@ function fixture() {
   let role: ControllerIdentity["authority"] | null = "administrator";
   const identity = (): ControllerIdentity | null => role ? { authority: role, controller: null, claimAvailable: false } : null;
   let changes = 0;
-  const settings = createJellyfinSettings({ jellyfin, invalidate: () => { changes++; } });
+  const notifications: { role: ControllerIdentity["authority"] | null; url: string | null }[] = [];
+  const settings = createJellyfinSettings({ jellyfin, invalidate: () => { changes++; notifications.push({ role, url: jellyfin.connection().url }); } });
   const request = (route: string, method = "GET", value?: unknown) => settings.handle(new Request(`http://localhost${route}`, { method, headers: { "Content-Type": "application/json" }, body: value === undefined ? undefined : JSON.stringify(value) }), identity);
   const configuration = () => {
     const db = new Database(path, { readonly: true });
     try { return db.query<{ configuration: string }, []>("SELECT configuration FROM jellyfin WHERE id = 1").get()!.configuration; }
     finally { db.close(); }
   };
-  return { jellyfin, settings, request, identity, configuration, role: (next: typeof role) => { role = next; }, changes: () => changes };
+  return { jellyfin, settings, request, identity, configuration, notifications, role: (next: typeof role) => { role = next; }, changes: () => changes };
 }
 
 test("only an administrator or physical host can manage Jellyfin and read its private address", async () => {
@@ -140,6 +141,23 @@ test("authorization is checked again after a delayed request body before login",
   expect((await pending).status).toBe(403);
   expect(upstream.logins()).toBe(0);
   expect(context.configuration()).toBeNull();
+});
+
+for (const action of ["replace", "disconnect"] as const) test(`${action} publishes its authorized configuration change before slow logout, with no later mutation after revocation`, async () => {
+  const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const original = server(undefined, () => { entered.resolve(); return gate.promise; });
+  const replacement = server(), context = fixture();
+  await context.request("/api/jellyfin", "POST", original.credentials);
+  const pending = action === "replace" ? context.request("/api/jellyfin", "POST", replacement.credentials) : context.request("/api/jellyfin", "DELETE");
+  await entered.promise;
+  const url = action === "replace" ? replacement.url : null;
+  expect(context.jellyfin.connection().url).toBe(url);
+  expect(context.notifications).toEqual([{ role: "administrator", url: original.url }, { role: "administrator", url }]);
+  context.role(null);
+  gate.resolve();
+  expect((await pending).status).toBe(200);
+  expect(context.changes()).toBe(2);
+  expect(context.notifications.every(notification => notification.role === "administrator")).toBe(true);
 });
 
 test("a claimed phone manages through the HTTP hub while ordinary controllers browse and profiles stay separate", async () => {

@@ -180,7 +180,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       }
       return status();
     },
-    async connect(input: { url: string; username: string; password: string }, authorize = () => {}) {
+    async connect(input: { url: string; username: string; password: string }, authorize = () => {}, changed = () => {}) {
       authorize();
       if (closed) throw new Error("The Jellyfin connection is closed.");
       if (typeof input.url !== "string" || input.url.length > 2048 || typeof input.username !== "string" || !input.username.trim() || input.username.length > 200 || typeof input.password !== "string" || input.password.length > 4096) throw new Error("Enter a server URL, username, and password.");
@@ -211,11 +211,12 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
         db.query("UPDATE jellyfin SET configuration = ? WHERE id = 1").run(JSON.stringify(next));
         configuration = next;
         api = candidate;
+        changed();
         await revoke(previous);
         return status();
       });
     },
-    async disconnect(authorize = () => {}) {
+    async disconnect(authorize = () => {}, changed = () => {}) {
       authorize();
       configurationGeneration++;
       const previous = api;
@@ -223,6 +224,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       configuration = null;
       api = null;
       db.run("UPDATE jellyfin SET configuration = NULL WHERE id = 1");
+      changed();
       await configure(async () => { await stopped; await revoke(previous); });
     },
     async items({ query = "", startIndex = 0, resume = false }: { query?: string; startIndex?: number; resume?: boolean } = {}): Promise<JellyfinItems> {

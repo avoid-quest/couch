@@ -24,13 +24,14 @@ function fixture() {
     status: () => ({ connected, serverName: connected ? "Living room" : null, username: connected ? "viewer" : null }),
     connection: () => ({ ...jellyfin.status(), url: connected ? "http://private-jellyfin:8096" : null }),
     test: async () => jellyfin.status(),
-    connect: async (input: { url: string; username: string; password: string }) => {
+    connect: async (input: { url: string; username: string; password: string }, _authorize?: () => void, changed?: () => void) => {
       connectCalls++;
       if (input.password === "private-password") throw new Error(`Upstream request failed: ${input.url}; password=${input.password}`);
       connected = true;
+      changed?.();
       return jellyfin.status();
     },
-    disconnect: async () => { connected = false; },
+    disconnect: async (_authorize?: () => void, changed?: () => void) => { connected = false; changed?.(); },
     items: async (options: { query?: string; startIndex?: number } = {}): Promise<JellyfinItems> => {
       if (options.query === "fail") throw new Error("Authorization: secret-token");
       return { items: [], total: 0, startIndex: options.startIndex ?? 0 };

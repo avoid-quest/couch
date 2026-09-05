@@ -57,11 +57,10 @@ export function createJellyfinSettings({ jellyfin, invalidate }: { jellyfin: Pic
         if (request.method === "POST") {
           const input = await credentials(request);
           authorize();
-          await jellyfin.connect(input, authorize);
+          await jellyfin.connect(input, authorize, invalidate);
         } else if (request.method === "DELETE") {
-          await jellyfin.disconnect(authorize);
+          await jellyfin.disconnect(authorize, invalidate);
         } else return methods("GET, POST, DELETE");
-        invalidate();
         return json(jellyfin.status());
       } catch (error) {
         try { authorize(); } catch (reason) { error = reason; }
