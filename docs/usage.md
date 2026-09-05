@@ -54,7 +54,8 @@ currently require restarting that command; Rust changes use Tauri's watcher.
 Open a file, add a local or mounted NAS folder in Library, browse Radio, or
 connect a Jellyfin server from the TV. Direct HTTP/HTTPS media URLs also work.
 Press play in the shared queue. Open the LAN address shown in the app on another device
-and enter its six-digit pairing code. Every remote controls this one player.
+and enter its six-digit pairing code. Give the remote a name so Settings can
+identify this browser. Every remote controls this one player.
 The TV always fills its display. Home opens browsing over the mounted player;
 Back closes the current menu, browsing view or playback controls. Phones and
 laptops have a dedicated controller interface with no video surface.
@@ -126,6 +127,64 @@ implementation is Linux-only. To produce a local macOS debug app:
 bun run desktop:build --debug --bundles app
 ```
 
+## Administrator and connection settings
+
+An unclaimed TV opens **Settings > General** with its local address, an address-only
+QR code, the six-digit controller pairing code and a separate ten-digit
+administrator code. Pair your phone first, then open its **Settings > General**
+and enter the administrator code. It expires after ten minutes and works once.
+If it expires before use, select **Get new code** on the TV. Competing first
+claims grant administration to one remote; existing paired devices remain ordinary
+controllers.
+
+The administrator phone can save the **TV name** in General. The committed name
+appears on the TV and other remotes, and survives restart. General shows the name
+read-only on the TV and ordinary remotes. Administrator status belongs to the
+paired browser credential. It does not change the watching profile, local history
+or connected Jellyfin account.
+
+**Connection** shows the TV address, connection status, and this remote's name
+and role. **Reconnect** keeps the browser paired and waits for a current snapshot
+before enabling controls. **Pair again** forgets this browser's current credential
+and returns to pairing. It does not revoke that credential on the server.
+Existing pairings migrate with their exact token hashes preserved and receive
+stable IDs and names such as Remote 1. They keep working after restart. Controller
+listing, renaming, revocation and role management remain in the
+[controller-management ticket](https://github.com/avoid-quest/couch/issues/11).
+
+Folder and Jellyfin connection setup still require local TV input. Paired D-pad
+commands cannot activate these controls, including actions in a dialog already
+opened locally or a nested portal. Back and Home can dismiss the protected dialog.
+Phone administration for [folders](https://github.com/avoid-quest/couch/issues/17)
+and [Jellyfin](https://github.com/avoid-quest/couch/issues/18) is separate work.
+
+### Recover administrator access
+
+Recovery requires trusted local access to the TV computer. Stop Couch, generate
+a fresh secret of 32 to 256 hexadecimal characters, and supply it through
+`COUCH_ADMIN_RECOVERY_CODE` when restarting the app. For example, use
+`openssl rand -hex 32` to generate a secret, then run these commands in a local
+Bash terminal, entering the secret at the hidden prompt:
+
+```bash
+read -rsp 'Recovery secret: ' COUCH_ADMIN_RECOVERY_CODE
+export COUCH_ADMIN_RECOVERY_CODE
+bun run desktop
+unset COUCH_ADMIN_RECOVERY_CODE
+```
+
+Pair the replacement browser, open **Settings > General**, and enter that secret
+in **Administrator code**. Its ten-minute deadline starts when the server first
+accepts the configured secret. Restarting with the same value neither extends
+that deadline nor makes a consumed secret reusable. An expired or consumed secret
+requires a fresh value and another local restart. Recovery grants administration
+to the replacement browser; it does not revoke the old administrator.
+
+Bun removes the recovery variable from its environment before starting media
+helpers. The server stores a hash, and never sends the secret in a snapshot or
+QR code. Recovery expiry, consumption and restart behavior are covered by the
+server tests. The native/HTTP gate tests first-time phone claiming and persistence.
+
 ## Music and saved playlists
 
 Add a music folder on the TV, then open Library's **Artists** or **Albums** tab
@@ -151,9 +210,9 @@ from an obsolete revision. Up to 100 playlists with 500 entries each persist
 across restart, without autoplay. Host paths and resolved provider streams do
 not appear in playlist HTTP responses.
 
-Queue transitions currently stop and load the next source. The latest native Linux
-capture measured 298.4 ms of silence between two lossless tracks, with unmatched
-edge samples retained in the measurement's loss/repetition bounds. Gapless
+Queue transitions currently stop and load the next source. The 2026-09-05
+Bandcamp qualification capture measured 298.4 ms of silence between two lossless
+tracks, with unmatched edge samples retained in the measurement's loss/repetition bounds. Gapless
 playback, ReplayGain, cue sheets and crossfade remain open feature gates.
 
 ### Bandcamp albums and tracks
@@ -278,14 +337,28 @@ local resume/history and watching profiles, Jellyfin resume, keyboard/focus and
 portal rendering, provider sessions, credential isolation and shutdown. Radio directory tests use
 controlled HTTP responses; public station searches were also checked manually.
 
-The 2026-09-05 integration run passed 408 native/remote checks with Jellyfin and
-live radio. The separate provider run passed eight public catalog-to-playback
-cases, TV and HTTP Bandcamp album flows, a missing-track failure check and restart
-persistence. Linux also passed 275 Bun tests with two skipped and 2,098 assertions,
-twelve app Rust/ABI tests and five libmpv DASH/resume/subtitle/radio regressions.
-The HTTP phone checks use a 390px viewport; native screenshots verify video and dialog/select
-composition. The compiled remote was also checked in the in-app browser at
-320, 375, 390, 768, 1024, 1440 and 1920px widths, with no video surface, horizontal
+The 2026-09-05 administrator/Settings integration run passed 450 native/HTTP
+checks with Jellyfin and live radio. Linux also passed 295 Bun tests with two
+skipped and 2,295 assertions, twelve app Rust/ABI tests and five libmpv
+DASH/resume/subtitle/radio regressions. Local checks passed 291 Bun tests with six
+skipped and 2,260 assertions; the local build and eight macOS Rust tests passed.
+The separate provider gate passed all eleven cases and restart persistence with
+the same production binaries.
+
+The HTTP phone checks use a 390px viewport; native screenshots verify video and
+dialog/select composition. The first administrator claim, TV-name save and
+restart ran through the real app with disposable data. API and store tests cover
+claim races, expiry, recovery, unchanged legacy pairing hashes and authorization
+rechecks before mutation. Native tests verify that paired D-pad input cannot
+activate pre-opened local folder or Jellyfin controls. A separate DOM regression
+covers the nested-portal case with an unguarded positive control.
+
+General and Connection were visually inspected in the in-app browser at 320,
+375, 390, 768, 1024, 1440 and 1920px widths; the native setup dialog and QR were
+also inspected. The development preview keeps the original five queue entries
+and pairings and remains unclaimed so the owner can claim their own phone.
+
+The earlier catalog and Bandcamp increment was checked at the same seven widths, with no video surface, horizontal
 page overflow or clipped action labels across all five catalogs. The Bandcamp
 22-track album also passed those seven viewport checks with decoded artwork.
 
@@ -369,6 +442,12 @@ metadata enrichment, cue sheets, ReplayGain, gapless audio, TV guides/DVR,
 CEC and hardware output qualification. Jellyfin remuxing/transcoding and DRM
 playback are not enabled. Speaker multiroom is later.
 
-The broader scope stays in the [feature matrix](research/feature-parity.md),
+Implementation pauses after the administrator/Settings increment. The
+[appliance map](https://github.com/avoid-quest/couch/issues/1) owns installation,
+Settings, controller management, output selection and updates. The linked
+[media map](https://github.com/avoid-quest/couch/issues/25) owns the remaining
+playback and library tickets. Publishing those tickets does not start them.
+
+The [feature matrix](research/feature-parity.md),
 [architecture](research/architecture.md), [playback research](research/playback.md)
-and [provider research](research/providers.md).
+and [provider research](research/providers.md) retain capability evidence and limits.

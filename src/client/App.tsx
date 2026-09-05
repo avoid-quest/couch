@@ -13,6 +13,7 @@ import { MediaArtwork, ProviderPanel } from "./ProviderPanel";
 import { Icon } from "./Icon";
 import { VideoStage } from "./VideoStage";
 import { QueuePanel } from "./QueuePanel";
+import { Settings } from "./Settings";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
 import { Gamepad2, LayoutGrid, House, SlidersHorizontal, ArrowUpRight } from "lucide-react";
@@ -49,6 +50,7 @@ export function App() {
   const [booting, setBooting] = useState(nativeHost);
   const [error, setError] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState("");
+  const [remoteName, setRemoteName] = useState("My remote");
   const [pairing, setPairing] = useState(false);
   const [quality, setQuality] = useState<VideoQuality>("best");
   const [section, setSection] = useState("Queue");
@@ -57,7 +59,7 @@ export function App() {
   const [visited, setVisited] = useState(new Set(["Queue"]));
   const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
-  const { state, status, connected, command } = useSession(credentials, key => navigation.current(key));
+  const { state, status, connected, command, reconnect } = useSession(credentials, key => navigation.current(key));
   const tv = useTvPresentation({ enabled: nativeHost, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   navigation.current = key => {
     if (!nativeHost) return;
@@ -155,7 +157,7 @@ export function App() {
         method: "POST",
         signal: AbortSignal.timeout(8_000),
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: pairingCode.trim() }),
+        body: JSON.stringify({ code: pairingCode.trim(), name: remoteName.trim() }),
       });
       const result = await response.json() as { token?: string; error?: string };
       if (!response.ok || !result.token) throw new Error(result.error || "Could not pair with the player.");
@@ -198,7 +200,12 @@ export function App() {
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
         <a className="brand" href="#main" aria-label="Couch, go to player" onClick={() => nativeHost ? tv.openHome() : setRemoteMode("browse")}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>couch<span className="brand-light">.avoid.quest</span></span></a>
-        <div className="header-status">{nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}{host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}<span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>{credentials && !nativeHost && <Button variant="ghost" className="text-button" onClick={unpair}><span className="pair-again-label">Pair again</span></Button>}</div>
+        <div className="header-status">
+          {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
+          {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
+          <span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>
+          {(!nativeHost || state) && <Settings credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} initialOpen={nativeHost && state?.administratorClaimed === false} />}
+        </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
           <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>
           <Button variant="ghost" aria-pressed={remoteMode === "control"} onClick={() => setRemoteMode("control")}><Gamepad2 aria-hidden="true" />Remote</Button>
@@ -219,9 +226,11 @@ export function App() {
             <p className="muted">{nativeHost ? "The local player and your remotes connect here." : "Enter the pairing code shown on the TV. This device becomes a remote for the same player."}</p>
             {nativeHost ? <Button disabled={booting} className="primary-button" onClick={() => setHostAttempt((attempt) => attempt + 1)}>{booting ? "Starting…" : "Try again"}</Button> : (
               <form onSubmit={pair} className="pair-form">
+                <Label htmlFor="remote-name">Remote name</Label>
+                <Input id="remote-name" autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required />
                 <Label htmlFor="pairing-code">Pairing code</Label>
                 <Input id="pairing-code" className="code-input" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="off" placeholder="000000" value={pairingCode} onChange={(event) => setPairingCode(event.target.value.replace(/\D/g, ""))} required autoFocus />
-                <Button className="primary-button" disabled={pairing || pairingCode.length !== 6}>{pairing ? "Connecting…" : "Connect"}</Button>
+                <Button className="primary-button" disabled={pairing || pairingCode.length !== 6 || !remoteName.trim()}>{pairing ? "Connecting…" : "Connect"}</Button>
               </form>
             )}
           </Card>

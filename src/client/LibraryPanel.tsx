@@ -116,10 +116,10 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <div className="library-heading flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0"><h2 className="text-2xl font-semibold">Your library</h2><p className="mt-1 text-sm text-muted-foreground">Music and video, ready to play.</p></div>
       <div className="library-folder-controls flex flex-wrap gap-2">
-        {host && <Button className="primary-button" onClick={() => void addFolder()} disabled={!connected || adding}><Plus aria-hidden="true" />{adding ? "Opening…" : "Add folder"}</Button>}
+        {host && <Button className="primary-button" data-tv-local-only onClick={() => void addFolder()} disabled={!connected || adding}><Plus aria-hidden="true" />{adding ? "Opening…" : "Add folder"}</Button>}
         {sources.length > 0 && <Dialog>
-      <DialogTrigger asChild><Button variant="outline" data-action="library-folders" aria-label={`${sources.length} library folder${sources.length === 1 ? "" : "s"}`}><FolderOpen aria-hidden="true" />Folders<Badge variant="secondary">{sources.length}</Badge>{sources.some(source => source.status === "scanning") && <span className="library-scan-indicator" aria-label="Scanning" />}</Button></DialogTrigger>
-      <DialogContent className="library-folders max-h-[85dvh] overflow-y-auto sm:max-w-xl">
+      <DialogTrigger asChild><Button variant="outline" data-action="library-folders" data-tv-local-only={host || undefined} aria-label={`${sources.length} library folder${sources.length === 1 ? "" : "s"}`}><FolderOpen aria-hidden="true" />Folders<Badge variant="secondary">{sources.length}</Badge>{sources.some(source => source.status === "scanning") && <span className="library-scan-indicator" aria-label="Scanning" />}</Button></DialogTrigger>
+      <DialogContent className="library-folders max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
         <DialogHeader><DialogTitle>Library folders</DialogTitle><DialogDescription>{host ? "Scan folders again after adding media. Network drives must be mounted on this player." : "These folders are managed on the TV."}</DialogDescription></DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <ul className="space-y-3">{sources.map(source => <li key={source.id}>
@@ -129,7 +129,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
             {host && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
             {source.error && <Alert variant="destructive"><AlertDescription>{source.error}</AlertDescription></Alert>}
             {source.warning && <p className="library-warning text-sm text-muted-foreground">{source.warning}</p>}
-            {host && <Button variant="outline" className="self-start" disabled={!connected || source.status === "scanning"} onClick={() => void scan(source.id)}>Scan again</Button>}
+            {host && <Button variant="outline" className="self-start" data-tv-local-only disabled={!connected || source.status === "scanning"} onClick={() => void scan(source.id)}>Scan again</Button>}
           </Card>
         </li>)}</ul>
       </DialogContent>

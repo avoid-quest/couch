@@ -5,6 +5,9 @@ import { createHub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 
 const native = process.env.COUCH_NATIVE === "1";
+const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
+// The one-time recovery secret must not reach media-helper subprocesses.
+delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
@@ -18,6 +21,7 @@ const hub = createHub({
   hostname: process.env.COUCH_HOST ?? "0.0.0.0",
   port: Number(process.env.COUCH_PORT ?? 4100),
   databasePath: join(dataDir, "couch.sqlite"),
+  adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   frontend,
   development: !native && process.env.NODE_ENV !== "production",

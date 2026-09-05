@@ -189,7 +189,38 @@ The threshold for Colyseus is concrete: reconsider it before implementing our ow
 
 ## LAN operation and failure ownership
 
-Show the local address/QR and a pairing code on the TV. Pair once, issue revocable device credentials, and check the allowed request origin and host. LAN-only means no cloud control-plane dependency; it does not mean random webpages or unpaired devices should control the player. Local media and cached library browsing must work without internet. Online providers still need their upstream connections.
+The TV shows its local address and an address-only QR code. Ordinary pairing
+uses six digits and creates a named controller with a stable ID. Migration keeps
+legacy token hashes unchanged, assigns names and IDs, and leaves every existing
+remote an ordinary controller. Controller credentials, watching profiles and TV
+presentation remain separate concepts.
+
+An unclaimed TV also shows a distinct ten-digit administrator code, valid for ten
+minutes and one claim from a paired phone. Bun checks the current credential at
+the mutation boundary, after reading the bounded request body. SQLite consumes
+the claim and grants the role in one immediate transaction; competing first
+claims produce one administrator. The committed role/name changes invalidate
+controller state and broadcast the saved installation name. The administrator
+phone edits the name; the native Settings UI and ordinary remotes show it read-only.
+
+Folder and Jellyfin setup remain host-only. Paired directional commands cannot
+activate local-only controls or move focus within a protected dialog, including
+a separately portalled child. The guard runs when the TV applies the queued
+navigation command. Back and Home can dismiss these dialogs. Native presentation
+therefore does not grant a remote caller the host's authority.
+
+Trusted-local recovery uses `COUCH_ADMIN_RECOVERY_CODE`; the
+[usage guide](../usage.md#recover-administrator-access) documents the operator steps.
+Only its hash persists. Restart preserves the original expiry and consumed state,
+and Bun removes the variable before media helpers can inherit it. Recovery adds
+an administrator without revoking the old credential. Full listing, renaming and
+immediate revocation remain in [controller management](https://github.com/avoid-quest/couch/issues/11).
+
+Requests still check the allowed origin and host. Local media and cached library
+browsing work without internet; online providers need their upstream connections.
+Connection offers Reconnect with the existing credential and Pair again, which
+forgets only this browser's credential. Controls wait for a fresh snapshot after
+reconnecting.
 
 Basic remote controls can work over local HTTP. Trusted HTTPS is required before depending on secure-context browser features such as an installed share target. The localhost exception belongs to the browser's own device, not another LAN IP. Removing Twitch embeds also removes that embed-specific hostname constraint from normal playback. [Secure contexts](https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy), [Web Share Target](https://developer.chrome.com/docs/capabilities/web-apis/web-share-target)
 

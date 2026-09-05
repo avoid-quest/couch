@@ -118,8 +118,8 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
     <div className="jellyfin-heading catalog-heading flex flex-wrap items-start justify-between gap-4">
       <div><h2 className="break-words text-2xl font-semibold">{status?.serverName || "Jellyfin"}</h2>{status?.connected && <p className="mt-1 text-sm text-muted-foreground">Watching as <strong className="font-medium text-foreground">{status.username || "the connected Jellyfin account"}</strong></p>}</div>
       {host && <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogTrigger asChild><Button variant="outline" data-action="jellyfin-settings" disabled={!connected || status === null}><Settings2 aria-hidden="true" />{status?.connected ? "Server settings" : "Connect Jellyfin"}</Button></DialogTrigger>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+        <DialogTrigger asChild><Button variant="outline" data-action="jellyfin-settings" data-tv-local-only disabled={!connected || status === null}><Settings2 aria-hidden="true" />{status?.connected ? "Server settings" : "Connect Jellyfin"}</Button></DialogTrigger>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg" data-tv-local-only>
           <DialogHeader><DialogTitle>{status?.connected ? "Jellyfin connection" : "Connect Jellyfin"}</DialogTitle><DialogDescription>{status?.connected ? `Watching history belongs to ${status.username || "the connected Jellyfin account"}. Every paired controller uses this account.` : "Connect once on the TV. Every paired controller can then browse your movies, episodes and music."}</DialogDescription></DialogHeader>
           {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           {status?.connected ? <div className="space-y-4">

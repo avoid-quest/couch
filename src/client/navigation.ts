@@ -3,14 +3,18 @@ import type { NavigationKey } from "../shared/protocol";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
 const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
-const visible = (element: HTMLElement) => !element.closest('[hidden], [inert], [aria-hidden="true"]')
+const localOnly = '[data-tv-local-only]';
+let remoteNavigation = false;
+const rendered = (element: HTMLElement) => !element.closest('[hidden]')
   && element.closest(portals)?.getAttribute("data-state") !== "closed"
-  && !element.matches(':disabled, [aria-disabled="true"]')
   && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
+const visible = (element: HTMLElement) => rendered(element) && !element.closest('[inert], [aria-hidden="true"]')
+  && !element.matches(':disabled, [aria-disabled="true"]');
 const lastVisible = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].filter(visible).at(-1);
 const navigationScope = () => lastVisible(portals) ?? lastVisible("[data-tv-navigation-scope]")
   ?? document.querySelector<HTMLElement>(".watch-mode") ?? document.body;
 const controlsIn = (scope: HTMLElement) => [...scope.querySelectorAll<HTMLElement>(focusable)].filter(element => visible(element)
+  && (!remoteNavigation || !element.closest(localOnly))
   && !element.matches('[role="tablist"], [role="tabpanel"]')
   && (element.tabIndex >= 0 || element.matches('[role="option"], [role^="menuitem"]')));
 
@@ -24,7 +28,8 @@ function moveFocus(key: string) {
   const scope = navigationScope();
   const controls = controlsIn(scope);
   const active = document.activeElement;
-  if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope) {
+  if (!(active instanceof HTMLElement) || !scope.contains(active) || !visible(active) || active === scope
+    || remoteNavigation && active.closest(localOnly)) {
     focus(controls[0]);
     return;
   }
@@ -52,30 +57,42 @@ function sendKey(target: HTMLElement, key: string) {
 // its real DOM, including Radix portals, without changing a controller's page.
 export function applyTvNavigation(key: NavigationKey) {
   if (key === "home" || key === "info") return false;
-  document.documentElement.setAttribute("data-keyboard", "");
-  const scope = navigationScope();
-  let target = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement) && visible(document.activeElement)
-    ? document.activeElement : null;
-  if (!target || target === scope) {
-    target = controlsIn(scope)[0] ?? scope;
-    focus(target);
-    // The first directional press establishes focus rather than skipping over it.
-    if (key !== "select" && key !== "back") return true;
+  // A nested Radix portal can aria-hide its parent dialog without closing it.
+  if (key !== "back" && [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.closest(localOnly) && rendered(element))) return true;
+  const previous = remoteNavigation;
+  remoteNavigation = true;
+  try {
+    document.documentElement.setAttribute("data-keyboard", "");
+    const scope = navigationScope();
+    let target = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement) && visible(document.activeElement)
+      ? document.activeElement : null;
+    if (key !== "back" && target?.closest(localOnly)) {
+      if (key === "select") return true;
+      target = null;
+    }
+    if (!target || target === scope) {
+      target = controlsIn(scope)[0] ?? scope;
+      focus(target);
+      // The first directional press establishes focus rather than skipping over it.
+      if (key !== "select" && key !== "back") return true;
+    }
+    if (key === "back") {
+      sendKey(target, "Escape");
+    } else if (key === "select") {
+      if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"]')) sendKey(target, "Enter");
+      else target.click();
+    } else {
+      const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
+      const slider = target.closest('[role="slider"]');
+      const crossSlider = slider && (slider.getAttribute("aria-orientation") === "vertical"
+        ? key === "left" || key === "right" : key === "up" || key === "down");
+      if (crossSlider || target.closest('[role="combobox"][aria-expanded="false"], input:not([role="combobox"]), textarea, [contenteditable="true"]')) moveFocus(arrow);
+      else sendKey(target, arrow);
+    }
+    return true;
+  } finally {
+    remoteNavigation = previous;
   }
-  if (key === "back") {
-    sendKey(target, "Escape");
-  } else if (key === "select") {
-    if (target.closest('[role="combobox"], [role="option"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="tab"]')) sendKey(target, "Enter");
-    else target.click();
-  } else {
-    const arrow = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key];
-    const slider = target.closest('[role="slider"]');
-    const crossSlider = slider && (slider.getAttribute("aria-orientation") === "vertical"
-      ? key === "left" || key === "right" : key === "up" || key === "down");
-    if (crossSlider || target.closest('[role="combobox"][aria-expanded="false"], input:not([role="combobox"]), textarea, [contenteditable="true"]')) moveFocus(arrow);
-    else sendKey(target, arrow);
-  }
-  return true;
 }
 
 // Radix owns navigation within its controls; spatial movement connects the rest.

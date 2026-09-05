@@ -18,6 +18,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const socket = useRef<WebSocket | null>(null);
   const ready = useRef(false);
   const pending = useRef(new Map<string, Pending>());
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
     setState(null);
@@ -97,7 +98,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current?.close();
       socket.current = null;
     };
-  }, [credentials?.origin, credentials?.token]);
+  }, [credentials?.origin, credentials?.token, reconnectAttempt]);
+
+  const reconnect = useCallback(() => {
+    ready.current = false;
+    setStatus("reconnecting");
+    setReconnectAttempt(attempt => attempt + 1);
+  }, []);
 
   const command = useCallback((action: Action) => {
     const connection = socket.current;
@@ -122,5 +129,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, connected: status === "connected" && !!credentials, command };
+  return { state, status, connected: status === "connected" && !!credentials, command, reconnect };
 }

@@ -137,6 +137,64 @@ async function pair(hub: Hub) {
   return (await response.json() as { token: string }).token;
 }
 
+test("a claimed phone names the TV for every controller and retains its authority after restart", async () => {
+  const initial = fixture();
+  const ownerToken = await pair(initial.hub), guestToken = await pair(initial.hub);
+  const first = new Peer(initial.hub, ownerToken), second = new Peer(initial.hub, guestToken);
+  await Promise.all([first.ready(), second.ready()]);
+  const api = (hub: Hub, token: string, path: string, method = "GET", body?: unknown) => fetch(`${hub.origin}${path}`, {
+    method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const originalProfile = first.state.activeProfile;
+  expect(first.state).toMatchObject({ installationName: "Couch", administratorClaimed: false });
+  expect((await api(initial.hub, guestToken, "/api/controllers/claim-code")).status).toBe(403);
+  expect((await api(initial.hub, guestToken, "/api/settings", "POST", { name: "Unapproved TV" })).status).toBe(403);
+  const codeResponse = await api(initial.hub, hostToken, "/api/controllers/claim-code");
+  expect(codeResponse.status).toBe(200);
+  const { code } = await codeResponse.json() as { code: string };
+  expect(code).toMatch(/^\d{10}$/);
+  expect((await api(initial.hub, ownerToken, "/api/controllers/claim", "POST", { code })).status).toBe(200);
+  await second.waitFor(message => message.type === "state" && message.state.administratorClaimed === true);
+  expect((await api(initial.hub, guestToken, "/api/controllers/claim", "POST", { code })).ok).toBe(false);
+  expect((await api(initial.hub, hostToken, "/api/controllers/claim-code")).status).toBe(409);
+  expect((await api(initial.hub, ownerToken, "/api/settings", "POST", { name: "Living room" })).status).toBe(200);
+  await second.waitFor(message => message.type === "state" && message.state.installationName === "Living room");
+  expect(second.state.activeProfile).toEqual(originalProfile);
+  expect(second.state.queue).toEqual([]);
+  expect(initial.commands).toEqual([]);
+  expect(JSON.stringify(second.messages)).not.toContain(code);
+  expect(JSON.stringify(second.messages)).not.toContain(hostToken);
+  const ownerIdentity = await (await api(initial.hub, ownerToken, "/api/controllers/me")).json();
+  expect(ownerIdentity).toMatchObject({ authority: "administrator", controller: { role: "administrator" }, claimAvailable: false });
+  await Promise.all([first.close(), second.close()]);
+  await initial.hub.close();
+  hubs.splice(hubs.indexOf(initial.hub), 1);
+  const restarted = fixture(initial.databasePath);
+  const remote = new Peer(restarted.hub, guestToken);
+  await remote.ready();
+  expect(remote.state).toMatchObject({ installationName: "Living room", administratorClaimed: true, currentEntryId: null });
+  expect(await (await api(restarted.hub, ownerToken, "/api/controllers/me")).json()).toMatchObject({ controller: ownerIdentity.controller, authority: "administrator" });
+  expect((await api(restarted.hub, guestToken, "/api/settings", "POST", { name: "Unauthorized" })).status).toBe(403);
+  expect(restarted.commands).toEqual([]);
+});
+
+test("named pairing keeps caller-supplied roles ordinary and rejects invalid names before saving", async () => {
+  const { hub } = fixture();
+  const request = (name: unknown) => fetch(`${hub.origin}/api/pair`, {
+    method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" },
+    body: JSON.stringify({ code: hub.pairingCode, name, role: "administrator" }),
+  });
+  expect((await request("\n")).status).toBe(400);
+  const response = await request("  Kitchen phone  ");
+  expect(response.status).toBe(200);
+  const paired = await response.json() as { token: string; controller: { name: string; role: string } };
+  expect(paired.controller).toMatchObject({ name: "Kitchen phone", role: "controller" });
+  expect(JSON.stringify(paired.controller)).not.toContain(paired.token);
+  expect(JSON.stringify(paired.controller)).not.toContain("token_hash");
+  expect(hub.session.state.administratorClaimed).toBe(false);
+});
+
 test("only authenticated controllers upload subtitle bytes, and native observations remain authoritative", async () => {
   const { hub, commands } = fixture();
   hub.session.observe(idle);
@@ -247,10 +305,11 @@ afterEach(async () => {
 
 test("paired controllers relay TV navigation only to trusted host sockets without changing shared state", async () => {
   const { hub, commands } = fixture();
+  const firstToken = await pair(hub), secondToken = await pair(hub);
   const host = new Peer(hub, hostToken);
   const secondHost = new Peer(hub, hostToken);
-  const first = new Peer(hub, await pair(hub));
-  const second = new Peer(hub, await pair(hub));
+  const first = new Peer(hub, firstToken);
+  const second = new Peer(hub, secondToken);
   await Promise.all([host.ready(), secondHost.ready(), first.ready(), second.ready()]);
   const state = JSON.stringify(hub.session.state);
   for (const [index, key] of (["up", "down", "left", "right", "select", "back", "home", "info"] as const).entries()) {

@@ -11,7 +11,8 @@ Read [architecture and shared state](architecture.md), [playback](playback.md), 
 | Area | Implemented | Remaining parity work |
 | --- | --- | --- |
 | TV/remote UI | Generated shadcn Mira preset `b1D0dv72`, neutral theme and Inter; fullscreen native TV with mounted VideoStage; separate browser remote, compact catalogs and phone directional pad; local retained browsing and focus restoration | Physical remote/CEC input and TV hardware qualification |
-| Shared controls | Paired WebSockets, current snapshots, persistent queue/volume, stale playback rejection and catalog invalidations | Controller management and physical remote/CEC input |
+| Shared controls | Named paired controllers over WebSockets, stable IDs, current snapshots, persistent queue/volume, stale playback rejection and catalog invalidations | Controller listing, renaming, revocation and role management in [Show connection status and manage paired remotes](https://github.com/avoid-quest/couch/issues/11); physical remote/CEC input |
+| Administration and Settings | Separate expiring first-administrator claim from a paired phone, address-only QR, durable shared TV name, Connection status/reconnect/pairing, preserved legacy credentials and trusted-local recovery; paired D-pad cannot invoke protected TV setup controls | Phone folder/Jellyfin administration and remaining Settings in the appliance map; the TV name is read-only in the native UI |
 | Native playback | Embedded libmpv, seek, tracks, subtitle off, chapters, speed and delays; private text-subtitle uploads; profile languages/subtitle mode/speed and device volume/audio-delay persistence | Bitmap subtitle/font corpus and hardware/output qualification; subtitle search/download |
 | Local/NAS library | Selected local or OS-mounted folders, bounded metadata scans, FTS search, stable IDs, missing-mount recovery; named watching profiles, local resume/watched/history | Integrated SMB/NFS setup, video metadata/artwork and profile editing/removal |
 | Music and playlists | Maintained audio tag parser, artists/albums, numeric disc/track order, authenticated embedded artwork; album queue/play; durable named playlists with revision-checked edit/load operations | Cue sheets, ReplayGain, measured gapless playback, crossfade, tag correction/writing and saved filters |
@@ -23,8 +24,14 @@ Read [architecture and shared state](architecture.md), [playback](playback.md), 
 
 The reproducible Linux test command and current limits are in [README](../../README.md). Implementation does not imply complete parity in a row.
 
+The administrator/Settings gate passed 450 native/HTTP checks with Jellyfin and
+live radio. The separate eleven-case provider gate used identical production
+binaries. General and Connection were visually inspected in the in-app browser
+at seven widths from 320 to 1920px. See [verification details](../usage.md#check-and-build)
+for test counts, first-claim and migration coverage, and hardware limits.
+
 Music qualification includes native/HTTP decoded artwork and playlist operations
-across restart. The recorded lossless queue transition contained 298.4 ms of
+across restart. The 2026-09-05 Bandcamp qualification transition contained 298.4 ms of
 silence; [playback evidence](playback.md) records the sample alignment and limits.
 Gapless, ReplayGain and cue sheets remain open despite upstream engine support.
 
@@ -35,7 +42,13 @@ album tracks and the suggested FTL album have no native playback qualification.
 The [provider evidence](providers.md#public-provider-checks) records the exact
 samples and the deliberately missing track's failure.
 
-The [implementation status](../../README.md) records the working first slice and actual Linux software-rendering tests. It covers only part of R1. The broad acceptance gates in this matrix remain open.
+Implementation pauses after the administrator/Settings increment. The
+[appliance map](https://github.com/avoid-quest/couch/issues/1) owns installation,
+Settings, controller management, outputs and updates. The linked
+[media map](https://github.com/avoid-quest/couch/issues/25) owns the remaining
+playback and library work. Ticket publication does not start implementation.
+The [implementation status](../../README.md) covers only part of R1; the broad
+acceptance gates below remain open.
 
 ## Product capability matrix
 

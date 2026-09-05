@@ -14,6 +14,8 @@ import { createProviders } from "./providers";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPlaylists } from "./playlists";
+import { ControllerError, createControllers } from "./controllers";
+import type { ControllerIdentity } from "../shared/controllers";
 
 type HubOptions = {
   hostname?: string;
@@ -21,6 +23,7 @@ type HubOptions = {
   databasePath: string;
   hostToken: string;
   pairingCode?: string;
+  adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
   frontend?: HTMLBundle;
   development?: boolean;
@@ -75,6 +78,7 @@ export function createHub(options: HubOptions) {
   const library = createLibrary({ databasePath: options.databasePath, onChange: () => session.invalidate("library") });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
+  const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller") });
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => {
     const state = session.state;
     if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
@@ -116,7 +120,13 @@ export function createHub(options: HubOptions) {
           let body: unknown;
           try { body = await request.json(); } catch { return json({ error: "Invalid pairing request." }, 400); }
           if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return json({ error: "The pairing code is incorrect." }, 401);
-          return json({ token: store.pair() });
+          try {
+            const token = store.pair("name" in body ? body.name : undefined);
+            session.invalidate("controller");
+            return json({ token, controller: store.controllerForToken(token) });
+          } catch (error) {
+            return json({ error: error instanceof ControllerError ? error.message : "Could not save this remote. Check the TV's storage." }, error instanceof ControllerError ? error.status : 500);
+          }
         },
       },
     },
@@ -127,7 +137,16 @@ export function createHub(options: HubOptions) {
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = token === options.hostToken;
-      if (!trusted && !store.isPaired(token)) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      const identity = (): ControllerIdentity | null => {
+        if (closed) return null;
+        if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
+        const controller = store.controllerForToken(token);
+        return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
+      };
+      const caller = identity();
+      if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
       return server.upgrade(request, { data: { trusted, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     },

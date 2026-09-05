@@ -113,7 +113,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
       <div className="queue-heading"><h2 id="queue-title">Play queue <span className="count">{queue.length}</span></h2><p>Everyone can choose what plays next.</p></div>
       <div className="queue-header-actions">
         <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.playlistVersion ?? 0} queueCount={queue.length} />
-        {nativeHost && <Button variant="secondary" disabled={!connected || choosing} onClick={() => void chooseFile()}><FolderOpen aria-hidden="true" />{choosing ? "Opening…" : "Open file"}</Button>}
+        {nativeHost && <Button variant="secondary" data-tv-local-only disabled={!connected || choosing} onClick={() => void chooseFile()}><FolderOpen aria-hidden="true" />{choosing ? "Opening…" : "Open file"}</Button>}
         <Dialog open={open} onOpenChange={value => { setOpen(value); if (value) { setError(null); setNotice(""); } }}>
           <DialogTrigger asChild><Button disabled={!connected}><Plus aria-hidden="true" />Add media</Button></DialogTrigger>
           <DialogContent className="queue-add-dialog" onOpenAutoFocus={event => { event.preventDefault(); sourceRef.current?.focus(); }}>

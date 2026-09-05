@@ -3,6 +3,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaybackPreferences, ProfilePlaybackPreferences, QueueEntry } from "../shared/protocol";
 import type { HistoryItem, WatchingProfile } from "../shared/library";
+import type { Controller } from "../shared/controllers";
+import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
 
 type ProgressRow = Omit<HistoryItem, "watched"> & { watched: number };
@@ -35,8 +37,32 @@ export function openStore(path: string) {
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
   `);
 
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
+    db.transaction(() => {
+      db.run(`CREATE TABLE devices_named (
+        token_hash TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('controller', 'administrator')), createdAt INTEGER, lastSeenAt INTEGER
+      )`);
+      const devices = db.query<{ token_hash: string }, []>("SELECT token_hash FROM devices ORDER BY rowid").all();
+      for (const [index, device] of devices.entries()) db.query("INSERT INTO devices_named VALUES (?, ?, ?, 'controller', NULL, NULL)").run(device.token_hash, crypto.randomUUID(), `Remote ${index + 1}`);
+      db.run("DROP TABLE devices; ALTER TABLE devices_named RENAME TO devices;");
+    }).immediate();
+  }
+  db.run(`
+    CREATE TABLE IF NOT EXISTS controller_claims (
+      code_hash TEXT PRIMARY KEY, recovery INTEGER NOT NULL CHECK (recovery IN (0, 1)),
+      expiresAt INTEGER NOT NULL, consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
+    );
+    CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
+    INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
+  `);
+
   const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
   const hash = (token: string) => new Bun.CryptoHasher("sha256").update(token).digest("hex");
+  const controllerColumns = "id, name, role, createdAt, lastSeenAt";
+  const controller = (id: string) => db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE id = ?`).get(id);
+  const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
+  const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
 
   return {
@@ -98,13 +124,56 @@ export function openStore(path: string) {
     saveVolume(volume: number) {
       db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);
     },
-    pair() {
+    pair(name?: unknown) {
+      const label = controllerName(name === undefined ? "Remote" : name);
       const token = crypto.randomUUID() + crypto.randomUUID();
-      db.query("INSERT INTO devices VALUES (?)").run(hash(token));
+      const now = Date.now();
+      db.query("INSERT INTO devices VALUES (?, ?, ?, 'controller', ?, ?)").run(hash(token), crypto.randomUUID(), label, now, now);
       return token;
     },
     isPaired(token: string) {
       return token.length <= 128 && db.query("SELECT 1 FROM devices WHERE token_hash = ?").get(hash(token)) !== null;
+    },
+    controller,
+    controllerForToken(token: string) {
+      return token.length <= 128 ? db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
+    },
+    touchController(id: string) {
+      const now = Date.now();
+      db.query("UPDATE devices SET lastSeenAt = ? WHERE id = ? AND (lastSeenAt IS NULL OR lastSeenAt <= ?)").run(now, id, now - 60_000);
+    },
+    administratorExists,
+    controllerClaim(code: string) {
+      const row = claimRow(code);
+      return row ? { expiresAt: row.expiresAt, consumed: !!row.consumed } : null;
+    },
+    createControllerClaim(code: string, recovery: boolean) {
+      return db.transaction(() => {
+        if (!recovery) db.query("DELETE FROM controller_claims WHERE recovery = 0 AND consumed = 0 AND code_hash != ?").run(hash(code));
+        // Reconfiguring a recovery code must never extend its first expiry or revive it.
+        db.query("INSERT OR IGNORE INTO controller_claims (code_hash, recovery, expiresAt) VALUES (?, ?, ?)").run(hash(code), Number(recovery), Date.now() + 600_000);
+        const row = claimRow(code)!;
+        return { expiresAt: row.expiresAt, consumed: !!row.consumed };
+      }).immediate();
+    },
+    consumeControllerClaim(id: string, code: string): Controller {
+      return db.transaction(() => {
+        const device = controller(id);
+        if (!device) throw new ControllerError("Pair this device before connecting.", 401);
+        if (device.role !== "controller") throw new ControllerError("This remote is already an administrator.", 409);
+        const claim = claimRow(code);
+        if (!claim || claim.consumed || claim.expiresAt <= Date.now()) throw new ControllerError("The administrator code is invalid or expired.", 401);
+        if (!claim.recovery && administratorExists()) throw new ControllerError("This TV already has an administrator.", 409);
+        db.query("UPDATE devices SET role = 'administrator' WHERE id = ?").run(id);
+        db.query("UPDATE controller_claims SET consumed = 1 WHERE code_hash = ?").run(hash(code));
+        return controller(id)!;
+      }).immediate();
+    },
+    installationName() { return db.query<{ name: string }, []>("SELECT name FROM installation WHERE id = 1").get()!.name; },
+    renameInstallation(value: unknown) {
+      const name = controllerName(value);
+      db.query("UPDATE installation SET name = ? WHERE id = 1").run(name);
+      return name;
     },
     close() { db.close(); },
   };
