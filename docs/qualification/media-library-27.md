@@ -65,6 +65,20 @@ The selected current show description is applied to all retained episodes with t
 - Native/HTTP playable movie and multi-season fixture, decoded artwork, phone/tablet/desktop/TV screenshots, queue/play, source switching/cancellation, two-controller reconnect, and offline stopped restart: pending coordinated qualification.
 - Shared preview rebuild and artifact links/source/binary hashes: pending coordinated qualification.
 
+### Browsing source checks
+
+At browsing source `cb4750b9d1465e47eee82322e8a375063b89349a`, above catalog `29a93a44f2b54b42d9157e27c33fc7bcb1b134eb`, these commands completed with exit status **0**:
+
+| Command | Output artifact |
+| --- | --- |
+| `bun run typecheck` | `.artifacts/browsing/final-typecheck.log` |
+| `bun run build` | `.artifacts/browsing/final-build.log` |
+| `bun x tsc --ignoreConfig --noEmit --target ESNext --module Preserve --moduleResolution Bundler --types bun --skipLibCheck --strict tests/linux/video-library.ts tests/linux/video-library-fixture.ts` | `.artifacts/browsing/final-helper-typecheck.log` |
+
+The helper typecheck emits no output on success; its observed exit status is recorded here. The build produces the frontend and Darwin ARM Bun sidecar. The new native fixture and UI flows have not run, so these checks provide no native playback or visual acceptance evidence. The rebased browsing source is unchanged by `git range-diff`; the corrected catalog's full check result is recorded above.
+
+The video fixture retains its local five-case queue-entry-to-action conversion. Sharing it would also edit the music fixture helper, which is under concurrent harness ownership, without changing the queue restoration behavior needed by this ticket. The existing controller interactions and stopped-state assertions remain in their respective fixtures; no generic provider abstraction was added.
+
 ## Official references
 
 - [Kodi movie NFO](https://kodi.wiki/view/NFO_files/Movies), [episode NFO](https://kodi.wiki/view/NFO_files/Episodes), [TV show NFO](https://kodi.wiki/view/NFO_files/TV_shows)
