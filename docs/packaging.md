@@ -79,6 +79,12 @@ adds Xvfb, Openbox, a silent PulseAudio sink and WebDriver as qualification
 fixtures. It receives only the package, driver, generated media/data and test
 launcher files. No application source or developer runtime is mounted.
 
+Ubuntu's systemd dependency includes `systemd-dev`, which contains shared D-Bus
+XML and pkg-config directory metadata. The fixture records and verifies that
+its paths stay under `/usr/share`; this data-only package is the sole exception
+to the `-dev` package-name check. `libsystemd-dev`, `libudev-dev` and other
+development libraries remain forbidden.
+
 An older Debian version of the same binary is the upgrade fixture because no
 previous production release exists. The test adopts an existing profile,
 authorized remote, library source and extra data file, upgrades to the exact

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'qualification_status=$?; if [ "$qualification_status" -ne 0 ]; then echo "Runtime qualification failed with status $qualification_status; see container.log" > /evidence/runtime-failed; fi' EXIT
 export DEBIAN_FRONTEND=noninteractive
 dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/base-packages.tsv
 apt-get update
@@ -11,7 +12,10 @@ dpkg-query -L couch > /evidence/package-files.txt
 for command in bun node npm cargo rustc cc gcc g++ make; do
   if command -v "$command"; then echo "Unexpected development command: $command"; exit 1; fi
 done
-if dpkg-query -W -f='${binary:Package}\n' | grep -E -- '(^build-essential$|-dev(:amd64)?$)'; then exit 1; fi
+# Ubuntu systemd depends on systemd-dev's shared XML/directory metadata, not development libraries.
+dpkg-query -L systemd-dev > /evidence/systemd-dev-files.txt
+if grep -vE '^/(\.|usr(/share(/.*)?)?)$' /evidence/systemd-dev-files.txt; then exit 1; fi
+if dpkg-query -W -f='${binary:Package}\n' | grep -v '^systemd-dev$' | grep -E -- '(^build-essential$|-dev(:amd64)?$)'; then exit 1; fi
 ldd /usr/bin/couch > /evidence/native-linkage.txt
 ldd /usr/bin/couch-server > /evidence/server-linkage.txt
 if grep 'not found' /evidence/*-linkage.txt; then exit 1; fi

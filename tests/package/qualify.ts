@@ -78,7 +78,11 @@ const command = (action: unknown) => new Promise<void>((accept, reject) => {
   socket!.send(JSON.stringify({ type: "command", requestId, action }));
 });
 try {
-  await until("Clean APT install, upgrade and reinstall complete", async () => Bun.file(`${root}/runtime-ready`).exists(), 240_000);
+  await until("Clean APT install, upgrade and reinstall complete", async () => {
+    const failure = Bun.file(`${root}/runtime-failed`);
+    if (await failure.exists()) throw new Error(await failure.text());
+    return Bun.file(`${root}/runtime-ready`).exists();
+  }, 240_000);
   await until("Official native driver starts", async () => fetch("http://127.0.0.1:44444/status").then(r => r.ok).catch(() => false));
   const start = async () => {
     native = (await driver(44444, "/session", { capabilities: { alwaysMatch: { browserName: "wry", "tauri:options": { application: "/usr/bin/couch" } } } })).sessionId;
