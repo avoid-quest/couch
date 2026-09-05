@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { WatchingProfile } from "../shared/library";
 import type { Action, PlaybackPreferences as Preferences, PlayerState } from "../shared/protocol";
 import type { Credentials } from "./session";
-import { PlaybackPreferences } from "./PlaybackPreferences";
+import { playbackDefault, type PlaybackDefaultSetting } from "../shared/playback-default";
+import { languageName } from "./playback-languages";
 
 type Props = {
   player: PlayerState;
@@ -122,7 +122,9 @@ function DelayControl({ id, label, value, disabled, onApply }: {
 
 export function PlaybackSettings({ player, ready, connected, credentials, preferences, profile, onCommand }: Props) {
   const [pending, setPending] = useState(false);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
   const commandPending = useRef(false);
+  useEffect(() => setDefaultError(null), [player.playbackId, profile.id, connected]);
   const tracks = player.tracks ?? [];
   const audio = tracks.filter((track) => track.kind === "audio");
   const subtitles = tracks.filter((track) => track.kind === "subtitle");
@@ -157,6 +159,18 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
   const selectTrack = (kind: "audio" | "subtitle", index: number) => {
     if (player.playbackId) void run({ type: "track", playbackId: player.playbackId, kind, index });
   };
+  const saveDefault = (setting: PlaybackDefaultSetting, label: string, value: string) => {
+    const patch = playbackDefault(player, setting);
+    const saved = patch && Object.entries(patch).every(([key, value]) => preferences.profile[key as keyof typeof preferences.profile] === value);
+    return <div className="space-y-2">
+      <p className="text-sm text-muted-foreground" role="status">Default for {profile.name}: {value}</p>
+      <Button variant="outline" className="min-h-11" disabled={disabled || !patch || !!saved} aria-label={`Save ${label} as default`} onClick={async () => {
+        setDefaultError(null);
+        if (player.playbackId && !await run({ type: "savePlaybackDefault", profileId: profile.id, playbackId: player.playbackId, setting })) setDefaultError("Could not save this default. Check the connection and watching profile, then try again.");
+      }}>Save as default</Button>
+      {!patch && ready && setting !== "speed" && <p className="text-sm text-muted-foreground">This track has no saved language choice. Choose a default in Settings, Playback.</p>}
+    </div>;
+  };
 
   return (
     <div className="playback-settings">
@@ -165,14 +179,9 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
-            <DialogDescription>Audio, subtitles and timing for the TV. Changes appear on every paired remote.</DialogDescription>
+            <DialogDescription>Track, speed and subtitle changes last for this item. Save as default uses that choice for {profile.name} on the next item. All remotes see the TV's current choices.</DialogDescription>
           </DialogHeader>
-          <Tabs defaultValue="current">
-            <TabsList className="w-full" aria-label="Playback settings sections">
-              <TabsTrigger value="current">Current playback</TabsTrigger>
-              <TabsTrigger value="preferences">Saved preferences</TabsTrigger>
-            </TabsList>
-            <TabsContent value="current" className="grid gap-4 pt-2">
+          <div className="grid gap-4 pt-2">
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="playback-audio">Audio track</Label>
@@ -180,6 +189,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                       <SelectTrigger id="playback-audio" className="min-h-11 w-full"><SelectValue placeholder={audio.length ? "Choose audio" : "No audio tracks"} /></SelectTrigger>
                       <SelectContent>{audio.map((track) => <SelectItem key={track.id} value={String(track.index)} className="min-h-11">{track.label || track.language || `Audio ${track.index + 1}`}</SelectItem>)}</SelectContent>
                     </Select>
+                    {audio.length > 0 && saveDefault("audio", "audio language", languageName(preferences.profile.audioLanguage))}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="playback-subtitles">Subtitles</Label>
@@ -190,6 +200,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                         {subtitles.map((track) => <SelectItem key={track.id} value={String(track.index)} className="min-h-11">{track.label || track.language || `Subtitle ${track.index + 1}`}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {subtitles.length > 0 && saveDefault("subtitles", "subtitles", preferences.profile.subtitles === "off" ? "Off" : languageName(preferences.profile.subtitleLanguage))}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="playback-chapters">Chapter</Label>
@@ -207,23 +218,21 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                       if (player.playbackId) void run({ type: "speed", playbackId: player.playbackId, speed: Number(value) });
                     }}>
                       <SelectTrigger id="playback-speed" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>{[0.5, 0.75, 1, 1.25, 1.5, 2].map((speed) => <SelectItem key={speed} value={String(speed)} className="min-h-11">{speed === 1 ? "Normal" : `${speed}×`}</SelectItem>)}</SelectContent>
+                      <SelectContent>{[...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, player.speed ?? 1])].sort((a, b) => a - b).map((speed) => <SelectItem key={speed} value={String(speed)} className="min-h-11">{speed === 1 ? "Normal" : `${speed}×`}</SelectItem>)}</SelectContent>
                     </Select>
+                    {saveDefault("speed", "speed", preferences.profile.speed === 1 ? "Normal" : `${preferences.profile.speed}×`)}
                   </div>
                 </div>
+                {defaultError && <Alert variant="destructive"><AlertDescription>{defaultError}</AlertDescription></Alert>}
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
                 {player.subtitleError && <Alert variant="destructive"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
                 <Separator />
                 <div className="grid gap-5 sm:grid-cols-2" key={player.playbackId}>
-                  <DelayControl id="playback-audio-delay" label="Audio delay" value={player.audioDelay ?? 0} disabled={disabled || !audio.length} onApply={(delay) => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />
+                  <DelayControl id="playback-audio-delay" label="TV audio delay · all profiles" value={player.audioDelay ?? 0} disabled={disabled || !audio.length} onApply={(delay) => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />
                   <DelayControl id="playback-subtitle-delay" label="Subtitle delay" value={player.subtitleDelay ?? 0} disabled={disabled || !subtitles.length} onApply={(delay) => player.playbackId ? run({ type: "subtitleDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />
                 </div>
-                <p className="text-muted-foreground text-sm">Positive delay plays audio or shows subtitles later. Speed is saved for {profile.name}; audio delay is saved for this TV. Subtitle delay applies to this item only.</p>
-            </TabsContent>
-            <TabsContent value="preferences" className="pt-2">
-              <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={onCommand} />
-            </TabsContent>
-          </Tabs>
+                <p className="text-muted-foreground text-sm">Positive delay plays audio or shows subtitles later. TV audio delay is saved for every profile and item. Subtitle delay ends with this item. Edit saved languages, subtitle mode and speed in Settings, Playback.</p>
+          </div>
           <DialogFooter><DialogClose asChild><Button className="min-h-11">Done</Button></DialogClose></DialogFooter>
         </DialogContent>
       </Dialog>

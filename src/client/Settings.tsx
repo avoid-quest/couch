@@ -9,10 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ConnectionInfo } from "../shared/protocol";
+import type { Action, ConnectionInfo, PlaybackPreferences as Preferences } from "../shared/protocol";
+import type { WatchingProfile } from "../shared/library";
 import { SetupQr } from "./SetupQr";
 import { QualitySelect } from "./QualitySelect";
 import type { useVideoQualityPreference } from "./video-quality";
+import { PlaybackPreferences } from "./PlaybackPreferences";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
@@ -26,10 +28,13 @@ type Props = {
   version: number;
   onReconnect: () => void;
   onPairAgain: () => void;
+  profile?: WatchingProfile;
+  preferences?: Preferences;
+  onCommand: (action: Action) => Promise<boolean>;
   initialOpen?: boolean;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, initialOpen = false }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [draftName, setDraftName] = useState(name);
@@ -138,8 +143,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
       <Tabs defaultValue="general" className="min-w-0 gap-4">
-        <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
+        <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
+          <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
         </TabsList>
@@ -181,6 +187,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
               <Button type="submit" className="min-h-11" disabled={!canWrite || !code.trim()}>{pending ? "Claiming…" : "Claim administrator"}</Button>
             </form>
           </>}
+        </TabsContent>
+        <TabsContent value="playback" className="min-w-0">
+          {profile && preferences ? <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={onCommand} /> : <p className="text-muted-foreground">Connect to the TV to see the watching profile's saved defaults.</p>}
         </TabsContent>
         <TabsContent value="remote" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <QualitySelect id="default-video-quality" label="Default online-video quality" value={videoQualityPreference.quality} onChange={videoQualityPreference.save} />

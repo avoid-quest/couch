@@ -43,6 +43,8 @@ const child = Bun.spawn([
   "-metadata:s:s:0", "language=eng", "-t", "20", "/fixtures/multitrack.mkv",
 ], { stdout: "inherit", stderr: "inherit" });
 if (await child.exited !== 0) throw new Error("Cannot generate media fixture");
+const preference = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", "title=Playback preference fixture", "/fixtures/preferences.mkv"], { stdout: "inherit", stderr: "inherit" });
+if (await preference.exited !== 0) throw new Error("Cannot copy the preference fixture");
 const radio = Bun.spawn([
   "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "/fixtures/multitrack.mkv",
   "-map", "0:a:0", "-t", "10", "-c:a", "libmp3lame", "-map_metadata", "-1", "-map_chapters", "-1",

@@ -621,8 +621,13 @@ try {
   await httpRemote!.ui.key(keys.escape);
   await until("HTTP phone Escape restores the watching profile trigger", async () => await httpRemote!.ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.matches('.watching-profile')"));
   await httpRemote!.ui.section("Queue");
+  const preferenceItem = (await api("/api/library/items?q=Playback%20preference%20fixture&offset=0&limit=30")).items[0];
+  assert.equal(preferenceItem?.title, "Playback preference fixture", "Preferences use their own scanned multitrack file without changing the progress fixture");
+  const preferenceEntryId = crypto.randomUUID();
+  await clients[0]!.command({ type: "enqueueLibrary", itemId: preferenceItem.id, entryId: preferenceEntryId });
+  await until("preference fixture is queued through the scanned local library", () => all(state => state.queue.some(entry => entry.id === preferenceEntryId && entry.source === `library:${preferenceItem.id}`)));
   const queueBeforeRestart = clients[0]!.state!.queue.map(entry => entry.id);
-  const preferenceContext = { origin, ui, until, clients, httpRemote, otherRemote: secondHttpRemote, artifactDir, api, entryId: progressContext.switchEntryId };
+  const preferenceContext = { origin, ui, until, clients, httpRemote, otherRemote: secondHttpRemote, artifactDir, api, entryId: preferenceEntryId };
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);

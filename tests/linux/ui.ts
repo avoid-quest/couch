@@ -268,9 +268,19 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     ui.clickElement = async id => {
       await ui.revealElement(id);
       const target = { "element-6066-11e4-a52e-4f735466cecf": id };
-      await ui.execute("arguments[0].scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
-      await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-      const point = await ui.execute("const rect = arguments[0].getBoundingClientRect(); return { x: (rect.x + rect.width / 2) * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + (rect.y + rect.height / 2) * devicePixelRatio }", [target]);
+      let previous = "";
+      await ui.waitFor("HTTP click target becomes visible, unobstructed and stable", async () => {
+        await ui.execute("const element = arguments[0], rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
+        await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
+        const point = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
+          const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+          return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
+            ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [target]);
+        const stable = !!point && point === previous;
+        previous = point;
+        return stable;
+      });
+      const point = JSON.parse(previous);
       await ui.execute("const target = arguments[0]; window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { hit: target.contains(event.target), actual: event.target.getAttribute('aria-label') || event.target.textContent, intended: target.getAttribute('aria-label') || target.textContent }; }, { once: true, capture: true });", [target]);
       const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", `^${windowClass}$`], { stdout: "pipe", stderr: "inherit" });
       const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
