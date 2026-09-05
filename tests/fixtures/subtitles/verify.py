@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -14,6 +15,12 @@ from fontTools.ttLib import TTFont
 from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parent
+
+
+def uses_only_font(log, family="Couch Corpus Sans", postscript="CouchCorpusSans"):
+    selections = [line.split("fontselect: ", 1)[1] for line in log.splitlines() if "fontselect: " in line]
+    expected = rf"\({re.escape(family)}, \d+, \d+\) -> {re.escape(postscript)}, 0, {re.escape(postscript)}"
+    return bool(selections) and all(re.fullmatch(expected, selection) for selection in selections) and "selecting one more font" not in log
 
 
 def main():
@@ -45,7 +52,7 @@ def main():
     names = {record.toUnicode() for record in font["name"].names if record.nameID in (1, 4, 16)}
     check(names == {"Couch Corpus Sans"}, "Subset internal family and full names are unique")
 
-    streams = {}
+    streams, dvd_display_times = {}, []
     for name, expected in {
         "text": [("ssa", "eng", 1), ("ssa", "ita", 64), ("srt", "rus", 0)],
         "bitmap": [("pgssub", "eng", 64), ("dvdsub", "ita", 1)],
@@ -72,6 +79,8 @@ def main():
                     data = bytes(packet)
                     control = int.from_bytes(data[2:4], "big")
                     stop = int.from_bytes(data[control + 2:control + 4], "big")
+                    start_ticks = int.from_bytes(data[control:control + 2], "big")
+                    check(start_ticks == 0, f"VobSub at {pts}s: start command has zero display delay")
                     cursor, commands = control + 4, []
                     while data[cursor] != 255:
                         command = data[cursor]
@@ -80,6 +89,7 @@ def main():
                     check([command for command in commands if command in (0, 1)] == [0 if pts == 8 else 1], f"VobSub at {pts}s: forced/ordinary display command survives conversion")
                     stop_ms = int.from_bytes(data[stop:stop + 2], "big") * 1024 / 90
                     check(abs(stop_ms - 4000) < 12 and data[stop + 4] == 2, f"VobSub at {pts}s: stop command within one DVD clock tick")
+                    dvd_display_times.append({"packet_pts": pts, "start_ticks": start_ticks, "stop_ms": stop_ms})
                 packets.setdefault(packet.stream.index, []).append([pts, duration, len(subtitles)])
             streams[name] = packets
     check(streams["text"] == {1: [[2, 4, 1], [8, 4, 1]], 2: [[3, 2, 1]], 3: [[2, 4, 1], [8, 4, 1]]}, "Text cues retain exact timestamps and decode")
@@ -119,14 +129,16 @@ def main():
         image.paste(card, (200, 290), card)
         references[number] = image
         image.save(evidence / f"expected-image-{number}.png")
+    composite_errors = {}
     for track, title in [(0, "pgs"), (1, "vobsub")]:
         for seconds in (1, 3, 7, 9, 13):
             actual = frame("bitmap", seconds, f"{title}-{seconds}", ["-filter_complex", f"[0:v][0:s:{track}]overlay"])
             expected = references[1 if seconds == 3 else 2] if seconds in (3, 9) else blank
-            # Decoding to yuv420p can move white by one level. The exact bright
-            # glyph mask checks placement, scanline parity, shape and clearing.
-            mask = lambda image: image.convert("L").point(lambda value: 255 if value > 180 else 0)
-            check(ImageChops.difference(mask(actual), mask(expected)).getbbox() is None, f"{title} at {seconds}s: exact bright glyph mask or blank interval")
+            # The pinned RGB/yuv420p conversion differs by at most two levels.
+            # Compare every channel, including background under transparent pixels.
+            error = max(high for low, high in ImageChops.difference(actual, expected).getextrema())
+            composite_errors[f"{title}-{seconds}"] = error
+            check(error <= 2, f"{title} at {seconds}s: complete composite within two RGB levels, observed {error}")
 
     for track, title in [(0, "ass"), (1, "forced"), (2, "srt")]:
         for seconds in (1, 4, 7, 9, 13):
@@ -134,8 +146,8 @@ def main():
             box = ImageChops.difference(blank, actual).getbbox()
             visible = seconds == 4 or seconds == 9 and track != 1
             check(bool(box) == visible and (not box or box[1] > 230), f"{title} at {seconds}s: bounded glyphs or blank interval")
-    log = (evidence / "ass-9.log").read_text()
-    check("-> CouchCorpusSans, 0, CouchCorpusSans" in log and "failed to find any fallback" not in log, "Libass reference selects the attached font without missing-glyph fallback")
+    for seconds in (4, 9):
+        check(uses_only_font((evidence / f"ass-{seconds}.log").read_text()), f"Attached ASS at {seconds}s: fallback or unexpected font is forbidden")
 
     # Compare shapes to the complete original font, not a second render of the
     # same subset. This caught missing Arabic presentation-form cmap entries.
@@ -153,8 +165,10 @@ def main():
     (evidence / "original.ass").write_text(script.replace("Couch Corpus Sans", "DejaVu Sans"))
     for shaper in ("simple", "complex"):
         frames = [frame("background", 9, f"{font}-{shaper}", ["-vf", f"ass=verification/{font}.ass:fontsdir=verification:shaping={shaper}"]) for font in ("subset", "original")]
+        check(uses_only_font((evidence / f"subset-{shaper}.log").read_text()), f"Subset {shaper}: fallback or unexpected font is forbidden")
+        check(uses_only_font((evidence / f"original-{shaper}.log").read_text(), "DejaVu Sans", "DejaVuSans"), f"Original {shaper}: fallback or unexpected font is forbidden")
         check(ImageChops.difference(*frames).getbbox() is None, f"{shaper} shaping: mixed-script subset pixels equal complete upstream font")
-    output = {"scope": "Local format and FFmpeg reference validation only; no Couch/native/package/HTTP/hardware qualification.", "pyav": av.__version__, "libraries": av.library_versions, "ffmpeg": manifest["ffmpeg"], "streams": streams, "checks": checks}
+    output = {"scope": "Local format and FFmpeg reference validation only; no Couch/native/package/HTTP/hardware qualification.", "pyav": av.__version__, "libraries": av.library_versions, "ffmpeg": manifest["ffmpeg"], "streams": streams, "dvd_display_times": dvd_display_times, "composite_max_rgb_error": composite_errors, "checks": checks}
     (evidence / "result.json").write_text(json.dumps(output, indent=2) + "\n")
     print(f"Passed {len(checks)} local corpus checks; evidence: {evidence}")
 

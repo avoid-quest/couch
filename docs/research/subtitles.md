@@ -25,6 +25,7 @@ SUBTITLE_FFMPEG=$(.artifacts/subtitles/venv/bin/python -c 'import imageio_ffmpeg
 curl -fL https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-sans-ttf-2.37.zip -o .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
 .artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/generate.py .artifacts/subtitles/corpus --ffmpeg "$SUBTITLE_FFMPEG"
 .artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/verify.py .artifacts/subtitles/corpus --ffmpeg "$SUBTITLE_FFMPEG" --font-archive .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
+.artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/negative-controls.py .artifacts/subtitles/negative-controls --ffmpeg "$SUBTITLE_FFMPEG" --font-archive .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
 ```
 
 To rebuild the committed font, run `prepare-font.py` with the downloaded ZIP as
@@ -38,6 +39,9 @@ are 640×360 FFmpeg reference composites, not Couch screenshots.
 The scripts are opt-in. Existing runners, application source, native helpers,
 upload paths and dependency manifests are unchanged. Each generation overwrites
 its named output files, so give it a dedicated artifact directory.
+Negative controls require a new output directory and mutate only their own
+copied sources and media. They refresh manifest hashes before invoking the real
+verifier, so rejection must come from a semantic assertion.
 
 ## Exact corpus subset
 
@@ -57,8 +61,9 @@ The PGS writer emits one window and one complete uncropped object per display
 set, a transparent/white palette and explicit empty compositions at cue ends.
 FFmpeg performs the DVD bitmap conversion and Matroska muxing. VobSub has four
 local palette slots and 4-bit alpha; its control timing is quantized to roughly
-11.38 ms. The verifier checks the timed ordinary/forced commands as well as the
-container flags. This is embedded `S_VOBSUB`, not an external `.idx`/`.sub` pair.
+11.38 ms. The verifier checks the initial display date, ordinary/forced commands,
+stop date and container flags. This is embedded `S_VOBSUB`, not an external
+`.idx`/`.sub` pair.
 [PGS decoder](https://github.com/FFmpeg/FFmpeg/blob/n7.1/libavcodec/pgssubdec.c),
 [SUP muxer](https://github.com/FFmpeg/FFmpeg/blob/n7.1/libavformat/supenc.c),
 [DVD encoder](https://github.com/FFmpeg/FFmpeg/blob/n7.1/libavcodec/dvdsubenc.c),
@@ -118,11 +123,44 @@ warns that the `font/ttf` and `text/plain` attachment codec parameters are unkno
 its libass filter nevertheless loads the named font, and extracted bytes match.
 This warning is a local tool observation, not an Ubuntu package result.
 
+## Verifier review corrections
+
+The [review of the initial corpus](https://github.com/avoid-quest/couch/issues/33#issuecomment-5555446193)
+found three false-pass paths. The original 94-check report remains available at
+[its immutable revision](https://github.com/avoid-quest/couch/blob/34d8fedd4aabacfe8a96d55fe3d7e1d150772b4f/tests/fixtures/subtitles/local-result.json).
+Before correction, its sources, corpus and raw reports were copied to
+`.artifacts/subtitles/baseline-34d8fed/`. The supplied media and font bytes have
+not changed. The updated verifier passes 102 checks on them.
+
+| Mutated input, with refreshed manifest | Old verifier | Corrected assertion |
+| --- | --- | --- |
+| PGS transparent palette entry becomes opaque black | Passed | Full composite comparison detects a 46-level RGB error. Every pixel/channel must remain within the measured two-level conversion tolerance, including background under transparent pixels. |
+| First DVD display-control date becomes 44 ticks, about 501 ms | Passed | The start command must have zero display delay; packet PTS alone is insufficient. Stop timing remains checked separately. |
+| Attached font loses `u` from the styled cue; Helvetica fallback succeeds | Passed | Both attached-font logs reject any fallback request or unexpected resolved font. |
+
+Simple and complex subset references also reject fallback requests and foreign
+font selections. The original reference must select only DejaVu Sans. Separate
+negative probes remove Greek lambda from the subset while leaving the original
+font and system fallback available. Both shaping modes resolve Helvetica, and
+both logs fail the shared font assertion. Removing either the request line or
+the foreign selection from the captured log still fails on the remaining signal.
+The complete upstream font remains available in the reference directory; its
+presence cannot excuse fallback in a subset reference.
+[DVD display-control dates](https://github.com/FFmpeg/FFmpeg/blob/n7.1/libavcodec/dvdsubdec.c),
+[libass fallback selection](https://github.com/libass/libass/blob/0.17.1/libass/ass_fontselect.c).
+
+`negative-controls.py --verifier path/to/old/verify.py` replays the counterexamples
+against a saved verifier and exits nonzero when corrupt inputs pass. The current
+[local result](../../tests/fixtures/subtitles/local-result.json) records the red
+and green commands, semantic failures, timing/composite measurements and artifact
+hashes. These corrections strengthen local evidence; packaged acceptance is
+still pending.
+
 ## Remaining qualification
 
 | Issue 33 criterion | Current evidence and remaining work |
 | --- | --- |
-| Corpus, fonts, scripts and flags | Authored sources, licensed derived font, decoded streams/times, embedded attachment hashes, bitmap masks and upstream-font reference comparisons. |
+| Corpus, fonts, scripts and flags | Authored sources, licensed derived font, decoded streams/display times, attachment hashes, full bitmap composites and exclusive-font reference comparisons. |
 | Selection, Off, timing, seek, source replacement, profile language, portals | Pending in Couch. Reference frames and container flags do not exercise TV/phone selectors or native controls. |
 | Packaged Ubuntu player and exact unsupported formats/fonts | Blocked by issue 2 and a coordinated native run. Every corpus sample remains unqualified in the packaged app. |
 | Bounded private text uploads, cleanup and restart defaults | Existing checks in `tests/linux/subtitles.ts` are preserved, with no new run claimed. Rerun them alongside this corpus after saved-preference integration. |
