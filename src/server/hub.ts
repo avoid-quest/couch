@@ -16,6 +16,7 @@ import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
+import { buildInfo } from "./build-info";
 
 type HubOptions = {
   hostname?: string;
@@ -145,6 +146,7 @@ export function createHub(options: HubOptions) {
       };
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (caller.controller) store.touchController(caller.controller.id);
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
