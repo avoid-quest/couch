@@ -221,11 +221,17 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   hub.session.observe({ ...idle, playbackId: "playbackId" in loading ? loading.playbackId : "", status: "playing" });
   expect(hub.session.state.currentEntryId).toBeNull();
   const queue = hub.session.state.queue;
+  const savedQueueResponse = await api("playlists", "POST", { name: "TV channels" }, secondToken);
+  expect(savedQueueResponse.status).toBe(201);
+  const savedQueue = await savedQueueResponse.json() as { playlist: { id: string; revision: number } };
+  expect((await api(`playlists/${savedQueue.playlist.id}/load`, "POST", { revision: savedQueue.playlist.revision, mode: "replace" }, secondToken)).status).toBe(200);
+  expect(hub.session.state.queue.map(item => item.source)).toEqual(queue.map(item => item.source));
+  const restoredQueue = hub.session.state.queue;
   await wait(() => messages.filter(message => message.type === "state" && message.state.iptvVersion === 4).length >= 2);
   expect(JSON.stringify(messages)).not.toContain("secret=");
   first.close(); second.close(); await hub.close();
   commands.length = 0; hub = start();
   const before = messages.length; peer(secondToken); await wait(() => messages.length > before);
-  expect(hub.session.state.queue).toEqual(queue); expect(hub.session.state.currentEntryId).toBeNull(); expect(commands).toEqual([]);
+  expect(hub.session.state.queue).toEqual(restoredQueue); expect(hub.session.state.currentEntryId).toBeNull(); expect(commands).toEqual([]);
   expect((await api(`iptv/channels/${id}/play`, "POST", undefined, secondToken)).status).toBe(404);
 });
