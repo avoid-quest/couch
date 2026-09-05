@@ -62,7 +62,8 @@ export type Action =
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
   | { type: "volume"; volume: number }
-  | { type: "preferences"; profileId: string; preferences: ProfilePlaybackPreferences }
+  | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
+  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
   | { type: "audioDelay"; playbackId: string; delay: number }

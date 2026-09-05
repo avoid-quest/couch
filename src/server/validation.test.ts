@@ -23,6 +23,15 @@ test("playback preferences accept language policy while stripping unrelated fiel
   expect(parse({ ...action, preferences: { ...preferences, source: "file:///private" } }).action).toEqual({ ...action, preferences: { ...preferences, audioLanguage: "ita" } });
   for (const changes of [{ audioLanguage: "eng,ita" }, { subtitleLanguage: "../" }, { subtitles: "yes" }, { speed: 0 }, { speed: 5 }, { speed: "1" }]) expect(() => parse({ ...action, preferences: { ...preferences, ...changes } })).toThrow();
   expect(() => parse({ type: "addSubtitle", playbackId: "current", source: "file:///private", title: "Private" })).toThrow();
+  expect(parse({ ...action, preferences: { audioLanguage: "EN", source: "private" } }).action).toEqual({ ...action, preferences: { audioLanguage: "en" } });
+  for (const preferences of [{}, { source: "private" }, { audioLanguage: null }, { speed: null }, { subtitles: null }]) expect(() => parse({ ...action, preferences })).toThrow();
+});
+
+test("save-default requests carry only current item, profile and supported choice", () => {
+  const action = { type: "savePlaybackDefault", profileId: "household", playbackId: "playing", setting: "speed" } as const;
+  expect(parse({ ...action, speed: 9, language: "private", track: 100, audioDelay: 5 }).action).toEqual(action);
+  for (const setting of ["audio", "subtitles", "speed"] as const) expect(parse({ ...action, setting }).action).toEqual({ ...action, setting });
+  for (const change of [{ setting: "audioDelay" }, { setting: "track" }, { playbackId: "" }, { profileId: "" }]) expect(() => parse({ ...action, ...change })).toThrow();
 });
 
 test("web queue commands validate quality and public metadata and ordinary enqueue strips extras", () => {
