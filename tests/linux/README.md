@@ -1,5 +1,7 @@
 # Linux native playback tests
 
+This temporary documentation edit measures CI classification and will be closed without merging.
+
 Run `bun run test:linux` with Docker running. The first run downloads the Ubuntu24.04 toolchain and builds Rust dependencies. Later runs reuse named Docker volumes. The source tree is mounted read-only and copied inside the disposable container, so Linux builds cannot overwrite host binaries or lockfiles.
 
 The tests launch the actual Tauri application through official `tauri-driver` and `WebKitWebDriver`, under Xvfb and Openbox. Bun sends W3C WebDriver requests directly, so there is no production automation plugin or application test endpoint. Two paired WebSocket clients and a separate WebKit HTTP browser check the same native player state. ffmpeg generates a 20-second clip with two audio tracks, subtitles and chapters, an MP3, and DASH fragments for an HTML5 media page resolved by the real yt-dlp executable.

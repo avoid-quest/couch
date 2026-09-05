@@ -1,4 +1,3 @@
-// Temporary CI measurement fixture, closed without merging.
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import frontend from "./client/index.html";
