@@ -78,3 +78,5 @@ if (native) {
     await close();
   }
 }
+
+// Temporary CI fixture: ordinary source routing with the complete native workflow.
