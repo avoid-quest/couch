@@ -1,6 +1,6 @@
 # Timeshift qualification evidence manifest
 
-This manifest identifies private evidence for [issue 67](https://github.com/avoid-quest/couch/issues/67). Read the [qualification report](timeshift-integration.md) for measured behavior, limitations and replay requirements. Archive members match the `files` entries below plus `evidence-manifest.json`. The archive is retained locally, outside Git.
+This manifest identifies private evidence for [Qualify a stable live/growing-timeshift backend and maintained host client](https://github.com/avoid-quest/couch/issues/67). Read the [qualification report](timeshift-integration.md) for measured behavior, limitations and replay requirements. Archive members match the `files` entries below plus `evidence-manifest.json`. The archive is retained locally, outside Git.
 
 ```json
 {
