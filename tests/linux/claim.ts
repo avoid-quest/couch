@@ -54,6 +54,14 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
     assert.equal(response.status, 200);
     return response.json() as Promise<any>;
   };
+  await openSettings(ui, until);
+  await ui.button("This screen", '[aria-label="Settings sections"]');
+  await ui.execute("document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]').focus()");
+  await navigate(ui, guest, until, "right");
+  await until("Radix moves remote arrow focus to the protected Sources tab without activating it", () => ui.execute("return document.activeElement?.textContent === 'Sources' && document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen'"));
+  await navigate(ui, guest, until, "select");
+  assert.equal(await ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen' && !document.querySelector('[aria-label=\"Jellyfin settings\"]')"), true, "Remote Enter cannot activate Sources after Radix deferred focus reaches its protected trigger");
+  await closeSettings(ui, until);
   await ui.section("Library");
   await ui.click('[data-action="library-folders"]');
   await until("physical TV input opens the real Library folders dialog", () => ui.execute("return !!document.querySelector('.library-folders button[data-tv-local-only]:not(:disabled)')"));

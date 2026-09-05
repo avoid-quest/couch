@@ -147,7 +147,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <DialogTitle className={host ? "text-lg" : undefined}>Settings</DialogTitle>
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
-      <Tabs value={section} onValueChange={setSection} className="min-w-0 gap-4">
+      <Tabs value={section} onValueChange={setSection} activationMode={host ? "manual" : "automatic"} className="min-w-0 gap-4">
         <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
           <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>

@@ -29,7 +29,7 @@ export function JellyfinSettings({ credentials, connected, canManage, version }:
   const canWrite = connected && canManage && !loading && !pending;
 
   useEffect(() => {
-    setConnection(null); setUrl(""); setUsername(""); setPassword(""); setEditing(false); setConfirmDisconnect(false); setPending(null); setNotice(null);
+    setConnection(null); setUrl(""); setUsername(""); setPassword(""); setEditing(false); setConfirmDisconnect(false); setPending(null); setNotice(null); setError(null);
     return () => mutation.current?.abort();
   }, [origin, token, canManage]);
 
@@ -37,7 +37,6 @@ export function JellyfinSettings({ credentials, connected, canManage, version }:
     if (!origin || !token || !connected) { setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true);
-    setError(null);
     void fetch(`${origin}/api/jellyfin${canManage ? "/connection" : ""}`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
     }).then(async response => {
