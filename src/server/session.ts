@@ -99,6 +99,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     options.deactivate?.();
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
+      try { authorize(); } catch (error) {
+        cancelRadioRetry();
+        state.player = { ...state.player, status: "error", error: error instanceof Error ? error.message : "Radio reconnect canceled. Play the station from a paired remote." };
+        broadcast();
+        return;
+      }
       try { play(entry!.id, true, true, authorize); } catch { /* The attempt already published its failure. */ }
     }) : null;
     // Ignore all later native observations and controls for the failed load, including Stop's idle acknowledgement.

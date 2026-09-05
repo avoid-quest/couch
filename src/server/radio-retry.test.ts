@@ -86,6 +86,36 @@ test("synchronous and asynchronous resolver failures share the same bounded retr
   expect(attempts).toBe(4);
 });
 
+test("revocation during radio backoff publishes cancellation and leaves another remote able to play", async () => {
+  const store = openStore(":memory:");
+  const token = store.pair("Revoked remote");
+  const survivor = store.pair("Surviving remote");
+  const commands: PlaybackCommand[] = [];
+  const published: PlayerState[] = [];
+  let attempts = 0;
+  const session = createSession(store, command => commands.push(command), state => published.push({ ...state.player }), {
+    now: () => time,
+    resolveSource: entry => { attempts++; return entry.id === station.id ? Promise.reject(new Error("Station unavailable")) : { source: entry.source }; },
+  });
+  cleanups.push(() => { session.close(); store.close(); });
+  const authorize = (credential: string) => () => { if (!store.isPaired(credential)) throw new Error("This remote's access was revoked. Pair again."); };
+  session.observe(idle);
+  session.command({ type: "enqueue", entry: station });
+  session.command({ type: "enqueue", entry: following });
+  session.command({ type: "play", entryId: station.id }, authorize(token));
+  await flush();
+  expect(session.state.radioRetry?.retryAt).toBe(time + 1000);
+  store.revokeController(store.controllerForToken(token)!.id);
+  advance(1000);
+  expect(session.state.radioRetry).toBeNull();
+  expect(published.at(-1)).toMatchObject({ status: "error", error: "This remote's access was revoked. Pair again." });
+  advance(60_000);
+  expect(attempts).toBe(1);
+  expect(commands.filter(command => command.type === "load")).toHaveLength(0);
+  session.command({ type: "play", entryId: following.id }, authorize(survivor));
+  expect(commands.at(-1)).toMatchObject({ type: "load", source: following.source });
+});
+
 test("legacy favorite classification commits without leaking resolved credentials and survives restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-radio-retry-"));
   const path = join(directory, "session.sqlite");
