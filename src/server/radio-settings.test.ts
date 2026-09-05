@@ -124,3 +124,38 @@ test("rejects malformed source requests and preserves failed imports for adminis
   expect((await f.request("playlists", "POST", source)).status).toBe(502);
   expect(f.radio.playlists()).toHaveLength(1);
 });
+
+for (const failure of [false, true]) for (const loss of ["controller", null] as const) test(`a shared ${failure ? "failed" : "successful"} refresh does not disclose details to a ${loss ? "demoted" : "revoked"} waiter`, async () => {
+  let delayed = false;
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<Response>();
+  const f = fixture((async () => {
+    if (!delayed) return new Response(feed());
+    started.resolve();
+    return release.promise;
+  }) as unknown as typeof fetch);
+  const { playlist } = await (await f.request("playlists", "POST", source)).json();
+  const before = f.radio.playlistStations({ playlistId: playlist.id });
+  delayed = true;
+  const first = f.request(`playlists/${playlist.id}/refresh`, "POST");
+  await started.promise;
+  let secondAuthority: ControllerIdentity["authority"] | null = "administrator";
+  const second = f.settings.handle(new Request(`http://localhost/api/radio/playlists/${playlist.id}/refresh`, { method: "POST" }),
+    (): ControllerIdentity | null => secondAuthority ? { authority: secondAuthority, controller: null, claimAvailable: false } : null);
+  secondAuthority = loss;
+  if (failure) release.reject(new Error(`Failed request ${source.url}`));
+  else release.resolve(new Response(feed("Changed station")));
+  const firstResponse = await first;
+  expect(firstResponse.status).toBe(failure ? 502 : 200);
+  const secondResponse = await second;
+  expect(secondResponse.status).toBe(loss ? 403 : 401);
+  expect(await secondResponse.text()).not.toContain("source-secret");
+  if (failure) {
+    expect(await firstResponse.text()).toContain("source-secret");
+    expect(f.radio.playlists()[0]!.error).toContain("source-secret");
+    expect(f.radio.playlistStations({ playlistId: playlist.id })).toEqual(before);
+  } else {
+    expect(f.radio.playlistStations({ playlistId: playlist.id })[0]!.name).toBe("Changed station");
+    expect(f.radio.playlists()[0]!.error).toBeNull();
+  }
+});

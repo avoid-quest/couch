@@ -6,6 +6,8 @@ import { RadioError, type createRadio } from "./radio";
 export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist">) {
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
+      const path = new URL(request.url).pathname;
+      const browsing = path === "/api/radio/playlists" && request.method === "GET";
       const authorize = () => {
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
@@ -14,8 +16,7 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
       const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
       try {
         if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
-        const path = new URL(request.url).pathname;
-        if (path === "/api/radio/playlists" && request.method === "GET") {
+        if (browsing) {
           const playlists: RadioPlaylistSummary[] = radio.playlists().map(({ id, name, stationCount, updatedAt, error }) => ({
             id, name, stationCount, updatedAt, error: error ? "This source needs attention in Settings > Sources. Cached stations are still available." : null,
           }));
@@ -49,6 +50,9 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
         radio.removePlaylist(match[1]!);
         return new Response(null, { status: 204 });
       } catch (error) {
+        // A shared refresh belongs to its first caller. Each waiter must still
+        // have authority before receiving that caller's private failure details.
+        if (!browsing) { try { authorize(); } catch (rejected) { error = rejected; } }
         if (error instanceof ControllerError || error instanceof RadioError) return Response.json({ error: error.message }, { status: error.status });
         return Response.json({ error: "Could not update radio sources. Try again." }, { status: 500 });
       }
