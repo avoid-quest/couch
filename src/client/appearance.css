@@ -1,5 +1,7 @@
 :root { --interface-scale: 1; }
-body { zoom: var(--interface-scale); min-width: 0; }
+body { min-width: 0; }
+/* Radix positions portal wrappers in viewport pixels. Scale their contents. */
+#root, [data-slot="dialog-content"], [data-slot="select-content"], [data-slot="popover-content"] { zoom: var(--interface-scale); }
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
 [data-slot="dialog-content"], body.native-host [data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
 .remote-shell .remote-controller { max-height: calc(100dvh / var(--interface-scale) - var(--remote-header-height) - 40px); }
