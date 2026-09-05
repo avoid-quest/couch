@@ -490,9 +490,11 @@ mod tests {
         let mut player = Player::default();
         player.apply(snapshot()).unwrap();
         let previous = player.state.clone();
-        let mut invalid = snapshot();
-        invalid.mpv_state.as_mut().unwrap().speed = f64::NAN;
-        assert!(player.apply(invalid).is_err());
-        assert!(player.state == previous);
+        for speed in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut invalid = snapshot();
+            invalid.mpv_state.as_mut().unwrap().speed = speed;
+            assert!(player.apply(invalid).is_err());
+            assert!(player.state == previous);
+        }
     }
 }
