@@ -189,6 +189,7 @@ async function closeSavedSettings(ui: UiDriver, until: Wait) {
 async function assertPreferencesLoad(context: PreferenceContext, preferences: ProfilePlaybackPreferences, audioDelay: number, description: string) {
   const { clients, entryId, until } = context;
   const { first, all } = controls(context);
+  assert.ok(first().queue.find(entry => entry.id === entryId)?.source.startsWith("library:"), "Profile defaults use the actual scanned library fixture");
   const previous = first().player.playbackId;
   await clients[1]!.command({ type: "play", entryId, fromStart: true });
   await until(description, () => all(state => state.player.playbackId !== previous && state.currentEntryId === entryId && state.player.status === "playing" && state.player.speed === preferences.speed && Math.abs((state.player.audioDelay ?? 0) - audioDelay) < 1e-6 && state.player.subtitleDelay === 0 && state.player.tracks?.some(track => track.kind === "audio" && track.selected && languageName(track.language ?? "") === languageName(preferences.audioLanguage)) === true && (preferences.subtitles === "off" ? !state.player.tracks?.some(track => track.kind === "subtitle" && track.selected) : state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && languageName(track.language ?? "") === languageName(preferences.subtitleLanguage)) === true)));
@@ -199,6 +200,7 @@ async function assertPreferencesLoad(context: PreferenceContext, preferences: Pr
 async function verifyPreferenceSources(context: PreferenceContext, preferences: ProfilePlaybackPreferences, audioDelay: number, phase: string) {
   const { clients, until, entryId, artifactDir } = context;
   const { first, all, stop } = controls(context);
+  assert.ok(first().queue.find(entry => entry.id === entryId)?.source.startsWith("library:"), "Source transitions use a scanned local file, including after restart");
   const providerId = crypto.randomUUID();
   await clients[0]!.command({ type: "enqueueWeb", entryId: providerId, url: "http://127.0.0.1:4200/radio.mp3", title: "Preference audio-only provider fixture" });
   const radio = first().queue.find(entry => entry.kind === "radio" && entry.source.includes("4200/radio.mp3"));
@@ -217,7 +219,7 @@ async function verifyPreferenceSources(context: PreferenceContext, preferences: 
       if (source.name === "Jellyfin sidecar") assert.ok(first().player.tracks?.some(track => track.kind === "subtitle" && track.language === "ita"), "Jellyfin text sidecar remains available under saved defaults");
       if (source.name === "radio" || source.name === "audio-only provider resolver") assert.ok(!first().player.tracks?.some(track => track.kind === "video" || track.kind === "subtitle"), "Audio-only source clears previous selected video and subtitle tracks");
       if (source.name.startsWith("local")) assert.ok(first().player.tracks?.some(track => track.kind === "video" && track.selected), "Local media restores its selected video after source changes");
-      evidence.push({ source: source.name, player: first().player, preferences: first().preferences });
+      evidence.push({ source: source.name, entrySource: first().queue.find(entry => entry.id === source.id)!.source, player: first().player, preferences: first().preferences });
       await clients[1]!.command({ type: "speed", playbackId, speed: 2 });
       await clients[1]!.command({ type: "subtitleDelay", playbackId, delay: 0.6 });
       await until(`${phase}: ${source.name} temporary speed and subtitle delay do not change saved defaults`, () => all(state => state.player.speed === 2 && Math.abs((state.player.subtitleDelay ?? 0) - 0.6) < 1e-6 && JSON.stringify(state.preferences?.profile) === JSON.stringify(preferences)));
