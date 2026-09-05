@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Play, Plus, Star } from "lucide-react";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
+import { QualitySelect } from "./QualitySelect";
 
 type Props = {
   origin: string;
@@ -28,21 +28,6 @@ const providers: Record<ProviderId, { name: string; placeholder: string; help: s
   bandcamp: { name: "Bandcamp", placeholder: "https://artist.bandcamp.com/album/…", help: "Open a public album or track link, or try an album below." },
 };
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request.";
-
-export function QualitySelect({ id, value, disabled, onChange }: { id: string; value: VideoQuality; disabled?: boolean; onChange: (quality: VideoQuality) => void }) {
-  return <div className="quality-select grid gap-2">
-    <Label htmlFor={id}>Video quality</Label>
-    <Select value={value} disabled={disabled} onValueChange={quality => onChange(quality as VideoQuality)}>
-      <SelectTrigger id={id} className="min-h-11 w-full"><SelectValue /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="best" className="min-h-11">Best available</SelectItem>
-        <SelectItem value="1080p" className="min-h-11">Up to 1080p</SelectItem>
-        <SelectItem value="720p" className="min-h-11">Up to 720p</SelectItem>
-        <SelectItem value="480p" className="min-h-11">Up to 480p</SelectItem>
-      </SelectContent>
-    </Select>
-  </div>;
-}
 
 export function MediaArtwork({ thumbnail, title, className = "" }: { thumbnail?: string; title: string; className?: string }) {
   const [failed, setFailed] = useState(false);

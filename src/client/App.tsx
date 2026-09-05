@@ -14,6 +14,7 @@ import { Icon } from "./Icon";
 import { VideoStage } from "./VideoStage";
 import { QueuePanel } from "./QueuePanel";
 import { Settings } from "./Settings";
+import { useVideoQualityPreference } from "./video-quality";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
 import { Gamepad2, LayoutGrid, House, SlidersHorizontal, ArrowUpRight } from "lucide-react";
@@ -53,6 +54,7 @@ export function App() {
   const [remoteName, setRemoteName] = useState("My remote");
   const [pairing, setPairing] = useState(false);
   const [quality, setQuality] = useState<VideoQuality>("best");
+  const videoQualityPreference = useVideoQualityPreference();
   const [section, setSection] = useState("Queue");
   const [remoteMode, setRemoteMode] = useState<"browse" | "control">("browse");
   const [pairingOpen, setPairingOpen] = useState(false);
@@ -204,7 +206,7 @@ export function App() {
           {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
           {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>
-          {(!nativeHost || state) && <Settings credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} initialOpen={nativeHost && state?.administratorClaimed === false} />}
+          {(!nativeHost || state) && <Settings videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} initialOpen={nativeHost && state?.administratorClaimed === false} />}
         </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
           <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>
