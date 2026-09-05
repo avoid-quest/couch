@@ -4,6 +4,8 @@ import frontend from "./client/index.html";
 import { createHub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 
+// Temporary CI ordinary routing fixture; never merge this branch.
+
 const native = process.env.COUCH_NATIVE === "1";
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
