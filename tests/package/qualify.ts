@@ -149,8 +149,8 @@ try {
   const diagnostics = browser ? await driver(44445, `/session/${browser}/execute/sync`, { script: "return { status: document.querySelector('.header-status')?.textContent, alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled }", args: [] }).catch(() => null) : null;
   await Bun.write(`${root}/failure.json`, JSON.stringify({ build: expected, checks, error: String(error), diagnostics }, null, 2));
   if (browser) {
-    await driver(44445, `/session/${browser}/execute/sync`, { script: "document.querySelector('#pairing-code')?.setAttribute('type', 'password')", args: [] }).catch(() => {});
-    const screenshot = await driver(44445, `/session/${browser}/screenshot`).catch(() => null);
+    const masked = await driver(44445, `/session/${browser}/execute/sync`, { script: "const input = document.querySelector('#pairing-code'); if (input) input.type = 'password'; return !input || input.type === 'password'", args: [] }).catch(() => false);
+    const screenshot = masked ? await driver(44445, `/session/${browser}/screenshot`).catch(() => null) : null;
     if (screenshot) await Bun.write(`${root}/browser-failure.png`, Buffer.from(screenshot, "base64"));
   }
   throw error;
