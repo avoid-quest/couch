@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { WatchingProfile } from "../shared/library";
 import type { Action, PlaybackPreferences as Preferences, ProfilePlaybackPreferences } from "../shared/protocol";
+import { playbackLanguages } from "./playback-languages";
 
 export function PlaybackPreferences({ profile, preferences, connected, onCommand }: {
   profile: WatchingProfile;
@@ -13,25 +13,24 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   connected: boolean;
   onCommand: (action: Action) => Promise<boolean>;
 }) {
-  const [draft, setDraft] = useState<ProfilePlaybackPreferences | null>(null);
+  const [draft, setDraft] = useState<Partial<ProfilePlaybackPreferences> | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const values = draft ?? preferences.profile;
+  const values = { ...preferences.profile, ...draft };
   const change = (patch: Partial<ProfilePlaybackPreferences>) => {
-    setDraft({ ...values, ...patch });
+    setDraft({ ...draft, ...patch });
     setSaved(false);
     setError(null);
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (!draft) return;
     setPending(true);
     setError(null);
     setSaved(false);
     try {
-      const ok = await onCommand({ type: "preferences", profileId: profile.id, preferences: {
-        ...values, audioLanguage: values.audioLanguage.trim().toLowerCase(), subtitleLanguage: values.subtitleLanguage.trim().toLowerCase(),
-      } });
+      const ok = await onCommand({ type: "preferences", profileId: profile.id, preferences: draft });
       if (ok) {
         setDraft(null);
         setSaved(true);
@@ -42,17 +41,23 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   };
 
   return <form className="grid gap-4" onSubmit={event => void save(event)}>
-    <p className="text-sm text-muted-foreground">Languages, subtitle mode and speed belong to {profile.name}. Saved defaults apply to the next item and survive a restart.</p>
+    <div className="space-y-1"><p className="font-medium break-words">Watching profile: {profile.name}</p><p className="text-sm text-muted-foreground">Saved defaults apply when the next item starts and survive a restart. This item keeps its current choices. Change the watching profile beside playback after stopping.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
-        <Input id="preferred-audio-language" className="min-h-11" value={values.audioLanguage} disabled={!connected || pending} placeholder="Automatic" maxLength={3} pattern="[A-Za-z]{2,3}" title="A two- or three-letter language code, or empty for automatic" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-describedby="playback-language-help" onChange={event => change({ audioLanguage: event.target.value })} />
+        <Select value={values.audioLanguage || "automatic"} disabled={!connected || pending} onValueChange={value => change({ audioLanguage: value === "automatic" ? "" : value })}>
+          <SelectTrigger id="preferred-audio-language" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>{playbackLanguages(values.audioLanguage).map(({ code, name }) => <SelectItem key={code} value={code || "automatic"} className="min-h-11">{name}</SelectItem>)}</SelectContent>
+        </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="preferred-subtitle-language">Preferred subtitle language</Label>
-        <Input id="preferred-subtitle-language" className="min-h-11" value={values.subtitleLanguage} disabled={!connected || pending} placeholder="Automatic" maxLength={3} pattern="[A-Za-z]{2,3}" title="A two- or three-letter language code, or empty for automatic" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-describedby="playback-language-help" onChange={event => change({ subtitleLanguage: event.target.value })} />
+        <Select value={values.subtitleLanguage || "automatic"} disabled={!connected || pending} onValueChange={value => change({ subtitleLanguage: value === "automatic" ? "" : value })}>
+          <SelectTrigger id="preferred-subtitle-language" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>{playbackLanguages(values.subtitleLanguage).map(({ code, name }) => <SelectItem key={code} value={code || "automatic"} className="min-h-11">{name}</SelectItem>)}</SelectContent>
+        </Select>
       </div>
-      <p id="playback-language-help" className="text-sm text-muted-foreground sm:col-span-2">Use a language code such as en, eng, it or ita. Leave empty for automatic selection.</p>
+      <p className="text-sm text-muted-foreground sm:col-span-2">The TV chooses a matching language when the item offers it. Automatic lets the player choose.</p>
       <div className="grid gap-2">
         <Label htmlFor="preferred-subtitle-mode">Default subtitles</Label>
         <Select value={values.subtitles} disabled={!connected || pending} onValueChange={value => change({ subtitles: value as "auto" | "off" })}>
@@ -64,7 +69,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
         <Label htmlFor="preferred-playback-speed">Default playback speed</Label>
         <Select value={String(values.speed)} disabled={!connected || pending} onValueChange={value => change({ speed: Number(value) })}>
           <SelectTrigger id="preferred-playback-speed" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
-          <SelectContent>{[0.5, 0.75, 1, 1.25, 1.5, 2].map(speed => <SelectItem key={speed} value={String(speed)} className="min-h-11">{speed === 1 ? "Normal" : `${speed}×`}</SelectItem>)}</SelectContent>
+          <SelectContent>{[...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, values.speed])].sort((a, b) => a - b).map(speed => <SelectItem key={speed} value={String(speed)} className="min-h-11">{speed === 1 ? "Normal" : `${speed}×`}</SelectItem>)}</SelectContent>
         </Select>
       </div>
     </div>
