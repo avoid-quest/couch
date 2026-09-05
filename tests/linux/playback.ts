@@ -10,6 +10,7 @@ import { verifyMusic, assertMusicAfterRestart } from "./music";
 import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
+import { verifyClaim } from "./claim";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -93,7 +94,7 @@ async function xdotool(...args: string[]) {
   return { code, output: output.trim() };
 }
 async function screenshot(name: string) {
-  await execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(pairing => pairing.style.visibility = 'hidden')");
+  await execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code], #administrator-code').forEach(pairing => pairing.style.visibility = 'hidden')");
   await Bun.sleep(250);
   const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await capture.exited, 0);
@@ -164,6 +165,9 @@ try {
   } } })).sessionId;
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   await assertTvFullscreen(ui, until, "startup");
+  await until("an unclaimed TV shows its separate administrator setup code and address QR", () => execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '') && !!document.querySelector('[role=dialog] svg title')"));
+  await ui.key(keys.escape);
+  await until("setup dismisses to the fullscreen TV browser", () => execute("return !document.querySelector('[role=dialog]')"));
   await ui.click(".pair-shortcut");
   const code = await execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
   await ui.key(keys.escape);
@@ -551,6 +555,7 @@ try {
   checks.push("ordinary video pixels survive DASH selection reset");
   console.log("PASS ordinary video pixels survive DASH selection reset");
   await clients[0]!.command({ type: "stop" });
+  await until("native Stop opens Home before saved-provider browsing", async () => all(state => state.player.status === "idle") && await execute("return !!document.querySelector('.tv-browser:not([hidden])')"));
 
   const favoriteUrl = "https://www.youtube.com/watch?v=YE7VzlLtp-4";
   const providerFavorite: ProviderItem = { id: `youtube-${createHash("sha256").update(favoriteUrl).digest("hex").slice(0, 32)}`, provider: "youtube", kind: "media", title: "Saved provider fixture", url: favoriteUrl, thumbnail: "http://127.0.0.1:4200/logo.svg" };
@@ -615,6 +620,7 @@ try {
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
+  const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -644,6 +650,7 @@ try {
   await assertLocalProgressAfterRestart(progressContext, persistedProgress);
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
+  await persistedClaim.verifyAfterRestart(clients, httpRemote);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === importedStations[0].id));

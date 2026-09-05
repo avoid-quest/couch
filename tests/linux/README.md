@@ -14,6 +14,24 @@ Radix menus, while phone browsing remains independent. The test phone shares the
 virtual X11 display, so focus/pixel checks foreground the TV and restore the phone
 before further input. Physical phones do not take focus from the TV window.
 
+`claim.ts` opens the unclaimed TV's real Settings and verifies its address-only
+QR, ordinary pairing code and separate administrator code. The HTTP phone claims
+administration, saves the TV name, and retains its role and name after a desktop
+restart. The TV and two WebSocket controllers must observe the committed changes
+without changing the queue or watching profile. Unpaired/ordinary HTTP requests
+and reused claim codes must fail. Server tests separately cover competing claims,
+expiry, trusted-local recovery and exact legacy credential-hash migration.
+
+The same native gate pre-opens the actual Library folders and Jellyfin setup
+dialogs with physical input, then sends paired directional commands. Remote OK
+and arrows must not invoke their protected actions, while Back/Home can dismiss
+them. A separate DOM regression models a nested Radix portal, with an unguarded
+positive control proving the input reached it. It does not claim a shipped
+nested settings control. The gate saves `administrator-claim.json`,
+`administrator-setup-qr.svg` and the HTTP administrator screenshot in its artifact
+directory. First claiming uses disposable test data; the persistent development
+preview is left unclaimed for its owner.
+
 Local progress checks cover observed stop/resume, Play from start, rewind, source replacement, loading and paused profile guards, actual EOF, watched actions and History. Two watching profiles retain separate records across desktop restart. The Jellyfin option also tests Continue watching and native resume through its real host progress reports. It temporarily allows the generated short clip to remain resumable, then restores the server's duration policy. The native mpv resume regression verifies that the next load clears the previous start offset.
 
 External subtitle tests use the actual TV and HTTP phone file inputs, then
@@ -39,7 +57,7 @@ retains conservative bounds for missing/repeated samples. WAV, fixture hashes,
 observed playback IDs, waveform and JSON measurements accompany the run. These
 software-output measurements do not qualify physical sound or gapless playback.
 
-Artifacts go to `.artifacts/linux/`, including native screenshots, passed checks, toolchain versions, source and binary hashes, process RSS and debug binary sizes. Each run copies its compiled app and sidecar before launching, so another build cannot replace its executables. Screenshots hide the temporary pairing code. Pixel assertions check both the WebView and native video after seeking and resizing. The container uses Xvfb software rendering, the application's explicit `COUCH_BASIC_RENDERING=1` option, and a clocked PulseAudio null sink. That option sets mpv's `gpu-dumb-mode=yes`, disabling advanced scalers and custom shaders. Default mpv rendering produced black or corrupted frames even in standalone mpv on Ubuntu 24.04 and 26.04 in this Docker environment. The suite therefore qualifies the basic rendering path. It cannot qualify advanced GPU rendering, hardware decoding, physical audio output, HDMI behavior, HDR, CEC, or real Wi-Fi reliability. Debug binary sizes and software-renderer memory use are not release-build measurements.
+Artifacts go to `.artifacts/linux/`, including native screenshots, passed checks, toolchain versions, source and binary hashes, process RSS and debug binary sizes. Each run copies its compiled app and sidecar before launching, so another build cannot replace its executables. Screenshots hide temporary pairing and administrator codes. Pixel assertions check both the WebView and native video after seeking and resizing. The container uses Xvfb software rendering, the application's explicit `COUCH_BASIC_RENDERING=1` option, and a clocked PulseAudio null sink. That option sets mpv's `gpu-dumb-mode=yes`, disabling advanced scalers and custom shaders. Default mpv rendering produced black or corrupted frames even in standalone mpv on Ubuntu 24.04 and 26.04 in this Docker environment. The suite therefore qualifies the basic rendering path. It cannot qualify advanced GPU rendering, hardware decoding, physical audio output, HDMI behavior, HDR, CEC, or real Wi-Fi reliability. Debug binary sizes and software-renderer memory use are not release-build measurements.
 
 To include a real disposable Jellyfin server with generated credentials and media:
 
@@ -65,6 +83,15 @@ The provider catalog gate also opens two public Bandcamp tracks and Blazo's
 restart without autoplay. A deliberately missing track must show a failure
 without changing the queue. These checks qualify the played samples, not all
 tracks in an album or account-only content.
+
+The 2026-09-05 administrator/Settings run passed 450 native/HTTP checks, 295 Bun
+tests with two skipped and 2,295 assertions, twelve app Rust/ABI tests and five
+explicit native regressions. The separate provider gate passed all eleven cases
+with identical production binaries. Additional in-app browser recordings cover
+General and Connection at 320, 375, 390, 768, 1024, 1440 and 1920px widths, with
+visual inspection of the final frames and the native setup dialog. The
+[usage guide](../../docs/usage.md#check-and-build) records the remaining checks and
+qualification limits.
 
 The image and build caches remain for later runs. `docker run --rm` removes the disposable test container. Nothing is published and no host ports are exposed.
 

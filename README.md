@@ -17,7 +17,8 @@ queue together. Movies, music, radio, and online video play on the same screen.
 - **Share the controls.** Pair a browser with the TV's six-digit code. Everyone
   can browse independently, add to the shared queue, and control playback.
   The TV stays fullscreen; phones and laptops get a compact remote with TV
-  navigation, built with shadcn/ui Mira.
+  navigation, built with shadcn/ui Mira. Claim the first administrator from your
+  phone with the separate TV setup code, then name the TV in Settings.
 - **Come back later.** Save playlists, track local viewing progress by profile,
   and resume where you left off.
 
@@ -35,8 +36,9 @@ bun run preview:linux
 ```
 
 The launcher opens the web remote and prints a Linux TV screen URL. Open that
-screen to get the pairing code, then enter it in the remote. It also prints a LAN
-address for your phone.
+screen to get the pairing code, then name and pair your remote. It also prints a
+LAN address for your phone. An unclaimed TV opens Settings with a QR address and
+separate administrator code. See [setup and recovery](docs/usage.md#administrator-and-connection-settings).
 
 The preview runs the real Linux app in a container with silent audio and software
 rendering. It keeps running when you close the browser. Stop it with:
@@ -107,9 +109,12 @@ The Linux integration suite exercises the native app and browser remotes in
 Docker. Physical TV hardware still needs qualification for HDMI audio, GPU
 decoding, HDR, refresh switching, CEC, and suspend/resume.
 
-Gapless music, ReplayGain, richer video metadata, TV guides/DVR, and multiroom
-audio remain future work. Account login and DRM video are unsupported; Jellyfin
-currently uses direct play.
+Gapless music, ReplayGain, richer video metadata and TV guides/DVR remain open.
+Account login and DRM video are unsupported; Jellyfin currently uses direct play.
+Speaker multiroom remains optional future work. The [appliance map](https://github.com/avoid-quest/couch/issues/1)
+covers installation, Settings and updates; the linked [media map](https://github.com/avoid-quest/couch/issues/25)
+tracks remaining playback and library work. Implementation is paused after the
+administrator/Settings increment pending the next agreed work cycle.
 
 - [Usage and development details](docs/usage.md)
 - [Linux test guide](tests/linux/README.md)

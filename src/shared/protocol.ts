@@ -41,6 +41,9 @@ export type SessionState = {
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;
+  controllerVersion?: number;
+  installationName?: string;
+  administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
 };
 

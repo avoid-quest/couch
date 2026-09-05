@@ -24,13 +24,19 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     queue: store.queue,
     currentEntryId: null,
     activeProfile,
+    installationName: store.installationName(),
+    administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
     player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
   };
   const broadcast = () => publish(state);
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
-  const invalidate = (kind: "library" | "radio" | "provider" | "jellyfin" | "playlist") => {
+  const invalidate = (kind: "library" | "radio" | "provider" | "jellyfin" | "playlist" | "controller") => {
+    if (kind === "controller") {
+      state.installationName = store.installationName();
+      state.administratorClaimed = store.administratorExists();
+    }
     const field = `${kind}Version` as const;
     state[field] = (state[field] ?? 0) + 1;
     broadcast();
