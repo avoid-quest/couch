@@ -6,7 +6,7 @@ import { openStore } from "../../src/server/store";
 import { createLibrary } from "../../src/server/library";
 import inputs from "../../packaging/inputs.json";
 
-const root = resolve(".artifacts/package-qualification");
+const root = resolve(".artifacts/package-qualification", `${Date.now()}-${process.pid}`);
 const fixtures = resolve(".artifacts/package-fixtures");
 const container = `couch-package-${process.pid}`;
 const origin = "http://127.0.0.1:44100";

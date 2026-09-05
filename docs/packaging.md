@@ -96,6 +96,8 @@ not claim compatibility with an unbuilt historical Couch release.
 
 `result.json`, package/source hashes, production and test dependency inventories,
 native linkage, build identities, screenshots and logs accompany the artifact.
+Each local qualification attempt writes a new evidence directory, preserving
+earlier logs without reusing readiness, failure or result markers.
 The display smoke uses software rendering and silent audio. Physical video,
 sound and boot-session results must be recorded separately on their owning
 issues.
