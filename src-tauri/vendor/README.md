@@ -119,6 +119,14 @@ ytdl fallback making an extra request before the coordinator's scheduled retry.
 Disabling that fallback restored the exact request budget and keeps extraction
 cancellation in one owner. See the [ytdl option](https://mpv.io/manual/stable/#options-ytdl).
 
+Native initialization also sets `audio-display=no`: Couch renders music artwork
+and titles in its audio surface. An embedded MP3 cover otherwise became a
+selected video track and could leave a black native frame after replacement.
+The UI uses observed selected video tracks to distinguish music from video.
+The libmpv probe covers tagged MP3/FLAC/M4A and repeated music/video switches;
+the Bandcamp application gate checks the rendered artwork after replacement.
+See [audio-display](https://mpv.io/manual/stable/#options-audio-display).
+
 Radio loads carry a private `radio` flag. `mpv_radio.rs` sets
 `network-timeout=8` and disables FFmpeg's implicit reconnect options, so the
 coordinator owns the attempt limit and cancellation. Ordinary loads restore the

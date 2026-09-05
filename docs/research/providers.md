@@ -1,6 +1,6 @@
 # Integrated provider playback
 
-Researched 2026-09-05 against current project docs and source. The [implementation](../../README.md) includes YouTube, Twitch and RaiPlay browsing, shared saved items, Radio Browser search/favorites, a Jellyfin SDK adapter and yt-dlp resolution into native playback. A disposable Jellyfin 10.11.11 server passed authentication, catalog browsing, native playback, host progress reporting and Continue watching. Resume and Play from start loaded the expected positions in native libmpv. Physical GPU and audio-output qualification still belongs on the intended Linux box.
+Researched 2026-09-05 against current project docs and source. The [implementation](../../README.md) includes YouTube, Twitch, RaiPlay and Bandcamp browsing, shared saved items, Radio Browser search/favorites, a Jellyfin SDK adapter and yt-dlp resolution into native playback. A disposable Jellyfin 10.11.11 server passed authentication, catalog browsing, native playback, host progress reporting and Continue watching. Resume and Play from start loaded the expected positions in native libmpv. Physical GPU and audio-output qualification still belongs on the intended Linux box.
 
 Provider modules supply catalogs, account sessions and playable media. The application owns browsing, queue, controls and status; the playback module owns decoding, output and its supported DRM paths. Normal media playback stays inside our application with our controls. Provider iframes and external-page handoff are not the product architecture.
 
@@ -14,7 +14,7 @@ cancellation, deadlines, output limits and process cleanup. Extraction is bounde
 signed stream URLs and HTTP headers travel through the private native pipe.
 Separate video and audio use libmpv's `audio-files` option, which is cleared on
 the next load. No provider iframe or video encoding is involved. The current
-adapter rejects DRM, account-only pages, playlists, unsupported transports and
+single-item resolver rejects DRM, account-only pages, playlists, unsupported transports and
 conflicting audio/video headers with explicit errors.
 [yt-dlp format selection](https://github.com/yt-dlp/yt-dlp#format-selection),
 [mpv audio-files](https://mpv.io/manual/stable/#options-audio-files)
@@ -32,7 +32,7 @@ by tests. Signed application distribution and coordinated updates remain work.
 ## Browsing and shared saved items
 
 The **Online** view renders native app cards with artwork, titles and live or
-duration metadata. **Play on TV** sends one enqueue-and-play command. The host
+duration metadata. **Play** sends one enqueue-and-play command. The host
 reserves that play request before catalog lookup; a newer Stop, Play or Next
 cancels it while preserving the queued item. Best, 1080p, 720p and 480p are per-entry choices stored with
 the queue. A pasted webpage with a blank title requests metadata in the
@@ -51,6 +51,7 @@ demuxer ordering can differ. See [mpv hooks and track properties](https://mpv.io
 | YouTube | Public search, channel Videos/Playlists/Shorts/Live sections, playlist entries and pagination | yt-dlp flat extraction; no account setup. Channel roots open section cards. [Upstream tab extractor](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube/_tab.py) |
 | Twitch | Live directory, categories, category channels, channel lookup and search | Anonymous public web GraphQL requests. Search pagination works; the live directory does not expose a continuation because upstream rejects that request. Offline channels have an explicit status. [Public web endpoint](https://gql.twitch.tv/gql), [official authenticated API alternative](https://dev.twitch.tv/docs/api/get-started/) |
 | RaiPlay | Home groups, programs, episode sets, live TV, search, genre lists and seven-day replay navigation | Public first-party JSON and current web search service. These web contracts need compatibility maintenance. [Home JSON](https://www.raiplay.it/index.json), [RaiNews catalog](https://www.raiplay.it/programmi/rainews.json), [search implementation](https://www.raiplay.it/assets/js/webcomponents/rai-search.js) |
+| Bandcamp | Public track/album links, suggested albums, ordered tracks, artwork, shared saved items and album queue/play | Bounded yt-dlp extraction; no account, artist discovery, full-text search or custom domains. [Bundled extractor](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/yt_dlp/extractor/bandcamp.py) |
 
 The authenticated provider routes cache completed pages briefly and bound
 concurrent browse work. SQLite stores up to 500 shared saved media items,
@@ -59,38 +60,76 @@ version through the same WebSocket session used for controls. Each screen
 reloads its own view; browsing on a phone does not change another screen's
 navigation. Closing the app aborts pending requests.
 
-The native Linux `--provider-catalogs` run passed six actual UI flows on
-2026-09-05: YouTube search, Twitch live search, RaiPlay live TV, program drilldown,
-search replay and recent replay navigation. Each used **Play on TV**, observed
-native playback through two remotes, and saved an item. All six favorites,
-queue entries, artwork, metadata and quality choices survived a desktop restart
-without autoplay. This exercises browsing through playback rather than treating
-an extractor response as the playback result.
+Bandcamp album browsing inspects the flat track list and one full track for
+artwork. The complete operation has a 30-second deadline and rejects more than
+500 returned tracks or malformed entries. The enqueue command repeats that
+bounded lookup, then appends once through SQLite before broadcasting. Remotes
+receive public page URLs, titles and artwork; each track's stream and headers
+are resolved privately when played. A newer Stop or play request wins over a
+slow album play request. Shutdown aborts unfinished extraction. The upstream
+extractor omits tracks without duration, so this is the returned public album
+list; browsing does not prove that every later track can still play.
 
 ## Public provider checks
 
-On 2026-09-05 the Linux app resolved and played these public sources with yt-dlp
-2026.08.19 and Deno 2.9.6. No account, cookies or video transcoding were used.
-Two paired remotes received native tracks and advancing playback position; a
-second remote changed the shared volume. These checks establish the listed
-samples, not every title or provider feature. The final six-case run used the
-explicit basic GPU rendering option described in [Linux tests](../../tests/linux/README.md);
-its native screenshots showed complete video frames.
+The final Linux `--provider-catalogs` run completed on 2026-09-05 at 19:04 UTC
+with yt-dlp 2026.08.19 and Deno 2.9.6. It passed these eight public media cases
+through the actual Online UI. Two paired remotes observed native tracks and
+advancing playback position; the second changed the shared volume. Each case
+also checked artwork and saving the item. No account, cookies or transcoding
+were used. The run used the explicit basic GPU rendering option described in
+[Linux tests](../../tests/linux/README.md); actual X11 screenshots showed video
+frames or the TV's audio artwork.
 
-| Sample | Observed media | Native test |
+| Sample | Browse path | Native result |
 | --- | --- | --- |
-| [YouTube, Big Buck Bunny 4K](https://www.youtube.com/watch?v=aqz-KE-bpKQ) | 3840×2160 AV1 and separate Opus audio | Rendered after remote seek to 30 seconds |
-| [YouTube, original Big Buck Bunny](https://www.youtube.com/watch?v=YE7VzlLtp-4) | 1080p with separate audio | Rendered after remote seek to 30 seconds |
-| [Twitch, LofiGirl](https://www.twitch.tv/lofigirl) | HLS, H.264 and AAC | Played through preroll into the live channel |
-| [RaiNews24 live](https://www.raiplay.it/dirette/rainews24) | 720p H.264 and AAC | Rendered the broadcast |
-| [RaiNews24 replay](https://www.raiplay.it/video/2026/09/RaiNews24-b7db7659-d7db-42ef-89f9-e7bdd2a04b86.html) | 720p H.264 and AAC | Rendered after remote seek to 20 seconds |
-| [Sygma via avoid radio](https://radio.avoid.quest/playlist.m3u) | MP3 stereo | Imported from the station feed and played natively |
+| [YouTube, original Big Buck Bunny](https://www.youtube.com/watch?v=YE7VzlLtp-4) | Search | Selected audio/video, advancing playback and visible frame |
+| [Twitch, LofiGirl](https://www.twitch.tv/lofigirl) | Live search | Selected audio/video, advancing playback and visible frame |
+| [RaiNews24 live](https://www.raiplay.it/dirette/rainews24) | Live TV | Selected audio/video, advancing playback and visible frame |
+| [RaiNews24 episode](https://www.raiplay.it/video/2026/09/RaiNews24-b7db7659-d7db-42ef-89f9-e7bdd2a04b86.html) | Program drilldown | Selected audio/video, advancing playback and visible frame |
+| [RaiNews24 replay](https://www.raiplay.it/video/2026/08/RaiNews24-1cf7cb45-accc-472d-ae73-fc345cbe17ec.html) | Search | Selected audio/video, advancing playback and visible frame |
+| [Rassegna stampa replay](https://www.raiplay.it/video/2026/09/RASSEGNA-STAMPA-e440a51a-b290-4de7-9208-f75b46a312d7.html) | Recent replay | Selected audio/video, advancing playback and visible frame |
+| [Mastodon, Hail to Fire](https://relapsealumni.bandcamp.com/track/hail-to-fire) | Public track link | Selected audio, unselected embedded cover track, advancing playback and visible TV artwork |
+| [Blazo, Intro](https://blazo.bandcamp.com/track/intro) | Public track link | Selected audio, advancing playback and visible TV artwork |
 
-The earlier YouTube test clip and Rai replay URL were unavailable. Replacing
-expired samples resolved those failures; they were not evidence of a provider
-restriction. An offline Twitch channel now produces a specific offline error.
-The repeatable native test command and result format are documented in
-[Linux tests](../../tests/linux/README.md). Public stream availability changes.
+The same run opened Blazo's [Jazz Format Mixtape vol.1](https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1)
+from its suggested card and queued all 22 returned public track pages in their
+displayed order. TV **Play album** started Intro; **Next** played
+[Kero One - Keep It Alive (Blazo remix)](https://blazo.bandcamp.com/track/kero-one-keep-it-alive-blazo-remix).
+A second controller replaced it with Hail to Fire, reconnected to the current
+session, and observed Stop. X11 pixel checks confirmed visible artwork for both
+standalone tracks and after replacement back to Hail to Fire.
+
+The real paired 390px HTTP browser opened the same album link, decoded artwork,
+appended all 22 tracks without autoplay, used **Play album** to start Intro, and
+stopped the TV. After a real desktop restart, the complete 74-entry test queue,
+eight saved items, metadata, artwork and video quality choices remained intact.
+Both WebSocket controllers and the HTTP phone reconnected without autoplay.
+
+The deliberately missing [couch-unavailable-test](https://blazo.bandcamp.com/track/couch-unavailable-test)
+page produced "The provider could not complete this request. Try again shortly."
+with a retry control in 2.1 seconds. The queue and stopped playback were unchanged.
+An earlier direct upstream diagnostic for that URL recorded HTTP 404. The initial
+native run also exposed a black screen when an embedded audio cover was selected
+as video. The final build disables mpv cover display and passed the actual
+artwork pixel checks; [playback notes](playback.md) describe the correction.
+
+These checks played only Intro and Kero One from the 22-track album. The other
+20 tracks have no native playback result. A separate adapter probe returned
+29 tracks and artwork for the suggested [FTL album](https://benprunty.bandcamp.com/album/ftl),
+but did not play it through the application. Account libraries, artist
+discographies, full-text search and custom domains remain unsupported. Upstream
+album extraction omits entries without duration, and availability can change
+between browsing and playback.
+
+Final evidence is in `.artifacts/bandcamp-provider-gate/qualification.json` and
+`source/.artifacts/linux/providers/` beneath that directory, including results,
+screenshots, source hashes and binary hashes. Its source manifest and both
+executables match the final `.artifacts/linux/` Jellyfin/live-radio run, which
+passed 408 native/remote checks. Earlier provider failures remain in
+`.artifacts/bandcamp-provider-gate/initial-linux/`; they do not qualify the final
+UI. These are Docker software-rendering and silent-audio results, not physical
+GPU or HDMI qualification.
 
 ## Radio station feeds
 
@@ -148,7 +187,7 @@ The table describes the broader target, including work beyond the current adapte
 | Internet radio | Saved M3U feeds, Radio Browser, shared favorites, observed current-track metadata and bounded native reconnects | Implemented; all 10 avoid streams probed, Sygma and Radio Paradise played in the app | Metadata depends on the stream; live rewind requires a buffer; physical network/audio qualification remains |
 | Jellyfin | Official TypeScript SDK, native catalog, playback negotiation and upstream progress reporting | Strong | Device capability profile must describe the real decoder and outputs; live streams need session lifecycle handling |
 | Bandcamp purchased files | Import files into the music library, play through the common engine | Strong | Does not provide Bandcamp's online account/catalog features |
-| Bandcamp online tracks/albums | Resolve playable formats through maintained yt-dlp adapter, map albums/tracks into the app catalog | Conditional, unofficial | No public consumer playback contract found; current extractor explicitly handles client challenges; availability differs by track and account |
+| Bandcamp online tracks/albums | Implemented public links, artwork, ordered album queue/play and private yt-dlp resolution | Public native track, TV/HTTP album and restart checks passed; unofficial | No consumer playback API or account integration; returned album tracks can be omitted upstream or fail when played; search/discography/custom domains remain unsupported |
 | YouTube | Implemented public catalog and yt-dlp resolver; YouTube.js + GoogleVideo remain alternatives for a future TS transport | Public browse-to-play checks passed; unofficial | Some playback uses SABR sessions rather than simple reusable URLs; signatures, account requirements and attestation evolve |
 | Twitch | Implemented anonymous catalog and yt-dlp live resolver; Streamlink only if a demonstrated gap needs it | Public browse-to-live-play check passed; unofficial | Tokens and live windows expire; offline channels cannot play; no universal VOD/live seek contract |
 | RaiPlay unprotected content | Implemented public catalogs/search/replays and yt-dlp resolver | Public browse-to-live/replay checks passed; unofficial | Stream expiry and title-specific requirements; yt-dlp reports protected titles as DRM |

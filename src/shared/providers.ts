@@ -1,4 +1,4 @@
-export type ProviderId = "youtube" | "twitch" | "raiplay";
+export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp";
 export type VideoQuality = "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {

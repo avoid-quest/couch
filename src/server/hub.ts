@@ -11,6 +11,7 @@ import { createJellyfin } from "./jellyfin";
 import { createCatalog } from "./catalog";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
+import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPlaylists } from "./playlists";
 
@@ -50,6 +51,7 @@ export function createHub(options: HubOptions) {
   }
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
   let closed = false;
+  const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => console.error(message), onProgress: () => session.invalidate("jellyfin") });
   const session = createSession(store, options.sendPlayer, state => {
@@ -153,7 +155,7 @@ export function createHub(options: HubOptions) {
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         try {
           const action = command.action;
-          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueRadio") && action.playNow
+          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueRadio") && action.playNow
             ? session.reservePlay() : undefined;
           if (action.type === "navigate") {
             if (server.subscriberCount("navigation") === 0) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
@@ -181,6 +183,11 @@ export function createHub(options: HubOptions) {
             if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
             const entries = session.loadQueue(items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })), "append");
             if (action.playNow && entries[0]) session.command({ type: "play", entryId: entries[0].id, fromStart: true });
+          } else if (action.type === "enqueueProviderAlbum") {
+            const page = await loadBandcampAlbum(action.url, shutdown.signal);
+            if (closed) return;
+            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
+            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true);
           } else if (action.type === "enqueueRadio") {
             const station = radio.getPlayable(action.stationId);
             session.command({ type: "enqueue", entry: { id: action.entryId, title: station.title, source: `radio:${action.stationId}`, kind: "radio", live: true, ...station.metadata } });
@@ -217,6 +224,7 @@ export function createHub(options: HubOptions) {
     async close() {
       if (closed) return;
       closed = true;
+      shutdown.abort();
       for (const controller of inspections.values()) controller.abort();
       session.close();
       providers.close();

@@ -192,7 +192,7 @@ export function App() {
       <main id="main">
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
         {nativeHost && <VideoStage active={active} title={current?.title || "Your media"}
-          audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video")}
+          audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
           subtitle={player?.nowPlaying ? [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ") : undefined}
           artwork={current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
@@ -243,8 +243,8 @@ export function App() {
                   <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </TabsContent>
                 {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} quality={quality} onQualityChange={setQuality} onEnqueue={(item, playNow) =>
-                  run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, quality, playNow })
-                } /></TabsContent>}
+                  run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow })
+                } onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></TabsContent>}
                 {visited.has("Library") && <TabsContent value="Library" forceMount hidden={section !== "Library"}><LibraryPanel origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} onPlayHistory={(item, options) => {
                   if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });
                   if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });

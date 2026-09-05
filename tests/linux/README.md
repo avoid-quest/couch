@@ -59,6 +59,13 @@ Run `bun run test:linux --providers tests/linux/providers.example.json` for sepa
 
 Run `bun run test:linux --provider-catalogs` to exercise the native Online panel against public catalogs. It searches YouTube for Big Buck Bunny and Twitch for LofiGirl, browses RaiPlay live channels and news program episodes, searches RaiNews24, and follows the recent replay date/channel cards. Each selected card must provide artwork, save to both remotes, and start native audio/video through Play on TV with a 720p cap. Queue metadata, quality, favorites and existing remote pairing must survive a desktop restart. Results and screenshots go to `.artifacts/linux/providers/`, including `catalog-persistence.json`. These opt-in checks can fail when public search rankings, catalogs, stream availability or regional access change. Use either `--providers` or `--provider-catalogs` in one run.
 
+The provider catalog gate also opens two public Bandcamp tracks and Blazo's
+22-track album. It verifies ordered album queue/play from the TV and a real
+390px HTTP browser, artwork, Next, source replacement, Stop, reconnect and
+restart without autoplay. A deliberately missing track must show a failure
+without changing the queue. These checks qualify the played samples, not all
+tracks in an album or account-only content.
+
 The image and build caches remain for later runs. `docker run --rm` removes the disposable test container. Nothing is published and no host ports are exposed.
 
 Official references: [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/), [manual WebDriver setup](https://v2.tauri.app/develop/tests/webdriver/manual-setup/), [Tauri Selenium example and capabilities](https://v2.tauri.app/develop/tests/webdriver/example/selenium/).

@@ -17,16 +17,23 @@ Read [architecture and shared state](architecture.md), [playback](playback.md), 
 | Music and playlists | Maintained audio tag parser, artists/albums, numeric disc/track order, authenticated embedded artwork; album queue/play; durable named playlists with revision-checked edit/load operations | Cue sheets, ReplayGain, measured gapless playback, crossfade, tag correction/writing and saved filters |
 | Radio | Saved Kodi-compatible M3U feeds, avoid radio import, stable station IDs/order/groups/logos, refresh, Radio Browser search, persistent shared favorites and immediate TV/phone Play; observed ICY/audio tags and bounded reconnects with Stop/replacement/shutdown cancellation | TV guide, recording, timeshift and physical network/audio qualification |
 | Jellyfin | Official SDK, host-only connection, paired browsing, negotiated direct play, host progress reporting, Continue watching, fresh upstream resume and authenticated text-sidecar delivery | External image subtitle delivery and conversion fallback |
-| Online browsing | YouTube search/channels/playlists, Twitch live channels/categories/search, RaiPlay live/programs/episodes/search/replays, shared saved items and Play on TV | Account subscriptions, richer discovery and provider compatibility maintenance |
-| Website media | Webpage queue mode, automatic title/artwork, per-entry quality, bounded cancellable yt-dlp worker, separate native video/audio and private headers; public YouTube, Twitch and RaiPlay native samples tested | Broader provider/expiry qualification, sign-in and DRM |
+| Online browsing | YouTube search/channels/playlists, Twitch live channels/categories/search, RaiPlay live/programs/episodes/search/replays, Bandcamp public tracks/ordered albums/artwork and album queue/play; shared saved items | Account subscriptions, Bandcamp artist/search/custom-domain discovery, richer discovery and provider compatibility maintenance |
+| Website media | Webpage queue mode, automatic title/artwork, per-entry quality, bounded cancellable yt-dlp worker, separate native video/audio and private headers; public YouTube, Twitch, RaiPlay and Bandcamp native samples tested | Broader provider/expiry qualification, sign-in and DRM |
 | Installation and testing | Linux desktop build, checksum-verified media-helper installer, real HTTP remote and Docker Linux screen preview | Signed installers/updates, AppImage dependency qualification and physical TV checks |
 
 The reproducible Linux test command and current limits are in [README](../../README.md). Implementation does not imply complete parity in a row.
 
 Music qualification includes native/HTTP decoded artwork and playlist operations
-across restart. The recorded lossless queue transition contained 272.9 ms of
+across restart. The recorded lossless queue transition contained 298.4 ms of
 silence; [playback evidence](playback.md) records the sample alignment and limits.
 Gapless, ReplayGain and cue sheets remain open despite upstream engine support.
+
+Bandcamp qualification covers Hail to Fire, Intro and the next Blazo album track
+in native playback, visible TV artwork, a 22-track ordered album on TV and HTTP,
+source replacement, Stop, reconnect and restart without autoplay. The remaining
+album tracks and the suggested FTL album have no native playback qualification.
+The [provider evidence](providers.md#public-provider-checks) records the exact
+samples and the deliberately missing track's failure.
 
 The [implementation status](../../README.md) records the working first slice and actual Linux software-rendering tests. It covers only part of R1. The broad acceptance gates in this matrix remain open.
 

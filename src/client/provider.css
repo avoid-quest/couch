@@ -29,6 +29,8 @@
 .provider-heading .quality-select { width: 170px; flex-shrink: 0; }
 .provider-heading .quality-select > label { font-size: .75rem; color: var(--muted-foreground); }
 .provider-heading .quality-select > button { font-size: .875rem; }
+.provider-selector { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.provider-selector [role="tab"] { min-width: 0; }
 .provider-open:focus-visible { outline-offset: -4px; }
 .provider-item-main { min-width: 0; }
 .provider-item-copy { min-height: 5rem; }
@@ -39,6 +41,17 @@
 .artwork-placeholder { display: grid; place-items: center; font-size: 28px; letter-spacing: 3px; }
 .queue-artwork { width: 54px; height: 38px; border-radius: 5px; flex-shrink: 0; }
 .queue-artwork.artwork-placeholder { font-size: 12px; letter-spacing: 1px; }
+.provider-music-grid .media-artwork { aspect-ratio: 1; }
+.provider-album { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 16px; }
+.provider-album .provider-album-artwork { aspect-ratio: 1; border-radius: var(--radius); }
+.provider-album-copy { min-width: 0; }
+.provider-album-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.provider-track-list { margin: 0; border-block: 1px solid var(--border); }
+.provider-track { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-block: 12px; }
+.provider-track + .provider-track { border-top: 1px solid var(--border); }
+.provider-track-position { font-size: .75rem; text-align: center; font-variant-numeric: tabular-nums; }
+.provider-track-copy { min-width: 0; }
+.provider-track .provider-item-actions { grid-template-columns: auto auto 44px; }
 
 @container catalog (min-width: 760px) {
   .catalog-row { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
@@ -48,7 +61,11 @@
   .provider-heading .quality-select { width: 100%; }
   .provider-heading .quality-select { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
   .provider-heading .quality-select > button { min-width: 0; }
-  .provider-selector [role="tab"] { padding-inline: 8px; font-size: .875rem; }
+  .provider-selector [role="tab"] { padding-inline: 2px; font-size: .75rem; }
+  .provider-album { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
+  .provider-album-actions > button { flex: 1 0 auto; }
+  .provider-track { grid-template-columns: 24px minmax(0, 1fr); gap: 8px; }
+  .provider-track .provider-item-actions { grid-column: 2; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
   .radio-playlist-picker { flex-basis: 100%; }
   .radio-playlist-toolbar { gap: 4px; }
   .radio-playlist-heading { gap: 8px; }

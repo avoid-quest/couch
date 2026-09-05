@@ -6,6 +6,9 @@ import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState 
 import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
 import * as libraryModule from "./library";
+import * as bandcampModule from "./providers/bandcamp";
+import * as webMediaModule from "./web-media";
+import type { ProviderPage } from "../shared/providers";
 
 const hostToken = "private-host-token-for-integration-tests-123456789";
 const roots: string[] = [];
@@ -16,6 +19,98 @@ const upstreams: Array<{ stop(closeActiveConnections?: boolean): Promise<void> }
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 // The shared DOM tsconfig hides Bun's extra client constructor overload.
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+
+const bandcampAlbum: ProviderPage = { title: "Album", items: ["first", "second"].map(title => ({ id: title, title, provider: "bandcamp", kind: "media", url: `https://artist.bandcamp.com/track/${title}`, thumbnail: "https://f4.bcbits.com/img/a123_10.jpg" })) };
+
+test("Bandcamp albums append once in order, play through the host resolver and persist public metadata", async () => {
+  const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
+  try {
+    const initial = fixture();
+    initial.hub.session.observe(idle);
+    const token = await pair(initial.hub);
+    const first = new Peer(initial.hub, token), second = new Peer(initial.hub, await pair(initial.hub));
+    await Promise.all([first.ready(), second.ready()]);
+    expect(await first.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true })).toMatchObject({ ok: true });
+    const load = await initial.waitForCommand(command => command.type === "load");
+    expect(load).toMatchObject({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
+    await second.waitFor(message => message.type === "state" && message.state.currentEntryId === message.state.queue[0]?.id);
+    expect(second.state.queue.map(item => item.title)).toEqual(["first", "second"]);
+    expect(first.messages.filter(message => message.type === "state").every(message => message.type !== "state" || message.state.queue.length !== 1)).toBe(true);
+    expect(second.state.queue.every(item => item.source.startsWith("web:https://artist.bandcamp.com/track/") && !!item.thumbnail && !item.quality)).toBe(true);
+    expect(JSON.stringify(second.messages)).not.toContain("private-stream");
+    const queue = second.state.queue;
+    await Promise.all([first.close(), second.close()]);
+    await initial.hub.close();
+    hubs.splice(hubs.indexOf(initial.hub), 1);
+    const restarted = fixture(initial.databasePath);
+    const remote = new Peer(restarted.hub, token);
+    await remote.ready();
+    expect(remote.state.queue).toEqual(queue);
+    expect(remote.state.currentEntryId).toBeNull();
+    expect(restarted.commands).toEqual([]);
+  } finally { album.mockRestore(); resolve.mockRestore(); }
+});
+
+test("Bandcamp album failure or insufficient capacity leaves the queue unchanged", async () => {
+  const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
+  try {
+    const { hub } = fixture();
+    hub.session.loadQueue(Array.from({ length: 499 }, () => ({ id: "existing", title: "Existing", source: "https://media.example/existing" })), "append");
+    const remote = new Peer(hub, await pair(hub));
+    await remote.ready();
+    const queue = remote.state.queue;
+    const action = { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album" } as const;
+    expect(await remote.command(action)).toMatchObject({ ok: false, error: expect.stringContaining("500") });
+    expect(remote.state.queue).toEqual(queue);
+    album.mockRejectedValueOnce(new Error("This album is unavailable."));
+    expect(await remote.command(action)).toMatchObject({ ok: false, error: "This album is unavailable." });
+    expect(remote.state.queue).toEqual(queue);
+  } finally { album.mockRestore(); }
+});
+
+for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement} cancels slow Bandcamp album play intent`, async () => {
+  const started = Promise.withResolvers<void>();
+  const output = Promise.withResolvers<ProviderPage>();
+  const album = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async () => { started.resolve(); return output.promise; });
+  try {
+    const { hub, commands } = fixture();
+    hub.session.observe(idle);
+    hub.session.command({ type: "enqueue", entry: { id: "replacement", title: "Replacement", source: "https://media.example/replacement" } });
+    const first = new Peer(hub, await pair(hub)), second = new Peer(hub, await pair(hub));
+    await Promise.all([first.ready(), second.ready()]);
+    const pending = first.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true });
+    await started.promise;
+    expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
+    output.resolve(bandcampAlbum);
+    expect(await pending).toMatchObject({ ok: false, error: expect.stringContaining("canceled by a newer control") });
+    expect(hub.session.state.queue.map(item => item.title)).toEqual(["Replacement", "first", "second"]);
+    expect(commands.filter(command => command.type === "load")).toHaveLength(replacement === "stop" ? 0 : 1);
+    expect(hub.session.state.currentEntryId).toBe(replacement === "stop" ? null : "replacement");
+  } finally { output.resolve(bandcampAlbum); album.mockRestore(); }
+});
+
+test("hub shutdown aborts pending Bandcamp extraction before a queue change", async () => {
+  const started = Promise.withResolvers<AbortSignal>();
+  const finished = Promise.withResolvers<void>();
+  const album = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async (_, signal) => {
+    started.resolve(signal!);
+    await new Promise<void>(resolve => signal!.addEventListener("abort", () => resolve(), { once: true }));
+    finished.resolve();
+    return bandcampAlbum;
+  });
+  try {
+    const { hub } = fixture();
+    const remote = new Peer(hub, await pair(hub));
+    await remote.ready();
+    remote.socket.send(JSON.stringify({ type: "command", requestId: "shutdown-album", action: { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album" } }));
+    const signal = await started.promise;
+    await hub.close();
+    await finished.promise;
+    expect(signal.aborted).toBe(true);
+    expect(hub.session.state.queue).toEqual([]);
+  } finally { album.mockRestore(); }
+});
 
 function fixture(databasePath?: string, advertisedUrls?: string[]) {
   const directory = mkdtempSync(join(tmpdir(), "couch-test-"));

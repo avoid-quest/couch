@@ -18,12 +18,14 @@ type Props = {
   quality: VideoQuality;
   onQualityChange: (quality: VideoQuality) => void;
   onEnqueue: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
+  onEnqueueAlbum: (provider: "bandcamp", url: string, playNow: boolean) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
 const providers: Record<ProviderId, { name: string; placeholder: string; help: string }> = {
   youtube: { name: "YouTube", placeholder: "Search YouTube, @channel, or paste a link", help: "Browse channels, playlists, videos, and live streams." },
   twitch: { name: "Twitch", placeholder: "Search channels, categories, or paste a link", help: "Find live channels and browse categories." },
   raiplay: { name: "RaiPlay", placeholder: "Search programs or paste a RaiPlay link", help: "Browse live TV, programs, and recent broadcasts." },
+  bandcamp: { name: "Bandcamp", placeholder: "https://artist.bandcamp.com/album/…", help: "Open a public album or track link, or try an album below." },
 };
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request.";
 
@@ -64,7 +66,7 @@ function duration(seconds: number) {
 export function ProviderPanel(props: Props) {
   const [provider, setProvider] = useState<ProviderId>("youtube");
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
-    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">Find something to watch.</p></div><QualitySelect id="provider-quality" value={props.quality} onChange={props.onQualityChange} /></div>
+    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" value={props.quality} onChange={props.onQualityChange} />}</div>
     <Tabs value={provider} onValueChange={value => setProvider(value as ProviderId)}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
       <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} provider={provider} /></TabsContent>
@@ -72,7 +74,7 @@ export function ProviderPanel(props: Props) {
   </section>;
 }
 
-function ProviderBrowser({ provider, origin, token, connected, canPlay, version, onEnqueue }: Props & { provider: ProviderId }) {
+function ProviderBrowser({ provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum }: Props & { provider: ProviderId }) {
   const info = providers[provider];
   const [input, setInput] = useState("");
   const [trail, setTrail] = useState<Location[]>([{ request: {}, title: info.name }]);
@@ -92,7 +94,7 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
   const actionRequest = useRef<AbortController | null>(null);
   const lifetime = useRef<AbortController | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
-  const restoreFocusId = useRef<string | null>(null);
+  const restoreFocus = useRef<"input" | { itemId: string } | null>(null);
   const location = trail[trail.length - 1]!;
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
@@ -144,11 +146,12 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
   }, [browse, connected, location]);
 
   useEffect(() => {
-    if (loading || !page || !restoreFocusId.current) return;
+    if (loading || !page || !restoreFocus.current) return;
     if (!browserRef.current?.closest("[hidden]") && !document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]')) {
-      browserRef.current?.querySelector<HTMLButtonElement>(`[data-provider-id="${CSS.escape(restoreFocusId.current)}"]`)?.focus();
+      const selector = restoreFocus.current === "input" ? "#provider-search" : `[data-provider-id="${CSS.escape(restoreFocus.current.itemId)}"]`;
+      browserRef.current?.querySelector<HTMLElement>(selector)?.focus();
     }
-    restoreFocusId.current = null;
+    restoreFocus.current = null;
   }, [page, loading]);
 
   useEffect(() => {
@@ -170,18 +173,23 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
     setNotice("");
     setActionError(null);
     setView("browse");
-    setTrail([{ request: /^https?:\/\//i.test(value) ? { url: value } : { query: value }, title: value ? `Results for ${value}` : info.name }]);
+    if (provider === "bandcamp") {
+      setTrail([{ request: {}, title: info.name }, ...(value ? [{ request: { url: value }, title: "Bandcamp" }] : [])]);
+    } else setTrail([{ request: /^https?:\/\//i.test(value) ? { url: value } : { query: value }, title: value ? `Results for ${value}` : info.name }]);
   }
 
   function open(item: ProviderItem) {
     setView("browse");
     setNotice("");
+    setActionError(null);
     const next = { request: { url: item.url }, title: item.title, openerId: item.id };
     setTrail(current => current[current.length - 1]?.request.url === item.url ? [...current.slice(0, -1), next] : [...current, next]);
   }
 
   function back() {
-    restoreFocusId.current = location.openerId ?? null;
+    restoreFocus.current = location.openerId ? { itemId: location.openerId } : "input";
+    setActionError(null);
+    setNotice("");
     setTrail(current => current.length > 1 ? current.slice(0, -1) : current);
   }
 
@@ -239,9 +247,27 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
     }
   }
 
+  async function enqueueAlbum(url: string, playNow: boolean) {
+    if (busy || !connected || !lifetime.current) return;
+    const controller = lifetime.current;
+    setBusy(url);
+    setActionError(null);
+    setNotice("");
+    try {
+      const ok = await onEnqueueAlbum("bandcamp", url, playNow);
+      if (ok && !controller.signal.aborted) setNotice(playNow ? "Album added. Playing on the TV." : "Album added to the shared queue.");
+    } catch (reason) {
+      if (!controller.signal.aborted) setActionError(message(reason));
+    } finally {
+      if (!controller.signal.aborted) setBusy(null);
+    }
+  }
+
   const savedItems = favorites.filter(item => item.provider === provider);
   const items = view === "saved" ? savedItems : page?.items ?? [];
   const pending = view === "saved" ? favoritesLoading : loading;
+  const albumUrl = provider === "bandcamp" && view === "browse" && /^https?:\/\/[^/]+\.bandcamp\.com\/album\/[^/?#]+\/?(?:[?#].*)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
+  const album = albumUrl && page && !pending && !browseError && items.length > 0 && items.every(item => item.kind === "media");
   return <div ref={browserRef} className="space-y-4" onKeyDown={event => {
     if (event.key !== "Escape" || event.defaultPrevented || view !== "browse" || trail.length < 2 || !connected) return;
     if (browserRef.current?.closest("[hidden]")) return;
@@ -251,8 +277,8 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
   }}>
     <p className="provider-help text-muted-foreground text-sm leading-relaxed">{info.help}</p>
     <form className="provider-search catalog-search flex items-end gap-2" role="search" onSubmit={search}>
-      <div className="grid min-w-0 flex-1 gap-2"><Label htmlFor="provider-search">Search or open a link</Label><Input id="provider-search" className="min-h-11" type="search" maxLength={4096} placeholder={info.placeholder} value={input} onChange={event => setInput(event.target.value)} disabled={!connected} /></div>
-      <Button type="submit" className="min-h-11" disabled={!connected}>Search</Button>
+      <div className="grid min-w-0 flex-1 gap-2"><Label htmlFor="provider-search">{provider === "bandcamp" ? "Album or track link" : "Search or open a link"}</Label><Input id="provider-search" className="min-h-11" type={provider === "bandcamp" ? "url" : "search"} maxLength={4096} placeholder={info.placeholder} value={input} onChange={event => setInput(event.target.value)} disabled={!connected} autoCapitalize="none" autoCorrect="off" /></div>
+      <Button type="submit" className="min-h-11" disabled={!connected}>{provider === "bandcamp" ? "Open" : "Search"}</Button>
     </form>
     <Tabs value={view} onValueChange={value => setView(value as "browse" | "saved")}>
       <div className="provider-toolbar mb-3 flex items-center justify-between gap-3 border-b pb-4">
@@ -272,8 +298,31 @@ function ProviderBrowser({ provider, origin, token, connected, canPlay, version,
         </div>}
         {view === "browse" && browseError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
         {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading saved items…" : `Loading ${info.name}…`}</p>}
-        {!pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
-        {!!items.length && <ul className="provider-grid">{items.map(item => {
+        {!pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Save albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
+        {album && <div className="provider-album">
+          <MediaArtwork key={items[0]!.thumbnail || albumUrl} thumbnail={items[0]!.thumbnail} title={page.title || "Album"} className="provider-album-artwork" />
+          <div className="provider-album-copy">
+            {items[0]!.subtitle && <p className="text-sm font-medium wrap-anywhere">{items[0]!.subtitle}</p>}
+            <p className="text-sm text-muted-foreground">{items.length} {items.length === 1 ? "track" : "tracks"}</p>
+            <div className="provider-album-actions">
+              <Button disabled={!canPlay || busy !== null} onClick={() => void enqueueAlbum(albumUrl, true)}><Play aria-hidden="true" />Play album</Button>
+              <Button variant="outline" disabled={!connected || busy !== null} onClick={() => void enqueueAlbum(albumUrl, false)}><Plus aria-hidden="true" />Add album to queue</Button>
+            </div>
+          </div>
+        </div>}
+        {album && <ol className="provider-track-list" aria-label="Album tracks">{items.map((item, index) => {
+          const saved = favorites.some(entry => entry.id === item.id);
+          return <li className="provider-item provider-track" key={item.id}>
+            <span className="provider-track-position text-muted-foreground" aria-hidden="true">{index + 1}</span>
+            <div className="provider-track-copy"><h4 className="text-sm font-medium wrap-anywhere">{item.title}</h4>{item.duration !== undefined && <p className="text-xs text-muted-foreground">{duration(item.duration)}</p>}</div>
+            <div className="provider-item-actions provider-media-actions">
+              <Button aria-label="Play on TV" disabled={!canPlay || busy !== null} onClick={() => void enqueue(item, true)}><Play aria-hidden="true" />Play</Button>
+              <Button variant="secondary" aria-label="Add to queue" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Queue</Button>
+              <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={`${saved ? "Remove" : "Save"} ${item.title} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
+            </div>
+          </li>;
+        })}</ol>}
+        {!!items.length && !album && <ul className={`provider-grid${provider === "bandcamp" ? " provider-music-grid" : ""}`}>{items.map(item => {
           const saved = favorites.some(entry => entry.id === item.id);
           const details = <>
             <div className="provider-artwork-wrap relative">

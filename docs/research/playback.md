@@ -137,18 +137,27 @@ Display refresh switching is platform work and can briefly blank the TV. Encoded
 
 libmpv already provides gapless-audio modes and ReplayGain settings. Keep a single application queue authority, but prepare the next item and let the engine perform consecutive playback without tearing down its audio output. The manual warns that slow next-file opening can still exhaust its buffer. Test continuous local/NAS/Jellyfin albums and authenticated source transitions. Crossfade is a separate capability; neither gapless mode nor two adjacent URLs proves crossfade support. [Gapless behavior](https://mpv.io/manual/stable/#options-gapless-audio), [ReplayGain](https://mpv.io/manual/stable/#options-replaygain)
 
-The 2026-09-05 18:36 UTC native queue capture does **not** qualify gapless playback. Two
+The 2026-09-05 19:02 UTC native queue capture does **not** qualify gapless playback. Two
 adjacent FLAC files decode exactly to a continuous 44.1 kHz PCM reference.
-PulseAudio output contained 12,036 silent samples at the join (272.9 ms).
-Aligned content on either side showed 1,743 net inserted samples (39.5 ms),
-with 10,293 reference edge samples unmatched. Conservative whole-recording
-loss/repetition bounds were 0–12,085 and 0–1,792 samples; they include initial
+PulseAudio output contained 13,161 silent samples at the join, or 298.435 ms.
+Aligned content on either side showed 2,986 net inserted samples, or 67.710 ms,
+with 10,175 reference edge samples unmatched. Conservative whole-recording
+loss/repetition bounds were 0 to 11,903 and 0 to 1,728 samples; they include initial
 output startup and correlation-window uncertainty. Four anchors matched exactly
 with no within-track offset drift. The app still stops and loads the next item
 after observed EOF; preloading and output continuity remain implementation work.
 Artifacts: `.artifacts/linux/music-audio-transition.json`,
 `music-native-transition.wav`, `music-reference.wav`, fixture hashes and waveform.
 This is software PulseAudio output, not physical HDMI/audio evidence.
+
+Native initialization sets `audio-display=no` so embedded cover tracks do not
+take over the video output. The TV shows the app's artwork and title whenever
+audio is selected without an active video track. The final Bandcamp gate checked
+actual X11 artwork pixels for Hail to Fire and Intro, including replacement back
+to Hail to Fire after album playback. The earlier replacement produced a black
+screen despite advancing audio observations. Those earlier screenshots do not
+qualify the final UI. See the [provider results](providers.md#public-provider-checks)
+and [native patch notes](../../src-tauri/vendor/README.md).
 
 Qualify Tauri's integrated renderer first. A failed HDR path calls for a renderer decision; it does not automatically justify transcoding every video. [Provider/CDM choices](providers.md) are a separate gate. Linux packaging must include and test the selected media dependencies against a defined base distribution, WebKitGTK and GPU stack. Tauri's bundling features do not certify an arbitrary libmpv dependency tree. [AppImage guidance](https://v2.tauri.app/distribute/appimage/)
 

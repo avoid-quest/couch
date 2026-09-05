@@ -61,7 +61,7 @@ test("browse caches complete pages by provider, query and cursor and retries fai
     if (request.query === "failure") throw new ProviderError("Try again", 503);
     return { items: [item], nextCursor: "24" };
   };
-  const catalog = fixture({ browse: { youtube: browse, twitch: browse, raiplay: browse } });
+  const catalog = fixture({ browse: { youtube: browse, twitch: browse, raiplay: browse, bandcamp: browse } });
   for (let attempt = 0; attempt < 2; attempt++) expect((await catalog.handle(api("youtube/items?q=music"))).status).toBe(200);
   expect(requests).toEqual([{ query: "music" }]);
   await catalog.handle(api("youtube/items?q=music&cursor=24"));
@@ -77,7 +77,7 @@ test("browse bounds parallel work, forwards cancellation and aborts requests on 
     signals.push(signal!);
     signal!.addEventListener("abort", () => reject(signal!.reason), { once: true });
   });
-  const catalog = fixture({ browse: { youtube: browse, twitch: browse, raiplay: browse } });
+  const catalog = fixture({ browse: { youtube: browse, twitch: browse, raiplay: browse, bandcamp: browse } });
   const controller = new AbortController();
   const pending = [catalog.handle(new Request("http://localhost/api/providers/youtube/items?q=first", { signal: controller.signal }))];
   for (let i = 1; i < 6; i++) pending.push(catalog.handle(api(`youtube/items?q=${i}`)));

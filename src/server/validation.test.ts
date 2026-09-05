@@ -3,6 +3,12 @@ import { parseCommand } from "./validation";
 
 const parse = (action: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "test", action }), false);
 
+test("provider albums accept a public link and discard client-supplied track lists and secrets", () => {
+  const action = { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1", playNow: true } as const;
+  expect(parse({ ...action, entries: [{ source: "file:///private" }], headers: { Authorization: "secret" } }).action).toEqual(action);
+  for (const change of [{ provider: "youtube" }, { url: "file:///private" }, { url: "https://user:secret@blazo.bandcamp.com/album/test" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
+});
+
 test("TV navigation accepts only remote keys and strips unrelated command fields", () => {
   for (const key of ["up", "down", "left", "right", "select", "back", "home", "info"] as const) {
     expect(parse({ type: "navigate", key, target: "other-controller", script: "private" }).action).toEqual({ type: "navigate", key });

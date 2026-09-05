@@ -28,7 +28,7 @@ On a Linux mini PC, Tauri displays the app and embedded video directly. Phones
 and laptops use the web remote in both setups. The Docker preview has silent
 audio and software video rendering.
 
-Select **Online** to browse YouTube, Twitch or RaiPlay, then **Play on TV**.
+Select **Online** to browse YouTube, Twitch, RaiPlay or Bandcamp, then **Play**.
 The launcher also prints a LAN URL for your phone. It keeps running after you
 close the browser; `bun run preview:linux stop` stops it. Restart after source
 changes to rebuild. See [preview options](../tests/preview/README.md) for mounting
@@ -75,10 +75,10 @@ queue without reconnecting or playing automatically. Live rewind needs a buffer
 and is not available.
 
 **Online** provides YouTube search, channel sections and playlists; Twitch live
-channels, categories and search; and RaiPlay live TV, programs, episodes, search
-and recent replays. Save videos, channels and collections for every paired
-remote. Browsing remains local to each screen; queue changes and saved items
-are shared. **Play on TV** adds the selected item and starts it on the player.
+channels, categories and search; RaiPlay live TV, programs, episodes, search
+and recent replays; and public Bandcamp albums and tracks. Save media, channels
+and collections for every paired remote. Browsing remains local to each screen; queue changes and saved items
+are shared. **Play** adds the selected item and starts it on the TV.
 
 For other website links, select **Webpage** in the queue form. A blank title
 requests the video's title and artwork automatically. Choose Best, 1080p, 720p
@@ -151,10 +151,29 @@ from an obsolete revision. Up to 100 playlists with 500 entries each persist
 across restart, without autoplay. Host paths and resolved provider streams do
 not appear in playlist HTTP responses.
 
-Queue transitions currently stop and load the next source. The native Linux
-latest capture measured 272.9 ms of silence between two lossless tracks, with unmatched
+Queue transitions currently stop and load the next source. The latest native Linux
+capture measured 298.4 ms of silence between two lossless tracks, with unmatched
 edge samples retained in the measurement's loss/repetition bounds. Gapless
 playback, ReplayGain, cue sheets and crossfade remain open feature gates.
+
+### Bandcamp albums and tracks
+
+In **Online → Bandcamp**, open a public album or track link, or choose a suggested
+album. Albums show artwork and their returned track order. **Add album to queue**
+appends all tracks; **Play album** appends them and starts the first. Individual
+tracks have Play, Queue and Save controls. Shared saved albums and tracks are
+available from every paired device.
+
+The host uses the existing yt-dlp worker, with a 30-second album deadline and a
+500-track limit. It resolves each public track page afresh when played. An album
+that exceeds the queue's remaining capacity leaves the queue unchanged. A newer
+Stop or playback request cancels an earlier album's pending play request.
+
+This supports public artist-subdomain `bandcamp.com/album/…` and `/track/…`
+links. Account libraries, full-text search, artist discographies and custom
+domains are not implemented. The displayed album contains the tracks returned
+by yt-dlp; its extractor omits entries without duration, and later tracks can
+still fail when playback checks their current availability.
 
 ## Resume, watched state and history
 
@@ -259,14 +278,25 @@ local resume/history and watching profiles, Jellyfin resume, keyboard/focus and
 portal rendering, provider sessions, credential isolation and shutdown. Radio directory tests use
 controlled HTTP responses; public station searches were also checked manually.
 
-The 2026-09-05 integration run passed 405 native/remote checks with Jellyfin and
-live radio, plus all six public provider catalog-to-playback flows and their
-restart persistence checks. Linux also passed 258 Bun tests, twelve app Rust/ABI
-tests and five libmpv DASH/resume/subtitle/radio regressions. The HTTP phone checks
-use a 390px viewport; native screenshots verify video and dialog/select
+The 2026-09-05 integration run passed 408 native/remote checks with Jellyfin and
+live radio. The separate provider run passed eight public catalog-to-playback
+cases, TV and HTTP Bandcamp album flows, a missing-track failure check and restart
+persistence. Linux also passed 275 Bun tests with two skipped and 2,098 assertions,
+twelve app Rust/ABI tests and five libmpv DASH/resume/subtitle/radio regressions.
+The HTTP phone checks use a 390px viewport; native screenshots verify video and dialog/select
 composition. The compiled remote was also checked in the in-app browser at
 320, 375, 390, 768, 1024, 1440 and 1920px widths, with no video surface, horizontal
-page overflow or clipped action labels across all five catalogs.
+page overflow or clipped action labels across all five catalogs. The Bandcamp
+22-track album also passed those seven viewport checks with decoded artwork.
+
+Bandcamp native playback passed for Mastodon's Hail to Fire, Blazo's Intro and
+the album's next track, Kero One - Keep It Alive (Blazo remix). The TV and phone
+queued the 22 returned album tracks in order. Source replacement, Stop and
+reconnect worked, and 74 queue entries plus eight saved items survived a desktop
+restart without autoplay. A deliberately missing track showed a provider error
+and left the queue unchanged. This does not qualify every track in the album;
+[provider evidence](research/providers.md#public-provider-checks) records the
+tested links, artwork checks and upstream limits.
 
 External-subtitle checks use real TV SRT and phone ASS uploads plus an
 authenticated Jellyfin SRT sidecar. Native pixel comparisons verify visible

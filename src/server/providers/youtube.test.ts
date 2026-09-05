@@ -133,7 +133,7 @@ test("long or multiline titles and descriptions can be queued and saved", async 
 
 test("invalid browse URLs and cursors return HTTP 400 through the provider route", async () => {
   const { browse, calls } = fixture();
-  const providers = createProviders({ databasePath: ":memory:", browse: { youtube: browse, twitch: browse, raiplay: browse } });
+  const providers = createProviders({ databasePath: ":memory:", browse: { youtube: browse, twitch: browse, raiplay: browse, bandcamp: browse } });
   try {
     for (const query of ["url=https%3A%2F%2Fexample.org%2F", "q=NASA&cursor=1", "q=NASA&cursor=2424", "cursor=24", "url=https%3A%2F%2Fwww.youtube.com%2F%40NASA&cursor=24"]) {
       expect((await providers.handle(new Request(`http://localhost/api/providers/youtube/items?${query}`))).status).toBe(400);

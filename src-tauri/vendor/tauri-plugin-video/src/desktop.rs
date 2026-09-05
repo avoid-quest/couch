@@ -1330,6 +1330,8 @@ mod linux_mpv {
             init.set_option("osc", "no")?;
             // Bun owns webpage extraction and its cancellation/retry budget.
             init.set_option("ytdl", "no")?;
+            // The app renders audio artwork; embedded covers are not video playback.
+            init.set_option("audio-display", "no")?;
             init.set_option("osd-level", "0")?;
             init.set_option("input-default-bindings", "no")?;
             init.set_option("cache", "yes")?;

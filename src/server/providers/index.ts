@@ -6,9 +6,10 @@ import { ProviderError, providerItemId } from "./http";
 import { browseYouTube } from "./youtube";
 import { browseTwitch } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
+import { browseBandcamp } from "./bandcamp";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
-const adapters: Record<ProviderId, Adapter> = { youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay };
+const adapters: Record<ProviderId, Adapter> = { youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp };
 const providerIds = new Set(Object.keys(adapters));
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -16,7 +17,7 @@ function publicUrl(value: unknown, provider?: ProviderId): string {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f\\]/.test(value)) throw new ProviderError("Invalid provider URL.", 400);
   let url: URL;
   try { url = new URL(value); } catch { throw new ProviderError("Invalid provider URL.", 400); }
-  const domains = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"] };
+  const domains = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || provider && !domains[provider].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`))) throw new ProviderError("Use a public URL from this provider.", 400);
   return url.href;
 }
@@ -79,7 +80,7 @@ export function createProviders({ databasePath, onChange = () => {}, browse = ad
           if (db.query("DELETE FROM provider_favorites WHERE id = ?").run(favorite[1]!).changes) onChange();
           return new Response(null, { status: 204 });
         }
-        const match = /^\/api\/providers\/(youtube|twitch|raiplay)\/items$/.exec(pathname);
+        const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp)\/items$/.exec(pathname);
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });
         if (request.method !== "GET") return wrongMethod("GET");
         const provider = match[1] as ProviderId;

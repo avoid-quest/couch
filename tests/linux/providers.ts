@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
 import type { Action, QueueEntry, ServerMessage, SessionState } from "../../src/shared/protocol";
 import type { ProviderId, ProviderItem } from "../../src/shared/providers";
-import { UiDriver, keys, qualityLabel } from "./ui";
+import { UiDriver, keys, qualityLabel, type startHttpRemote } from "./ui";
+import { captureBandcampAudio, verifyBandcamp, verifyBandcampRestart } from "./bandcamp";
 
 type Provider = { name: string; url?: string; kind: "webpage" | "direct"; video: boolean; live?: boolean; observeSeconds?: number; seekPosition?: number; catalog?: { provider: ProviderId; search?: string; open?: string[]; match: string } };
 const catalogs = process.env.COUCH_TEST_PROVIDER_CATALOGS === "1";
@@ -12,6 +13,8 @@ const providers: Provider[] = catalogs ? [
   { name: "RaiPlay browse news program episode", kind: "webpage", video: true, catalog: { provider: "raiplay", open: ["^L'informazione Rai$", "^RaiNews$", "^Rai News - Puntate$"], match: "^RaiNews24$" } },
   { name: "RaiPlay search RaiNews24 replay", kind: "webpage", video: true, catalog: { provider: "raiplay", search: "RaiNews24", match: "RaiNews24" } },
   { name: "RaiPlay browse recent replay", kind: "webpage", video: true, catalog: { provider: "raiplay", open: ["^Replay - ultimi 7 giorni$", "^\\d{2}/\\d{2}/\\d{4}$", "^Rai News ?24$"], match: "RASSEGNA STAMPA|RaiNews24" } },
+  { name: "Bandcamp public Mastodon Hail to Fire", kind: "webpage", video: false, catalog: { provider: "bandcamp", search: "https://relapsealumni.bandcamp.com/track/hail-to-fire", match: "^Hail to Fire$" } },
+  { name: "Bandcamp public Blazo Intro", kind: "webpage", video: false, catalog: { provider: "bandcamp", search: "https://blazo.bandcamp.com/track/intro", match: "^Intro$" } },
 ] : await Bun.file(process.env.COUCH_TEST_PROVIDERS!).json() as Provider[];
 const artifacts = "/artifacts/providers";
 await Bun.$`mkdir -p ${artifacts}`.quiet();
@@ -21,6 +24,8 @@ const driverOrigin = "http://127.0.0.1:4444";
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file(`${artifacts}/driver.log`), stderr: Bun.file(`${artifacts}/native.log`) });
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
 let session = "";
+let httpRemote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
+const providerLabels: Record<ProviderId, string> = { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay", bandcamp: "Bandcamp" };
 const remotes: { token: string; socket: WebSocket; state: SessionState | null }[] = [];
 const favorites = new Map<string, ProviderItem>();
 const results: unknown[] = [];
@@ -84,6 +89,14 @@ function connect(remote: typeof remotes[number]) {
 function command(index: number, action: Action) {
   remotes[index]!.socket.send(JSON.stringify({ type: "command", requestId: crypto.randomUUID(), action }));
 }
+async function record(result: Record<string, unknown>) {
+  results.push(result);
+  const oldIndex = previous.findIndex(old => catalogs ? old.name === result.name && !!old.catalog : old.url === result.url && old.kind === result.kind && !old.catalog);
+  if (oldIndex !== -1) previous.splice(oldIndex, 1);
+  previous.push({ ...result, ...provenance });
+  await Bun.write(`${artifacts}/native-results.json`, JSON.stringify(previous, null, 2));
+  await Bun.write(`${artifacts}/native-run-results.json`, JSON.stringify({ ...provenance, cases: results }, null, 2));
+}
 async function screenshot(name: string) {
   await execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(pairing => pairing.style.visibility='hidden')");
   await Bun.sleep(250);
@@ -114,17 +127,22 @@ try {
     console.log(`START native provider ${provider.name}`);
     let phase = "add media through the native UI";
     let entry: QueueEntry | undefined;
+    let result: Record<string, unknown>;
     try {
       if (provider.catalog) {
         phase = "browse the provider through the native Online UI";
         await ui.section("Online");
         phase = "select provider";
-        await button(".provider-selector", { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay" }[provider.catalog.provider]);
+        await button(".provider-selector", providerLabels[provider.catalog.provider]);
         phase = "open provider home";
         await button(".provider-toolbar", "Home");
-        phase = "select provider quality";
-        await ui.select("#provider-quality", qualityLabel("720p"));
-        await until(async () => await execute("return !document.querySelector('[role=listbox]') && document.querySelector('#provider-quality').textContent.trim() === 'Up to 720p'"));
+        if (provider.catalog.provider === "bandcamp") {
+          assert.equal(await execute("return !!document.querySelector('#provider-quality')"), false, "Bandcamp has no video quality selector");
+        } else {
+          phase = "select provider quality";
+          await ui.select("#provider-quality", qualityLabel("720p"));
+          await until(async () => await execute("return !document.querySelector('[role=listbox]') && document.querySelector('#provider-quality').textContent.trim() === 'Up to 720p'"));
+        }
         if (provider.catalog.search) {
           phase = "type provider search";
           await interact("#provider-search", provider.catalog.search);
@@ -150,9 +168,13 @@ try {
         const queued = new Set(remotes[0]!.state!.queue.map(item => item.id));
         phase = "play selected provider card on TV";
         await button(selected, "Play on TV");
-        await until(() => remotes.every(remote => remote.state?.queue.some(item => !queued.has(item.id) && item.title === title && item.thumbnail === thumbnail && item.quality === "720p")));
+        await until(() => remotes.every(remote => remote.state?.queue.some(item => !queued.has(item.id) && item.title === title && item.thumbnail === thumbnail && item.quality === (provider.catalog!.provider === "bandcamp" ? undefined : "720p"))));
         entry = remotes[0]!.state!.queue.find(item => !queued.has(item.id))!;
         provider.url = entry.source.slice(4);
+        if (provider.catalog.provider === "bandcamp") {
+          assert.equal(provider.url, provider.catalog.search, "Only the original public Bandcamp page reaches paired controllers");
+          assert.equal("headers" in entry || "audioSource" in entry || "resolvedSource" in entry, false, "Resolved Bandcamp streams stay on the host");
+        }
       } else {
         await ui.select("#media-kind", provider.kind === "webpage" ? "Webpage" : "Direct media");
         await interact("#media-url", provider.url!);
@@ -184,33 +206,33 @@ try {
         await until(async () => await execute(`
           const row = [...document.querySelectorAll('.queue-entry')].reverse().find(row => row.querySelector('.queue-entry-title')?.textContent === arguments[0]);
           row?.scrollIntoView({ block: 'center' });
-          return row?.querySelector('img')?.naturalWidth > 0 && row.textContent.includes('720p');
-        `, [entry!.title]));
+          return row?.querySelector('img')?.naturalWidth > 0 && (arguments[1] ? !row.textContent.includes('720p') : row.textContent.includes('720p'));
+        `, [entry!.title, provider.catalog!.provider === "bandcamp"]));
         if (provider.live) await until(() => remotes.every(remote => remote.state?.queue.some(item => item.id === entry!.id && item.live === true)));
       }
       phase = "capture the actual native window";
       await ui.watching();
       await execute("window.scrollTo(0, 0)");
-      await screenshot(name);
-      results.push({ ...provider, status: "passed", seconds: (performance.now() - started) / 1000, entry: remotes[0]!.state!.queue.find(item => item.id === entry!.id), tracks: remotes[0]!.state!.player.tracks?.map(track => ({ kind: track.kind, selected: track.selected })), observations: `${provider.catalog ? "Native Online browsing, card artwork, quality selection, Play on TV and shared favorite checked. " : ""}Native audio/video metadata and advancing position reached two paired remotes; second remote changed volume; actual X11 screenshot captured.` });
+      if (provider.catalog?.provider === "bandcamp") await captureBandcampAudio(ui, entry!.title, name, artifacts, screenshot);
+      else await screenshot(name);
+      result = { ...provider, status: "passed", seconds: (performance.now() - started) / 1000, entry: remotes[0]!.state!.queue.find(item => item.id === entry!.id), tracks: remotes[0]!.state!.player.tracks?.map(track => ({ kind: track.kind, selected: track.selected })), observations: `${provider.catalog ? `Native Online browsing, card artwork, ${provider.catalog.provider === "bandcamp" ? "audio-only controls" : "quality selection"}, Play on TV and shared favorite checked. ` : ""}Native audio/video metadata and advancing position reached two paired remotes; second remote changed volume; actual X11 screenshot captured.` };
       console.log(`PASS native provider ${provider.name}`);
     } catch (error) {
       await screenshot(`${name}-failed`).catch(() => {});
       const diagnostics = await execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(item => item.textContent), titles: [...document.querySelectorAll('.provider-item h4')].map(item => item.textContent), quality: document.querySelector('#provider-quality')?.outerHTML, input: document.querySelector('#provider-search')?.outerHTML, hidden: document.querySelector('#provider-search')?.closest('[hidden]')?.outerHTML.slice(0,500), body: getComputedStyle(document.body).pointerEvents, menus: [...document.querySelectorAll('[role=listbox]')].map(item => item.outerHTML), tabs: [...document.querySelectorAll('.source-nav button')].map(item => [item.textContent,item.getAttribute('data-state')]) }").catch(() => null);
-      results.push({ ...provider, status: "failed", phase, error: String(error), diagnostics });
+      result = { ...provider, status: "failed", phase, error: String(error), diagnostics };
       console.log(`FAIL native provider ${provider.name} during ${phase}: ${String(error)}`);
     } finally {
       command(0, { type: "stop" });
       await until(() => remotes.every(remote => remote.state!.player.status === "idle"));
-      const latest = results.at(-1) as Record<string, unknown>;
-      const oldIndex = previous.findIndex(result => catalogs ? result.name === latest.name && !!result.catalog : result.url === latest.url && result.kind === latest.kind && !result.catalog);
-      if (oldIndex !== -1) previous.splice(oldIndex, 1);
-      previous.push({ ...latest, ...provenance });
-      await Bun.write(`${artifacts}/native-results.json`, JSON.stringify(previous, null, 2));
-      await Bun.write(`${artifacts}/native-run-results.json`, JSON.stringify({ ...provenance, cases: results }, null, 2));
+      await record(result!);
     }
   }
-  if (catalogs && favorites.size) {
+  if (catalogs) {
+    httpRemote = await verifyBandcamp({ ui, origin, artifacts, code, remotes, command, until, screenshot, record,
+      reconnect: index => { remotes[index]!.socket.close(); connect(remotes[index]!); } });
+  }
+  if (catalogs && (favorites.size || httpRemote)) {
     const queue = remotes[0]!.state!.queue;
     remotes.forEach(remote => remote.socket.close());
     await wd(`/session/${session}`, undefined, "DELETE");
@@ -226,16 +248,18 @@ try {
     }
     await ui.section("Online");
     for (const provider of new Set([...favorites.values()].map(item => item.provider))) {
-      await button(".provider-selector", { youtube: "YouTube", twitch: "Twitch", raiplay: "RaiPlay" }[provider]);
+      await button(".provider-selector", providerLabels[provider]);
       await interact('.provider-views [role="tab"]:nth-child(2)');
       for (const item of favorites.values()) if (item.provider === provider) await until(async () => await execute("return [...document.querySelectorAll('.provider-item h4')].some(title => title.textContent === arguments[0])", [item.title]));
     }
     await screenshot("catalog-favorites-after-restart");
-    await Bun.write(`${artifacts}/catalog-persistence.json`, JSON.stringify({ ...provenance, status: "passed", queue, favorites: [...favorites.values()], observations: "Queue metadata and quality, paired remote credentials and all saved provider cards survived desktop restart without autoplay." }, null, 2));
+    if (httpRemote) await verifyBandcampRestart(httpRemote, queue, until);
+    await Bun.write(`${artifacts}/catalog-persistence.json`, JSON.stringify({ ...provenance, status: "passed", queue, favorites: [...favorites.values()], observations: "Queue metadata and quality, ordered Bandcamp albums, paired remote credentials and all saved provider cards survived desktop restart without autoplay. The HTTP phone reconnected with the same complete queue." }, null, 2));
     console.log("PASS native provider favorites, metadata and quality survive desktop restart for both remotes");
   }
   assert.equal(results.some(result => (result as { status: string }).status === "failed"), false, "All requested public providers play through the native app");
 } finally {
+  await httpRemote?.close();
   remotes.forEach(remote => remote.socket.close());
   if (session) await wd(`/session/${session}`, undefined, "DELETE").catch(() => {});
   driver.kill();

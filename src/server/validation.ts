@@ -31,6 +31,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueProviderAlbum": return value.provider === "bandcamp" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean");
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail))
@@ -59,6 +60,10 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
   try { value = JSON.parse(message); } catch { throw new Error("Invalid JSON command."); }
   if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action, trusted)) throw new Error("Invalid command or unsupported media source.");
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
+  if (value.action.type === "enqueueProviderAlbum") {
+    const { provider, url, playNow } = value.action;
+    return { type: "command", requestId: value.requestId, action: { type: "enqueueProviderAlbum", provider, url, ...(playNow === undefined ? {} : { playNow }) } };
+  }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
     return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }) } };

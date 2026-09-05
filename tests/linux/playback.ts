@@ -537,6 +537,7 @@ try {
     checks.push(`native ${quality} DASH renders the ${selectedVideo === 0 ? 360 : 720}p fixture color`);
     console.log(`PASS native ${quality} DASH renders the ${selectedVideo === 0 ? 360 : 720}p fixture color`);
     await clients[0]!.command({ type: "stop" });
+    await until(`native ${quality} DASH Stop opens Home before the next source`, async () => all(state => state.player.status === "idle") && await execute("return !!document.querySelector('.tv-browser:not([hidden])')"));
   }
   await clients[0]!.command({ type: "play", entryId: clients[0]!.state!.queue.find(entry => entry.title === "Linux multitrack fixture")!.id });
   await until("ordinary media resets DASH selection and restores its native tracks", () => all(state =>
