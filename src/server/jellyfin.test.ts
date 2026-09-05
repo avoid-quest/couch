@@ -392,7 +392,7 @@ describe("Jellyfin source", () => {
     await disconnecting;
     expect(upstream.requests.filter(request => request.path === "/Sessions/Logout")).toHaveLength(1);
     expect(jellyfin.status().connected).toBe(false);
-    await expect(jellyfin.items()).rejects.toThrow("Connect a Jellyfin server on the TV first");
+    await expect(jellyfin.items()).rejects.toThrow("Connect Jellyfin in Settings > Sources first");
   });
 
   test("closing while authentication is pending cannot write or reopen a closed source", async () => {

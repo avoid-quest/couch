@@ -11,7 +11,7 @@ import { getSessionApi } from "@jellyfin/sdk/lib/utils/api/session-api";
 import { getSystemApi } from "@jellyfin/sdk/lib/utils/api/system-api";
 import { getUserLibraryApi } from "@jellyfin/sdk/lib/utils/api/user-library-api";
 import axios from "axios";
-import type { JellyfinItem, JellyfinItems, JellyfinStatus } from "../shared/jellyfin";
+import type { JellyfinConnection, JellyfinItem, JellyfinItems, JellyfinStatus } from "../shared/jellyfin";
 import type { PlayerState, QueueEntry } from "../shared/protocol";
 
 const ticksPerSecond = 10_000_000;
@@ -95,7 +95,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
   const now = options.now ?? Date.now;
   const status = (): JellyfinStatus => ({ connected: configuration !== null, serverName: configuration?.serverName ?? null, username: configuration?.username ?? null });
   const connection = () => {
-    if (closed || !configuration || !api) throw new Error("Connect a Jellyfin server on the TV first.");
+    if (closed || !configuration || !api) throw new Error("Connect Jellyfin in Settings > Sources first.");
     return { configuration, api };
   };
   // Serialize authentication and logout so a late logout cannot revoke a newly reused device token.
@@ -166,12 +166,28 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
 
   return {
     status,
-    async connect(input: { url: string; username: string; password: string }) {
+    connection: (): JellyfinConnection => ({ ...status(), url: configuration?.url ?? null }),
+    async test() {
+      const current = connection();
+      try {
+        const { data } = await getUserApi(current.api).getCurrentUser();
+        if (current.api !== api) throw new Error("changed");
+        if (data.Id !== current.configuration.userId) throw new Error("identity");
+      } catch (error) {
+        if (current.api !== api) throw new Error("The Jellyfin connection changed. Test it again.");
+        if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) throw new Error("Jellyfin rejected the saved connection. Reconnect with your username and password.");
+        throw new Error("Could not reach the Jellyfin account. Check that the server is running, then reconnect if needed.");
+      }
+      return status();
+    },
+    async connect(input: { url: string; username: string; password: string }, authorize = () => {}) {
+      authorize();
       if (closed) throw new Error("The Jellyfin connection is closed.");
       if (typeof input.url !== "string" || input.url.length > 2048 || typeof input.username !== "string" || !input.username.trim() || input.username.length > 200 || typeof input.password !== "string" || input.password.length > 4096) throw new Error("Enter a server URL, username, and password.");
       const candidate = client.createApi(serverUrl(input.url), "", http);
       const requestGeneration = ++configurationGeneration;
       return configure(async () => {
+        authorize();
         if (requestGeneration !== configurationGeneration) throw new Error("The Jellyfin connection changed. Try again.");
         let next: Configuration;
         try {
@@ -182,10 +198,14 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
           const scope = new Bun.CryptoHasher("sha256").update(JSON.stringify([candidate.basePath, info.data.Id, result.data.User.Id])).digest("hex").slice(0, 24);
           next = { url: candidate.basePath, userId: result.data.User.Id, username: (result.data.User.Name || input.username.trim()).slice(0, 200), accessToken: result.data.AccessToken, serverName: (info.data.ServerName || "Jellyfin").slice(0, 200), scope };
         } catch { throw new Error("Could not connect to Jellyfin. Check the server address, username, and password."); }
-        if (requestGeneration === configurationGeneration) await deactivate();
-        if (requestGeneration !== configurationGeneration) {
+        try {
+          authorize();
+          if (requestGeneration === configurationGeneration) await deactivate();
+          authorize();
+          if (requestGeneration !== configurationGeneration) throw new Error("The Jellyfin connection changed. Try again.");
+        } catch (error) {
           await revoke(candidate);
-          throw new Error("The Jellyfin connection changed. Try again.");
+          throw error;
         }
         const previous = api;
         db.query("UPDATE jellyfin SET configuration = ? WHERE id = 1").run(JSON.stringify(next));
@@ -195,7 +215,8 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
         return status();
       });
     },
-    async disconnect() {
+    async disconnect(authorize = () => {}) {
+      authorize();
       configurationGeneration++;
       const previous = api;
       const stopped = deactivate();
