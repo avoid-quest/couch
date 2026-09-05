@@ -233,9 +233,11 @@ export async function assertNativePortal(ui: UiDriver, selector: string, artifac
   assert.ok(matches >= sample.width * sample.height * 0.75, `${name} paints above native video (${matches}/${sample.width * sample.height} background pixels)`);
 }
 
-export async function startHttpRemote(origin: string, code: string, artifacts: string, until: Wait) {
-  const endpoint = "http://127.0.0.1:4446";
-  const browserDriver = Bun.spawn(["WebKitWebDriver", "--port=4446"], { env: { ...process.env, GDK_DPI_SCALE: "1.25" }, stdout: Bun.file(`${artifacts}/http-driver.log`), stderr: Bun.file(`${artifacts}/http-browser.log`) });
+export async function startHttpRemote(origin: string, code: string, artifacts: string, until: Wait, port = 4446) {
+  const endpoint = `http://127.0.0.1:${port}`;
+  const name = port === 4446 ? "http" : `http-${port}`;
+  const windowClass = port === 4446 ? "CouchHttpTest" : `CouchHttpTest${port}`;
+  const browserDriver = Bun.spawn(["WebKitWebDriver", `--port=${port}`], { env: { ...process.env, GDK_DPI_SCALE: "1.25" }, stdout: Bun.file(`${artifacts}/${name}-driver.log`), stderr: Bun.file(`${artifacts}/${name}-browser.log`) });
   let session = "";
   const request: Request = async (path, body, method = body === undefined ? "GET" : "POST") => {
     const response = await fetch(`${endpoint}${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
@@ -251,7 +253,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
   };
   try {
     await until("HTTP remote browser driver is ready", async () => { try { return (await fetch(`${endpoint}/status`)).ok; } catch { return false; } });
-    session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", timeouts: { implicit: 5_000 }, "webkitgtk:browserOptions": { args: ["--automation", "--class=CouchHttpTest"] } } } })).sessionId;
+    session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", timeouts: { implicit: 5_000 }, "webkitgtk:browserOptions": { args: ["--automation", `--class=${windowClass}`] } } } })).sessionId;
     await request(`/session/${session}/url`, { url: origin });
     await until("compiled Bun HTTP app displays its real pairing form", async () => !!await ui.execute("return document.querySelector('#pairing-code') && !window.__TAURI_INTERNALS__"));
     // MiniBrowser chrome has a 447px minimum. A 1.25 display scale permits a
@@ -270,7 +272,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
       const point = await ui.execute("const rect = arguments[0].getBoundingClientRect(); return { x: (rect.x + rect.width / 2) * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + (rect.y + rect.height / 2) * devicePixelRatio }", [target]);
       await ui.execute("const target = arguments[0]; window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { hit: target.contains(event.target), actual: event.target.getAttribute('aria-label') || event.target.textContent, intended: target.getAttribute('aria-label') || target.textContent }; }, { once: true, capture: true });", [target]);
-      const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", "^CouchHttpTest$"], { stdout: "pipe", stderr: "inherit" });
+      const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", `^${windowClass}$`], { stdout: "pipe", stderr: "inherit" });
       const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
       assert.equal(await search.exited, 0, "HTTP browser window exists for real pointer input");
       const pointer = Bun.spawn(["xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1"], { stdout: "ignore", stderr: "inherit" });
@@ -291,10 +293,10 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       screenshot: async (name: string) => { const png = await request(`/session/${session}/screenshot`); await Bun.write(`${artifacts}/${name}.png`, Buffer.from(png, "base64")); } };
   } catch (error) {
     const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), status: document.querySelector('.header-status')?.textContent, codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled, viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } }").catch(() => null);
-    await Bun.write(`${artifacts}/http-failure.json`, JSON.stringify(diagnostics, null, 2));
+    await Bun.write(`${artifacts}/${name}-failure.json`, JSON.stringify(diagnostics, null, 2));
     await ui.execute("document.querySelector('#pairing-code')?.setAttribute('type', 'password')").catch(() => {});
     const png = await request(`/session/${session}/screenshot`).catch(() => null);
-    if (png) await Bun.write(`${artifacts}/http-failure.png`, Buffer.from(png, "base64"));
+    if (png) await Bun.write(`${artifacts}/${name}-failure.png`, Buffer.from(png, "base64"));
     await close();
     throw error;
   }

@@ -31,3 +31,16 @@ export function useVideoQualityPreference() {
   };
   return { quality, save, error };
 }
+
+export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {
+  const [quality, setQuality] = useState(defaultQuality);
+  useEffect(() => setQuality(defaultQuality), [defaultQuality]);
+  return [quality, setQuality, () => setQuality(defaultQuality)] as const;
+}
+
+export function supportsWebVideoQuality(source: string) {
+  try {
+    const url = new URL(source.trim());
+    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !/\.(mp3|m4a|aac|oga|opus|wav|flac|mka)$/i.test(url.pathname);
+  } catch { return true; }
+}

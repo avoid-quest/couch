@@ -69,6 +69,14 @@ That option starts the official Jellyfin 10.11.11 image on an isolated Docker ne
 
 The default suite also imports a generated M3U playlist, checks its logos and groups, saves an imported favorite, refreshes its station list, and verifies restart persistence. It adds a local webpage through the native form with an empty title and a quality cap, verifies real yt-dlp title/artwork extraction and native DASH playback, then checks queue metadata and quality after restart. A second DASH fixture puts audio before blue 360p and red 720p video representations. Native form choices for Best, 480p and 720p must select the expected video for both remotes and paint its color across at least 98% of the sampled X11 pixels. Loading an ordinary multitrack file afterward must restore its tracks and video pixels. The suite also runs the native mpv DASH selection regression explicitly.
 
+The quality check opens Settings on the TV and two separate 390px HTTP browser
+sessions. It saves different browser defaults, reloads each remote, queues a
+saved Online card and pasted links, tests one-entry overrides and confirms that
+changing a default preserves existing queue entries. Bandcamp, known audio
+files and direct media retain their audio-only controls. Screenshots and
+`video-quality.json` accompany the binary and source hashes. Public Online
+search remains a separate live provider check.
+
 A saved YouTube card exercises native Online favorites, shared invalidation, removal, and restart without contacting YouTube. The Bun checks use real yt-dlp against local HTML/HLS fixtures to verify quality caps and audio-only fallback, and test verified media-tool installation and failed-update recovery.
 
 Add `--live-radio` to test a real station discovered through Radio Browser, import radio.avoid.quest's ten-station collection, and play its Sygma station. Those optional checks depend on the public directories and stations being reachable. The image includes yt-dlp 2026.08.19 and Deno 2.9.6 for provider checks. The local HTML/DASH test does not qualify YouTube or other public extractors.

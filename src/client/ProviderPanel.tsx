@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Play, Plus, Star } from "lucide-react";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
 import { QualitySelect } from "./QualitySelect";
+import { useEnqueueVideoQuality } from "./video-quality";
 
 type Props = {
   origin: string;
@@ -15,9 +16,8 @@ type Props = {
   connected: boolean;
   canPlay: boolean;
   version: number;
-  quality: VideoQuality;
-  onQualityChange: (quality: VideoQuality) => void;
-  onEnqueue: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
+  defaultQuality: VideoQuality;
+  onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueueAlbum: (provider: "bandcamp", url: string, playNow: boolean) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
@@ -50,11 +50,17 @@ function duration(seconds: number) {
 
 export function ProviderPanel(props: Props) {
   const [provider, setProvider] = useState<ProviderId>("youtube");
+  const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality);
+  const enqueue = async (item: ProviderItem, playNow: boolean) => {
+    const ok = await props.onEnqueue(item, playNow, item.provider === "bandcamp" ? undefined : quality);
+    if (ok) resetQuality();
+    return ok;
+  };
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
-    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" value={props.quality} onChange={props.onQualityChange} />}</div>
+    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" label="Next video quality" value={quality} disabled={!props.connected} onChange={setQuality} />}</div>
     <Tabs value={provider} onValueChange={value => setProvider(value as ProviderId)}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
-      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} provider={provider} /></TabsContent>
+      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} onEnqueue={enqueue} provider={provider} /></TabsContent>
     </Tabs>
   </section>;
 }

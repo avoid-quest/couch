@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readVideoQuality, saveVideoQuality, videoQualityLabels } from "./video-quality";
+import { readVideoQuality, saveVideoQuality, supportsWebVideoQuality, videoQualityLabels } from "./video-quality";
 import type { VideoQuality } from "../shared/providers";
 
 const storage = () => {
@@ -26,4 +26,9 @@ describe("browser video quality preference", () => {
   test("a denied write is reported instead of claiming persistence", () => {
     expect(() => saveVideoQuality("720p", { setItem: () => { throw new Error("blocked"); } })).toThrow("blocked");
   });
+});
+
+test("webpage quality excludes known audio-only links without matching other hosts", () => {
+  for (const url of ["https://bandcamp.com/", "https://artist.bandcamp.com/track/song", "https://example.com/music/SONG.MP3?download=1", "https://example.com/track.flac"]) expect(supportsWebVideoQuality(url)).toBe(false);
+  for (const url of ["https://youtube.com/watch?v=video", "https://notbandcamp.com/video", "https://bandcamp.com.example/video", "http://localhost/video.html", ""]) expect(supportsWebVideoQuality(url)).toBe(true);
 });

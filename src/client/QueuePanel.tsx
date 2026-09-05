@@ -11,6 +11,7 @@ import type { Action, SessionState, VideoQuality } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { QualitySelect } from "./QualitySelect";
+import { supportsWebVideoQuality, useEnqueueVideoQuality } from "./video-quality";
 import { QueueActions } from "./QueueActions";
 import { SavedPlaylists } from "./SavedPlaylists";
 import { createId, type Credentials } from "./session";
@@ -22,6 +23,7 @@ type Props = {
   connected: boolean;
   available: boolean;
   nativeHost: boolean;
+  defaultQuality: VideoQuality;
   run: (action: Action) => Promise<boolean>;
 };
 
@@ -41,12 +43,13 @@ function sourceLabel(source: string) {
   }
 }
 
-export function QueuePanel({ state, credentials, connected, available, nativeHost, run }: Props) {
+export function QueuePanel({ state, credentials, connected, available, nativeHost, defaultQuality, run }: Props) {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState("");
   const [sourceKind, setSourceKind] = useState<"direct" | "webpage">("direct");
   const [title, setTitle] = useState("");
-  const [quality, setQuality] = useState<VideoQuality>("best");
+  const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(defaultQuality);
+  const offersVideoQuality = sourceKind === "webpage" && supportsWebVideoQuality(source);
   const [adding, setAdding] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,9 +79,10 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
     setAdding(true);
     try {
       const action: Action = sourceKind === "webpage"
-        ? { type: "enqueueWeb", entryId: createId(), url: url.href, title: title.trim() || undefined, quality }
+        ? { type: "enqueueWeb", entryId: createId(), url: url.href, title: title.trim() || undefined, ...(offersVideoQuality ? { quality } : {}) }
         : { type: "enqueue", entry: { id: createId(), source: url.href, title: title.trim() || url.hostname } };
       if (await run(action)) {
+        resetQuality();
         setSource("");
         setTitle("");
         setNotice("Added to the queue.");
@@ -115,7 +119,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
       <div className="queue-header-actions">
         <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.playlistVersion ?? 0} queueCount={queue.length} />
         {nativeHost && <Button variant="secondary" data-tv-local-only disabled={!connected || choosing} onClick={() => void chooseFile()}><FolderOpen aria-hidden="true" />{choosing ? "Opening…" : "Open file"}</Button>}
-        <Dialog open={open} onOpenChange={value => { setOpen(value); if (value) { setError(null); setNotice(""); } }}>
+        <Dialog open={open} onOpenChange={value => { setOpen(value); if (value) { resetQuality(); setError(null); setNotice(""); } }}>
           <DialogTrigger asChild><Button disabled={!connected}><Plus aria-hidden="true" />Add media</Button></DialogTrigger>
           <DialogContent className="queue-add-dialog" onOpenAutoFocus={event => { event.preventDefault(); sourceRef.current?.focus(); }}>
             <DialogHeader><DialogTitle>Add media</DialogTitle><DialogDescription>Paste a link to add it to the TV queue.</DialogDescription></DialogHeader>
@@ -133,7 +137,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
                 <p id="media-link-help" className="queue-form-help">{sourceKind === "webpage" ? "A video or album page from a supported site." : "A direct link to a video, audio file, or live stream."}</p>
               </div>
               <div className="queue-form-field"><Label htmlFor="media-title">Title <span className="optional">optional</span></Label><Input id="media-title" placeholder={sourceKind === "webpage" ? "Fetched automatically" : "Give it a name"} maxLength={200} value={title} onChange={event => setTitle(event.target.value)} disabled={!connected || adding} /></div>
-              {sourceKind === "webpage" && <QualitySelect id="media-quality" value={quality} disabled={!connected || adding} onChange={setQuality} />}
+              {offersVideoQuality && <QualitySelect id="media-quality" value={quality} disabled={!connected || adding} onChange={setQuality} />}
               <Button type="submit" className="queue-add-submit" disabled={!connected || adding || !source.trim()}><Plus aria-hidden="true" />{adding ? "Adding…" : "Add to queue"}</Button>
             </form>
           </DialogContent>
