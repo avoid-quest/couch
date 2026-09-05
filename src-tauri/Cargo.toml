@@ -1,0 +1,34 @@
+[package]
+name = "couch"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "couch"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.11.5", features = [] }
+tauri-plugin-shell = "=2.3.6"
+tauri-plugin-single-instance = "=2.4.4"
+tauri-plugin-log = "=2.9.1"
+tauri-plugin-dialog = "=2.7.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["sync", "time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+libmpv2 = "=5.0.3"
+libmpv2-sys = "=4.0.1"
+
+[patch.crates-io]
+tauri-runtime-wry = { path = "vendor/tauri-runtime-wry" }
+libmpv2 = { path = "vendor/libmpv2" }

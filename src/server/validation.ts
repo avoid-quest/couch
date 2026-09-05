@@ -1,0 +1,71 @@
+import { fileURLToPath } from "node:url";
+import type { Action, ClientMessage, QueueEntry } from "../shared/protocol";
+
+const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
+const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
+const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
+  && (value.fromStart === undefined || value.playNow === true && typeof value.fromStart === "boolean");
+const httpUrl = (value: unknown): value is string => {
+  if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return false;
+  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
+};
+
+function validEntry(value: unknown, trusted: boolean): value is QueueEntry {
+  if (!object(value) || !id(value.id) || typeof value.title !== "string" || value.title.length > 200 || !value.title.trim() || typeof value.source !== "string" || value.source.length > 4096) return false;
+  if (value.kind !== undefined && (value.kind !== "radio" || !httpUrl(value.source))) return false;
+  try {
+    const url = new URL(value.source.startsWith("web:") ? value.source.slice(4) : value.source);
+    if (url.username || url.password) return false;
+    if (["http:", "https:"].includes(url.protocol)) return true;
+    if (value.source.startsWith("web:")) return false;
+    return trusted && url.protocol === "file:" && !fileURLToPath(url).includes("\0");
+  } catch { return false; }
+}
+
+function validAction(value: unknown, trusted: boolean): value is Action {
+  if (!object(value)) return false;
+  switch (value.type) {
+    case "navigate": return typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
+    case "enqueue": return validEntry(value.entry, trusted) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
+    case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
+    case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
+      && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
+      && (value.thumbnail === undefined || httpUrl(value.thumbnail))
+      && (value.quality === undefined || ["best", "1080p", "720p", "480p"].includes(String(value.quality)));
+    case "remove": return id(value.entryId);
+    case "play": return id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean");
+    case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
+    case "pause": return id(value.playbackId) && typeof value.paused === "boolean";
+    case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
+    case "volume": return number(value.volume, 100);
+    case "preferences": return id(value.profileId) && object(value.preferences)
+      && [value.preferences.audioLanguage, value.preferences.subtitleLanguage].every(language => typeof language === "string" && /^(?:[a-z]{2,3})?$/i.test(language))
+      && ["auto", "off"].includes(String(value.preferences.subtitles))
+      && number(value.preferences.speed, 4) && value.preferences.speed >= 0.25;
+    case "track": return id(value.playbackId) && (value.kind === "audio" || value.kind === "subtitle") && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= (value.kind === "subtitle" ? -1 : 0) && value.index <= 1024;
+    case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
+    case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
+    case "next": return id(value.playbackId);
+    case "stop": return true;
+    default: return false;
+  }
+}
+
+export function parseCommand(message: string, trusted: boolean): ClientMessage {
+  let value: unknown;
+  try { value = JSON.parse(message); } catch { throw new Error("Invalid JSON command."); }
+  if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action, trusted)) throw new Error("Invalid command or unsupported media source.");
+  if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
+  if (value.action.type === "enqueue") {
+    const { id, title, source, kind } = value.action.entry;
+    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }) } };
+  }
+  if (value.action.type === "preferences") {
+    const { audioLanguage, subtitleLanguage, subtitles, speed } = value.action.preferences;
+    return { type: "command", requestId: value.requestId, action: { type: "preferences", profileId: value.action.profileId, preferences: { audioLanguage: audioLanguage.toLowerCase(), subtitleLanguage: subtitleLanguage.toLowerCase(), subtitles, speed } } };
+  }
+  return value as ClientMessage;
+}

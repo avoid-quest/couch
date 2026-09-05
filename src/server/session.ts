@@ -1,0 +1,350 @@
+import type { Action, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, SessionState } from "../shared/protocol";
+import type { Store } from "./store";
+import { createProgress, localMediaId, ViewingError } from "./progress";
+import { createRadioRetry } from "./radio-retry";
+
+type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
+export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean };
+type SessionOptions = {
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
+  deactivate?: () => void;
+  observe?: (player: PlayerState) => void;
+  now?: () => number;
+};
+
+export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
+  let desiredVolume = store.volume;
+  let resolution: AbortController | null = null;
+  let subtitleWarning: string | null = null;
+  let playIntent = 0;
+  let activePlayIntent = 0;
+  const radioRetry = createRadioRetry(options.now);
+  const activeProfile = store.activeProfile();
+  const state: SessionState = {
+    queue: store.queue,
+    currentEntryId: null,
+    activeProfile,
+    preferences: store.playbackPreferences(activeProfile.id),
+    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
+  };
+  const broadcast = () => publish(state);
+  const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
+  const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
+  const invalidate = (kind: "library" | "radio" | "provider" | "jellyfin" | "playlist") => {
+    const field = `${kind}Version` as const;
+    state[field] = (state[field] ?? 0) + 1;
+    broadcast();
+  };
+  const progress = createProgress(store, () => { state.progressError = null; invalidate("library"); }, options.now);
+  const persistProgress = (save: () => void, required = false) => {
+    try { save(); }
+    catch {
+      state.progressError = "Could not save viewing progress. Check the TV's storage.";
+      if (required) { broadcast(); throw new Error(state.progressError); }
+    }
+  };
+  const finishProgress = (nearEnd = false, required = false) => persistProgress(() => progress.finish(nearEnd), required);
+  const saveQueue = (queue: SessionState["queue"]) => {
+    store.saveQueue(queue);
+    state.queue = queue;
+  };
+  const enrichEntry = (entryId: string, source: string, metadata: Metadata) => {
+    const entry = state.queue.find(entry => entry.id === entryId && entry.source === source);
+    if (!entry) return;
+    const { title, ...details } = metadata;
+    const next = { ...entry, ...details, ...(entry.automaticTitle && title ? { title } : {}) };
+    if (JSON.stringify(next) === JSON.stringify(entry)) return;
+    saveQueue(state.queue.map(entry => entry.id === entryId ? next : entry));
+    broadcast();
+  };
+  const available = () => {
+    if (state.player.status === "unavailable") throw new Error("The desktop player is not connected.");
+  };
+  const currentPlayback = (playbackId: string) => {
+    available();
+    if (playbackId !== state.player.playbackId) throw new Error("The playing item changed. Use the current state and try again.");
+  };
+  const send = (command: PlaybackCommand) => {
+    try { sendPlayer(command); } catch {
+      playIntent++;
+      cancelRadioRetry();
+      resolution?.abort();
+      options.deactivate?.();
+      finishProgress();
+      state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: "The desktop player disconnected." };
+      broadcast();
+      throw new Error("The desktop player disconnected.");
+    }
+  };
+  const cancelReconnect = (message: string) => {
+    if (!state.radioRetry || state.player.status !== "loading") return false;
+    cancelRadioRetry();
+    resolution?.abort();
+    options.deactivate?.();
+    state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", nowPlaying: null, error: message };
+    send({ type: "stop" });
+    return true;
+  };
+  const failRadio = (error: string) => {
+    const entry = state.queue.find(entry => entry.id === state.currentEntryId);
+    if (!isRadio(entry)) return false;
+    resolution?.abort();
+    options.deactivate?.();
+    finishProgress();
+    state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
+      try { play(entry!.id, true, true); } catch { /* The attempt already published its failure. */ }
+    }) : null;
+    // Ignore all later native observations and controls for the failed load, including Stop's idle acknowledgement.
+    state.player = {
+      ...state.player, playbackId: crypto.randomUUID(), status: state.radioRetry?.retryAt != null ? "loading" : "error",
+      nowPlaying: null, seekable: false, tracks: [], chapters: [],
+      error: state.radioRetry && state.radioRetry.retryAt === null ? `${error} Reconnect failed after ${state.radioRetry.maximum} retries. Play the station to try again.` : error,
+    };
+    try { send({ type: "stop" }); } catch { return true; }
+    broadcast();
+    return true;
+  };
+  const play = (entryId: string, fromStart = false, retry = false) => {
+    available();
+    const entry = state.queue.find(entry => entry.id === entryId);
+    if (!entry) throw new Error("That queue entry no longer exists.");
+    finishProgress(true, true);
+    if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
+    else cancelRadioRetry();
+    activePlayIntent = ++playIntent;
+    resolution?.abort();
+    resolution = new AbortController();
+    options.deactivate?.();
+    const playbackId = crypto.randomUUID();
+    subtitleWarning = null;
+    const profileId = state.activeProfile.id;
+    state.currentEntryId = entry.id;
+    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], subtitleError: null, nowPlaying: null, error: null };
+    broadcast();
+    const failed = (error: unknown) => {
+      if (state.player.playbackId !== playbackId) return;
+      const message = error instanceof Error ? error.message : "This source could not be opened.";
+      if (failRadio(message)) return;
+      resolution?.abort();
+      options.deactivate?.();
+      try { send({ type: "stop" }); } catch { return; }
+      state.player = { ...state.player, status: "error", nowPlaying: null, error: message };
+      broadcast();
+    };
+    try {
+      const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart) ?? { source: entry.source };
+      const load = ({ metadata, radio, subtitleWarning: warning, ...media }: MediaSource) => {
+        if (state.player.playbackId !== playbackId) return;
+        subtitleWarning = warning ?? null;
+        if (metadata || radio) enrichEntry(entry.id, entry.source, { ...metadata, ...(radio ? { kind: "radio", live: true } : {}) });
+        const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
+        const mediaId = localMediaId(currentEntry);
+        const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
+        if (position !== undefined && position > 0) media.startPosition = position;
+        progress.begin(currentEntry, playbackId, profileId);
+        send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...state.preferences!.profile, ...state.preferences!.device } });
+      };
+      if (source instanceof Promise) {
+        send({ type: "stop" });
+        void source.then(load).catch(failed);
+      } else load(source);
+    } catch (error) { failed(error); throw error; }
+  };
+  const stop = () => {
+    playIntent++;
+    cancelRadioRetry();
+    finishProgress(true);
+    resolution?.abort();
+    options.deactivate?.();
+    state.currentEntryId = null;
+    subtitleWarning = null;
+    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
+    if (state.player.status !== "unavailable") send({ type: "stop" });
+    broadcast();
+  };
+  const next = () => {
+    const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
+    const following = state.queue[index + 1];
+    if (following) play(following.id);
+    else stop();
+  };
+
+  return {
+    get state() { return structuredClone(state); },
+    enrichEntry,
+    loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play") {
+      if (mode === "play") {
+        available();
+        if (!entries.length) throw new Error("This playlist is empty. Add items before playing it.");
+      }
+      if (entries.length + (mode === "append" ? state.queue.length : 0) > 500) throw new Error("The queue can hold up to 500 items. Remove some items before loading this playlist.");
+      const added = entries.map(entry => ({ ...entry, id: crypto.randomUUID() }));
+      if (mode !== "append") persistProgress(progress.checkpoint, true);
+      saveQueue(mode === "append" ? [...state.queue, ...added] : added);
+      if (mode === "play") {
+        try { play(added[0]!.id, true); }
+        catch (error) {
+          if (state.currentEntryId !== added[0]!.id || !state.radioRetry) stop();
+          throw error;
+        }
+      }
+      else if (mode === "replace") stop();
+      else broadcast();
+      return added;
+    },
+    addSubtitle(playbackId: string, subtitle: { source: string; title: string; language?: string }) {
+      currentPlayback(playbackId);
+      if (!["playing", "paused"].includes(state.player.status)) throw new Error("Wait for this item to finish loading before adding subtitles.");
+      send({ type: "addSubtitle", playbackId, ...subtitle });
+    },
+    reservePlay() {
+      available();
+      if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
+      return ++playIntent;
+    },
+    playIfCurrent(intent: number, entryId: string, fromStart = false) {
+      if (intent !== playIntent) throw new Error("Added to the queue. Playback was canceled by a newer control.");
+      play(entryId, fromStart);
+    },
+    close() {
+      playIntent++;
+      cancelRadioRetry();
+      finishProgress();
+      resolution?.abort();
+      options.deactivate?.();
+      state.player.playbackId = null;
+    },
+    invalidate,
+    createProfile(name: string) {
+      const profile = store.createProfile(name);
+      invalidate("library");
+      return profile;
+    },
+    selectProfile(id: string) {
+      if (["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop playback before selecting another watching profile.", 409);
+      finishProgress(false, true);
+      const preferences = store.playbackPreferences(id);
+      const profile = store.selectProfile(id);
+      playIntent++;
+      state.activeProfile = profile;
+      state.preferences = preferences;
+      cancelRadioRetry();
+      invalidate("library");
+      return profile;
+    },
+    editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
+      if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
+      store.editProgress(state.activeProfile.id, mediaId, changes, item);
+      invalidate("library");
+    },
+    command(action: Action) {
+      switch (action.type) {
+        case "enqueue":
+          if (action.playNow) available();
+          if (state.queue.length >= 500) throw new Error("The queue is full. Remove an item before adding another.");
+          if (state.queue.some(entry => entry.id === action.entry.id)) throw new Error("That queue entry already exists.");
+          saveQueue([...state.queue, { ...action.entry, title: action.entry.title.trim() }]);
+          if (action.playNow) play(action.entry.id, true);
+          else broadcast();
+          break;
+        case "remove": {
+          const index = state.queue.findIndex(entry => entry.id === action.entryId);
+          if (index === -1) throw new Error("That queue entry no longer exists.");
+          saveQueue(state.queue.filter(entry => entry.id !== action.entryId));
+          if (state.currentEntryId === action.entryId) stop();
+          else broadcast();
+          break;
+        }
+        case "move": {
+          const index = state.queue.findIndex(entry => entry.id === action.entryId);
+          if (index === -1 || (action.beforeEntryId !== null && !state.queue.some(entry => entry.id === action.beforeEntryId))) throw new Error("The queue changed. Try the move again.");
+          if (action.entryId === action.beforeEntryId) break;
+          const queue = [...state.queue];
+          const [entry] = queue.splice(index, 1);
+          const before = action.beforeEntryId === null ? queue.length : queue.findIndex(entry => entry.id === action.beforeEntryId);
+          queue.splice(before, 0, entry!);
+          saveQueue(queue);
+          broadcast();
+          break;
+        }
+        case "play": play(action.entryId, action.fromStart); break;
+        case "preferences":
+          if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
+          store.saveProfilePreferences(action.profileId, action.preferences);
+          state.preferences = { ...state.preferences!, profile: { ...action.preferences } };
+          broadcast();
+          break;
+        case "speed":
+          currentPlayback(action.playbackId);
+          const profile = { ...state.preferences!.profile, speed: action.speed };
+          store.saveProfilePreferences(state.activeProfile.id, profile);
+          state.preferences = { ...state.preferences!, profile };
+          broadcast();
+          send(action);
+          break;
+        case "audioDelay":
+          currentPlayback(action.playbackId);
+          store.saveAudioDelay(action.delay);
+          state.preferences = { ...state.preferences!, device: { audioDelay: action.delay } };
+          broadcast();
+          send(action);
+          break;
+        case "pause": case "subtitleDelay":
+          currentPlayback(action.playbackId);
+          send(action);
+          break;
+        case "track":
+          currentPlayback(action.playbackId);
+          if (!(action.kind === "subtitle" && action.index === -1) && !state.player.tracks?.some(track => track.kind === action.kind && track.index === action.index)) throw new Error("That track is not available for this item.");
+          send(action);
+          break;
+        case "seek":
+          currentPlayback(action.playbackId);
+          if (!state.player.seekable) throw new Error("This stream does not support seeking.");
+          const position = state.player.duration === null ? action.position : Math.min(action.position, state.player.duration);
+          send({ ...action, position });
+          progress.seek(position);
+          break;
+        case "volume":
+          store.saveVolume(action.volume);
+          desiredVolume = action.volume;
+          if (state.player.status === "unavailable") {
+            state.player.volume = desiredVolume;
+            broadcast();
+          } else send(action);
+          break;
+        case "next": currentPlayback(action.playbackId); next(); break;
+        case "stop": stop(); break;
+        case "enqueueLibrary": case "enqueueAlbum": case "enqueueJellyfin": case "enqueueRadio": case "enqueueWeb": throw new Error("Resolve this catalog item before adding it to the queue.");
+      }
+    },
+    observe(player: PlayerState) {
+      if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
+      const wasUnavailable = state.player.status === "unavailable";
+      const ended = player.status === "ended" && state.player.status !== "ended";
+      if ((player.status === "error" || ended) && isRadio(state.queue.find(entry => entry.id === state.currentEntryId))) {
+        options.observe?.(player);
+        failRadio(player.error || "The radio stream disconnected.");
+        return;
+      }
+      if (player.status === "unavailable" && !wasUnavailable || ended) playIntent++;
+      if (player.status === "unavailable") { cancelRadioRetry(); resolution?.abort(); options.deactivate?.(); }
+      if (["unavailable", "error", "idle"].includes(player.status)) finishProgress();
+      radioRetry.observe(player);
+      if (player.status === "playing") state.radioRetry = null;
+      state.player = { ...player, ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
+      try { progress.observe(player); }
+      catch { state.progressError = "Could not save viewing progress. Check the TV's storage."; }
+      options.observe?.(player);
+      if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: desiredVolume });
+      broadcast();
+      if (ended) {
+        const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
+        const following = state.queue[index + 1];
+        if (following) {
+          try { play(following.id); } catch { /* Keep the ended item visible if its progress cannot be saved. */ }
+        }
+      }
+    },
+  };
+}

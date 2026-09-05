@@ -1,0 +1,79 @@
+.remote-shell { --remote-header-height: 72px; max-width: 1440px; padding: 0 24px; }
+.remote-shell .app-header { position: sticky; top: 0; z-index: 20; min-height: var(--remote-header-height); gap: 16px; border-bottom: 1px solid var(--border); }
+.remote-shell .brand { font-size: 22px; }
+.remote-shell .header-status { gap: 8px; font-size: 12px; }
+.remote-shell .header-status button { font-size: 12px; }
+.remote-shell .workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); align-items: start; gap: 24px; padding: 20px 0; }
+.remote-shell .remote-controller { position: sticky; top: calc(var(--remote-header-height) + 20px); min-width: 0; max-height: calc(100dvh - var(--remote-header-height) - 40px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); }
+.remote-shell .player-controls { padding: 16px; min-width: 0; }
+.remote-shell .remote-pad { border-top: 1px solid var(--border); }
+.remote-shell .now-heading { margin-bottom: 8px; gap: 8px; }
+.remote-shell .eyebrow { font-size: 11px; letter-spacing: .06em; }
+.remote-shell .playback-status { font-size: 11px; }
+.remote-shell .media-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 16px; font-weight: 500; line-height: 1.4; letter-spacing: 0; }
+.remote-shell .player-controls > .source-label { margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.remote-shell .radio-now-playing, .remote-shell .radio-retry { margin-top: 8px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.remote-shell .radio-retry { display: grid; gap: 8px; }
+.remote-shell .playback-error { margin-top: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.remote-shell .seek-control { margin-top: 12px; }
+.remote-shell .time-labels { margin-top: 4px; font-size: 12px; }
+.remote-shell .transport-row { display: grid; gap: 8px; margin-top: 8px; }
+.remote-shell .transport-buttons { gap: 4px; }
+.remote-shell .play-button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: var(--radius-lg); }
+.remote-shell .volume-control { width: 100%; min-width: 0; gap: 8px; }
+.remote-shell .volume-control > svg { display: block; width: 16px; }
+.remote-shell .volume-control > span { min-width: 30px; font-size: 12px; }
+.remote-shell .player-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 12px; }
+.remote-shell .player-settings button { width: 100%; justify-content: flex-start; min-height: 44px; font-size: 12px; padding-inline: 8px; }
+.remote-shell .playback-expand { display: none; }
+.remote-shell .media-browser { background: transparent; border: 0; border-radius: 0; gap: 16px; }
+.remote-shell .source-nav { position: sticky; top: var(--remote-header-height); z-index: 10; height: auto; min-height: 50px; padding: 3px; border: 0; border-radius: var(--radius-lg); background: var(--muted); }
+.remote-shell .source-nav button { font-size: 14px; padding: 8px 12px; }
+.remote-shell .media-browser > [role="tabpanel"] { border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); }
+.remote-shell .pair-card { margin-top: 48px; }
+@media (min-width: 960px) { .remote-shell .mode-switch { display: none; } }
+@media (max-width: 959px) {
+  .remote-shell { --remote-header-height: 116px; padding: 0 16px; }
+  .remote-shell .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 8px 0; }
+  .remote-shell .brand { min-height: 44px; font-size: 20px; gap: 8px; }
+  .remote-shell .header-status { flex-wrap: nowrap; gap: 4px; }
+  .remote-shell .header-status [role="status"] { display: none; }
+  .remote-shell .header-status button { padding-inline: 8px; }
+  .remote-shell .mode-switch { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: var(--radius-lg); background: var(--muted); }
+  .remote-shell .mode-switch button { min-height: 44px; font-size: 14px; }
+  .remote-shell .mode-switch button[aria-pressed="true"] { background: var(--background); }
+  .remote-shell .workspace { display: block; padding: 16px 0; }
+  .remote-shell .remote-controller { position: static; max-height: none; overflow: visible; }
+  .remote-shell .source-nav button { font-size: 13px; padding: 8px; }
+  .remote-shell.remote-browse .workspace { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .remote-browse .remote-controller { border: 0; }
+  .remote-browse .remote-pad { display: none; }
+  .remote-browse .remote-controller > .player-controls { position: fixed; inset: auto 8px max(8px, env(safe-area-inset-bottom)); z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--card); }
+  .remote-browse .player-controls .now-heading { grid-column: 1; margin: 0; justify-content: flex-start; gap: 6px; }
+  .remote-browse .player-controls .media-title { grid-column: 1; font-size: 13px; }
+  .remote-browse .player-controls .transport-row { grid-area: 1 / 2 / span 3; margin: 0; align-self: center; display: block; }
+  .remote-browse .player-controls .playback-expand { display: inline-flex; }
+  .remote-browse .player-controls > .source-label, .remote-browse .player-controls .seek-control, .remote-browse .player-controls .volume-control, .remote-browse .player-controls .player-settings, .remote-browse .player-controls .transport-buttons > .icon-button { display: none; }
+  .remote-browse .player-controls .radio-now-playing { grid-column: 1; margin: 0; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .remote-browse .player-controls:has(.radio-now-playing) .media-title { -webkit-line-clamp: 1; }
+  .remote-browse .player-controls .radio-retry { grid-column: 1 / -1; margin: 0; }
+  .remote-browse .player-controls .radio-retry:not(:has(button)), .remote-browse .player-controls .radio-retry > p { display: none; }
+  .remote-browse .player-controls .playback-error { grid-column: 1 / -1; max-height: 48px; overflow: auto; }
+  .remote-control .media-browser { display: none; }
+  .remote-control .remote-controller { max-width: 400px; margin: 0 auto; }
+}
+@media (max-width: 359px) {
+  .remote-shell { padding-inline: 8px; }
+  .remote-shell .brand-light { display: none; }
+  .remote-shell .source-nav button { font-size: 12px; padding-inline: 6px; }
+  .remote-shell .source-count { font-size: 10px; padding-inline: 4px; }
+  .remote-browse .player-controls .now-heading .eyebrow { display: none; }
+}
+@media (min-width: 600px) and (max-width: 959px) and (max-height: 600px) {
+  .remote-shell { --remote-header-height: 64px; }
+  .remote-shell .app-header { grid-template-columns: auto minmax(180px, 1fr) auto; min-height: 64px; }
+  .remote-shell .mode-switch { grid-column: 2; grid-row: 1; }
+  .remote-shell .header-status { grid-column: 3; grid-row: 1; }
+  .remote-control .remote-controller { display: grid; grid-template-columns: 1fr 1fr; align-items: start; max-width: 800px; }
+  .remote-control .remote-pad { border-top: 0; border-left: 1px solid var(--border); }
+}

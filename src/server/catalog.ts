@@ -1,0 +1,226 @@
+import type { LibrarySource } from "../shared/library";
+import type { JellyfinSource } from "./jellyfin";
+import type { Library } from "./library";
+import { RadioError, type createRadio } from "./radio";
+import { localMediaId, ViewingError } from "./progress";
+import type { Store } from "./store";
+import type { createSession } from "./session";
+
+type Services = {
+  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork">;
+  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "playlistStations">;
+  jellyfin: Pick<JellyfinSource, "status" | "connect" | "disconnect" | "items">;
+  invalidate: (kind: "jellyfin") => void;
+  viewing?: { store: Store; session: ReturnType<typeof createSession> };
+};
+
+class RequestError extends Error {
+  constructor(message: string, readonly status = 400) { super(message); }
+}
+
+function methodNotAllowed(methods: string) {
+  return Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: methods } });
+}
+
+function requireHost(trusted: boolean) {
+  if (!trusted) throw new RequestError("Manage media sources on the TV.", 403);
+}
+
+async function body(request: Request): Promise<Record<string, unknown>> {
+  if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
+    throw new RequestError("Send a JSON object.");
+  }
+  const value: unknown = await request.json().catch(() => { throw new RequestError("Invalid JSON body."); });
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new RequestError("Send a JSON object.");
+  return value as Record<string, unknown>;
+}
+
+function queryText(params: URLSearchParams, key: string, maximum: number) {
+  const value = params.get(key)?.trim() ?? "";
+  if (value.length > maximum || /[\0\r\n]/.test(value)) throw new RequestError(`Invalid ${key} query.`);
+  return value;
+}
+
+function queryInteger(params: URLSearchParams, key: string, fallback: number, minimum: number, maximum: number) {
+  const value = params.get(key);
+  if (value === null) return fallback;
+  if (!/^\d+$/.test(value) || Number(value) < minimum || Number(value) > maximum) throw new RequestError(`Invalid ${key} query.`);
+  return Number(value);
+}
+
+function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
+  if (trusted) return source;
+  const { path: _path, ...view } = source;
+  return { ...view, error: source.error ? "This folder needs attention on the TV." : null };
+}
+
+export function createCatalog({ library, radio, jellyfin, invalidate, viewing }: Services) {
+  function startScan(source: LibrarySource) {
+    // The library publishes scan progress and owns job completion during shutdown.
+    void library.scan(source.id).catch(() => {});
+    return library.listSources().find(candidate => candidate.id === source.id) ?? source;
+  }
+
+  return {
+    async handle(request: Request, trusted: boolean): Promise<Response> {
+      const { pathname, searchParams } = new URL(request.url);
+      try {
+        if (viewing && pathname === "/api/profiles") {
+          if (request.method === "GET") return Response.json({ profiles: viewing.store.profiles(), activeProfile: viewing.session.state.activeProfile });
+          if (request.method !== "POST") return methodNotAllowed("GET, POST");
+          const { name } = await body(request);
+          if (typeof name !== "string") throw new RequestError("Enter a watching profile name.");
+          return Response.json({ profile: viewing.session.createProfile(name) }, { status: 201 });
+        }
+        const profileSelection = /^\/api\/profiles\/([\w-]{1,80})\/select$/.exec(pathname);
+        if (viewing && profileSelection) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          return Response.json({ profile: viewing.session.selectProfile(profileSelection[1]!) });
+        }
+        if (viewing && pathname === "/api/progress/history") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const { activeProfile, queue } = viewing.session.state;
+          const items = viewing.store.history(activeProfile.id, queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
+            const queueEntry = queue.find(entry => localMediaId(entry) === item.mediaId);
+            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}) };
+          });
+          return Response.json({ items, profile: activeProfile });
+        }
+        if (viewing && pathname.startsWith("/api/progress/")) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          let mediaId: string;
+          try { mediaId = decodeURIComponent(pathname.slice("/api/progress/".length)); }
+          catch { throw new RequestError("Invalid media identity."); }
+          if (!/^(library:[\w-]{1,80}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
+          const changes = await body(request);
+          if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))
+            || changes.watched !== undefined && typeof changes.watched !== "boolean"
+            || changes.clearResume !== undefined && changes.clearResume !== true
+            || changes.watched === undefined && changes.clearResume === undefined) throw new RequestError("Choose a watched state or clear the resume position.");
+          const profileId = viewing.session.state.activeProfile.id;
+          const existing = viewing.store.progress(profileId, mediaId);
+          const libraryItemId = mediaId.startsWith("library:") ? mediaId.slice(8) : null;
+          const item = existing ?? (libraryItemId ? library.getItem(libraryItemId) : null);
+          if (!item) throw new RequestError("Media item not found.", 404);
+          viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title, libraryItemId });
+          return Response.json({ progress: viewing.store.progress(profileId, mediaId) });
+        }
+        if (pathname === "/api/library/sources") {
+          if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });
+          if (request.method !== "POST") return methodNotAllowed("GET, POST");
+          requireHost(trusted);
+          const { path } = await body(request);
+          if (typeof path !== "string" || !path.trim() || path.length > 4096 || /[\0\r\n]/.test(path)) throw new RequestError("Choose a folder on the TV.");
+          let source: LibrarySource;
+          try { source = await library.addSource(path); }
+          catch { throw new RequestError("Could not open this folder. Choose an available folder on the TV."); }
+          return Response.json({ source: startScan(source) }, { status: 202 });
+        }
+        const scan = /^\/api\/library\/sources\/([\w-]{1,80})\/scan$/.exec(pathname);
+        if (scan) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          requireHost(trusted);
+          const source = library.listSources().find(source => source.id === scan[1]);
+          if (!source) throw new RequestError("Library folder not found.", 404);
+          return Response.json({ source: startScan(source) }, { status: 202 });
+        }
+        if (pathname === "/api/library/items") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined, offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
+          if (viewing) {
+            const profileId = viewing.session.state.activeProfile.id;
+            result.items = result.items.map(item => {
+              const saved = viewing.store.progress(profileId, `library:${item.id}`);
+              const progress = saved ? { position: saved.position, duration: saved.duration, watched: saved.watched, lastPlayedAt: saved.lastPlayedAt } : null;
+              return { ...item, progress };
+            });
+          }
+          return Response.json(result);
+        }
+        if (pathname === "/api/library/music/artists" || pathname === "/api/library/music/albums") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const options = { query: queryText(searchParams, "q", 200), offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) };
+          return Response.json(pathname.endsWith("artists") ? library.musicArtists(options) : library.musicAlbums({ ...options, artistId: queryText(searchParams, "artistId", 80) || undefined }));
+        }
+        const album = /^\/api\/library\/music\/albums\/([\w-]{1,80})$/.exec(pathname);
+        if (album) {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          try { return Response.json(library.albumTracks(album[1]!)); }
+          catch { throw new RequestError("This album is unavailable or has more than 500 tracks. Browse its tracks in All media.", 404); }
+        }
+        const artwork = /^\/api\/library\/artwork\/([a-f0-9]{64})$/.exec(pathname);
+        if (artwork) {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const image = library.artwork(artwork[1]!);
+          if (!image) throw new RequestError("Artwork not found.", 404);
+          return new Response(Buffer.from(image.data), { headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" } });
+        }
+        if (pathname === "/api/radio/playlists") {
+          if (request.method === "GET") return Response.json({ playlists: radio.playlists() });
+          if (request.method !== "POST") return methodNotAllowed("GET, POST");
+          const { name, url } = await body(request);
+          if (typeof name !== "string" || !name.trim() || name.length > 200 || /[\0\r\n]/.test(name)
+            || typeof url !== "string" || !url.trim() || url.length > 4096) throw new RequestError("Enter a playlist name and an HTTP or HTTPS M3U URL.");
+          return Response.json({ playlist: await radio.addPlaylist({ name, url }) }, { status: 201 });
+        }
+        const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})(?:\/(refresh|stations))?$/.exec(pathname);
+        if (playlist) {
+          if (playlist[2] === "stations") {
+            if (request.method !== "GET") return methodNotAllowed("GET");
+            return Response.json({ stations: radio.playlistStations({ playlistId: playlist[1]!, q: queryText(searchParams, "q", 100) }) });
+          }
+          if (playlist[2] === "refresh") {
+            if (request.method !== "POST") return methodNotAllowed("POST");
+            return Response.json({ playlist: await radio.refreshPlaylist(playlist[1]!) });
+          }
+          if (request.method !== "DELETE") return methodNotAllowed("DELETE");
+          radio.removePlaylist(playlist[1]!);
+          return new Response(null, { status: 204 });
+        }
+        if (pathname === "/api/radio/stations") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          return Response.json({ stations: await radio.search({ q: queryText(searchParams, "q", 100), countrycode: queryText(searchParams, "countrycode", 2) }) });
+        }
+        if (pathname === "/api/radio/favorites") {
+          if (request.method === "GET") return Response.json({ favorites: radio.favorites() });
+          if (request.method !== "POST") return methodNotAllowed("GET, POST");
+          return Response.json({ station: radio.saveFavorite((await body(request)).station) });
+        }
+        const favorite = /^\/api\/radio\/favorites\/([\w-]{1,80})$/.exec(pathname);
+        if (favorite) {
+          if (request.method !== "DELETE") return methodNotAllowed("DELETE");
+          radio.removeFavorite(favorite[1]!);
+          return new Response(null, { status: 204 });
+        }
+        if (pathname === "/api/jellyfin") {
+          if (request.method === "GET") return Response.json(jellyfin.status());
+          if (!["POST", "DELETE"].includes(request.method)) return methodNotAllowed("GET, POST, DELETE");
+          requireHost(trusted);
+          if (request.method === "POST") {
+            const { url, username, password } = await body(request);
+            if (typeof url !== "string" || !url.trim() || url.length > 2048 || typeof username !== "string" || !username.trim() || username.length > 200 || typeof password !== "string" || password.length > 4096) throw new RequestError("Enter a server URL, username, and password.");
+            try { await jellyfin.connect({ url, username, password }); }
+            catch { throw new RequestError("Could not connect to Jellyfin. Check the server address, username, and password.", 502); }
+          } else {
+            try { await jellyfin.disconnect(); }
+            catch { throw new RequestError("Could not disconnect Jellyfin. Try again.", 502); }
+          }
+          invalidate("jellyfin");
+          return Response.json(jellyfin.status());
+        }
+        if (pathname === "/api/jellyfin/items") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          if (searchParams.has("resume") && !["true", "false"].includes(searchParams.get("resume")!)) throw new RequestError("Invalid resume query.");
+          const options = { query: queryText(searchParams, "q", 200), startIndex: queryInteger(searchParams, "startIndex", 0, 0, 1_000_000), resume: searchParams.get("resume") === "true" };
+          if (!jellyfin.status().connected) throw new RequestError("Connect a Jellyfin server on the TV first.", 409);
+          try { return Response.json(await jellyfin.items(options)); }
+          catch { throw new RequestError("Could not load the Jellyfin library. Check the server connection.", 502); }
+        }
+        return Response.json({ error: "Not found." }, { status: 404 });
+      } catch (error) {
+        if (error instanceof RequestError || error instanceof RadioError || error instanceof ViewingError) return Response.json({ error: error.message }, { status: error.status });
+        return Response.json({ error: "The media catalog is temporarily unavailable." }, { status: 500 });
+      }
+    },
+  };
+}

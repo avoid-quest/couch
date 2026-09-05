@@ -1,0 +1,50 @@
+.queue-panel .queue-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; border-bottom: 1px solid var(--border); }
+.queue-panel .queue-heading { min-width: 0; }
+.queue-panel .queue-heading h2 { display: flex; align-items: center; gap: 4px; }
+.queue-panel .queue-heading p { margin-top: 5px; color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
+.queue-panel .queue-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.queue-panel .queue-header-actions > button { min-height: 44px; }
+.queue-panel .queue-list { max-height: none; padding: 8px; overflow: visible; }
+.queue-panel .queue-entry { flex-wrap: nowrap; min-height: 72px; gap: 10px; padding: 10px 8px; }
+.queue-panel .queue-entry.current { background: color-mix(in srgb, var(--primary) 8%, var(--card)); box-shadow: inset 3px 0 var(--primary); }
+.queue-panel .queue-entry > button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+.queue-panel .queue-entry-title { margin-bottom: 3px; line-height: 1.45; }
+.queue-panel .queue-current-label { color: var(--primary); }
+.queue-panel .queue-artwork { width: 48px; height: 48px; }
+.queue-panel .queue-feedback { width: auto; margin: 12px 20px; }
+.queue-panel .queue-notice { color: var(--primary); font-size: .8rem; overflow-wrap: anywhere; }
+.queue-panel .queue-empty { display: grid; justify-items: center; gap: 8px; padding: 44px 24px; text-align: center; }
+.queue-panel .queue-empty > svg { width: 30px; height: 30px; margin-bottom: 8px; color: var(--primary); }
+.queue-panel .queue-empty p { max-width: 320px; color: var(--muted-foreground); font-size: .9rem; line-height: 1.6; }
+.queue-add-dialog [data-slot="dialog-header"] { padding-right: 32px; }
+.queue-add-dialog .queue-add-form { display: grid; gap: 18px; min-width: 0; }
+.queue-add-dialog .queue-form-field { display: grid; gap: 8px; min-width: 0; }
+.queue-add-dialog input, .queue-add-dialog [role="combobox"], .queue-add-dialog button { min-height: 44px; }
+.queue-add-dialog [role="combobox"] { width: 100%; }
+.queue-add-dialog .queue-form-help { color: var(--muted-foreground); font-size: .8rem; line-height: 1.5; }
+.queue-add-dialog .queue-add-submit { width: 100%; margin-top: 2px; }
+.queue-actions button { min-height: 44px; }
+.saved-playlists button, .saved-playlists input { min-height: 44px; }
+
+.tv-shell .queue-panel .queue-header { padding: 24px 30px; }
+.tv-shell .queue-panel .queue-heading p { font-size: 16px; }
+.tv-shell .queue-panel .queue-list { padding: 10px 20px; }
+.tv-shell .queue-panel .queue-entry { min-height: 88px; gap: 16px; padding: 12px 10px; }
+.tv-shell .queue-panel .queue-entry > button { min-width: 52px; min-height: 52px; }
+.tv-shell .queue-panel .queue-artwork { width: 60px; height: 60px; }
+body.native-host .queue-add-dialog, body.native-host .saved-playlists { width: min(680px, calc(100% - 80px)); max-width: none; padding: 28px; }
+body.native-host .queue-add-dialog input, body.native-host .queue-add-dialog button, body.native-host .queue-add-dialog [role="combobox"], body.native-host .saved-playlists button, body.native-host .saved-playlists input { min-height: 52px; font-size: 18px; }
+body.native-host .queue-add-dialog [data-slot="dialog-title"], body.native-host .saved-playlists [data-slot="dialog-title"] { font-size: 26px; }
+body.native-host .queue-add-dialog label { font-size: 18px; }
+
+@media (max-width: 480px) {
+  .queue-panel .queue-header { padding: 16px; gap: 14px; }
+  .queue-panel .queue-header-actions { width: 100%; }
+  .queue-panel .queue-header-actions > button { flex: 1 1 auto; padding-inline: 12px; }
+  .queue-panel .queue-list { padding: 6px; }
+  .queue-panel .queue-entry { gap: 6px; padding: 8px 4px; }
+  .queue-panel .queue-artwork { width: 40px; height: 40px; }
+  .queue-panel .queue-entry-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; font-size: .85rem; }
+  .queue-panel .queue-entry-copy .source-label { font-size: .7rem; }
+  .queue-panel .queue-empty { padding: 32px 20px; }
+}
