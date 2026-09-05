@@ -18,7 +18,7 @@ import { verifyClaim } from "./claim";
 import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
-import { verifyConnection, verifyRecovery } from "./connection";
+import { preparePublicConnection, verifyConnection, verifyRecovery } from "./connection";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -645,6 +645,7 @@ try {
   await click(".provider-views button:nth-child(2)");
   await until("provider favorites survive desktop restart in the native Saved view", async () => await execute("return document.querySelector('.provider-item h4')?.textContent") === providerFavorite.title);
 
+  const publicConnection = await preparePublicConnection(connectionContext, secondHttpRemote);
   await radioAcceptance.prepareShutdown();
   clients.forEach(client => client.socket.close());
   const radioExitStarted = performance.now();
@@ -655,12 +656,14 @@ try {
   });
   assert.ok(performance.now() - radioExitStarted < 3_000, "Radio backoff does not delay desktop shutdown");
   await radioAcceptance.assertShutdown();
+  await publicConnection.assertOffline();
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
   await until("desktop reconnects after shutdown during radio backoff", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   clients.forEach(client => client.connect());
   await radioAcceptance.assertAfterRestart();
+  await publicConnection.assertAfterRestart();
 
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {

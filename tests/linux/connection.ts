@@ -101,3 +101,41 @@ export async function verifyRecovery(context: Context, recoveryCode: string) {
   await httpRemote.minimize();
   await Bun.write(`${artifactDir}/administrator-recovery.json`, JSON.stringify({ invocation: "COUCH_ADMIN_RECOVERY_CODE supplied to tauri-driver's native child /work/bin/couch", claimedThrough: "real HTTP browser Settings > General", recoveredRole: "administrator", oldCredentialStatus: 200, secretConsumed: true, limitation: "Local native process fixture. Installed supervisor and physical-target SSH recovery require separate appliance qualification." }, null, 2));
 }
+
+export async function preparePublicConnection(context: Context, otherRemote: Context["httpRemote"]) {
+  const { origin, httpRemote, until, artifactDir } = context;
+  const administrator = await browserToken(httpRemote.ui);
+  const revoked = await browserToken(otherRemote.ui);
+  const identity = await (await api(origin, revoked, "/api/controllers/me")).json() as ControllerIdentity;
+  await otherRemote.restore();
+  await connection(otherRemote.ui, until);
+  assert.equal((await api(origin, administrator, `/api/controllers/${identity.controller!.id}`, undefined, "DELETE")).status, 200);
+  await until("the second HTTP browser enters pairing-required state", () => otherRemote.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Pairing required'"));
+  await otherRemote.minimize();
+  await httpRemote.restore();
+  await connection(httpRemote.ui, until);
+  await httpRemote.ui.button("Pair again", settings);
+  await httpRemote.ui.button("Forget this browser", settings);
+  await until("the first HTTP browser forgets only its local pairing", () => httpRemote.ui.execute("return !!document.querySelector('#pairing-code') && !localStorage.getItem('couch.remote-token')"));
+  await connection(httpRemote.ui, until);
+  await httpRemote.minimize();
+  const health = (ui: UiDriver) => ui.execute("return Object.fromEntries([...document.querySelectorAll('[role=dialog] dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]))");
+  return {
+    async assertOffline() {
+      for (const remote of [httpRemote, otherRemote]) await until("unpaired and rejected Connection update public server health after real shutdown", async () => {
+        const details = await health(remote.ui);
+        return details.Server === "Server unavailable" && details.Player === "Unknown while disconnected";
+      });
+    },
+    async assertAfterRestart() {
+      for (const remote of [httpRemote, otherRemote]) await until("unpaired and rejected Connection refresh server and native player availability after restart", async () => {
+        const details = await health(remote.ui);
+        return details.Server === "Reachable" && details.Player === "Available";
+      });
+      assert.equal(await browserToken(otherRemote.ui), revoked, "Public health polling does not replace the rejected credential");
+      assert.equal((await api(origin, revoked, "/api/controllers/me")).status, 401);
+      assert.equal(await httpRemote.ui.execute("return localStorage.getItem('couch.remote-token')"), null);
+      await Bun.write(`${artifactDir}/public-connection-health.json`, JSON.stringify({ browsers: ["unpaired", "revoked"], stoppedServer: "Server unavailable", stoppedPlayer: "Unknown while disconnected", restartedServer: "Reachable", restartedPlayer: "Available", revokedCredentialStatus: 401, pairingPreserved: true }, null, 2));
+    },
+  };
+}

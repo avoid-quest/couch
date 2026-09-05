@@ -19,6 +19,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   changeOrigin.current = onOrigin;
   const [details, setDetails] = useState<ConnectionDetails | null>(() => knownConnection()?.details ?? null);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
+  const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<SessionState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const socket = useRef<WebSocket | null>(null);
@@ -32,6 +33,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     let disposed = false;
     const controller = new AbortController();
     let attempt = 0;
+    let authenticate = !!credentials;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
 
@@ -44,17 +46,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { ready.current = false; setState(null); setIdentity(null); setStatus("pairing-required"); rejectPending(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
-      setStatus(attempt ? "reconnecting" : "connecting");
+      if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
       const cached = knownConnection();
       const origins = [...new Set([credentials?.origin ?? cached?.origin ?? location.origin, ...(credentials && !changeOrigin.current ? [] : cached?.details.urls ?? [])])];
       let origin: string | undefined;
       for (const candidate of origins) {
         try {
           const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
-          if (credentials) {
+          if (authenticate && credentials) {
             const response = await fetch(`${candidate}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
             if (disposed) return;
             if (response.status === 401) { pairingRequired(); return; }
@@ -63,6 +65,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
             const caller = await response.json() as ControllerIdentity;
             if (disposed) return;
             setIdentity(caller);
+            setCredentialRejected(false);
           }
           const response = await fetch(`${candidate}/api/connection`, { signal });
           if (!response.ok) throw new Error("Server unavailable");
@@ -75,7 +78,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         } catch { if (disposed) return; }
       }
       if (!origin) { setStatus("server-unavailable"); retryLater(); return; }
-      if (!credentials) { setStatus("pairing-required"); return; }
+      if (!authenticate || !credentials) { setStatus("pairing-required"); attempt = 0; retry = setTimeout(() => void connect(), 5_000); return; }
       if (origin !== credentials.origin && changeOrigin.current) { changeOrigin.current(origin); return; }
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -139,7 +142,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
   }, [credentials?.origin, credentials?.token, reconnectAttempt]);
 
-  useEffect(() => setIdentity(null), [credentials?.token]);
+  useEffect(() => { setIdentity(null); setCredentialRejected(false); }, [credentials?.token]);
 
   useEffect(() => {
     if (!state || !details || !credentials) return;
@@ -190,5 +193,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, details, identity, connected: status === "connected" && !!credentials, command, reconnect };
+  return { state, status, details, identity, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
 }

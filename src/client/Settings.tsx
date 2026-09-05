@@ -28,6 +28,7 @@ type Props = {
   identity: ControllerIdentity | null;
   details: ConnectionDetails | null;
   pairingRequired: boolean;
+  reachable: boolean;
   playerStatus?: string;
   host: ConnectionInfo | null;
   administratorClaimed: boolean;
@@ -45,7 +46,7 @@ type Props = {
   libraryVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, playerStatus, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [section, setSection] = useState("general");
   useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
@@ -227,8 +228,8 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
             <dt className="text-muted-foreground">Status</dt><dd className="min-w-0 break-words">{status}</dd>
             <dt className="text-muted-foreground">TV name</dt><dd className="min-w-0 break-words">{savedName}</dd>
             <dt className="text-muted-foreground">TV address</dt><dd className="min-w-0 break-all">{origin || knownConnection()?.origin || location.origin}</dd>
-            <dt className="text-muted-foreground">Server</dt><dd>{connected ? "Connected" : pairingRequired ? "Reachable" : status}</dd>
-            <dt className="text-muted-foreground">Player</dt><dd>{connected || pairingRequired && !credentials ? playerStatus === "unavailable" ? "Unavailable" : "Available" : "Unknown while disconnected"}</dd>
+            <dt className="text-muted-foreground">Server</dt><dd>{connected ? "Connected" : reachable ? "Reachable" : status}</dd>
+            <dt className="text-muted-foreground">Player</dt><dd>{reachable ? playerStatus === "unavailable" ? "Unavailable" : "Available" : "Unknown while disconnected"}</dd>
             {identity?.controller && <><dt className="text-muted-foreground">This remote</dt><dd className="min-w-0 space-y-1"><p className="break-words">{identity.controller.name}</p><Badge variant="secondary">{identity.authority === "administrator" ? "Administrator" : "Controller"}</Badge></dd></>}
           </dl>
           {pairingRequired && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}
