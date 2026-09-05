@@ -12,6 +12,7 @@ import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
 import { verifyVideoQuality } from "./video-quality";
+import { verifyAppearance } from "./appearance";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -632,6 +633,7 @@ try {
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -662,6 +664,7 @@ try {
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
+  await persistedAppearance.verifyAfterRestart();
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === importedStations[0].id));
