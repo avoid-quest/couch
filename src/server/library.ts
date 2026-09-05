@@ -127,6 +127,13 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     }
   }
 
+  function indexItem(rowid: number, item: LibraryItem) {
+    db.query("DELETE FROM library_search WHERE rowid = ?").run(rowid);
+    db.query("INSERT INTO library_search (rowid, id, title, artist, album) VALUES (?, ?, ?, ?, ?)").run(rowid, item.id,
+      [item.title, item.video?.originalTitle, item.video?.show?.title].filter(Boolean).join(" "),
+      [item.artist, ...(item.artists ?? []), item.albumArtist, ...(item.video?.genres ?? []), ...(item.video?.show?.genres ?? [])].filter(Boolean).join(" "), item.album);
+  }
+
   const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[]) => {
     for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
     for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
@@ -141,10 +148,17 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       .get(item.id, item.sourceId, item.path, item.title, item.kind, item.duration, item.artist, item.album, item.size, item.modified, item.probed, scanId,
         JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
         item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null)!;
-    db.query("DELETE FROM library_search WHERE rowid = ?").run(row.rowid);
-    db.query("INSERT INTO library_search (rowid, id, title, artist, album) VALUES (?, ?, ?, ?, ?)").run(row.rowid, item.id,
-      [item.title, item.video?.originalTitle, item.video?.show?.title].filter(Boolean).join(" "),
-      [item.artist, ...(item.artists ?? []), item.albumArtist, ...(item.video?.genres ?? []), ...(item.video?.show?.genres ?? [])].filter(Boolean).join(" "), item.album);
+    indexItem(row.rowid, item);
+    const show = item.video?.show;
+    if (show) {
+      const description = JSON.stringify(show);
+      // A current read supplies the show description, including for retained missing episodes.
+      const updated = db.query<PublicItemRow & { rowid: number }, [string, string, string]>(`UPDATE library_items
+        SET video = json_set(video, '$.show', json(?))
+        WHERE json_extract(video, '$.show.id') = ? AND json_extract(video, '$.show') <> ? RETURNING rowid, *`)
+        .all(description, show.id, description);
+      for (const episode of updated) indexItem(episode.rowid, publicItem(episode));
+    }
     db.query("DELETE FROM library_music_artists WHERE itemId = ?").run(item.id);
     if (item.kind === "audio") for (const name of [...(item.artists ?? []), ...(item.albumArtist ? [item.albumArtist] : [])]) {
       db.query("INSERT OR IGNORE INTO library_music_artists (itemId, artistId, name) VALUES (?, ?, ?)").run(item.id, musicArtistId(name), name);
@@ -184,13 +198,16 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         }
         assertOpen();
         const music = kind === "audio" ? await readMusicMetadata(path, info.size) : null;
-        const fileMetadata: Metadata | null = kind === "video" && unchanged && previous?.fileMetadata ? JSON.parse(previous.fileMetadata) : null;
-        const metadata = kind === "audio" ? music : fileMetadata ?? (executable ? await probe(path, executable) : null);
+        const fileMetadata: Metadata | null = kind === "video" && unchanged && previous ? (previous.fileMetadata ? JSON.parse(previous.fileMetadata) :
+          !previous.video ? { title: previous.title, duration: previous.duration, artist: previous.artist, album: previous.album } : null) : null;
+        // Legacy values remain a fallback until a successful probe seeds the separate cache.
+        const probedMetadata = kind === "audio" ? music : fileMetadata && previous?.probed && previous.fileMetadata ? fileMetadata : (executable ? await probe(path, executable) : null);
+        const metadata = probedMetadata ?? fileMetadata;
         const localVideo = kind === "video" ? await readVideoMetadata(root, source.id, path) : null;
         sidecarFailures += localVideo?.failures ?? 0;
         const retained = !metadata && unchanged ? previous : null;
         assertOpen();
-        if ((kind === "audio" || executable) && !metadata) metadataFailures++;
+        if ((kind === "audio" || executable) && !probedMetadata) metadataFailures++;
         saveItem({ id: previous?.id ?? crypto.randomUUID(), sourceId: source.id, path: localPath,
           title: localVideo?.title ?? metadata?.title ?? (kind === "audio" ? retained?.title : null) ?? basename(path, extname(path)), kind,
           duration: metadata?.duration ?? (kind === "video" ? localVideo?.runtime : retained?.duration) ?? null,
@@ -200,7 +217,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
           artworkId: kind === "video" ? localVideo?.artworkId ?? null : music?.artwork?.id ?? retained?.artworkId ?? null,
           video: localVideo?.video ?? null, fileMetadata: kind === "video" && metadata ? JSON.stringify(metadata) : null,
           metadataVersion: kind === "audio" ? musicMetadataVersion : videoMetadataVersion,
-          probed: metadata ? 1 : 0, available: true }, scanId, localVideo?.artworks ?? (music?.artwork ? [music.artwork] : []), localVideo?.originals ?? []);
+          probed: probedMetadata ? 1 : 0, available: true }, scanId, localVideo?.artworks ?? (music?.artwork ? [music.artwork] : []), localVideo?.originals ?? []);
       };
       let failure: unknown;
       for await (const path of files(root)) {

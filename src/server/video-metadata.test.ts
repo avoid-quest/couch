@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { chmod, mkdir, mkdtemp, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rename, rm, stat, symlink, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createLibrary } from "./library";
@@ -131,6 +131,85 @@ test("sidecar edits and removal preserve IDs and embedded tag precedence without
   expect(scanned.artwork(artworkId)).toBeNull();
   expect(await Bun.file(count).text()).toBe("probe\n");
   expect(scanned.search({ query: "Changed" }).total).toBe(0);
+});
+
+for (const unavailableProbe of ["absent", "failing"]) for (const previouslyProbed of [0, 1]) test(`legacy video metadata (probed=${previouslyProbed}) survives ${unavailableProbe} ffprobe until successful probing`, async () => {
+  const { root, media, write } = await fixture();
+  await write("movie.mkv", "unchanged legacy media");
+  await write("movie.nfo", "<movie><runtime>99</runtime></movie>");
+  const info = await stat(join(media, "movie.mkv"));
+  const databasePath = join(root, "legacy.sqlite");
+  const sourceId = crypto.randomUUID(), itemId = crypto.randomUUID();
+  const legacy = new Database(databasePath);
+  legacy.run(`CREATE TABLE library_items (
+    id TEXT PRIMARY KEY, sourceId TEXT NOT NULL, path TEXT NOT NULL,
+    title TEXT NOT NULL, kind TEXT NOT NULL, duration REAL, artist TEXT, album TEXT,
+    size INTEGER NOT NULL, modified REAL NOT NULL, probed INTEGER NOT NULL DEFAULT 0,
+    available INTEGER NOT NULL DEFAULT 1, seenScan TEXT NOT NULL, UNIQUE(sourceId, path)
+  ); CREATE TABLE library_sources (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'idle', lastScanned INTEGER, error TEXT, warning TEXT
+  );`);
+  legacy.query("INSERT INTO library_sources (id, name, path) VALUES (?, 'Legacy', ?)").run(sourceId, media);
+  legacy.query(`INSERT INTO library_items (id, sourceId, path, title, kind, duration, size, modified, probed, seenScan)
+    VALUES (?, ?, 'movie.mkv', 'Embedded title', 'video', 120, ?, ?, ?, 'legacy')`).run(itemId, sourceId, info.size, info.mtimeMs, previouslyProbed);
+  legacy.close();
+  const store = openStore(databasePath);
+  cleanups.push(() => store.close());
+  store.saveProgress("household", { mediaId: `library:${itemId}`, libraryItemId: itemId, title: "Embedded title", position: 40, duration: 120, watched: false, lastPlayedAt: 100 });
+  const executable = join(root, "ffprobe-legacy");
+  await Bun.write(executable, `#!${process.execPath}\nprocess.exit(1);`);
+  await chmod(executable, 0o755);
+  const scanned = createLibrary({ databasePath, ffprobePath: unavailableProbe === "absent" ? null : executable });
+  cleanups.push(() => scanned.close());
+  for (let scan = 0; scan < 2; scan++) {
+    expect((await scanned.scan(sourceId)).status).toBe("ready");
+    expect(scanned.getItem(itemId)).toMatchObject({ title: "Embedded title", duration: 120 });
+  }
+  await scanned.close();
+  await Bun.write(executable, `#!${process.execPath}\nconsole.log(JSON.stringify({format:{duration:'125',tags:{title:'Reprobed title'}}}));`);
+  const reopened = createLibrary({ databasePath, ffprobePath: executable });
+  cleanups.push(() => reopened.close());
+  expect(reopened.getItem(itemId)).toMatchObject({ title: "Embedded title", duration: 120 });
+  await reopened.scan(sourceId);
+  expect(reopened.getItem(itemId)).toMatchObject({ title: "Reprobed title", duration: 125 });
+  expect(store.progress("household", `library:${itemId}`)).toMatchObject({ position: 40, watched: false });
+  await write("movie.mkv", "replaced media with different bytes and size");
+  await Bun.write(executable, `#!${process.execPath}\nprocess.exit(1);`);
+  await reopened.scan(sourceId);
+  expect(reopened.getItem(itemId)).toMatchObject({ title: "movie", duration: 5940 });
+});
+
+test("current show metadata survives deleted episodes, search and whole-source offline restart", async () => {
+  const { root, media, databasePath, library, write } = await fixture();
+  await write("Show/Season 1/S01E01.mkv", "unit media");
+  await write("Show/Season 2/S02E01.mkv", "unit media");
+  await write("Show/tvshow.nfo", "<tvshow><title>A show</title><originaltitle>Current original</originaltitle><plot>Show plot</plot></tvshow>");
+  const source = await library.addSource(media);
+  await library.scan(source.id);
+  const showId = library.videoShows().items[0]!.id;
+  const episodes = library.search({ showId }).items;
+  await unlink(join(media, "Show/Season 2/S02E01.mkv"));
+  await write("Show/tvshow.nfo", "<tvshow><title>Z show</title><originaltitle>Current original</originaltitle><plot>Show plot</plot></tvshow>");
+  await library.scan(source.id);
+  const shows = library.videoShows();
+  expect(shows.items).toEqual([expect.objectContaining({ id: showId, title: "Z show", plot: "Show plot", seasonCount: 2, episodeCount: 2 })]);
+  expect(library.videoShows({ query: "Z show" })).toEqual(shows);
+  expect(library.videoShows({ query: "Current original" })).toEqual(shows);
+  expect(library.videoShows({ query: "A show" }).total).toBe(0);
+  expect(library.search({ showId }).items.map(item => item.id)).toEqual(episodes.map(item => item.id));
+  expect(library.getItem(episodes[1]!.id)?.available).toBe(false);
+  expect(library.getItem(episodes[1]!.id)?.video?.show?.title).toBe("Z show");
+  expect(library.search({ query: "Z show", videoType: "episode" }).total).toBe(2);
+  expect(library.search({ query: "A show", videoType: "episode" }).total).toBe(0);
+  await rename(media, join(root, "offline"));
+  expect((await library.scan(source.id)).status).toBe("unavailable");
+  await library.close();
+  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  cleanups.push(() => reopened.close());
+  expect(reopened.videoShows()).toEqual(shows);
+  expect(reopened.videoShows({ query: "Z show" })).toEqual(shows);
+  expect(reopened.search({ showId }).items.every(item => !item.available)).toBe(true);
 });
 
 test("malformed and escaped sidecars stay isolated from playable entries and filename fallback", async () => {

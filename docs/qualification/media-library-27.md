@@ -23,6 +23,8 @@ Shows occupy one directory, with episodes directly inside it or in `Season N`/`S
 
 For item titles the order is valid NFO, embedded ffprobe title, filename. Probed duration wins over NFO runtime. The host retains embedded tags separately, so removing an NFO restores the embedded title without re-probing unchanged media. File tags still provide artist/album values. Artwork and NFO are read again on every explicit scan; unchanged media avoids repeated ffprobe work.
 
+Migrated video rows retain their legacy title, duration, artist and album while ffprobe is absent or fails on unchanged media. This fallback survives repeated scans and restart, and remains eligible for replacement by a successful probe. A file size/mtime change invalidates it.
+
 Source files are read-only. NFO playback paths, URL artwork, external IDs, watched/playcount/resume fields, and other unlisted fields do not drive playback or overwrite Couch progress. Library items keep their existing UUID by source and relative video path. Show identity hashes the source UUID and relative show directory, independently of NFO/title changes. Renaming/moving a video or show directory is not identity-preserving in this slice. Episodes sort numerically by season and episode, unknown values last, then title and media UUID.
 
 ## Nearby artwork and bounds
@@ -52,10 +54,13 @@ This is the retained input for later [metadata correction/export](https://github
 
 The scanner's SQLite transactions commit item, artwork, original NFO, and search changes before the library invalidation is published. Scans retain existing media rows and profile progress. Reconnect uses the existing fresh snapshot and query invalidation; a full restart retains catalogs and waits for an explicit Play command.
 
+A current episode read supplies the shared show description to all retained episodes with the same directory identity, including missing episodes. The same transaction refreshes their search entries without changing their availability, episode numbers, IDs or progress. This keeps show titles and search counts consistent after a show NFO edit and retains the current description when the whole source goes offline.
+
 ## Validation record
 
-- Local `bun run check`: 299 pass, 6 skip, 0 fail, 2,352 assertions. Skips cover missing local ffmpeg/yt-dlp and opt-in public Twitch/RaiPlay checks. These are not substitutes for native evidence.
+- Local `bun run check`: 304 pass, 6 skip, 0 fail, 2,397 assertions. Skips cover missing local ffmpeg/yt-dlp and opt-in public Twitch/RaiPlay checks. These are not substitutes for native evidence.
 - Scanner/catalog tests cover movie/episode/show fields, numeric ordering, FTS search, pagination, protected path-free artwork, malformed/deep/oversized XML, invalid/dimension-limited images, symlink escapes, sidecar edits/removal, embedded fallback without repeated probing, source unavailability/recovery, UUID/progress persistence, restart, and exact private NFO retention.
+- Focused review regressions reproduce the original failures, then verify migration from a real legacy SQLite schema with absent/failing ffprobe, repeated scans, restart, successful reprobe and changed-file invalidation. A deleted-season episode plus `A show` → `Z show` NFO edit verifies stable identity, cached episode counts, current detail/search metadata and whole-source offline restart. Local frontend/sidecar build passes. Logs are under `.artifacts/catalog/review-{regressions-red,check,build}.log` in the assigned worktree.
 - Native/HTTP playable movie and multi-season fixture, decoded artwork, phone/tablet/desktop/TV screenshots, queue/play, source switching/cancellation, two-controller reconnect, and offline stopped restart: pending coordinated qualification.
 - Shared preview rebuild and artifact links/source/binary hashes: pending coordinated qualification.
 
