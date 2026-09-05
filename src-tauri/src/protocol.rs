@@ -398,7 +398,7 @@ mod tests {
                 ..
             }
         ));
-        for value in ["-1", "1e400", "\"12\"", "true"] {
+        for value in ["-1", "-0.25", "1e400", "\"12\"", "true", "[]", "{}"] {
             let command = format!(
                 r#"{{"type":"load","playbackId":"invalid","source":"/media/movie.mkv","startPosition":{value}}}"#
             );

@@ -16,6 +16,10 @@ jobs:
     name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'linux' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # Keep the dev/test assertions and overflow checks; omit bulky debug symbols.
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -63,12 +67,18 @@ jobs:
         if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libmpv-dev libgl1-mesa-dev ffmpeg
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg
       - name: Set up Rust
         if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
-        run: |
-          rustup update stable --no-self-update
-          rustup default stable
+        run: rustup show active-toolchain
+      - name: Reuse Cargo dependencies
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-bin: false
+          # The action also keys compiler/host, Cargo env, manifests, and lockfiles.
+          key: ubuntu-24.04-default-test-${{ hashFiles('.github/workflows/check.yml', 'src-tauri/vendor/**', 'src-tauri/build.rs', 'src-tauri/tauri.conf.json', 'src-tauri/capabilities/**', 'src-tauri/icons/**', 'scripts/build.ts', 'package.json', 'bun.lock') }}
       - name: Install media test dependency
         if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false'
         run: |
@@ -82,7 +92,5 @@ jobs:
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - run: bun run build
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked --verbose
         if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
