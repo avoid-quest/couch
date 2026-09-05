@@ -41,6 +41,7 @@ export type SessionState = {
   progressError?: string | null;
   libraryVersion?: number;
   radioVersion?: number;
+  iptvVersion?: number;
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;
