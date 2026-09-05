@@ -105,7 +105,8 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     return result;
   };
   const revoke = async (previous: Api | null) => {
-    if (!previous?.accessToken || (api?.basePath === previous.basePath && api.accessToken === previous.accessToken)) return;
+    // Different URLs can reach the same server. Logging out its reused token would revoke the new connection too.
+    if (!previous?.accessToken || api?.accessToken === previous.accessToken) return;
     await getSessionApi(previous).reportSessionEnded().catch(() => undefined);
   };
   const report = (send: () => Promise<unknown>) => {

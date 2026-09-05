@@ -13,6 +13,7 @@ afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await c
 const userId = "b".repeat(32);
 
 function server(authWait?: () => Promise<void>, logoutWait?: () => Promise<void>) {
+  const accessToken = `private-token-${crypto.randomUUID()}`;
   let health = 200;
   let logins = 0;
   let logouts = 0;
@@ -23,9 +24,9 @@ function server(authWait?: () => Promise<void>, logoutWait?: () => Promise<void>
       logins++;
       await authWait?.();
       const body = await request.json() as { Username: string; Pw: string };
-      return body.Pw === "private-password" ? Response.json({ User: { Id: userId, Name: body.Username }, AccessToken: "private-token" }) : new Response("private upstream failure", { status: 401 });
+      return body.Pw === "private-password" ? Response.json({ User: { Id: userId, Name: body.Username }, AccessToken: accessToken }) : new Response("private upstream failure", { status: 401 });
     }
-    if (!request.headers.get("Authorization")?.includes('Token="private-token"')) return new Response(null, { status: 401 });
+    if (!request.headers.get("Authorization")?.includes(`Token="${accessToken}"`)) return new Response(null, { status: 401 });
     if (path === "/Users/Me") return health === 200 ? Response.json({ Id: userId, Name: "Family" }) : new Response("private upstream failure", { status: health });
     if (path === "/Items") return Response.json({ Items: [{ Id: "a".repeat(32), Name: "Family movie", Type: "Movie" }], TotalRecordCount: 1 });
     if (path === "/Sessions/Logout") { logouts++; await logoutWait?.(); return new Response(null, { status: 204 }); }
