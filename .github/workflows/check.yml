@@ -15,6 +15,7 @@ jobs:
     if: github.event.action != 'edited' || github.event.changes.base
     name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'linux' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
