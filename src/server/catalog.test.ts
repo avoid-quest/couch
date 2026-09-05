@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JellyfinItems } from "../shared/jellyfin";
@@ -129,6 +129,37 @@ test("rejects invalid pagination and reports supported methods without running m
   expect(wrongMethod.status).toBe(405);
   expect(wrongMethod.headers.get("Allow")).toBe("GET, POST");
   expect((await request("/api/missing")).status).toBe(404);
+});
+
+test("video catalog routes paginate ordered episodes with progress and cached artwork without host paths", async () => {
+  const { directory, library, request, store } = fixture();
+  mkdirSync(join(directory, "Show", "Season 1"), { recursive: true });
+  writeFileSync(join(directory, "Show", "tvshow.nfo"), '<tvshow><title>Catalog show</title><unknown path="/private/secret">host-only original</unknown></tvshow>');
+  const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOZkAAAAASUVORK5CYII=", "base64");
+  writeFileSync(join(directory, "Show", "poster.png"), image);
+  for (const number of [10, 2]) writeFileSync(join(directory, "Show", "Season 1", `Show.S01E${number}.mkv`), "unit media");
+  const source = await library.addSource(directory);
+  await library.scan(source.id);
+  const shows = await (await request("/api/library/video/shows?q=Catalog&limit=1")).json();
+  const show = shows.items[0];
+  expect(shows).toMatchObject({ total: 1, offset: 0, limit: 1, items: [{ title: "Catalog show", episodeCount: 2, seasonCount: 1 }] });
+  expect(await (await request(`/api/library/video/shows/${show.id}/seasons`)).json()).toMatchObject({ items: [{ season: 1, episodeCount: 2 }] });
+  const item = library.search({ showId: show.id }).items[0]!;
+  store.saveProgress("household", { mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title, position: 25, duration: 120, watched: false, lastPlayedAt: 100 });
+  const response = await request(`/api/library/items?videoType=episode&showId=${show.id}&season=1&limit=1`);
+  const body = await response.text();
+  expect(JSON.parse(body)).toMatchObject({ total: 2, items: [{ id: item.id, video: { episode: 2 }, progress: { position: 25 } }] });
+  for (const secret of [directory, "/private/secret", "host-only original", '"fileMetadata"', '"path"']) expect(body + JSON.stringify(shows)).not.toContain(secret);
+  const artwork = await request(`/api/library/artwork/${show.artworkId}`);
+  expect(artwork.status).toBe(200);
+  expect(artwork.headers.get("Content-Type")).toBe("image/png");
+  expect(artwork.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect(new Uint8Array(await artwork.arrayBuffer())).toEqual(image);
+  for (const path of ["/api/library/items?videoType=audio", "/api/library/items?showId=../../private", "/api/library/items?season=1", `/api/library/items?showId=${show.id}&season=-1`,
+    `/api/library/items?showId=${show.id}&season=1000`, "/api/library/video/shows?limit=101"]) expect((await request(path)).status).toBe(400);
+  expect((await request(`/api/library/video/shows/${"0".repeat(64)}/seasons`)).status).toBe(404);
+  expect((await request("/api/library/video/shows", "POST", {})).status).toBe(405);
+  expect((await request(`/api/library/video/shows/${show.id}/seasons`, "POST", {})).status).toBe(405);
 });
 
 test("watching profiles and progress APIs validate edits and expose path-free catalog/history views", async () => {

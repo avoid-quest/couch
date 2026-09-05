@@ -4,18 +4,17 @@ import { mkdirSync } from "node:fs";
 import { lstat, opendir, realpath } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { LibraryItem, LibrarySearch, LibrarySource, MusicAlbum, MusicAlbums, MusicArtist, MusicArtists } from "../shared/library";
-import { musicArtistId, musicMetadataVersion, readMusicMetadata, type MusicMetadata } from "./music-metadata";
-
-const videoExtensions = new Set("mp4 mkv webm avi mov m4v ts m2ts mts mpg mpeg ogv flv wmv vob 3gp".split(" "));
+import type { LibraryItem, LibrarySearch, LibrarySource, MusicAlbum, MusicAlbums, MusicArtist, MusicArtists, VideoMetadata, VideoSeason, VideoShow, VideoShows } from "../shared/library";
+import { musicArtistId, musicMetadataVersion, readMusicMetadata } from "./music-metadata";
+import { readVideoMetadata, videoExtensions, videoMetadataVersion, type OriginalVideoNfo, type VideoArtwork } from "./video-metadata";
 
 type SourceRow = LibrarySource & { path: string };
 type Metadata = { title: string | null; duration: number | null; artist: string | null; album: string | null };
-type ItemRow = LibraryItem & { sourceId: string; path: string; size: number; modified: number; probed: number; metadataVersion: number };
-type PublicItemRow = Omit<LibraryItem, "available" | "artists"> & { available: number; artists: string };
-const publicItem = (row: PublicItemRow): LibraryItem => ({ ...row, artists: JSON.parse(row.artists) as string[], available: !!row.available });
+type ItemRow = LibraryItem & { sourceId: string; path: string; size: number; modified: number; probed: number; metadataVersion: number; fileMetadata?: string | null };
+type PublicItemRow = Omit<LibraryItem, "available" | "artists" | "video"> & { available: number; artists: string; video: string | null };
+const publicItem = (row: PublicItemRow): LibraryItem => ({ ...row, artists: JSON.parse(row.artists) as string[], video: row.video ? JSON.parse(row.video) as VideoMetadata : null, available: !!row.available });
 const itemColumns = `i.id, i.title, i.kind, i.duration, i.artist, i.album, i.artists, i.albumArtist, i.albumId,
-  i.discNumber, i.trackNumber, i.artworkId, (i.available AND s.status <> 'unavailable') AS available`;
+  i.discNumber, i.trackNumber, i.artworkId, i.video, (i.available AND s.status <> 'unavailable') AS available`;
 const albumColumns = `i.albumId AS id, MIN(i.album) AS title, MIN(i.albumArtist) AS artist,
   MIN(i.artworkId) AS artworkId, COUNT(*) AS trackCount,
   CASE WHEN COUNT(i.duration) = COUNT(*) THEN SUM(i.duration) ELSE NULL END AS duration`;
@@ -58,7 +57,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     UPDATE library_sources SET status = 'idle', error = 'Previous scan was interrupted.' WHERE status = 'scanning';
   `);
   const columns = new Set(db.query<{ name: string }, []>("PRAGMA table_info(library_items)").all().map(column => column.name));
-  for (const [name, type] of Object.entries({ artists: "TEXT NOT NULL DEFAULT '[]'", albumArtist: "TEXT", albumId: "TEXT", discNumber: "INTEGER", trackNumber: "INTEGER", artworkId: "TEXT", metadataVersion: "INTEGER NOT NULL DEFAULT 0" })) {
+  for (const [name, type] of Object.entries({ artists: "TEXT NOT NULL DEFAULT '[]'", albumArtist: "TEXT", albumId: "TEXT", discNumber: "INTEGER", trackNumber: "INTEGER", artworkId: "TEXT", metadataVersion: "INTEGER NOT NULL DEFAULT 0", video: "TEXT", fileMetadata: "TEXT" })) {
     if (!columns.has(name)) db.run(`ALTER TABLE library_items ADD COLUMN ${name} ${type}`);
   }
   db.run(`
@@ -66,6 +65,11 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     CREATE TABLE IF NOT EXISTS library_music_artists (itemId TEXT NOT NULL, artistId TEXT NOT NULL, name TEXT NOT NULL, PRIMARY KEY(itemId, artistId));
     CREATE INDEX IF NOT EXISTS library_music_artists_artist ON library_music_artists(artistId);
     CREATE TABLE IF NOT EXISTS library_artwork (id TEXT PRIMARY KEY, data BLOB NOT NULL, mimeType TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS library_items_video ON library_items(json_extract(video, '$.type'), json_extract(video, '$.show.id'));
+    CREATE TABLE IF NOT EXISTS library_video_nfo (
+      sourceId TEXT NOT NULL, path TEXT NOT NULL, data BLOB NOT NULL, seenScan TEXT NOT NULL,
+      available INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(sourceId, path)
+    );
   `);
   let closing = false;
   let scanQueue: Promise<unknown> = Promise.resolve();
@@ -123,18 +127,24 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     }
   }
 
-  const saveItem = db.transaction((item: ItemRow, scanId: string, artwork: MusicMetadata["artwork"]) => {
-    if (artwork) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
-    const row = db.query<{ rowid: number }, (string | number | null)[]>(`INSERT INTO library_items (id, sourceId, path, title, kind, duration, artist, album, size, modified, probed, available, seenScan, artists, albumArtist, albumId, discNumber, trackNumber, artworkId, metadataVersion)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(sourceId, path) DO UPDATE SET
+  const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[]) => {
+    for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
+    for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
+      ON CONFLICT(sourceId, path) DO UPDATE SET data=excluded.data, seenScan=excluded.seenScan, available=1`).run(item.sourceId, nfo.path, nfo.data, scanId);
+    const row = db.query<{ rowid: number }, (string | number | null)[]>(`INSERT INTO library_items (id, sourceId, path, title, kind, duration, artist, album, size, modified, probed, available, seenScan, artists, albumArtist, albumId, discNumber, trackNumber, artworkId, metadataVersion, video, fileMetadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(sourceId, path) DO UPDATE SET
       title=excluded.title, duration=excluded.duration, artist=excluded.artist, album=excluded.album,
       artists=excluded.artists, albumArtist=excluded.albumArtist, albumId=excluded.albumId, discNumber=excluded.discNumber,
       trackNumber=excluded.trackNumber, artworkId=excluded.artworkId, metadataVersion=excluded.metadataVersion,
+      video=excluded.video, fileMetadata=excluded.fileMetadata,
       size=excluded.size, modified=excluded.modified, probed=excluded.probed, available=1, seenScan=excluded.seenScan RETURNING rowid`)
       .get(item.id, item.sourceId, item.path, item.title, item.kind, item.duration, item.artist, item.album, item.size, item.modified, item.probed, scanId,
-        JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion)!;
+        JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
+        item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null)!;
     db.query("DELETE FROM library_search WHERE rowid = ?").run(row.rowid);
-    db.query("INSERT INTO library_search (rowid, id, title, artist, album) VALUES (?, ?, ?, ?, ?)").run(row.rowid, item.id, item.title, [item.artist, ...(item.artists ?? []), item.albumArtist].filter(Boolean).join(" "), item.album);
+    db.query("INSERT INTO library_search (rowid, id, title, artist, album) VALUES (?, ?, ?, ?, ?)").run(row.rowid, item.id,
+      [item.title, item.video?.originalTitle, item.video?.show?.title].filter(Boolean).join(" "),
+      [item.artist, ...(item.artists ?? []), item.albumArtist, ...(item.video?.genres ?? []), ...(item.video?.show?.genres ?? [])].filter(Boolean).join(" "), item.album);
     db.query("DELETE FROM library_music_artists WHERE itemId = ?").run(item.id);
     if (item.kind === "audio") for (const name of [...(item.artists ?? []), ...(item.albumArtist ? [item.albumArtist] : [])]) {
       db.query("INSERT OR IGNORE INTO library_music_artists (itemId, artistId, name) VALUES (?, ?, ?)").run(item.id, musicArtistId(name), name);
@@ -146,6 +156,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     const executable = options.ffprobePath === undefined ? Bun.which("ffprobe") : options.ffprobePath;
     let metadataFailures = 0;
     let videosWithoutProbe = 0;
+    let sidecarFailures = 0;
     const pending = new Set<Promise<void>>();
     try {
       assertOpen();
@@ -162,28 +173,34 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const info = await lstat(path);
         if (!info.isFile() || info.isSymbolicLink() || !within(root, await realpath(path))) return;
         const localPath = relative(root, path);
-        const stored = db.query<Omit<ItemRow, "artists"> & { artists: string }, [string, string]>("SELECT * FROM library_items WHERE sourceId = ? AND path = ?").get(source.id, localPath);
-        const previous = stored ? { ...stored, artists: JSON.parse(stored.artists) as string[] } : null;
+        const stored = db.query<Omit<ItemRow, "artists" | "video"> & { artists: string; video: string | null }, [string, string]>("SELECT * FROM library_items WHERE sourceId = ? AND path = ?").get(source.id, localPath);
+        const previous = stored ? { ...stored, artists: JSON.parse(stored.artists) as string[], video: stored.video ? JSON.parse(stored.video) as VideoMetadata : null } : null;
         const unchanged = previous?.size === info.size && previous.modified === info.mtimeMs;
         const kind = videoExtensions.has(extname(path).slice(1).toLowerCase()) ? "video" : "audio";
         if (kind === "video" && !executable) videosWithoutProbe++;
-        if (previous && unchanged && (kind === "audio" ? previous.metadataVersion === musicMetadataVersion && previous.probed : previous.probed || !executable)) {
+        if (kind === "audio" && previous && unchanged && previous.metadataVersion === musicMetadataVersion && previous.probed) {
           db.query("UPDATE library_items SET seenScan = ?, available = 1 WHERE id = ?").run(scanId, previous.id);
           return;
         }
         assertOpen();
         const music = kind === "audio" ? await readMusicMetadata(path, info.size) : null;
-        const metadata = kind === "audio" ? music : executable ? await probe(path, executable) : null;
+        const fileMetadata: Metadata | null = kind === "video" && unchanged && previous?.fileMetadata ? JSON.parse(previous.fileMetadata) : null;
+        const metadata = kind === "audio" ? music : fileMetadata ?? (executable ? await probe(path, executable) : null);
+        const localVideo = kind === "video" ? await readVideoMetadata(root, source.id, path) : null;
+        sidecarFailures += localVideo?.failures ?? 0;
         const retained = !metadata && unchanged ? previous : null;
         assertOpen();
         if ((kind === "audio" || executable) && !metadata) metadataFailures++;
         saveItem({ id: previous?.id ?? crypto.randomUUID(), sourceId: source.id, path: localPath,
-          title: metadata?.title ?? retained?.title ?? basename(path, extname(path)), kind, duration: metadata?.duration ?? retained?.duration ?? null,
+          title: localVideo?.title ?? metadata?.title ?? (kind === "audio" ? retained?.title : null) ?? basename(path, extname(path)), kind,
+          duration: metadata?.duration ?? (kind === "video" ? localVideo?.runtime : retained?.duration) ?? null,
           artist: metadata?.artist ?? retained?.artist ?? null, album: metadata?.album ?? retained?.album ?? null, size: info.size, modified: info.mtimeMs,
           artists: music?.artists ?? retained?.artists ?? [], albumArtist: music?.albumArtist ?? retained?.albumArtist ?? null, albumId: music?.albumId ?? retained?.albumId ?? null,
-          discNumber: music?.discNumber ?? retained?.discNumber ?? null, trackNumber: music?.trackNumber ?? retained?.trackNumber ?? null, artworkId: music?.artwork?.id ?? retained?.artworkId ?? null,
-          metadataVersion: kind === "audio" ? musicMetadataVersion : 0,
-          probed: metadata ? 1 : 0, available: true }, scanId, music?.artwork ?? null);
+          discNumber: music?.discNumber ?? retained?.discNumber ?? null, trackNumber: music?.trackNumber ?? retained?.trackNumber ?? null,
+          artworkId: kind === "video" ? localVideo?.artworkId ?? null : music?.artwork?.id ?? retained?.artworkId ?? null,
+          video: localVideo?.video ?? null, fileMetadata: kind === "video" && metadata ? JSON.stringify(metadata) : null,
+          metadataVersion: kind === "audio" ? musicMetadataVersion : videoMetadataVersion,
+          probed: metadata ? 1 : 0, available: true }, scanId, localVideo?.artworks ?? (music?.artwork ? [music.artwork] : []), localVideo?.originals ?? []);
       };
       let failure: unknown;
       for await (const path of files(root)) {
@@ -198,10 +215,15 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       assertOpen();
       db.transaction(() => {
         db.query("UPDATE library_items SET available = 0 WHERE sourceId = ? AND seenScan <> ?").run(source.id, scanId);
-        db.query("DELETE FROM library_artwork WHERE id NOT IN (SELECT artworkId FROM library_items WHERE artworkId IS NOT NULL)").run();
+        db.query("UPDATE library_video_nfo SET available = 0 WHERE sourceId = ? AND seenScan <> ?").run(source.id, scanId);
+        db.query(`DELETE FROM library_artwork WHERE id NOT IN (
+          SELECT artworkId FROM library_items WHERE artworkId IS NOT NULL UNION
+          SELECT value FROM library_items, json_tree(library_items.video) WHERE key IN ('fanartId', 'artworkId', 'seasonArtworkId') AND type = 'text'
+        )`).run();
         db.query("UPDATE library_sources SET status = 'ready', lastScanned = ?, error = NULL, warning = ? WHERE id = ?")
           .run(Date.now(), [videosWithoutProbe ? "Install ffprobe to read video durations and tags. Files are still playable." : null,
-            metadataFailures ? `Could not read metadata from ${metadataFailures} file${metadataFailures === 1 ? "" : "s"}. Audio metadata is limited to 512 MiB files.` : null].filter(Boolean).join(" ") || null, source.id);
+            metadataFailures ? `Could not read metadata from ${metadataFailures} file${metadataFailures === 1 ? "" : "s"}. Audio metadata is limited to 512 MiB files.` : null,
+            sidecarFailures ? `Skipped ${sidecarFailures} invalid or oversized NFO/artwork sidecar read${sidecarFailures === 1 ? "" : "s"}. Media is still playable.` : null].filter(Boolean).join(" ") || null, source.id);
       })();
     } catch (error) {
       await Promise.all(pending);
@@ -240,21 +262,40 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       notify();
       return job;
     },
-    search(options: { query?: string; offset?: number; limit?: number; artistId?: string } = {}): LibrarySearch {
+    search(options: { query?: string; offset?: number; limit?: number; artistId?: string; videoType?: "movie" | "episode"; showId?: string; season?: number | "unknown" } = {}): LibrarySearch {
       const { offset, limit } = page(options);
       const query = (options.query ?? "").trim().slice(0, 200);
       const terms = query.match(/[\p{L}\p{N}]+/gu) ?? [];
       if (query && terms.length === 0) return { items: [], total: 0, offset, limit };
       const match = terms.map(term => `"${term}"*`).join(" AND ");
-      const clauses = [match ? "i.id IN (SELECT id FROM library_search WHERE library_search MATCH ?)" : "", options.artistId ? "i.id IN (SELECT itemId FROM library_music_artists WHERE artistId = ?)" : ""].filter(Boolean);
+      const clauses = [match ? "i.id IN (SELECT id FROM library_search WHERE library_search MATCH ?)" : "", options.artistId ? "i.id IN (SELECT itemId FROM library_music_artists WHERE artistId = ?)" : "",
+        options.videoType ? "json_extract(i.video, '$.type') = ?" : "", options.showId ? "json_extract(i.video, '$.show.id') = ?" : "",
+        options.season === "unknown" ? "json_extract(i.video, '$.season') IS NULL" : options.season !== undefined ? "json_extract(i.video, '$.season') = ?" : ""].filter(Boolean);
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const args = [...(match ? [match] : []), ...(options.artistId ? [options.artistId] : [])];
-      const total = db.query<{ count: number }, string[]>(`SELECT COUNT(*) AS count FROM library_items i ${where}`).get(...args)!.count;
+      const args = [...(match ? [match] : []), ...(options.artistId ? [options.artistId] : []), ...(options.videoType ? [options.videoType] : []), ...(options.showId ? [options.showId] : []),
+        ...(typeof options.season === "number" ? [options.season] : [])];
+      const total = db.query<{ count: number }, (string | number)[]>(`SELECT COUNT(*) AS count FROM library_items i ${where}`).get(...args)!.count;
+      const order = options.showId ? "json_extract(i.video, '$.season') IS NULL, json_extract(i.video, '$.season'), json_extract(i.video, '$.episode') IS NULL, json_extract(i.video, '$.episode')," : "";
       const rows = db.query<PublicItemRow, (string | number)[]>(`
         SELECT ${itemColumns}
-        FROM library_items i JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY i.title COLLATE NOCASE, i.id LIMIT ? OFFSET ?`)
+        FROM library_items i JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY ${order} i.title COLLATE NOCASE, i.id LIMIT ? OFFSET ?`)
         .all(...args, limit, offset);
       return { items: rows.map(publicItem), total, offset, limit };
+    },
+    videoShows(options: { query?: string; offset?: number; limit?: number } = {}): VideoShows {
+      const { offset, limit } = page(options);
+      const pattern = searchPattern(options.query);
+      const where = "json_extract(video, '$.show.id') IS NOT NULL AND (json_extract(video, '$.show.title') LIKE ? ESCAPE '\\' OR json_extract(video, '$.show.originalTitle') LIKE ? ESCAPE '\\')";
+      const total = db.query<{ count: number }, [string, string]>(`SELECT COUNT(DISTINCT json_extract(video, '$.show.id')) AS count FROM library_items WHERE ${where}`).get(pattern, pattern)!.count;
+      const rows = db.query<{ show: string; seasonCount: number; episodeCount: number }, [string, string, number, number]>(`SELECT MIN(json_extract(video, '$.show')) AS show,
+        COUNT(DISTINCT COALESCE(json_extract(video, '$.season'), -1)) AS seasonCount, COUNT(*) AS episodeCount FROM library_items WHERE ${where}
+        GROUP BY json_extract(video, '$.show.id') ORDER BY json_extract(show, '$.title') COLLATE NOCASE, json_extract(show, '$.id') LIMIT ? OFFSET ?`).all(pattern, pattern, limit, offset);
+      return { items: rows.map(row => ({ ...JSON.parse(row.show) as VideoShow, seasonCount: row.seasonCount, episodeCount: row.episodeCount })), total, offset, limit };
+    },
+    videoSeasons(showId: string): VideoSeason[] {
+      return db.query<VideoSeason, [string]>(`SELECT json_extract(video, '$.season') AS season, COUNT(*) AS episodeCount,
+        MIN(COALESCE(json_extract(video, '$.seasonArtworkId'), json_extract(video, '$.show.artworkId'))) AS artworkId FROM library_items
+        WHERE json_extract(video, '$.show.id') = ? GROUP BY season ORDER BY season IS NULL, season`).all(showId);
     },
     getItem(id: string): LibraryItem | null {
       const row = db.query<PublicItemRow, [string]>(`
