@@ -1,3 +1,4 @@
+import { audioExtensions } from "../shared/media";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { lstat, opendir, realpath } from "node:fs/promises";
@@ -7,7 +8,7 @@ import type { LibraryItem, LibrarySearch, LibrarySource, MusicAlbum, MusicAlbums
 import { musicArtistId, musicMetadataVersion, readMusicMetadata, type MusicMetadata } from "./music-metadata";
 
 const videoExtensions = new Set("mp4 mkv webm avi mov m4v ts m2ts mts mpg mpeg ogv flv wmv vob 3gp".split(" "));
-const audioExtensions = new Set("mp3 flac m4a aac ogg opus wav aiff aif wma alac ape ac3 dts dsf dff".split(" "));
+
 type SourceRow = LibrarySource & { path: string };
 type Metadata = { title: string | null; duration: number | null; artist: string | null; album: string | null };
 type ItemRow = LibraryItem & { sourceId: string; path: string; size: number; modified: number; probed: number; metadataVersion: number };

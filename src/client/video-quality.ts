@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
+import { audioExtensions } from "../shared/media";
 
 export const videoQualityLabels: Record<VideoQuality, string> = { best: "Best available", "1080p": "Up to 1080p", "720p": "Up to 720p", "480p": "Up to 480p" };
 const storageKey = "couch.online-video-quality";
@@ -33,14 +34,14 @@ export function useVideoQualityPreference() {
 }
 
 export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {
-  const [quality, setQuality] = useState(defaultQuality);
-  useEffect(() => setQuality(defaultQuality), [defaultQuality]);
-  return [quality, setQuality, () => setQuality(defaultQuality)] as const;
+  const [override, setOverride] = useState<VideoQuality | null>(null);
+  useEffect(() => setOverride(null), [defaultQuality]);
+  return [override ?? defaultQuality, setOverride, () => setOverride(null)] as const;
 }
 
 export function supportsWebVideoQuality(source: string) {
   try {
     const url = new URL(source.trim());
-    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !/\.(mp3|m4a|aac|oga|opus|wav|flac|mka)$/i.test(url.pathname);
+    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !audioExtensions.has(decodeURIComponent(url.pathname).split(".").at(-1)!.toLowerCase());
   } catch { return true; }
 }

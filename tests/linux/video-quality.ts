@@ -51,6 +51,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
     if (!quality) assert.equal(await target.execute("return !!document.querySelector('#media-quality')"), false, "Audio-only webpage hides video quality");
     await target.click('.queue-add-form button[type=submit]');
     await until(`${title} reaches the shared queue with its intended quality`, () => clients.every(client => client.state!.queue.some(entry => entry.title === title && entry.quality === quality)));
+    await until("Add media closes after the acknowledged enqueue", () => target.execute("return !document.querySelector('[role=dialog]')"));
   };
 
   await httpRemote.restore();
@@ -94,13 +95,28 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await phone.type("#media-title", "Override link");
   await phone.click('.queue-add-form button[type=submit]');
   await until("paste-link override reaches both remotes", () => clients.every(client => client.state!.queue.some(entry => entry.title === "Override link" && entry.quality === "720p")));
+  await until("override enqueue closes Add media", () => phone.execute("return !document.querySelector('[role=dialog]')"));
   await addLink(phone, "Default after override", "480p");
   const queuedBeforeChange = structuredClone(clients[0]!.state!.queue);
+  await savedProvider(phone);
+  await phone.execute(`
+    const send = WebSocket.prototype.send;
+    WebSocket.prototype.send = function(value) {
+      if (JSON.parse(value).action?.type === 'enqueueWeb') {
+        WebSocket.prototype.send = send;
+        window.__qualityRelease = () => { send.call(this, value); delete window.__qualityRelease; };
+      } else send.call(this, value);
+    };
+  `);
+  await phone.button("Add to queue", ".provider-item");
   await settings(phone);
   await selected(phone, "#default-video-quality", "480p");
   await phone.select("#default-video-quality", qualityLabel("720p"));
   await close(phone);
   assert.deepEqual(clients[0]!.state!.queue, queuedBeforeChange, "Changing the default preserves earlier default and override entries");
+  await phone.execute("window.__qualityRelease()");
+  await until("pending enqueue keeps the quality selected when it was sent", () => clients.every(client => client.state!.queue.length === queuedBeforeChange.length + 1 && client.state!.queue.at(-1)!.quality === "480p"));
+  await until("pending Online enqueue finishes", () => phone.execute("return !document.querySelector('.provider-item [aria-label=\"Add to queue\"]')?.disabled"));
   await savedProvider(phone);
   await selected(phone, "#provider-quality", "720p");
   await addLink(phone, "Changed default link", "720p");
