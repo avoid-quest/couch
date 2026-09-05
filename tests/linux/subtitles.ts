@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { WatchingProfile } from "../../src/shared/library";
 import type { Action, MediaTrack, ProfilePlaybackPreferences, SessionState } from "../../src/shared/protocol";
 import { assertResponsive, keys, type startHttpRemote, type UiDriver, type Wait } from "./ui";
+import { languageName } from "../../src/client/playback-languages";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type Context = { ui: UiDriver; until: Wait; clients: readonly Remote[]; artifactDir: string };
@@ -12,6 +13,7 @@ type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
 type PreferenceContext = Context & {
   origin: string;
   httpRemote: HttpRemote;
+  otherRemote?: HttpRemote;
   api: (path: string, body?: unknown, index?: number) => Promise<any>;
   entryId: string;
 };
@@ -162,16 +164,26 @@ export async function verifyJellyfinSubtitles(context: Context & { config: { con
 }
 
 async function savePreferences(ui: UiDriver, until: Wait, preferences: ProfilePlaybackPreferences, phone = false) {
-  await settings(ui, until);
-  await ui.button("Saved preferences", "[role=dialog]");
+  await savedSettings(ui, until);
   if (phone) await assertResponsive(ui, "Phone saved playback preferences");
-  await ui.type("#preferred-audio-language", preferences.audioLanguage);
-  await ui.type("#preferred-subtitle-language", preferences.subtitleLanguage);
+  await ui.select("#preferred-audio-language", languageName(preferences.audioLanguage));
+  await ui.select("#preferred-subtitle-language", languageName(preferences.subtitleLanguage));
   await ui.select("#preferred-subtitle-mode", preferences.subtitles === "off" ? "Off" : "Automatic");
   await ui.select("#preferred-playback-speed", preferences.speed === 1 ? "Normal" : `${preferences.speed}×`);
   await ui.button("Save preferences", "[role=dialog]");
   await until("the saved-preferences form confirms a committed change", async () => await ui.execute("return [...document.querySelectorAll('[role=dialog] [role=status]')].some(element => element.textContent.startsWith('Preferences saved for '))"));
-  await closeSettings(ui, until);
+  await closeSavedSettings(ui, until);
+}
+
+async function savedSettings(ui: UiDriver, until: Wait) {
+  await ui.button("Settings");
+  await ui.button("Playback", "[role=dialog]");
+  await until("Settings Playback shows the watching profile and saved choices", () => ui.execute("return !!document.querySelector('#preferred-audio-language') && document.querySelector('[role=dialog]').textContent.includes('Watching profile:')"));
+}
+
+async function closeSavedSettings(ui: UiDriver, until: Wait) {
+  await ui.key(keys.escape);
+  await until("Escape closes saved preferences and restores Settings", () => ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Settings'"));
 }
 
 async function assertPreferencesLoad(context: PreferenceContext, preferences: ProfilePlaybackPreferences, audioDelay: number, description: string) {
@@ -179,23 +191,112 @@ async function assertPreferencesLoad(context: PreferenceContext, preferences: Pr
   const { first, all } = controls(context);
   const previous = first().player.playbackId;
   await clients[1]!.command({ type: "play", entryId, fromStart: true });
-  await until(description, () => all(state => state.player.playbackId !== previous && state.currentEntryId === entryId && state.player.status === "playing" && state.player.speed === preferences.speed && Math.abs((state.player.audioDelay ?? 0) - audioDelay) < 1e-6 && state.player.subtitleDelay === 0 && state.player.tracks?.some(track => track.kind === "audio" && track.selected && track.language === preferences.audioLanguage) === true && (preferences.subtitles === "off" ? !state.player.tracks?.some(track => track.kind === "subtitle" && track.selected) : state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && track.language === preferences.subtitleLanguage) === true)));
+  await until(description, () => all(state => state.player.playbackId !== previous && state.currentEntryId === entryId && state.player.status === "playing" && state.player.speed === preferences.speed && Math.abs((state.player.audioDelay ?? 0) - audioDelay) < 1e-6 && state.player.subtitleDelay === 0 && state.player.tracks?.some(track => track.kind === "audio" && track.selected && languageName(track.language ?? "") === languageName(preferences.audioLanguage)) === true && (preferences.subtitles === "off" ? !state.player.tracks?.some(track => track.kind === "subtitle" && track.selected) : state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && languageName(track.language ?? "") === languageName(preferences.subtitleLanguage)) === true)));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
   await until("native preference verification pauses before the next UI action", () => all(state => state.player.status === "paused"));
 }
 
+async function verifyPreferenceSources(context: PreferenceContext, preferences: ProfilePlaybackPreferences, audioDelay: number, phase: string) {
+  const { clients, until, entryId, artifactDir } = context;
+  const { first, all, stop } = controls(context);
+  const providerId = crypto.randomUUID();
+  await clients[0]!.command({ type: "enqueueWeb", entryId: providerId, url: "http://127.0.0.1:4200/radio.mp3", title: "Preference audio-only provider fixture" });
+  const radio = first().queue.find(entry => entry.kind === "radio" && entry.source.includes("4200/radio.mp3"));
+  const jellyfin = first().queue.find(entry => entry.source.startsWith("jellyfin:"));
+  assert.ok(radio, "The radio source is available for preference resets");
+  const sources = [{ name: "local", id: entryId }, ...(jellyfin ? [{ name: "Jellyfin sidecar", id: jellyfin.id }] : []), { name: "radio", id: radio.id }, { name: "audio-only provider resolver", id: providerId }, { name: "local after providers", id: entryId }];
+  const evidence = [];
+  try {
+    for (const source of sources) {
+      const previous = first().player.playbackId;
+      await clients[0]!.command({ type: "play", entryId: source.id, fromStart: true });
+      await until(`${phase}: ${source.name} starts with saved speed, TV delay and reset subtitle delay`, () => all(state => state.currentEntryId === source.id && state.player.playbackId !== previous && state.player.status === "playing" && state.player.speed === preferences.speed && state.player.subtitleDelay === 0 && Math.abs((state.player.audioDelay ?? 0) - audioDelay) < 1e-6 && state.player.position < 3 && JSON.stringify(state.preferences?.profile) === JSON.stringify(preferences)), 30_000);
+      const playbackId = first().player.playbackId!;
+      await clients[1]!.command({ type: "pause", playbackId, paused: true });
+      await until(`${phase}: ${source.name} pauses for scope inspection`, () => all(state => state.player.status === "paused"));
+      if (source.name === "Jellyfin sidecar") assert.ok(first().player.tracks?.some(track => track.kind === "subtitle" && track.language === "ita"), "Jellyfin text sidecar remains available under saved defaults");
+      if (source.name === "radio" || source.name === "audio-only provider resolver") assert.ok(!first().player.tracks?.some(track => track.kind === "video" || track.kind === "subtitle"), "Audio-only source clears previous selected video and subtitle tracks");
+      if (source.name.startsWith("local")) assert.ok(first().player.tracks?.some(track => track.kind === "video" && track.selected), "Local media restores its selected video after source changes");
+      evidence.push({ source: source.name, player: first().player, preferences: first().preferences });
+      await clients[1]!.command({ type: "speed", playbackId, speed: 2 });
+      await clients[1]!.command({ type: "subtitleDelay", playbackId, delay: 0.6 });
+      await until(`${phase}: ${source.name} temporary speed and subtitle delay do not change saved defaults`, () => all(state => state.player.speed === 2 && Math.abs((state.player.subtitleDelay ?? 0) - 0.6) < 1e-6 && JSON.stringify(state.preferences?.profile) === JSON.stringify(preferences)));
+    }
+    await stop();
+    await assertSubtitleCleanup(context);
+    await Bun.write(`${artifactDir}/preference-sources-${phase}.json`, JSON.stringify({ jellyfinIncluded: !!jellyfin, sources: evidence }, null, 2));
+  } finally { await clients[0]!.command({ type: "remove", entryId: providerId }); }
+}
+
 export async function verifyPlaybackPreferences(context: PreferenceContext & { otherProfile: WatchingProfile }): Promise<SavedPreferences> {
-  const { ui, until, clients, api, httpRemote, otherProfile } = context;
+  const { ui, until, clients, api, httpRemote, otherRemote, otherProfile } = context;
   const { first, all, stop } = controls(context);
   const household = first().activeProfile;
-  const householdPreferences: ProfilePlaybackPreferences = { audioLanguage: "ita", subtitleLanguage: "eng", subtitles: "off", speed: 1.25 };
-  const otherPreferences: ProfilePlaybackPreferences = { audioLanguage: "eng", subtitleLanguage: "eng", subtitles: "auto", speed: 0.75 };
+  const householdPreferences: ProfilePlaybackPreferences = { audioLanguage: "it", subtitleLanguage: "en", subtitles: "off", speed: 1.25 };
+  const otherPreferences: ProfilePlaybackPreferences = { audioLanguage: "en", subtitleLanguage: "en", subtitles: "auto", speed: 0.75 };
   const audioDelay = 0.4;
   await stop();
   await httpRemote.minimize();
   await savePreferences(ui, until, householdPreferences);
   await until("TV preferences are committed to Household and broadcast to both controllers", () => all(state => JSON.stringify(state.preferences?.profile) === JSON.stringify(householdPreferences)));
+  await savedSettings(ui, until);
+  await nativeFrame(context.artifactDir, "preferences-settings-tv");
+  await closeSavedSettings(ui, until);
+  if (otherRemote) {
+    await httpRemote.restore();
+    await httpRemote.ui.section("Library");
+    await savedSettings(httpRemote.ui, until);
+    await httpRemote.ui.select("#preferred-audio-language", "English");
+    await httpRemote.minimize();
+    await otherRemote.restore();
+    await otherRemote.ui.section("Radio");
+    await savedSettings(otherRemote.ui, until);
+    await until("second real HTTP remote receives the TV's saved profile defaults", () => otherRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'Italian' && document.querySelector('#preferred-playback-speed')?.textContent.trim() === '1.25×'"));
+    await otherRemote.ui.select("#preferred-playback-speed", "1.5×");
+    await otherRemote.ui.button("Save preferences", "[role=dialog]");
+    await until("second HTTP remote commits its speed default", () => all(state => state.preferences?.profile.speed === 1.5));
+    await otherRemote.screenshot("preferences-second-http");
+    await closeSavedSettings(otherRemote.ui, until);
+    await otherRemote.minimize();
+    await httpRemote.restore();
+    await until("first remote retains its language draft while showing the other remote's saved speed", () => httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'English' && document.querySelector('#preferred-playback-speed')?.textContent.trim() === '1.5×'"));
+    await httpRemote.ui.button("Save preferences", "[role=dialog]");
+    await until("independent HTTP form saves retain both language and speed changes", () => all(state => state.preferences?.profile.audioLanguage === "en" && state.preferences.profile.speed === 1.5));
+    await httpRemote.screenshot("preferences-first-http");
+    await closeSavedSettings(httpRemote.ui, until);
+    await until("saved defaults never move either HTTP remote's independent browsing", async () => await httpRemote.ui.execute("return document.querySelector('[aria-label=\"Media sources\"] [aria-selected=true]')?.textContent") === "Library" && await otherRemote.ui.execute("return document.querySelector('[aria-label=\"Media sources\"] [aria-selected=true]')?.textContent") === "Radio");
+    await savePreferences(httpRemote.ui, until, householdPreferences, true);
+    await httpRemote.minimize();
+  }
   await assertPreferencesLoad(context, householdPreferences, first().preferences!.device.audioDelay, "saved Household audio, subtitle mode and speed apply to the next native load");
+  await httpRemote.restore();
+  await settings(httpRemote.ui, until);
+  const previousPlayback = first().player.playbackId!;
+  const englishAudio = first().player.tracks!.find(track => track.kind === "audio" && track.language === "eng")!;
+  const englishSubtitle = first().player.tracks!.find(track => track.kind === "subtitle" && track.language === "eng")!;
+  await httpRemote.ui.select("#playback-speed", "1.5×");
+  await until("temporary phone speed reaches native playback", () => all(state => state.player.speed === 1.5));
+  await httpRemote.ui.select("#playback-audio", englishAudio.label);
+  await until("temporary phone audio track reaches native playback", () => all(state => state.player.tracks?.some(track => track.kind === "audio" && track.selected && track.language === "eng") === true));
+  await httpRemote.ui.select("#playback-subtitles", englishSubtitle.label);
+  await until("phone track and speed changes remain temporary on both remotes", () => all(state => state.player.speed === 1.5 && state.player.tracks?.some(track => track.kind === "audio" && track.selected && track.language === "eng") === true && state.player.tracks.some(track => track.kind === "subtitle" && track.selected && track.language === "eng") && JSON.stringify(state.preferences?.profile) === JSON.stringify(householdPreferences)));
+  await httpRemote.ui.button("Save speed as default", "[role=dialog]");
+  await until("explicit speed save records only the observed native speed", () => all(state => state.preferences?.profile.speed === 1.5 && state.preferences.profile.audioLanguage === "it" && state.preferences.profile.subtitles === "off"));
+  await httpRemote.ui.button("Save audio language as default", "[role=dialog]");
+  await until("explicit audio default records the current track's language", () => all(state => state.preferences?.profile.audioLanguage === "eng"));
+  await httpRemote.ui.button("Save subtitles as default", "[role=dialog]");
+  const explicitPreferences: ProfilePlaybackPreferences = { audioLanguage: "eng", subtitleLanguage: "eng", subtitles: "auto", speed: 1.5 };
+  await until("explicit defaults save observed languages without changing the current item", () => all(state => state.player.playbackId === previousPlayback && state.player.status === "paused" && JSON.stringify(state.preferences?.profile) === JSON.stringify(explicitPreferences)));
+  await assertResponsive(httpRemote.ui, "Phone current playback and explicit defaults");
+  await httpRemote.screenshot("preferences-current-http");
+  await closeSettings(httpRemote.ui, until);
+  await httpRemote.minimize();
+  await assertPreferencesLoad(context, explicitPreferences, first().preferences!.device.audioDelay, "explicit speed and track-language defaults apply to the next native item");
+  await assert.rejects(clients[0]!.command({ type: "savePlaybackDefault", playbackId: previousPlayback, profileId: household.id, setting: "speed" }), "A stale Save as default cannot write from a previous item");
+  await stop();
+  householdPreferences.subtitleLanguage = "eng";
+  await savePreferences(ui, until, householdPreferences);
+  await assertPreferencesLoad(context, householdPreferences, first().preferences!.device.audioDelay, "Settings restores defaults for the following item");
   await httpRemote.restore();
   await settings(httpRemote.ui, until);
   await httpRemote.ui.type("#playback-audio-delay", String(audioDelay));
@@ -218,6 +319,8 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   await until("returning to Household restores its isolated language, subtitle and speed preferences", () => all(state => state.activeProfile.id === household.id && JSON.stringify(state.preferences?.profile) === JSON.stringify(householdPreferences)));
   await assertPreferencesLoad(context, householdPreferences, audioDelay, "Household preference selection remains correct after changing profiles");
   await stop();
+  await verifyPreferenceSources(context, householdPreferences, audioDelay, "before-restart");
+  await Bun.write(`${context.artifactDir}/playback-preferences.json`, JSON.stringify({ household, otherProfile, householdPreferences, otherPreferences, explicitPreferences, audioDelay, realHttpRemotes: otherRemote ? 2 : 1, currentItemSpeed: 1.5, restartVerified: false }, null, 2));
   return { household, otherProfile, householdPreferences, otherPreferences, audioDelay };
 }
 
@@ -226,10 +329,10 @@ export async function assertPlaybackPreferencesAfterRestart(context: PreferenceC
   const { all, stop } = controls(context);
   await until("saved playback preferences survive the desktop restart without autoplay", () => all(state => state.player.status === "idle" && state.activeProfile.id === expected.household.id && JSON.stringify(state.preferences?.profile) === JSON.stringify(expected.householdPreferences) && state.preferences?.device.audioDelay === expected.audioDelay));
   await httpRemote.restore();
-  await settings(httpRemote.ui, until);
-  await httpRemote.ui.button("Saved preferences", "[role=dialog]");
-  await until("reconnected HTTP phone displays the persisted profile and device preferences", async () => await httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.value === 'ita' && document.querySelector('#preferred-subtitle-mode')?.textContent.trim() === 'Off' && document.querySelector('[role=dialog]')?.textContent.includes('TV audio delay is 0.4 seconds')"));
-  await closeSettings(httpRemote.ui, until);
+  await savedSettings(httpRemote.ui, until);
+  await until("reconnected HTTP phone displays the persisted profile and device preferences", async () => await httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'Italian' && document.querySelector('#preferred-subtitle-mode')?.textContent.trim() === 'Off' && document.querySelector('[role=dialog]')?.textContent.includes('TV audio delay is 0.4 seconds')"));
+  await httpRemote.screenshot("preferences-restarted-http");
+  await closeSavedSettings(httpRemote.ui, until);
   await httpRemote.minimize();
   for (const [profile, preferences] of [[expected.household, expected.householdPreferences], [expected.otherProfile, expected.otherPreferences]] as const) {
     await api(`/api/profiles/${profile.id}/select`, {}, 1);
@@ -239,4 +342,7 @@ export async function assertPlaybackPreferencesAfterRestart(context: PreferenceC
   }
   await api(`/api/profiles/${expected.household.id}/select`, {});
   await until("subtitle acceptance restores Household and leaves native playback stopped", () => all(state => state.player.status === "idle" && state.activeProfile.id === expected.household.id));
+  await verifyPreferenceSources(context, expected.householdPreferences, expected.audioDelay, "after-restart");
+  const evidencePath = `${context.artifactDir}/playback-preferences.json`;
+  await Bun.write(evidencePath, JSON.stringify({ ...await Bun.file(evidencePath).json(), restartVerified: true }, null, 2));
 }

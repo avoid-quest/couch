@@ -266,7 +266,11 @@ does not change that account.
 
 ## TV and remote interface
 
-Playback settings has Current playback and Saved preferences tabs. Choose
+Settings, Playback shows the active watching profile and its saved language,
+subtitle mode and speed defaults. The language lists use names and retain
+existing saved values. Paired remotes share these defaults while keeping their
+own browsing location. Beside playback, Playback settings contains the current
+item's tracks, chapters, speed and subtitle timing. Choose
 **Add subtitle file** on the TV or a paired phone to send an SRT, ASS, SSA or
 WebVTT file from that device. Files are limited to 2 MiB, kept privately on the
 host and removed after native playback acknowledges another source or Stop.
@@ -280,8 +284,11 @@ Unavailable subtitles leave the movie playable and show a subtitle error.
 External image sidecars and subtitle search/download services remain unsupported.
 
 The watching profile owns preferred audio/subtitle languages, default subtitle
-mode and speed. Saved defaults apply on the next load. Changing current playback
-speed also updates that profile's default. The TV device owns volume and audio
+mode and speed. Saved defaults apply when the next item starts, including when
+the current item is still resolving. Current speed and track choices stay with
+the item. Save as default explicitly records the observed speed or selected
+track's language for the active profile. A subtitle file itself cannot become a
+default. The TV device owns volume and audio
 delay, shared by every profile. Subtitle delay and individual track choices apply
 only to the current item. Every load resets them before applying profile defaults;
 restarting restores preferences and the queue without autoplay.

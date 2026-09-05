@@ -31,8 +31,9 @@ that selection, while each phone keeps its own browsing view.
 
 Playback settings can add `/fixtures/external-tv.srt` or
 `/fixtures/external-phone.ass` on the TV. A phone chooses a subtitle file from
-its own storage. Saved preferences records language, subtitle mode and speed for
-the selected watching profile; volume and audio delay belong to this TV.
+its own storage. Settings, Playback saves language, subtitle mode and speed for
+the selected watching profile. Current speed and track choices end with the
+item unless you use Save as default. Volume and audio delay belong to this TV.
 
 Add `/music-fixtures` in Library to try the tagged MP3, FLAC and M4A compilation.
 Artists and Albums show its embedded cover and disc/track ordering. Use Saved
