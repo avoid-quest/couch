@@ -18,7 +18,7 @@ function api(origin: string, token: string, path: string, body?: unknown, method
 }
 
 async function pairBrowser({ ui, httpRemote, until }: Context, name: string) {
-  await until("Pair again returns to the real pairing form", () => httpRemote.ui.execute("return !!document.querySelector('#pairing-code')"));
+  await until("Pair again closes Settings and returns to the real pairing form", () => httpRemote.ui.execute("return !document.querySelector('[role=dialog]') && !!document.querySelector('#pairing-code') && document.activeElement?.getAttribute('aria-label') === 'Settings'"));
   const code = await ui.execute("return document.querySelector('.pair-shortcut strong').textContent");
   await httpRemote.ui.type("#remote-name", name);
   await httpRemote.ui.type("#pairing-code", code);
@@ -116,7 +116,7 @@ export async function preparePublicConnection(context: Context, otherRemote: Con
   await connection(httpRemote.ui, until);
   await httpRemote.ui.button("Pair again", settings);
   await httpRemote.ui.button("Forget this browser", settings);
-  await until("the first HTTP browser forgets only its local pairing", () => httpRemote.ui.execute("return !!document.querySelector('#pairing-code') && !localStorage.getItem('couch.remote-token')"));
+  await until("the first HTTP browser forgets only its local pairing", () => httpRemote.ui.execute("return !document.querySelector('[role=dialog]') && !!document.querySelector('#pairing-code') && !localStorage.getItem('couch.remote-token') && document.activeElement?.getAttribute('aria-label') === 'Settings'"));
   await connection(httpRemote.ui, until);
   await httpRemote.minimize();
   const health = (ui: UiDriver) => ui.execute("return Object.fromEntries([...document.querySelectorAll('[role=dialog] dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]))");
