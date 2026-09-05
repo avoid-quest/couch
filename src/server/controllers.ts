@@ -16,7 +16,7 @@ export function controllerName(value: unknown) {
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
 
-async function body(request: Request, field: string) {
+export async function settingField(request: Request, field: string) {
   if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new ControllerError("Send a JSON object.", 415);
   if (Number(request.headers.get("Content-Length")) > 8192) throw new ControllerError("The request is too large.", 413);
   const reader = request.body?.getReader();
@@ -89,7 +89,7 @@ export function createControllers({ store, onChange, recoveryCode }: { store: St
           if (caller.authority === "host") throw new ControllerError("Claim administration from a paired remote.");
           if (Date.now() - claimWindow >= 60_000) { claimWindow = Date.now(); claimAttempts = 0; }
           if (++claimAttempts > 20) throw new ControllerError("Too many claim attempts. Try again in a minute.", 429);
-          const code = await body(request, "code");
+          const code = await settingField(request, "code");
           const current = requireIdentity();
           if (!current.controller || current.authority !== "controller") throw new ControllerError("This remote is already an administrator.", 409);
           if (typeof code !== "string" || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code)) throw new ControllerError("The administrator code is invalid or expired.", 401);
@@ -101,7 +101,7 @@ export function createControllers({ store, onChange, recoveryCode }: { store: St
           if (request.method === "GET") return json({ name: store.installationName() });
           if (request.method !== "POST") return methods("GET, POST");
           administrator();
-          const name = await body(request, "name");
+          const name = await settingField(request, "name");
           administrator();
           const saved = store.renameInstallation(name);
           onChange();

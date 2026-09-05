@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
 import { createSession } from "./session";
+import { createAppearance } from "./appearance";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import { createLibrary } from "./library";
@@ -79,6 +80,7 @@ export function createHub(options: HubOptions) {
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller") });
+  const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => {
     const state = session.state;
     if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
@@ -146,6 +148,7 @@ export function createHub(options: HubOptions) {
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
       if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
       return server.upgrade(request, { data: { trusted, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
@@ -246,6 +249,7 @@ export function createHub(options: HubOptions) {
       shutdown.abort();
       for (const controller of inspections.values()) controller.abort();
       session.close();
+      appearance.close();
       providers.close();
       await server.stop(true);
       subtitles.close();

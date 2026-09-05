@@ -1,5 +1,5 @@
-import { useLayoutEffect, useSyncExternalStore } from "react";
-import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { defaultTvAppearance, isInterfaceSize, type InterfaceSize, type TvAppearance } from "../shared/appearance";
 
 const key = "couch.remote-interface-size";
 const changed = "couch-interface-size";
@@ -31,9 +31,24 @@ export function saveRemoteInterfaceSize(value: InterfaceSize) {
 
 export const useRemoteInterfaceSize = () => useSyncExternalStore<InterfaceSize>(subscribe, () => current, () => 1);
 
-export function useInterfaceSize(native: boolean) {
+export function usePreviewSeconds(appearance: TvAppearance) {
+  const [now, setNow] = useState(Date.now());
+  const expiresAt = appearance.preview?.expiresAt;
+  useEffect(() => {
+    setNow(Date.now());
+    if (!expiresAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [expiresAt]);
+  return expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : 0;
+}
+
+export function useInterfaceSize(native: boolean, appearance = defaultTvAppearance) {
   const remote = useRemoteInterfaceSize();
+  const seconds = usePreviewSeconds(appearance);
+  const size = native ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
   useLayoutEffect(() => {
-    document.documentElement.style.setProperty("--interface-scale", String(native ? 1 : remote));
-  }, [native, remote]);
+    document.documentElement.style.setProperty("--interface-scale", String(size));
+    window.dispatchEvent(new Event("couch-interface-size-applied"));
+  }, [size]);
 }

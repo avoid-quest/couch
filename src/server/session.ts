@@ -3,6 +3,7 @@ import type { Store } from "./store";
 import { createProgress, localMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
 import { playbackDefault } from "../shared/playback-default";
+import type { TvAppearance } from "../shared/appearance";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
 export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean };
@@ -26,6 +27,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     currentEntryId: null,
     activeProfile,
     installationName: store.installationName(),
+    appearance: { size: store.tvInterfaceSize(), confirmedSize: store.tvInterfaceSize(), preview: null },
     administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
     player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
@@ -178,6 +180,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
 
   return {
+    updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
     get state() { return structuredClone(state); },
     enrichEntry,
     loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play") {

@@ -36,6 +36,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
     const main = document.getElementById("main");
     if (main) observer.observe(main);
     window.addEventListener("resize", measure);
+    window.addEventListener("couch-interface-size-applied", measure);
     window.addEventListener("scroll", measure, true);
     measure();
     return () => {
@@ -43,6 +44,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
       observer.disconnect();
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", measure);
+      window.removeEventListener("couch-interface-size-applied", measure);
       window.removeEventListener("scroll", measure, true);
     };
   }, []);
