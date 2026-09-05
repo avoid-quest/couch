@@ -34,6 +34,8 @@ jobs:
         with:
           workspaces: src-tauri
           cache-bin: false
+          # Keep compiled dependencies when a later runtime qualification fails.
+          cache-on-failure: true
           key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', '.github/workflows/package.yml', 'src-tauri/vendor/**') }}
       - run: bun install --frozen-lockfile
       - run: bun run package:prepare
@@ -48,8 +50,9 @@ jobs:
           cp src-tauri/target/release/bundle/deb/*.deb .artifacts/package-release/
           cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
           git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
-          sha256sum .artifacts/package-release/* > .artifacts/package-release/SHA256SUMS
           stat --printf='%n %s bytes\n' .artifacts/package-release/*.deb > .artifacts/package-release/size.txt
+          cd .artifacts/package-release
+          sha256sum *.deb *.json *.tar.gz > SHA256SUMS
       - name: Install the official qualification driver
         run: cargo install tauri-driver --version 2.0.6 --locked
       - name: Qualify the exact Debian package on clean Ubuntu

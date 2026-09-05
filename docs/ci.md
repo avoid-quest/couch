@@ -51,7 +51,9 @@ Reuse existing documentation/ordinary evidence when their behavior is unchanged.
 The opt-in [Package workflow](../.github/workflows/package.yml) adds no work to
 ordinary Check revisions or metadata events. One requested qualification has one
 Ubuntu job that builds one release and installs that exact artifact into a clean
-runtime container. Its build, helper downloads, license generation, official
+runtime container. It retains compiled Cargo dependencies if a later runtime
+smoke fails, so a fixture correction can reuse that build work. Its build,
+helper downloads, license generation, official
 driver setup and smoke are additional release-qualification usage. Record every
 attempt with the timing/rounding method above, including failures, cancellations
 and a separately requested post-merge build. Compare the unchanged ordinary
