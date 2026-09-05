@@ -1,0 +1,28 @@
+.guide-panel { display: grid; gap: 1rem; min-width: 0; }
+.guide-heading { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+.guide-heading h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: .25rem; }
+.guide-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .75rem; }
+.guide-filters > div { display: grid; gap: .5rem; min-width: 0; }
+.guide-filters [role=combobox] { width: 100%; min-width: 0; }
+.guide-channel-list { display: grid; gap: .75rem; }
+.guide-channel { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; padding: .875rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.guide-channel-name { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+.guide-channel-name > div { min-width: 0; }
+.guide-channel h3 { font-weight: 600; overflow-wrap: anywhere; }
+.guide-logo { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; flex-shrink: 0; border-radius: .5rem; background: var(--muted); color: var(--primary); overflow: hidden; }
+.guide-logo img { width: 100%; height: 100%; object-fit: contain; }
+.guide-now-next { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .75rem; }
+.guide-now-next p { display: grid; align-content: start; gap: .2rem; min-width: 0; }
+.guide-now-next span, .guide-now-next time { color: var(--muted-foreground); font-size: .75rem; }
+.guide-now-next strong { font-weight: 500; font-size: .875rem; overflow-wrap: anywhere; }
+.guide-channel-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.guide-channel-actions button { flex: 1 1 auto; }
+.guide-empty { color: var(--muted-foreground); padding: 1.25rem 0; }
+.guide-day { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.guide-day h3 { font-weight: 500; }
+.guide-program-list { display: grid; }
+.guide-program-list li { display: grid; gap: .35rem; padding: .9rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.guide-program-list h3 { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-weight: 500; }
+.guide-program-list time, .guide-program-list p { color: var(--muted-foreground); font-size: .875rem; }
+@media (min-width: 768px) { .guide-channel { grid-template-columns: minmax(140px, .8fr) minmax(0, 1.4fr); align-items: center; } .guide-channel-actions { grid-column: 1 / -1; } .guide-channel-actions button { flex: 0 1 auto; } }
+@media (min-width: 1440px) { .guide-channel { grid-template-columns: minmax(150px, .7fr) minmax(0, 1.2fr) auto; } .guide-channel-actions { grid-column: auto; max-width: 270px; } }

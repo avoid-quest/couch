@@ -20,12 +20,15 @@ import { verifyVideoQuality } from "./video-quality";
 import { verifyAppearance } from "./appearance";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
 import { preparePublicConnection, verifyConnection, verifyRecovery } from "./connection";
+import { createGuideFixture } from "./iptv-fixture";
+import { verifyGuide } from "./iptv";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const artifactDir = "/artifacts";
 const checks: string[] = [];
 const radioFixture = await createRadioFixture();
+const guideFixture = await createGuideFixture();
 const plainMediaAuth: boolean[] = [];
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
 let driver = Bun.spawn(["tauri-driver"], {
@@ -587,6 +590,7 @@ try {
   const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
   const connectionContext = { origin, ui, httpRemote, until, artifactDir };
   await verifyConnection(connectionContext);
+  const persistedGuide = await verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }, guideFixture);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -635,6 +639,7 @@ try {
   await persistedRadioSettings.verifyAfterRestart();
   await persistedFolderSettings.verifyAfterRestart();
   await verifyRecovery(connectionContext, recoveryCode);
+  await persistedGuide.verifyAfterRestart(clients, httpRemote);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.equal((await api("/api/library/items?q=Linux&offset=0&limit=30")).items[0].id, library.items[0].id);
@@ -693,4 +698,5 @@ try {
   driver.kill();
   await media.stop(true);
   await radioFixture.close();
+  await guideFixture.close();
 }
