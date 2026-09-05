@@ -11,9 +11,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { ConnectionInfo } from "../shared/protocol";
 import { SetupQr } from "./SetupQr";
+import { QualitySelect } from "./QualitySelect";
+import type { useVideoQualityPreference } from "./video-quality";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
+  videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   credentials: { origin: string; token: string } | null;
   connected: boolean;
   status: string;
@@ -26,7 +29,7 @@ type Props = {
   initialOpen?: boolean;
 };
 
-export function Settings({ credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, initialOpen = false }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, initialOpen = false }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [draftName, setDraftName] = useState(name);
@@ -135,8 +138,9 @@ export function Settings({ credentials, connected, status, host, administratorCl
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
       <Tabs defaultValue="general" className="min-w-0 gap-4">
-        <TabsList className="w-full min-h-12" aria-label="Settings sections">
+        <TabsList className="grid h-auto w-full grid-cols-2" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
+          <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
         </TabsList>
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
@@ -178,6 +182,12 @@ export function Settings({ credentials, connected, status, host, administratorCl
             </form>
           </>}
         </TabsContent>
+        <TabsContent value="remote" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
+          <QualitySelect id="default-video-quality" label="Default online-video quality" value={videoQualityPreference.quality} onChange={videoQualityPreference.save} />
+          <p className="text-muted-foreground">Saved in this browser for new online videos. You can choose another quality when adding a video.</p>
+          <p className="text-muted-foreground">Existing queue entries, other remotes and the TV's display resolution stay unchanged.</p>
+          {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
+        </TabsContent>
         <TabsContent value="connection" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
             <dt className="text-muted-foreground">Status</dt><dd className="min-w-0 break-words">{status}</dd>
@@ -193,7 +203,7 @@ export function Settings({ credentials, connected, status, host, administratorCl
         </TabsContent>
       </Tabs>
       {loading && <p role="status" className="text-muted-foreground">Loading settings…</p>}
-      {!connected && <p role="status" className="text-muted-foreground">{credentials ? "Connect to the TV to change settings." : "This browser is not paired."}</p>}
+      {!connected && <p role="status" className="text-muted-foreground">{credentials ? "Connect to the TV to change its settings." : "This browser is not paired."}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {notice && <p role="status">{notice}</p>}
     </DialogContent>
