@@ -24,6 +24,12 @@ def changed_paths(event_name, event):
     if not all(isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha) and int(sha, 16) for sha in (base, head)):
         raise ValueError("missing commit")
     if event_name == "pull_request":
+        # Checkout tests GitHub's merge result. A stacked PR's event base can lag
+        # behind that merge while GitHub rebases the stack; use the tested base.
+        parents = git("rev-list", "--parents", "-n", "1", "HEAD").decode().split()
+        if len(parents) != 3 or parents[2] != head:
+            raise ValueError("checkout does not merge the event head")
+        base = parents[1]
         bases = git("merge-base", "--all", base, head).splitlines()
         if len(bases) != 1:
             raise ValueError("ambiguous merge base")

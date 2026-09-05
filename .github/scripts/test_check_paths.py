@@ -48,8 +48,13 @@ class DiffTests(unittest.TestCase):
         self.git("commit", "-qm", "fixture")
         return self.git("rev-parse", "HEAD")
 
-    def pr(self, base, head):
+    def event(self, base, head):
         return {"pull_request": {"base": {"sha": base}, "head": {"sha": head}}}
+
+    def pr(self, base, head):
+        merge = self.git("commit-tree", f"{head}^{{tree}}", "-p", base, "-p", head, "-m", "PR merge fixture")
+        self.git("checkout", "-q", "--detach", merge)
+        return self.event(base, head)
 
     def test_stack_and_retarget_use_actual_base(self):
         self.write("src-tauri/src/lib.rs")
@@ -66,6 +71,22 @@ class DiffTests(unittest.TestCase):
         self.write("src-tauri/build.rs")
         base = self.commit()
         self.assertEqual(check_paths.select("pull_request", self.pr(base, head))[0], "ordinary")
+
+    def test_stack_merge_base_can_be_newer_than_event_base(self):
+        self.write(".github/scripts/check-paths.py")
+        lower = self.commit()
+        self.write("docs/ci.md")
+        head = self.commit()
+        self.pr(lower, head)
+        self.assertEqual(check_paths.select("pull_request", self.event(self.base, head))[0], "docs")
+
+    def test_checkout_must_merge_the_event_head(self):
+        self.write("docs/ci.md")
+        head = self.commit()
+        event = self.pr(self.base, head)
+        self.assertEqual(check_paths.select("pull_request", self.event(self.base, self.base))[0], "native")
+        self.git("checkout", "-q", "--detach", head)
+        self.assertEqual(check_paths.select("pull_request", event)[0], "native")
 
     def test_main_covers_the_whole_push(self):
         self.write("src-tauri/build.rs")
@@ -97,12 +118,12 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(check_paths.select("pull_request", event)[0], "native")
 
     def test_missing_or_invalid_information_selects_native(self):
-        for event in [{}, self.pr("0" * 40, self.base), self.pr("f" * 40, self.base), self.pr("--help", self.base)]:
+        for event in [{}, self.event("0" * 40, self.base), self.event("f" * 40, self.base), self.event("--help", self.base)]:
             with self.subTest(event=event):
                 self.assertEqual(check_paths.select("pull_request", event)[0], "native")
         self.assertEqual(check_paths.select("unknown", {})[0], "native")
         Path(".git/shallow").write_text(self.base + "\n")
-        self.assertEqual(check_paths.select("pull_request", self.pr(self.base, self.base))[0], "native")
+        self.assertEqual(check_paths.select("pull_request", self.event(self.base, self.base))[0], "native")
 
 
 if __name__ == "__main__":
