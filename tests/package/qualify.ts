@@ -129,8 +129,9 @@ try {
   await until("Real HTTP remote serves its pairing UI from compiled assets", async () => execute("return !!document.querySelector('#pairing-code') && !window.__TAURI_INTERNALS__"));
   const input = await driver(44445, `/session/${browser}/element`, { using: "css selector", value: "#pairing-code" });
   await driver(44445, `/session/${browser}/element/${input["element-6066-11e4-a52e-4f735466cecf"]}/value`, { text: connection.pairingCode });
+  await until("HTTP pairing form enables Connect", async () => execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
   await execute("document.querySelector('#pairing-code').closest('form').requestSubmit()");
-  await until("Browser pairs through the production form and renders remote controls", async () => execute("return !!document.querySelector('.remote-control') && !document.querySelector('.video-stage')"));
+  await until("Browser pairs through the production form and renders remote controls", async () => execute("return !!document.querySelector('.remote-controller') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !document.querySelector('.video-stage')"));
   await Bun.write(`${root}/browser-remote.png`, Buffer.from(await driver(44445, `/session/${browser}/screenshot`), "base64"));
   socket!.close();
   await driver(44444, `/session/${native}`, undefined, "DELETE");
@@ -144,6 +145,15 @@ try {
   assert.equal(run(["docker", "exec", container, "sh", "-c", "pgrep -x couch-server | wc -l"]), "1");
   record("Restart preserves profiles, pairings, source, media and custom data without autoplay");
   await Bun.write(`${root}/result.json`, JSON.stringify({ build: expected, packageSha256: new Bun.CryptoHasher("sha256").update(new Uint8Array(await Bun.file(artifact).arrayBuffer())).digest("hex"), checks, display: "Xvfb software rendering with PulseAudio null output", upgradeFixture: "Same binary repacked with older Debian version; no prior production release exists" }, null, 2));
+} catch (error) {
+  const diagnostics = browser ? await driver(44445, `/session/${browser}/execute/sync`, { script: "return { status: document.querySelector('.header-status')?.textContent, alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled }", args: [] }).catch(() => null) : null;
+  await Bun.write(`${root}/failure.json`, JSON.stringify({ build: expected, checks, error: String(error), diagnostics }, null, 2));
+  if (browser) {
+    await driver(44445, `/session/${browser}/execute/sync`, { script: "document.querySelector('#pairing-code')?.setAttribute('type', 'password')", args: [] }).catch(() => {});
+    const screenshot = await driver(44445, `/session/${browser}/screenshot`).catch(() => null);
+    if (screenshot) await Bun.write(`${root}/browser-failure.png`, Buffer.from(screenshot, "base64"));
+  }
+  throw error;
 } finally {
   socket?.close();
   if (browser) await driver(44445, `/session/${browser}`, undefined, "DELETE").catch(() => {});
