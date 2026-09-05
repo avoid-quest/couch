@@ -47,3 +47,14 @@ A cold native measurement needs no usable Cargo dependency/build cache. Warm
 proof needs two consecutive relevant native source edits that reuse an earlier
 compatible cache; rerunning one SHA does not prove incremental performance.
 Reuse existing documentation/ordinary evidence when their behavior is unchanged.
+
+The opt-in [Package workflow](../.github/workflows/package.yml) adds no work to
+ordinary Check revisions or metadata events. One requested qualification has one
+Ubuntu job that builds one release and installs that exact artifact into a clean
+runtime container. Its build, helper downloads, license generation, official
+driver setup and smoke are additional release-qualification usage. Record every
+attempt with the timing/rounding method above, including failures, cancellations
+and a separately requested post-merge build. Compare the unchanged ordinary
+Check usage and added qualification usage separately. A new PR head requires
+fresh qualification even if an older Package check passed; see
+[package verification](packaging.md#build-and-qualify).

@@ -1,0 +1,65 @@
+name: Package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-deb:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-package'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: package-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - name: Install build libraries from the reviewed Ubuntu snapshot
+        run: |
+          snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
+          sudo apt-get update --snapshot "$snapshot"
+          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip
+          rustup show active-toolchain
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          workspaces: src-tauri
+          cache-bin: false
+          key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', '.github/workflows/package.yml', 'src-tauri/vendor/**') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run package:prepare
+      - name: Build the native TV and Debian package
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        with:
+          tauriScript: bun scripts/desktop.ts
+          args: --bundles deb --config src-tauri/tauri.package.conf.json -- --locked
+      - name: Preserve the exact artifact and matching source
+        run: |
+          mkdir -p .artifacts/package-release
+          cp src-tauri/target/release/bundle/deb/*.deb .artifacts/package-release/
+          cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
+          git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
+          sha256sum .artifacts/package-release/* > .artifacts/package-release/SHA256SUMS
+          stat --printf='%n %s bytes\n' .artifacts/package-release/*.deb > .artifacts/package-release/size.txt
+      - name: Install the official qualification driver
+        run: cargo install tauri-driver --version 2.0.6 --locked
+      - name: Qualify the exact Debian package on clean Ubuntu
+        run: bun tests/package/qualify.ts .artifacts/package-release/*.deb
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: couch-ubuntu24.04-amd64-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .artifacts/package-release/
+            .artifacts/package-qualification/
+          if-no-files-found: error
+          retention-days: 30

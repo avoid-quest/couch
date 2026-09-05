@@ -13,6 +13,8 @@
     "build": "bun scripts/build.ts",
     "desktop": "bun scripts/desktop.ts dev --no-dev-server",
     "desktop:build": "bun scripts/desktop.ts build",
+    "package:prepare": "bun scripts/package-prepare.ts",
+    "package:build": "bun run package:prepare && bun scripts/desktop.ts build --bundles deb --config src-tauri/tauri.package.conf.json -- --locked",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:linux": "bun scripts/linux-test.ts",

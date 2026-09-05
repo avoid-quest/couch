@@ -55,7 +55,7 @@ async function run(command: string[]) {
   return stdout.trim();
 }
 
-export async function installMediaTools(directory = mediaToolsDirectory(), fetchRelease: FetchRelease = fetch) {
+export async function installMediaTools(directory = mediaToolsDirectory(), fetchRelease: FetchRelease = fetch, pinnedChecksums?: Record<string, string>) {
   const releases = mediaReleases();
   const unzip = Bun.which("unzip");
   if (!unzip) throw new Error("Install unzip, then run bun run setup:media again.");
@@ -68,6 +68,7 @@ export async function installMediaTools(directory = mediaToolsDirectory(), fetch
       const manifest = (await download(`${release.base}/${release.sums}`, 64 * 1024, fetchRelease)).toString();
       const checksums = manifest.split(/\r?\n/).map(line => /^([a-f0-9]{64})[ \t]+\*?(.+)$/i.exec(line)).filter(match => match?.[2] === release.file);
       if (checksums.length !== 1) throw new Error(`Missing or ambiguous SHA-256 checksum for ${release.file}`);
+      if (pinnedChecksums && checksums[0]![1]!.toLowerCase() !== pinnedChecksums[release.file]) throw new Error(`Release checksum differs from the pinned input for ${release.file}`);
       const bytes = await download(`${release.base}/${release.file}`, 128 * 1024 * 1024, fetchRelease);
       if (new Bun.CryptoHasher("sha256").update(bytes).digest("hex") !== checksums[0]![1]!.toLowerCase()) throw new Error(`SHA-256 checksum mismatch for ${release.file}`);
       const executable = join(staging, release.name);
