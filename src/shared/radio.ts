@@ -20,3 +20,5 @@ export interface RadioPlaylist {
   updatedAt: number | null;
   error: string | null;
 }
+
+export type RadioPlaylistSummary = Omit<RadioPlaylist, "url">;

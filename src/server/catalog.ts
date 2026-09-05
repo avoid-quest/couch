@@ -8,7 +8,7 @@ import type { createSession } from "./session";
 
 type Services = {
   library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
-  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "playlistStations">;
+  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlistStations">;
   jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
 };
@@ -173,27 +173,10 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (!image) throw new RequestError("Artwork not found.", 404);
           return new Response(Buffer.from(image.data), { headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" } });
         }
-        if (pathname === "/api/radio/playlists") {
-          if (request.method === "GET") return Response.json({ playlists: radio.playlists() });
-          if (request.method !== "POST") return methodNotAllowed("GET, POST");
-          const { name, url } = await body(request);
-          if (typeof name !== "string" || !name.trim() || name.length > 200 || /[\0\r\n]/.test(name)
-            || typeof url !== "string" || !url.trim() || url.length > 4096) throw new RequestError("Enter a playlist name and an HTTP or HTTPS M3U URL.");
-          return Response.json({ playlist: await radio.addPlaylist({ name, url }) }, { status: 201 });
-        }
-        const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})(?:\/(refresh|stations))?$/.exec(pathname);
+        const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})\/stations$/.exec(pathname);
         if (playlist) {
-          if (playlist[2] === "stations") {
-            if (request.method !== "GET") return methodNotAllowed("GET");
-            return Response.json({ stations: radio.playlistStations({ playlistId: playlist[1]!, q: queryText(searchParams, "q", 100) }) });
-          }
-          if (playlist[2] === "refresh") {
-            if (request.method !== "POST") return methodNotAllowed("POST");
-            return Response.json({ playlist: await radio.refreshPlaylist(playlist[1]!) });
-          }
-          if (request.method !== "DELETE") return methodNotAllowed("DELETE");
-          radio.removePlaylist(playlist[1]!);
-          return new Response(null, { status: 204 });
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          return Response.json({ stations: radio.playlistStations({ playlistId: playlist[1]!, q: queryText(searchParams, "q", 100) }) });
         }
         if (pathname === "/api/radio/stations") {
           if (request.method !== "GET") return methodNotAllowed("GET");

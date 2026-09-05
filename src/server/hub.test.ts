@@ -731,7 +731,7 @@ test("catalog HTTP authenticates native CORS requests and shares only approved l
   expect(commands.some(command => command.type === "load")).toBe(false);
 });
 
-test("paired remotes import, refresh, favorite and play a durable Kodi radio playlist", async () => {
+test("an administrator manages a durable radio playlist while ordinary remotes browse, favorite and play", async () => {
   let stream = "https://radio.example/live.mp3";
   let available = true;
   const feed = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => available
@@ -741,22 +741,33 @@ test("paired remotes import, refresh, favorite and play a durable Kodi radio pla
     const initial = fixture();
     const token = await pair(initial.hub);
     const first = new Peer(initial.hub, token);
-    const second = new Peer(initial.hub, await pair(initial.hub));
+    const guestToken = await pair(initial.hub);
+    const second = new Peer(initial.hub, guestToken);
     await Promise.all([first.ready(), second.ready()]);
-    const api = (hub: Hub, path = "", method = "GET", body?: unknown) => fetch(`${hub.origin}/api/radio/${path}`, {
-      method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    const api = (hub: Hub, path = "", method = "GET", body?: unknown, callerToken = token) => fetch(`${hub.origin}/api/radio/${path}`, {
+      method, headers: { Origin: hub.origin, Authorization: `Bearer ${callerToken}`, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     expect((await fetch(`${initial.hub.origin}/api/radio/playlists`, { headers: { Origin: initial.hub.origin } })).status).toBe(401);
+    expect((await api(initial.hub, "sources")).status).toBe(403);
+    expect((await api(initial.hub, "playlists", "POST", { name: "avoid radio", url: `http://127.0.0.1:${feed.port}/playlist.m3u` })).status).toBe(403);
+    const claimCode = await (await fetch(`${initial.hub.origin}/api/controllers/claim-code`, { headers: { Authorization: `Bearer ${hostToken}` } })).json() as { code: string };
+    expect((await fetch(`${initial.hub.origin}/api/controllers/claim`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ code: claimCode.code }) })).status).toBe(200);
     const added = await api(initial.hub, "playlists", "POST", { name: "avoid radio", url: `http://127.0.0.1:${feed.port}/playlist.m3u` });
     expect(added.status).toBe(201);
     const { playlist } = await added.json() as { playlist: RadioPlaylist };
     expect(playlist.stationCount).toBe(1);
+    expect((await (await api(initial.hub, "sources")).json()).sources[0].url).toBe(playlist.url);
+    expect((await (await api(initial.hub, "playlists", "GET", undefined, guestToken)).json()).playlists[0].url).toBeUndefined();
+    expect((await api(initial.hub, "sources", "GET", undefined, guestToken)).status).toBe(403);
+    expect((await api(initial.hub, `playlists/${playlist.id}/refresh`, "POST", undefined, guestToken)).status).toBe(403);
+    expect((await api(initial.hub, `playlists/${playlist.id}`, "DELETE", undefined, guestToken)).status).toBe(403);
     await second.waitFor(message => message.type === "state" && (message.state.radioVersion ?? 0) > 0);
     const stations = async (hub: Hub) => (await (await api(hub, `playlists/${playlist.id}/stations`)).json() as { stations: RadioStation[] }).stations;
     const [station] = await stations(initial.hub);
     expect(station).toMatchObject({ name: "Sygma Radio", url: stream, groupTitle: "avoid radio", logoUrl: "https://radio.example/logo.png" });
-    expect((await api(initial.hub, "favorites", "POST", { station })).status).toBe(200);
+    expect((await api(initial.hub, `playlists/${playlist.id}/stations`, "GET", undefined, guestToken)).status).toBe(200);
+    expect((await api(initial.hub, "favorites", "POST", { station }, guestToken)).status).toBe(200);
     expect(await first.command({ type: "enqueueRadio", stationId: "missing", entryId: "missing-radio" })).toMatchObject({ ok: false });
     expect(await first.command({ type: "enqueueRadio", stationId: station!.id, entryId: "curated-radio" })).toMatchObject({ ok: true });
     await second.waitFor(message => message.type === "state" && message.state.queue.some(entry => entry.id === "curated-radio"));
