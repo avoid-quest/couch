@@ -4,6 +4,7 @@ body { min-width: 0; }
 #root, [data-slot="dialog-content"], [data-slot="select-content"], [data-slot="popover-content"] { zoom: var(--interface-scale); }
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
 [data-slot="dialog-content"], body.native-host [data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
+[data-slot="popover-content"] { max-width: calc((100vw - 2rem) / var(--interface-scale)); }
 .remote-shell .remote-controller { max-height: calc(100dvh / var(--interface-scale) - var(--remote-header-height) - 40px); }
 .interface-size-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: .5rem; }
 .interface-size-choices button { min-height: 44px; }
