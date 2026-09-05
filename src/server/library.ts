@@ -172,6 +172,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     let videosWithoutProbe = 0;
     let sidecarFailures = 0;
     const pending = new Set<Promise<void>>();
+    const shows = new Map<string, { show: VideoShow; priority: number; path: string }>();
     try {
       assertOpen();
       let root: string;
@@ -204,6 +205,15 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const probedMetadata = kind === "audio" ? music : fileMetadata && previous?.probed && previous.fileMetadata ? fileMetadata : (executable ? await probe(path, executable) : null);
         const metadata = probedMetadata ?? fileMetadata;
         const localVideo = kind === "video" ? await readVideoMetadata(root, source.id, path) : null;
+        if (localVideo?.video.show) {
+          const show = localVideo.video.show;
+          const selected = shows.get(show.id);
+          const priority = localVideo.showTitlePriority;
+          if (!selected || priority > selected.priority || priority === selected.priority && localPath < selected.path) {
+            shows.set(show.id, { show, priority, path: localPath });
+          }
+          localVideo.video.show = shows.get(show.id)!.show;
+        }
         sidecarFailures += localVideo?.failures ?? 0;
         const retained = !metadata && unchanged ? previous : null;
         assertOpen();

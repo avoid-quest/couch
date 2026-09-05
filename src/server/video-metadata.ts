@@ -131,9 +131,10 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
   const showNfo = episode ? await nfo(join(showFolder, "tvshow.nfo")) : null;
   if (showNfo && showNfo.type !== "tvshow") failures++;
   const showFields = showNfo?.type === "tvshow" ? showNfo.fields : {};
+  const showTitle = text(showFields.title), episodeShowTitle = text(fields.showtitle);
   const show = episode ? {
     ...description(showFields), id: hash(JSON.stringify([sourceId, relative(root, showFolder)])),
-    title: text(showFields.title) ?? text(fields.showtitle) ?? basename(showFolder),
+    title: showTitle ?? episodeShowTitle ?? basename(showFolder),
     artworkId: await art(showFolder, ["poster"]), fanartId: await art(showFolder, ["fanart"]),
   } : null;
   const seasonArtworkId = show && season !== null ? await art(showFolder, [season === 0 ? "season-specials-poster" : `season${String(season).padStart(2, "0")}-poster`]) : null;
@@ -142,5 +143,6 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
   const video: VideoMetadata = { ...description(fields, episode), type: episode ? "episode" : "movie", show, season, episode: episodeNumber, fanartId, seasonArtworkId };
   const runtime = text(fields.runtime);
   return { title: text(fields.title), runtime: runtime && /^\d{1,5}(?:\.\d{1,2})?$/.test(runtime) && Number(runtime) > 0 && Number(runtime) <= 10_000 ? Number(runtime) * 60 : null,
-    video, artworkId: artworkId ?? show?.artworkId ?? null, artworks, originals, failures };
+    video, showTitlePriority: showTitle ? 2 : episodeShowTitle ? 1 : 0,
+    artworkId: artworkId ?? show?.artworkId ?? null, artworks, originals, failures };
 }

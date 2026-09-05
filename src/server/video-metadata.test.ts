@@ -212,6 +212,49 @@ test("current show metadata survives deleted episodes, search and whole-source o
   expect(reopened.search({ showId }).items.every(item => !item.available)).toBe(true);
 });
 
+for (const metadata of ["mixed", "conflicting"]) for (const last of ["S01E01", "S01E02"]) test(`${metadata} episode show titles follow precedence when ${last} saves last`, async () => {
+  const { root, media, databasePath, library, write } = await fixture();
+  await library.close();
+  await write("ZFolder/S01E01.mkv", "unit media");
+  await write("ZFolder/S01E01.nfo", "<episodedetails><showtitle>AShow</showtitle></episodedetails>");
+  await write("ZFolder/S01E02.mkv", "unit media");
+  if (metadata === "conflicting") await write("ZFolder/S01E02.nfo", "<episodedetails><showtitle>BShow</showtitle></episodedetails>");
+  const first = last === "S01E01" ? "S01E02" : "S01E01";
+  const executable = join(root, "ffprobe-order");
+  await Bun.write(executable, `#!${process.execPath}
+import { Database } from "bun:sqlite";
+if (process.argv.at(-1).endsWith(${JSON.stringify(`${last}.mkv`)})) {
+  const db = new Database(${JSON.stringify(databasePath)}, { readonly: true });
+  const saved = db.query("SELECT id FROM library_items WHERE path = ?");
+  const deadline = Date.now() + 2000;
+  while (!saved.get(${JSON.stringify(`ZFolder/${first}.mkv`)})) {
+    if (Date.now() > deadline) process.exit(1);
+    await Bun.sleep(5);
+  }
+  db.close();
+}
+console.log(JSON.stringify({format:{duration:"20"}}));`);
+  await chmod(executable, 0o755);
+  const scanned = createLibrary({ databasePath, ffprobePath: executable });
+  cleanups.push(() => scanned.close());
+  const source = await scanned.addSource(media);
+  expect((await scanned.scan(source.id)).status).toBe("ready");
+  const db = new Database(databasePath, { readonly: true });
+  cleanups.push(() => db.close());
+  expect(db.query<{ path: string }, []>("SELECT path FROM library_items ORDER BY rowid").all().map(row => row.path)).toEqual([`ZFolder/${first}.mkv`, `ZFolder/${last}.mkv`]);
+  const shows = scanned.videoShows();
+  expect(shows.items).toEqual([expect.objectContaining({ title: "AShow", episodeCount: 2, seasonCount: 1 })]);
+  expect(scanned.search({ query: "AShow" }).total).toBe(2);
+  expect(scanned.search({ query: "ZFolder" }).total).toBe(0);
+  expect(scanned.search({ query: "BShow" }).total).toBe(0);
+  expect(scanned.search().items.every(item => item.video?.show?.title === "AShow")).toBe(true);
+  await unlink(join(media, "ZFolder/S01E01.nfo"));
+  if (metadata === "conflicting") await unlink(join(media, "ZFolder/S01E02.nfo"));
+  await scanned.scan(source.id);
+  expect(scanned.videoShows().items[0]).toMatchObject({ id: shows.items[0]!.id, title: "ZFolder", episodeCount: 2 });
+  expect(scanned.search({ query: "AShow" }).total).toBe(0);
+});
+
 test("malformed and escaped sidecars stay isolated from playable entries and filename fallback", async () => {
   const { root, media, library, write } = await fixture();
   await write("Show/Season 2/Fallback.S02E10.mkv", "unit media");
