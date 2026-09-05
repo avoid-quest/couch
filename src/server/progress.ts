@@ -31,6 +31,7 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
   };
   return {
     get mediaId() { return active?.item.mediaId ?? null; },
+    forgetProfile(id: string) { if (active?.profileId === id) active = null; },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
     begin(entry: QueueEntry, playbackId: string, profileId: string) {

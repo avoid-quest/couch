@@ -803,3 +803,49 @@ test("an administrator manages a durable radio playlist while ordinary remotes b
     expect(await (await api(restarted.hub, "playlists")).json()).toEqual({ playlists: [] });
   } finally { await feed.stop(true); }
 });
+
+test("paired HTTP controllers rename and race removal with shared durable state and unchanged authority", async () => {
+  const initial = fixture();
+  const { hub } = initial;
+  hub.session.observe(idle);
+  const firstToken = await pair(hub), secondToken = await pair(hub);
+  const first = new Peer(hub, firstToken), second = new Peer(hub, secondToken);
+  await Promise.all([first.ready(), second.ready()]);
+  const api = (target: Hub, token: string, path: string, body?: unknown) => fetch(`${target.origin}${path}`, {
+    method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${token}`, Origin: target.origin, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const identities = await Promise.all([firstToken, secondToken].map(async token => (await (await api(hub, token, "/api/controllers/me")).json()).controller));
+  const { profile } = await (await api(hub, firstToken, "/api/profiles", { name: "Viewer" })).json();
+  await api(hub, firstToken, `/api/profiles/${profile.id}/select`, {});
+  await second.waitFor(message => message.type === "state" && message.state.activeProfile.id === profile.id);
+  await first.command({ type: "preferences", profileId: profile.id, preferences: { speed: 1.25 } });
+  expect((await fetch(`${hub.origin}/api/profiles/${profile.id}/rename`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ name: "No pairing", expectedName: profile.name }) })).status).toBe(401);
+  const renamed = { ...profile, name: "Movie night" };
+  expect((await api(hub, secondToken, `/api/profiles/${profile.id}/rename`, { name: renamed.name, expectedName: profile.name })).status).toBe(200);
+  await Promise.all([first, second].map(peer => peer.waitFor(message => message.type === "state" && message.state.activeProfile.name === renamed.name)));
+  expect(first.state.preferences?.profile.speed).toBe(1.25);
+  expect((await api(hub, firstToken, `/api/profiles/${profile.id}/rename`, { name: "Stale", expectedName: profile.name })).status).toBe(409);
+  const races = await Promise.all([firstToken, secondToken].map(token => api(hub, token, `/api/profiles/${profile.id}/remove`, { expectedName: renamed.name })));
+  expect(races.map(response => response.status).sort()).toEqual([200, 404]);
+  await Promise.all([first, second].map(peer => peer.waitFor(message => message.type === "state" && message.state.activeProfile.id === "household")));
+  expect(first.state.preferences?.profile.speed).toBe(1);
+  const reconnected = new Peer(hub, secondToken);
+  await reconnected.ready();
+  expect(reconnected.state.activeProfile).toEqual({ id: "household", name: "Household" });
+  expect((await (await api(hub, firstToken, "/api/profiles")).json()).profiles).toEqual([{ id: "household", name: "Household" }]);
+  for (const [index, token] of [firstToken, secondToken].entries()) {
+    const identity = (await (await api(hub, token, "/api/controllers/me")).json()).controller;
+    expect(identity).toMatchObject({ id: identities[index].id, role: "controller" });
+    expect((await api(hub, token, "/api/settings", { installationName: "Unclaimed" })).status).toBe(403);
+  }
+  await Promise.all([first.close(), second.close(), reconnected.close()]);
+  await hub.close();
+  hubs.splice(hubs.indexOf(hub), 1);
+  const restarted = fixture(initial.databasePath);
+  const remote = new Peer(restarted.hub, firstToken);
+  await remote.ready();
+  expect(remote.state.activeProfile).toEqual({ id: "household", name: "Household" });
+  expect(remote.state.currentEntryId).toBeNull();
+  expect(restarted.commands).toEqual([]);
+  expect((await (await api(restarted.hub, secondToken, "/api/profiles")).json()).profiles).toEqual([{ id: "household", name: "Household" }]);
+});
