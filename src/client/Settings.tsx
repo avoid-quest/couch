@@ -229,7 +229,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
             <dt className="text-muted-foreground">TV name</dt><dd className="min-w-0 break-words">{savedName}</dd>
             <dt className="text-muted-foreground">TV address</dt><dd className="min-w-0 break-all">{origin || knownConnection()?.origin || location.origin}</dd>
             <dt className="text-muted-foreground">Server</dt><dd>{connected ? "Connected" : reachable ? "Reachable" : status}</dd>
-            <dt className="text-muted-foreground">Player</dt><dd>{reachable ? playerStatus === "unavailable" ? "Unavailable" : "Available" : "Unknown while disconnected"}</dd>
+            <dt className="text-muted-foreground">Player</dt><dd>{!reachable ? "Unknown while disconnected" : !playerStatus ? "Unknown" : playerStatus === "unavailable" ? "Unavailable" : "Available"}</dd>
             {identity?.controller && <><dt className="text-muted-foreground">This remote</dt><dd className="min-w-0 space-y-1"><p className="break-words">{identity.controller.name}</p><Badge variant="secondary">{identity.authority === "administrator" ? "Administrator" : "Controller"}</Badge></dd></>}
           </dl>
           {pairingRequired && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}

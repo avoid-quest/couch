@@ -18,6 +18,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const changeOrigin = useRef(onOrigin);
   changeOrigin.current = onOrigin;
   const [details, setDetails] = useState<ConnectionDetails | null>(() => knownConnection()?.details ?? null);
+  const [publicPlayer, setPublicPlayer] = useState<ConnectionDetails["player"]>();
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<SessionState | null>(null);
@@ -29,6 +30,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   useEffect(() => {
     setState(null);
+    setPublicPlayer(undefined);
     ready.current = false;
     let disposed = false;
     const controller = new AbortController();
@@ -46,7 +48,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setPublicPlayer(undefined); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
@@ -72,6 +74,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           const next = await response.json() as ConnectionDetails;
           if (disposed) return;
           setDetails(next);
+          setPublicPlayer(next.player);
           rememberConnection(candidate, next);
           origin = candidate;
           break;
@@ -193,5 +196,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, details, identity, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
+  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicPlayer : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
 }
