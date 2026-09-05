@@ -122,7 +122,9 @@ function DelayControl({ id, label, value, disabled, onApply }: {
 
 export function PlaybackSettings({ player, ready, connected, credentials, preferences, profile, onCommand }: Props) {
   const [pending, setPending] = useState(false);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
   const commandPending = useRef(false);
+  useEffect(() => setDefaultError(null), [player.playbackId, profile.id, connected]);
   const tracks = player.tracks ?? [];
   const audio = tracks.filter((track) => track.kind === "audio");
   const subtitles = tracks.filter((track) => track.kind === "subtitle");
@@ -162,8 +164,9 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
     const saved = patch && Object.entries(patch).every(([key, value]) => preferences.profile[key as keyof typeof preferences.profile] === value);
     return <div className="space-y-2">
       <p className="text-sm text-muted-foreground" role="status">Default for {profile.name}: {value}</p>
-      <Button variant="outline" className="min-h-11" disabled={disabled || !patch || !!saved} aria-label={`Save ${label} as default`} onClick={() => {
-        if (player.playbackId) void run({ type: "savePlaybackDefault", profileId: profile.id, playbackId: player.playbackId, setting });
+      <Button variant="outline" className="min-h-11" disabled={disabled || !patch || !!saved} aria-label={`Save ${label} as default`} onClick={async () => {
+        setDefaultError(null);
+        if (player.playbackId && !await run({ type: "savePlaybackDefault", profileId: profile.id, playbackId: player.playbackId, setting })) setDefaultError("Could not save this default. Check the connection and watching profile, then try again.");
       }}>Save as default</Button>
       {!patch && ready && setting !== "speed" && <p className="text-sm text-muted-foreground">This track has no saved language choice. Choose a default in Settings, Playback.</p>}
     </div>;
@@ -220,6 +223,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                     {saveDefault("speed", "speed", preferences.profile.speed === 1 ? "Normal" : `${preferences.profile.speed}×`)}
                   </div>
                 </div>
+                {defaultError && <Alert variant="destructive"><AlertDescription>{defaultError}</AlertDescription></Alert>}
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
                 {player.subtitleError && <Alert variant="destructive"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
                 <Separator />
