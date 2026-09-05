@@ -3,6 +3,8 @@ import type { Action, SessionState } from "../../src/shared/protocol";
 import type { GuidePage, GuideSource } from "../../src/shared/iptv";
 import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote } from "./ui";
 import { assertNativeVideoPixels } from "./pixels";
+import { assertLiveFrame, clockLag } from "./iptv-clock";
+import { captureGuideClock } from "./iptv-native-clock";
 import { appleGuidePermission, appleGuideSample, type GuideFixture } from "./iptv-fixture";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
@@ -10,6 +12,7 @@ type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
 type Context = { origin: string; ui: UiDriver; httpRemote: HttpRemote; clients: readonly Remote[]; until: Wait; artifactDir: string };
 
 export async function verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }: Context, fixture: GuideFixture) {
+  await fixture.startStreams();
   const first = () => clients[0]!.state!;
   const all = (predicate: (state: SessionState) => boolean) => clients.every(client => !!client.state && predicate(client.state));
   const originalQueue = first().queue.map(entry => entry.id);
@@ -31,7 +34,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     const encoded = JSON.stringify({ ...value, at: 0 });
     if (encoded !== previous) { observations.push(value); previous = encoded; }
   }, 100);
-  const evidence: Record<string, unknown> = { generated: fixture.hashes, publicSample: { url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
+  const evidence: Record<string, unknown> = { generated: fixture.hashes, encoding: fixture.encoding, epoch: fixture.epoch, publicSample: { url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
   const write = () => Bun.write(`${artifactDir}/iptv.json`, JSON.stringify({ ...evidence, date: new Date().toISOString(), requests: fixture.requests(), observations, limits: "Software rendering and a silent audio sink. No physical audio, decoder, HDMI or network hardware qualification." }, null, 2));
   try {
     await stop();
@@ -89,10 +92,35 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     await until("the live fixture advances at least eight segments while paused", () => fixture.currentSequence() >= beforeLive + 8, 20_000);
     await httpRemote.restore(); await httpRemote.ui.section("Guide");
     await until("probed live HLS exposes the Go live action", () => httpRemote.ui.execute("return [...document.querySelectorAll('.guide-channel-actions button')].some(button=>button.textContent==='Go live')"));
-    const resumedAt = Date.now(), expectedSequence = fixture.currentSequence() - 3;
-    await httpRemote.ui.button("Go live");
-    await until("Go live reloads at advancing live HLS segments with a new native playback ID", () => playing(blue.id) && first().player.playbackId !== oldPlayback && fixture.requests().some(request => request.native && request.path.startsWith("/blue/segments/") && request.at >= resumedAt && (request.sequence ?? 0) >= expectedSequence), 25_000);
-    evidence.liveEdge = { beforeLive, expectedSequence, resumedAt, playbackId: first().player.playbackId };
+    const reload = async () => {
+      const old = first().player.playbackId;
+      await httpRemote.restore(); await httpRemote.ui.section("Guide"); await httpRemote.ui.button("Go live");
+      await until("Go live starts a new native load of the live channel", () => playing(blue.id) && first().player.playbackId !== old, 25_000);
+      await httpRemote.minimize();
+    };
+    const frames = async (name: string) => {
+      const first = await captureGuideClock(ui, artifactDir, `${name}-first`, fixture.epoch);
+      await Bun.sleep(1_000);
+      const second = await captureGuideClock(ui, artifactDir, `${name}-second`, fixture.epoch);
+      assert.ok(second.tick > first.tick && second.captureStart > first.captureEnd, "Native presented frames and fixture clock both advance between captures");
+      return [first, second];
+    };
+    const resumedAt = Date.now(); await reload();
+    const liveFrames = await frames("native-iptv-live");
+    evidence.liveEdge = { beforeLive, oldPlayback, resumedAt, playbackId: first().player.playbackId, frames: liveFrames.map(frame => ({ ...frame, ...assertLiveFrame(frame) })) };
+    await until("fixture retains a complete delayed live window", () => fixture.currentSequence() >= 18, 40_000);
+    try {
+      fixture.delayLive(20); await reload();
+      const delayedFrames = await frames("native-iptv-delayed-reload");
+      for (const frame of delayedFrames) {
+        const lag = clockLag(frame); // Invalid capture/clock/marker errors cannot count as the negative control.
+        assert.ok(lag.minimumLagMs >= 20_000, "Deliberately delayed native frames are at least twenty seconds old");
+        assert.throws(() => assertLiveFrame(frame), /Presented IPTV frame exceeds/, "The same live assertion rejects a new load presenting delayed video");
+      }
+      evidence.liveNegativeControl = { delaySeconds: 20, playbackId: first().player.playbackId, frames: delayedFrames.map(frame => ({ ...frame, ...clockLag(frame) })) };
+    } finally { fixture.delayLive(0); }
+    await reload();
+    evidence.liveRecovery = (await frames("native-iptv-live-recovery")).map(frame => ({ ...frame, ...assertLiveFrame(frame) }));
 
     const startSlow = async () => {
       const at = Date.now();
