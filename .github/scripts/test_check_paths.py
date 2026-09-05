@@ -12,7 +12,7 @@ spec.loader.exec_module(check_paths)
 
 class ClassificationTests(unittest.TestCase):
     def test_docs_and_ordinary(self):
-        self.assertEqual(check_paths.classify(["AGENTS.md", "docs/ci.md"]), "docs")
+        self.assertEqual(check_paths.classify(["AGENTS.md", "docs/ci.md", "tests/linux/README.md", "tests/preview/README.md"]), "docs")
         for path in ["src/main.ts", "src/client/App.tsx", "src/server/hub.test.ts", "tests/setup-media.test.ts", "src/client/styles.css", "src/client/index.html", "src/server/radio.m3u"]:
             with self.subTest(path=path):
                 self.assertEqual(check_paths.classify(["README.md", path]), "ordinary")

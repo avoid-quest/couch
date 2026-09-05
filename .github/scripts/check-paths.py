@@ -40,7 +40,7 @@ def classify(paths):
         parts = PurePosixPath(path).parts
         # Build scripts, native sources/vendor/config, dependencies, toolchains,
         # workflows, and any new path are native unless explicitly allowed here.
-        if (len(parts) == 1 or parts[0] == "docs") and path.endswith(".md"):
+        if ((len(parts) == 1 or parts[0] == "docs") and path.endswith(".md")) or path in {"tests/linux/README.md", "tests/preview/README.md"}:
             continue
         if parts[0] in {"src", "tests"} and PurePosixPath(path).suffix in {".ts", ".tsx", ".css", ".html", ".m3u"}:
             ordinary = True
