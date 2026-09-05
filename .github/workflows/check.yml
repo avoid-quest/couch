@@ -21,19 +21,41 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Select checks from changed paths
+        id: paths
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'
+          python3 .github/scripts/check-paths.py
       - uses: oven-sh/setup-bun@v2
+        if: steps.paths.outputs.mode != 'docs'
         with:
           bun-version: 1.4.2
       - name: Install Linux dependencies
+        if: steps.paths.outputs.mode == 'native'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libmpv-dev libgl1-mesa-dev ffmpeg
       - name: Set up Rust
+        if: steps.paths.outputs.mode == 'native'
         run: |
           rustup update stable --no-self-update
           rustup default stable
+      - name: Install media test dependency
+        if: steps.paths.outputs.mode == 'ordinary'
+        run: |
+          if ! command -v ffmpeg; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
       - run: bun install --frozen-lockfile
+        if: steps.paths.outputs.mode != 'docs'
       - run: bun run check
+        if: steps.paths.outputs.mode != 'docs'
       - run: bun run build
+        if: steps.paths.outputs.mode != 'docs'
       - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+        if: steps.paths.outputs.mode == 'native'
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        if: steps.paths.outputs.mode == 'native'
