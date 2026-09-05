@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { createHash } from "node:crypto";
 import type { Action, SessionState } from "../../src/shared/protocol";
 import { assertSubtitlePixels } from "./subtitles";
 import { assertNativeVideoPixels } from "./pixels";
@@ -13,6 +14,26 @@ const settingsDialog = '[role="dialog"]:has([aria-label="Settings sections"])';
 const remoteChoices = '[role="group"][aria-label="This remote interface size"]';
 const tvChoices = '[role="group"][aria-label="TV interface size"]';
 const scale = (ui: UiDriver) => ui.execute("return Number(getComputedStyle(document.getElementById('root')).zoom)");
+
+async function subtitleMask(artifactDir: string, name: string, sample: { left: number; top: number; width: number; height: number }) {
+  const frames = await Promise.all(["off", "on"].map(async state => {
+    const decode = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", `${artifactDir}/${name}-${state}.png`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdout: "pipe", stderr: "inherit" });
+    const pixels = new Uint8Array(await new Response(decode.stdout).arrayBuffer());
+    assert.equal(await decode.exited, 0, "The captured subtitle comparison frame decodes");
+    assert.equal(pixels.length, 1600 * 1000 * 3);
+    return pixels;
+  }));
+  const [off, on] = frames as [Uint8Array, Uint8Array];
+  const mask = new Uint8Array(1600 * 1000);
+  for (let y = Math.ceil(sample.height * 0.55); y < sample.height * 0.97; y++) for (let x = Math.ceil(sample.width * 0.05); x < sample.width * 0.95; x++) {
+    const pixel = (sample.top + y) * 1600 + sample.left + x;
+    const offset = pixel * 3;
+    if ([0, 1, 2].some(channel => Math.abs(on[offset + channel]! - off[offset + channel]!) > 35)
+      && Math.max(on[offset]!, on[offset + 1]!, on[offset + 2]!) > 180) mask[pixel] = 1;
+  }
+  await Bun.write(`${artifactDir}/${name}.mask`, mask);
+  return mask;
+}
 
 async function open(ui: UiDriver, until: Wait) {
   await ui.browse();
@@ -93,7 +114,15 @@ export async function verifyAppearance(context: Context) {
   await assertSubtitlePixels(context, subtitle, "appearance-largest-subtitles");
   const defaults = await Bun.file(`${artifactDir}/appearance-default-subtitles-pixels.json`).json();
   const largest = await Bun.file(`${artifactDir}/appearance-largest-subtitles-pixels.json`).json();
-  assert.deepEqual(largest, defaults, "Interface scaling leaves subtitle placement, glyph pixels and the paused picture unchanged");
+  assert.deepEqual(largest.sample, defaults.sample, "The subtitle comparison uses the same native video aperture");
+  assert.ok(Math.abs(largest.position - defaults.position) < 0.05, "The subtitle comparison uses the same paused media position");
+  const [defaultMask, largestMask] = await Promise.all([
+    subtitleMask(artifactDir, "appearance-default-subtitles", defaults.sample),
+    subtitleMask(artifactDir, "appearance-largest-subtitles", largest.sample),
+  ]);
+  const differingCoordinates = defaultMask.reduce((count, value, pixel) => count + Number(value !== largestMask[pixel]), 0);
+  assert.equal(differingCoordinates, 0, "Interface scaling leaves every captured subtitle glyph pixel at the same screen coordinate");
+  const maskSha256 = createHash("sha256").update(largestMask).digest("hex");
   await ui.home();
   await ui.section("Queue");
   await clients[1]!.command({ type: "navigate", key: "right" });
@@ -101,7 +130,7 @@ export async function verifyAppearance(context: Context) {
   await until("directional focus selects the next source at the largest TV size", () => ui.execute("return document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Online'"));
   await clients[0]!.command({ type: "stop" });
   await until("appearance verification restores idle playback and the original queue", () => all(state => state.player.status === "idle" && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queue)));
-  await Bun.write(`${artifactDir}/appearance.json`, JSON.stringify({ nativeViewport: [1600, 1000], physical: false, nativeGeometry: original, remoteSizes: [1.3, 1.15], subtitlePixels: largest, checks: ["immediate browser size", "browser reload", "two separate HTTP browsers", "administrator scope", "TV timeout", "TV confirmation", "physical pointer reset", "ordinary remote navigation boundary", "directional focus", "native pattern", "unchanged subtitle pixels"] }, null, 2));
+  await Bun.write(`${artifactDir}/appearance.json`, JSON.stringify({ nativeViewport: [1600, 1000], physical: false, nativeGeometry: original, remoteSizes: [1.3, 1.15], subtitlePixels: largest, subtitleGeometry: { differingCoordinates, maskSha256 }, checks: ["immediate browser size", "browser reload", "two separate HTTP browsers", "administrator scope", "TV timeout", "TV confirmation", "physical pointer reset", "ordinary remote navigation boundary", "directional focus", "native pattern", "identical subtitle screen-coordinate masks"] }, null, 2));
   return {
     async verifyAfterRestart() {
       await until("confirmed TV size survives desktop restart", async () => all(state => state.appearance?.size === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.3);
