@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
+import { audioExtensions } from "../shared/media";
 
 export const videoQualityLabels: Record<VideoQuality, string> = { best: "Best available", "1080p": "Up to 1080p", "720p": "Up to 720p", "480p": "Up to 480p" };
 const storageKey = "couch.online-video-quality";
@@ -30,4 +31,18 @@ export function useVideoQualityPreference() {
     catch { setError("Could not save this browser's preference. Allow site storage and try again."); }
   };
   return { quality, save, error };
+}
+
+export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {
+  const [override, setOverride] = useState<VideoQuality | null>(null);
+  useEffect(() => setOverride(null), [defaultQuality]);
+  return [override ?? defaultQuality, setOverride, () => setOverride(null)] as const;
+}
+
+export function supportsWebVideoQuality(source: string) {
+  try {
+    const url = new URL(source.trim());
+    const extension = decodeURIComponent(url.pathname).split(".").at(-1)!.toLowerCase();
+    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !audioExtensions.has(extension) && !["oga", "mka"].includes(extension);
+  } catch { return true; }
 }

@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { Action, ConnectionInfo, NavigationKey, VideoQuality } from "../shared/protocol";
+import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
 import { createId, useSession, type Credentials } from "./session";
 import { JellyfinPanel } from "./JellyfinPanel";
 import { LibraryPanel } from "./LibraryPanel";
@@ -53,7 +53,6 @@ export function App() {
   const [pairingCode, setPairingCode] = useState("");
   const [remoteName, setRemoteName] = useState("My remote");
   const [pairing, setPairing] = useState(false);
-  const [quality, setQuality] = useState<VideoQuality>("best");
   const videoQualityPreference = useVideoQualityPreference();
   const [section, setSection] = useState("Queue");
   const [remoteMode, setRemoteMode] = useState<"browse" | "control">("browse");
@@ -251,10 +250,10 @@ export function App() {
                   {["Queue", "Online", "Library", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
                 </TabsList>
                 <TabsContent value="Queue" forceMount hidden={section !== "Queue"}>
-                  <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
+                  <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </TabsContent>
-                {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} quality={quality} onQualityChange={setQuality} onEnqueue={(item, playNow) =>
-                  run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow })
+                {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={(item, playNow, quality) =>
+                  run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(quality ? { quality } : {}), playNow })
                 } onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></TabsContent>}
                 {visited.has("Library") && <TabsContent value="Library" forceMount hidden={section !== "Library"}><LibraryPanel origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} onPlayHistory={(item, options) => {
                   if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });

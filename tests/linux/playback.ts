@@ -11,6 +11,7 @@ import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
+import { verifyVideoQuality } from "./video-quality";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -45,6 +46,7 @@ const media = Bun.serve({
 let sessionId = "";
 const clients: Remote[] = [];
 let httpRemote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
+let secondHttpRemote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
 let startShutdownPlayback: (() => Promise<void>) | undefined;
 let verifyShutdownReport: (() => Promise<void>) | undefined;
 
@@ -571,6 +573,10 @@ try {
   await api("/api/providers/favorites", { item: providerFavorite }, 1);
   await until("another remote restores the native Saved card without reload", async () => await execute("return document.querySelector('.provider-item h4')?.textContent") === providerFavorite.title);
 
+  secondHttpRemote = await startHttpRemote(origin, code, artifactDir, until, 4447);
+  await verifyVideoQuality({ ui, httpRemote: httpRemote!, otherRemote: secondHttpRemote, until, clients, artifactDir, screenshot });
+  await secondHttpRemote.minimize();
+
   await section("Library");
   await click('.library-heading button');
   let folderWindow = "";
@@ -616,7 +622,7 @@ try {
   await until("HTTP phone Escape restores the watching profile trigger", async () => await httpRemote!.ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.matches('.watching-profile')"));
   await httpRemote!.ui.section("Queue");
   const queueBeforeRestart = clients[0]!.state!.queue.map(entry => entry.id);
-  const preferenceContext = { origin, ui, until, clients, httpRemote, artifactDir, api, entryId: progressContext.switchEntryId };
+  const preferenceContext = { origin, ui, until, clients, httpRemote, otherRemote: secondHttpRemote, artifactDir, api, entryId: progressContext.switchEntryId };
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
@@ -701,6 +707,7 @@ try {
   await Bun.write(`${artifactDir}/failure.txt`, String(error));
   throw error;
 } finally {
+  await secondHttpRemote?.close();
   await httpRemote?.close();
   clients.forEach(client => client.socket.close());
   if (sessionId) await webdriver(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});

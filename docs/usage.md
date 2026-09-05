@@ -129,6 +129,12 @@ bun run desktop:build --debug --bundles app
 
 ## Administrator and connection settings
 
+**Settings > This remote** saves the default online-video quality in this
+browser. The TV's local browser calls this section **This screen**. Online and
+Add media use that default for new videos; an override applies to one enqueue.
+Existing queued videos keep their quality, and each remote keeps its own
+default. This preference does not change the TV's display resolution.
+
 An unclaimed TV opens **Settings > General** with its local address, an address-only
 QR code, the six-digit controller pairing code and a separate ten-digit
 administrator code. Pair your phone first, then open its **Settings > General**
