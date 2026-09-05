@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
 import { createId, useSession, type Credentials } from "./session";
+import { knownConnection } from "./connection";
 import { JellyfinPanel } from "./JellyfinPanel";
 import { LibraryPanel } from "./LibraryPanel";
 import { PlaybackControls } from "./PlaybackControls";
@@ -34,7 +35,7 @@ function storedCredentials(): Credentials | null {
   try {
     const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
     if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
-    return token ? { origin: location.origin, token } : null;
+    return token ? { origin: knownConnection()?.origin ?? location.origin, token } : null;
   } catch {
     return null;
   }
@@ -61,7 +62,7 @@ export function App() {
   const [visited, setVisited] = useState(new Set(["Queue"]));
   const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
-  const { state, status, connected, command, reconnect } = useSession(credentials, key => navigation.current(key));
+  const { state, status, details, identity, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
   const tv = useTvPresentation({ enabled: nativeHost, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   navigation.current = key => {
     if (!nativeHost) return;
@@ -155,7 +156,8 @@ export function App() {
     setPairing(true);
     setError(null);
     try {
-      const response = await fetch("/api/pair", {
+      const origin = credentials?.origin ?? knownConnection()?.origin ?? location.origin;
+      const response = await fetch(`${origin}/api/pair`, {
         method: "POST",
         signal: AbortSignal.timeout(8_000),
         headers: { "Content-Type": "application/json" },
@@ -164,7 +166,7 @@ export function App() {
       const result = await response.json() as { token?: string; error?: string };
       if (!response.ok || !result.token) throw new Error(result.error || "Could not pair with the player.");
       try { localStorage.setItem(tokenKey, result.token); } catch { /* Pairing still works for this tab. */ }
-      setCredentials({ origin: location.origin, token: result.token });
+      setCredentials({ origin, token: result.token });
       setPairingCode("");
     } catch (reason) {
       setError(errorText(reason));
@@ -174,7 +176,7 @@ export function App() {
   };
 
   const unpair = () => {
-    try { localStorage.removeItem(tokenKey); } catch { /* Storage may be disabled. */ }
+    try { localStorage.removeItem(tokenKey); localStorage.removeItem("modern-kodi.remote-token"); } catch { /* Storage may be disabled. */ }
     setCredentials(null);
     setError(null);
   };
@@ -186,8 +188,8 @@ export function App() {
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
-  const statusLabel = !credentials ? (booting ? "Starting player" : "Not connected") : {
-    connecting: "Connecting", syncing: "Getting current state", connected: "Connected", reconnecting: "Reconnecting",
+  const statusLabel = booting ? "Starting player" : {
+    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected",
   }[status];
 
   return (
@@ -206,7 +208,7 @@ export function App() {
           {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
           {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>
-          {(!nativeHost || state) && <Settings libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
+          {(!nativeHost || state) && <Settings libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={player?.status ?? details?.player} pairingRequired={status === "pairing-required"} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
         </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
           <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>
@@ -220,11 +222,12 @@ export function App() {
 
 
 
-        {!credentials ? (
+        {!credentials || status === "pairing-required" ? (
           <Card className="pair-card">
             <div className="pair-icon"><Icon name="screen" /></div>
             <p className="eyebrow">{nativeHost ? "Your media center" : "One screen. A shared queue."}</p>
             <h1>{nativeHost ? "Starting your player" : "Connect to your TV"}</h1>
+            {!nativeHost && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}
             <p className="muted">{nativeHost ? "The local player and your remotes connect here." : "Enter the pairing code shown on the TV. This device becomes a remote for the same player."}</p>
             {nativeHost ? <Button disabled={booting} className="primary-button" onClick={() => setHostAttempt((attempt) => attempt + 1)}>{booting ? "Starting…" : "Try again"}</Button> : (
               <form onSubmit={pair} className="pair-form">

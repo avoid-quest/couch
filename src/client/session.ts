@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
+import type { ConnectionDetails, ControllerIdentity } from "../shared/controllers";
+import { knownConnection, rememberConnection } from "./connection";
 
 export type Credentials = { origin: string; token: string };
-export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting";
+export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
 // getRandomValues also works on the plain HTTP origins used by LAN remotes.
@@ -10,9 +12,13 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, onOrigin?: (origin: string) => void) {
   const navigation = useRef(onNavigation);
   navigation.current = onNavigation;
+  const changeOrigin = useRef(onOrigin);
+  changeOrigin.current = onOrigin;
+  const [details, setDetails] = useState<ConnectionDetails | null>(() => knownConnection()?.details ?? null);
+  const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [state, setState] = useState<SessionState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const socket = useRef<WebSocket | null>(null);
@@ -23,8 +29,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   useEffect(() => {
     setState(null);
     ready.current = false;
-    if (!credentials) return;
     let disposed = false;
+    const controller = new AbortController();
     let attempt = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let handshake: ReturnType<typeof setTimeout> | undefined;
@@ -37,10 +43,41 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       pending.current.clear();
     };
 
-    const connect = () => {
+    const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
+    const pairingRequired = () => { ready.current = false; setState(null); setIdentity(null); setStatus("pairing-required"); rejectPending(); };
+    const connect = async () => {
       if (disposed) return;
       setStatus(attempt ? "reconnecting" : "connecting");
-      const url = new URL("/api/ws", credentials.origin);
+      const cached = knownConnection();
+      const origins = [...new Set([credentials?.origin ?? cached?.origin ?? location.origin, ...(credentials && !changeOrigin.current ? [] : cached?.details.urls ?? [])])];
+      let origin: string | undefined;
+      for (const candidate of origins) {
+        try {
+          const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
+          if (credentials) {
+            const response = await fetch(`${candidate}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+            if (disposed) return;
+            if (response.status === 401) { pairingRequired(); return; }
+            if (response.status === 403) { setStatus("connection-rejected"); return; }
+            if (!response.ok) throw new Error("Server unavailable");
+            const caller = await response.json() as ControllerIdentity;
+            if (disposed) return;
+            setIdentity(caller);
+          }
+          const response = await fetch(`${candidate}/api/connection`, { signal });
+          if (!response.ok) throw new Error("Server unavailable");
+          const next = await response.json() as ConnectionDetails;
+          if (disposed) return;
+          setDetails(next);
+          rememberConnection(candidate, next);
+          origin = candidate;
+          break;
+        } catch { if (disposed) return; }
+      }
+      if (!origin) { setStatus("server-unavailable"); retryLater(); return; }
+      if (!credentials) { setStatus("pairing-required"); return; }
+      if (origin !== credentials.origin && changeOrigin.current) { changeOrigin.current(origin); return; }
+      const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       const connection = new WebSocket(url);
@@ -78,19 +115,21 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         }
       };
       connection.onerror = () => connection.close();
-      connection.onclose = () => {
+      connection.onclose = event => {
         if (!isCurrent()) return;
         clearTimeout(handshake);
         ready.current = false;
         rejectPending();
+        if (event.code === 4001) { pairingRequired(); return; }
         setStatus("reconnecting");
-        retry = setTimeout(connect, Math.min(500 * 2 ** attempt++, 8_000));
+        retryLater();
       };
     };
 
-    connect();
+    void connect();
     return () => {
       disposed = true;
+      controller.abort();
       ready.current = false;
       clearTimeout(retry);
       clearTimeout(handshake);
@@ -99,6 +138,28 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
     };
   }, [credentials?.origin, credentials?.token, reconnectAttempt]);
+
+  useEffect(() => setIdentity(null), [credentials?.token]);
+
+  useEffect(() => {
+    if (!state || !details || !credentials) return;
+    const next = { ...details, name: state.installationName ?? details.name, player: state.player.status };
+    setDetails(next);
+    rememberConnection(credentials.origin, next);
+  }, [state?.installationName, state?.player.status, credentials?.origin]);
+
+  useEffect(() => {
+    if (status !== "connected" || !credentials) return;
+    const controller = new AbortController();
+    void fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal: controller.signal }).then(async response => {
+      if (controller.signal.aborted) return;
+      if (response.status === 401) { socket.current?.close(4001, "Pair again"); return; }
+      if (!response.ok) return;
+      const caller = await response.json() as ControllerIdentity;
+      if (!controller.signal.aborted) setIdentity(caller);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [credentials?.origin, credentials?.token, status, state?.controllerVersion]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -129,5 +190,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, connected: status === "connected" && !!credentials, command, reconnect };
+  return { state, status, details, identity, connected: status === "connected" && !!credentials, command, reconnect };
 }
