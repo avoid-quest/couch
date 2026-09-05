@@ -15,6 +15,7 @@ import { SetupQr } from "./SetupQr";
 import { QualitySelect } from "./QualitySelect";
 import type { useVideoQualityPreference } from "./video-quality";
 import { PlaybackPreferences } from "./PlaybackPreferences";
+import { AppearanceSettings } from "./AppearanceSettings";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
@@ -148,7 +149,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
+          {!host && <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>}
         </TabsList>
+        {!host && <TabsContent value="appearance" className="min-w-0"><AppearanceSettings native={false} /></TabsContent>}
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>

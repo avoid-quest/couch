@@ -5,6 +5,7 @@ import "./theme.css";
 import "./styles.css";
 import "./remote-mode.css";
 import "./tv-mode.css";
+import "./appearance.css";
 
 document.documentElement.classList.add("dark");
 

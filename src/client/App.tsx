@@ -15,6 +15,7 @@ import { VideoStage } from "./VideoStage";
 import { QueuePanel } from "./QueuePanel";
 import { Settings } from "./Settings";
 import { useVideoQualityPreference } from "./video-quality";
+import { useInterfaceSize } from "./interface-size";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
 import { Gamepad2, LayoutGrid, House, SlidersHorizontal, ArrowUpRight } from "lucide-react";
@@ -45,6 +46,7 @@ function errorText(error: unknown) {
 }
 
 export function App() {
+  useInterfaceSize(nativeHost);
   const [credentials, setCredentials] = useState<Credentials | null>(storedCredentials);
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
