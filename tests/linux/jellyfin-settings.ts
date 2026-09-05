@@ -31,6 +31,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     const url = new URL(request.url);
     const headers = new Headers(request.headers);
     headers.delete("host");
+    headers.set("accept-encoding", "identity");
     const response = await fetch(`${config.containerUrl}${url.pathname}${url.search}`, { method: request.method, headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body, redirect: "manual" });
     if (url.pathname === "/Users/AuthenticateByName" && response.ok) token = (await response.clone().json() as { AccessToken: string }).AccessToken;
     return response;
