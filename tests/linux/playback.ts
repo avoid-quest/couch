@@ -7,6 +7,7 @@ import { UiDriver, assertNativePortal, assertResponsive, assertTheme, keys, qual
 import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinResume } from "./progress";
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
+import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
 import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
@@ -631,6 +632,7 @@ try {
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
+  const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
@@ -661,6 +663,7 @@ try {
   await assertLocalProgressAfterRestart(progressContext, persistedProgress);
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
+  await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));

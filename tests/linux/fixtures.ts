@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { createVideoLibraryFixture } from "./video-library-fixture";
 
 await mkdir("/fixtures", { recursive: true });
 await Bun.write("/fixtures/subtitles.srt", "1\n00:00:00,000 --> 00:00:20,000\nNative subtitle test\n");
@@ -45,6 +46,7 @@ const child = Bun.spawn([
 if (await child.exited !== 0) throw new Error("Cannot generate media fixture");
 const preference = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", "title=Playback preference fixture", "/fixtures/preferences.mkv"], { stdout: "inherit", stderr: "inherit" });
 if (await preference.exited !== 0) throw new Error("Cannot copy the preference fixture");
+await createVideoLibraryFixture();
 const radio = Bun.spawn([
   "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", "/fixtures/multitrack.mkv",
   "-map", "0:a:0", "-t", "10", "-c:a", "libmp3lame", "-map_metadata", "-1", "-map_chapters", "-1",

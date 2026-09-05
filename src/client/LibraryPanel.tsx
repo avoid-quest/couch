@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Disc3, FolderOpen, History, MicVocal, Music2, Play, Plus, RotateCcw, Search, Video } from "lucide-react";
+import { Check, Disc3, Film, FolderOpen, History, MicVocal, Music2, Play, Plus, RotateCcw, Search, Tv, Video } from "lucide-react";
 import { HistoryPanel, ProgressActions, progressTime, type HistoryPlayback } from "./HistoryPanel";
 import { AuthArtwork } from "./AuthArtwork";
 import { MusicPanel } from "./MusicPanel";
+import { VideoLibraryPanel } from "./VideoLibraryPanel";
 
 const pageSize = 30;
 const statusLabels: Record<LibrarySource["status"], string> = {
@@ -138,7 +139,8 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     </div>
     {error && <Alert variant="destructive" className="library-error"><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     <Tabs value={view} onValueChange={setView} className="gap-4">
-      <TabsList aria-label="Library view" className="library-views"><TabsTrigger value="all"><FolderOpen aria-hidden="true" />All media</TabsTrigger><TabsTrigger value="artists"><MicVocal aria-hidden="true" />Artists</TabsTrigger><TabsTrigger value="albums"><Disc3 aria-hidden="true" />Albums</TabsTrigger><TabsTrigger value="history"><History aria-hidden="true" />History</TabsTrigger></TabsList>
+      <TabsList aria-label="Library view" className="library-views"><TabsTrigger value="all"><FolderOpen aria-hidden="true" />All media</TabsTrigger><TabsTrigger value="movies"><Film aria-hidden="true" />Movies</TabsTrigger><TabsTrigger value="shows"><Tv aria-hidden="true" />Shows</TabsTrigger><TabsTrigger value="artists"><MicVocal aria-hidden="true" />Artists</TabsTrigger><TabsTrigger value="albums"><Disc3 aria-hidden="true" />Albums</TabsTrigger><TabsTrigger value="history"><History aria-hidden="true" />History</TabsTrigger></TabsList>
+      {(["movies", "shows"] as const).map(videoView => <TabsContent key={videoView} value={videoView} forceMount hidden={view !== videoView}><VideoLibraryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={version} view={videoView} active={view === videoView} onEnqueue={onEnqueue} /></TabsContent>)}
       {(["artists", "albums"] as const).map(musicView => <TabsContent key={musicView} value={musicView} forceMount hidden={view !== musicView}><MusicPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={version} view={musicView} active={view === musicView} onEnqueue={onEnqueue} onQueueAlbum={onQueueAlbum} onArtistTracks={selected => { setArtist(selected); setDraft(""); setQuery(""); setOffset(0); setView("all"); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }} /></TabsContent>)}
       <TabsContent value="history"><HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={version} onPlay={onPlayHistory} /></TabsContent>
       <TabsContent value="all" className="space-y-4">
@@ -154,7 +156,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <ul className="library-items space-y-2" aria-busy={loading}>{results.items.map(item => <li key={item.id}>
       <Card className="catalog-row gap-3 p-3">
         <div className="catalog-row-main flex min-w-0 items-center gap-3">
-          {item.kind === "audio" && item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} className="library-kind audio size-11" /> : <span className={`library-kind ${item.kind} grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary`} aria-label={item.kind}>{item.kind === "audio" ? <Music2 aria-hidden="true" className="size-5" /> : <Video aria-hidden="true" className="size-5" />}</span>}
+          {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind === "video"} className={`library-kind ${item.kind} size-11`} /> : <span className={`library-kind ${item.kind} grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary`} aria-label={item.kind}>{item.kind === "audio" ? <Music2 aria-hidden="true" className="size-5" /> : <Video aria-hidden="true" className="size-5" />}</span>}
           <div className="library-item-copy min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-base font-medium">{item.title}</strong>{item.progress?.watched && <Badge variant="secondary"><Check aria-hidden="true" />Watched</Badge>}</div>
             <span className="mt-1 block break-words text-sm leading-relaxed text-muted-foreground">{[item.artist, item.album, duration(item.duration)].filter(Boolean).join(" · ") || (item.kind === "audio" ? "Audio" : "Video")}{!item.available && " · File unavailable"}</span>
