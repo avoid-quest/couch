@@ -96,3 +96,5 @@ qualification limits.
 The image and build caches remain for later runs. `docker run --rm` removes the disposable test container. Nothing is published and no host ports are exposed.
 
 Official references: [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/), [manual WebDriver setup](https://v2.tauri.app/develop/tests/webdriver/manual-setup/), [Tauri Selenium example and capabilities](https://v2.tauri.app/develop/tests/webdriver/example/selenium/).
+
+<!-- Temporary CI fixture: documentation-only routing with the complete native workflow. -->
