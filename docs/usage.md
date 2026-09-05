@@ -60,13 +60,18 @@ The TV always fills its display. Home opens browsing over the mounted player;
 Back closes the current menu, browsing view or playback controls. Phones and
 laptops have a dedicated controller interface with no video surface.
 
-In Radio, **Add avoid radio** imports the station index from
+In Settings > Sources, an administrator can use **Add avoid radio** to import
+the station index from
 [`radio.avoid.quest/playlist.m3u`](https://radio.avoid.quest/playlist.m3u).
-You can also save another Kodi-compatible radio M3U URL. Playlists retain their
+The same page accepts another supported extended M3U radio URL and shows import
+errors. Radio's **Manage radio sources** button opens this page. Playlists retain their
 station order, IDs, groups and logos. Refresh updates the shared catalog and
 saved favorites; queued stations resolve their current URL when played.
-A failed refresh keeps the last usable list. Every paired
-remote can browse, refresh, queue or immediately play these stations.
+A failed refresh keeps the last usable list. Only administrators manage sources
+and see feed URLs. Every paired remote can browse, search, favorite, queue or
+immediately play stations. Removing a source removes its imported catalog and
+keeps all favorites. Queued stations may become unavailable unless saved as
+favorites; no media files are deleted.
 
 The TV and remotes show a station's current track when the stream supplies ICY
 or audio tags. The station name stays unchanged. Radio retries failed or ended
