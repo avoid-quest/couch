@@ -42,6 +42,7 @@ export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {
 export function supportsWebVideoQuality(source: string) {
   try {
     const url = new URL(source.trim());
-    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !audioExtensions.has(decodeURIComponent(url.pathname).split(".").at(-1)!.toLowerCase());
+    const extension = decodeURIComponent(url.pathname).split(".").at(-1)!.toLowerCase();
+    return url.hostname !== "bandcamp.com" && !url.hostname.endsWith(".bandcamp.com") && !audioExtensions.has(extension) && !["oga", "mka"].includes(extension);
   } catch { return true; }
 }
