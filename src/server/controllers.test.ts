@@ -265,3 +265,47 @@ test("database write failures retain state, suppress broadcasts and return no da
   expect(f.changed).not.toHaveBeenCalled();
   db.close();
 });
+
+test("only current administrators manage named remotes and a racing demotion blocks a pending write", async () => {
+  const f = fixture();
+  const owner = f.phone("Owner"), guest = f.phone("Guest"), replacement = f.phone("Replacement");
+  f.store.setControllerRole(owner.id, "administrator");
+  expect((await f.request("/api/controllers", "GET", undefined, guest.identity)).status).toBe(403);
+  for (const path of [`/api/controllers/${owner.id}/role`, `/api/controllers/${guest.id}/name`]) expect((await f.request(path, "POST", { role: "administrator" }, guest.identity)).status).toBe(403);
+  expect((await f.request(`/api/controllers/${guest.id}`, "DELETE", undefined, guest.identity)).status).toBe(403);
+  const listing = await (await f.request("/api/controllers", "GET", undefined, owner.identity)).json();
+  expect(listing).toMatchObject({ controllers: expect.arrayContaining([expect.objectContaining({ name: "Owner", role: "administrator", lastSeenAt: expect.any(Number) }), expect.objectContaining({ name: "Guest", role: "controller" }), expect.objectContaining({ name: "Replacement" })]) });
+  for (const secret of [owner.token, guest.token, "token_hash"]) expect(JSON.stringify(listing)).not.toContain(secret);
+  expect((await f.request(`/api/controllers/${guest.id}/name`, "POST", { name: "Living room phone" }, owner.identity)).status).toBe(200);
+  expect((await f.request(`/api/controllers/${replacement.id}/role`, "POST", { role: "administrator" }, owner.identity)).status).toBe(200);
+  const bytes = Promise.withResolvers<void>();
+  let finish!: () => void;
+  const stream = new ReadableStream({ start(controller) { finish = () => { controller.enqueue(new TextEncoder().encode('{"name":"Too late"}')); controller.close(); }; }, pull() { bytes.resolve(); } });
+  const pending = f.service.handle(new Request(`http://localhost/api/controllers/${guest.id}/name`, { method: "POST", headers: { "Content-Type": "application/json" }, body: stream }), owner.identity);
+  await bytes.promise;
+  expect((await f.request(`/api/controllers/${owner.id}/role`, "POST", { role: "controller" }, replacement.identity)).status).toBe(200);
+  finish();
+  expect((await pending).status).toBe(403);
+  expect(f.store.controller(guest.id)?.name).toBe("Living room phone");
+  expect((await f.request(`/api/controllers/${replacement.id}`, "DELETE", undefined, replacement.identity)).status).toBe(409);
+  expect((await f.request(`/api/controllers/${replacement.id}/role`, "POST", { role: "controller" }, replacement.identity)).status).toBe(409);
+});
+
+test("revocation notification follows the committed credential deletion and failed writes do not notify", async () => {
+  const path = file();
+  const f = fixture({ file: path });
+  const guest = f.phone();
+  const revoked = mock((id: string) => { expect(id).toBe(guest.id); expect(f.store.controllerForToken(guest.token)).toBeNull(); });
+  const service = createControllers({ store: f.store, onChange: f.changed, onRevoke: revoked });
+  const request = () => service.handle(new Request(`http://localhost/api/controllers/${guest.id}`, { method: "DELETE" }), host);
+  const db = new Database(path);
+  db.run("CREATE TRIGGER reject_revoke BEFORE DELETE ON devices BEGIN SELECT RAISE(ABORT, 'SECRET'); END;");
+  expect((await request()).status).toBe(500);
+  expect(revoked).not.toHaveBeenCalled();
+  expect(f.changed).not.toHaveBeenCalled();
+  db.run("DROP TRIGGER reject_revoke");
+  db.close();
+  expect((await request()).status).toBe(200);
+  expect(revoked).toHaveBeenCalledTimes(1);
+  expect(f.changed).toHaveBeenCalledTimes(1);
+});

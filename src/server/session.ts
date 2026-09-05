@@ -92,14 +92,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     send({ type: "stop" });
     return true;
   };
-  const failRadio = (error: string) => {
+  const failRadio = (error: string, authorize = () => {}) => {
     const entry = state.queue.find(entry => entry.id === state.currentEntryId);
     if (!isRadio(entry)) return false;
     resolution?.abort();
     options.deactivate?.();
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
-      try { play(entry!.id, true, true); } catch { /* The attempt already published its failure. */ }
+      try { play(entry!.id, true, true, authorize); } catch { /* The attempt already published its failure. */ }
     }) : null;
     // Ignore all later native observations and controls for the failed load, including Stop's idle acknowledgement.
     state.player = {
@@ -111,7 +111,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     broadcast();
     return true;
   };
-  const play = (entryId: string, fromStart = false, retry = false) => {
+  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}) => {
+    authorize();
     available();
     const entry = state.queue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
@@ -132,7 +133,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const failed = (error: unknown) => {
       if (state.player.playbackId !== playbackId) return;
       const message = error instanceof Error ? error.message : "This source could not be opened.";
-      if (failRadio(message)) return;
+      try { authorize(); if (failRadio(message, authorize)) return; } catch { cancelRadioRetry(); }
       resolution?.abort();
       options.deactivate?.();
       try { send({ type: "stop" }); } catch { return; }
@@ -143,6 +144,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart) ?? { source: entry.source };
       const load = ({ metadata, radio, subtitleWarning: warning, ...media }: MediaSource) => {
         if (state.player.playbackId !== playbackId) return;
+        authorize();
         subtitleWarning = warning ?? null;
         if (metadata || radio) enrichEntry(entry.id, entry.source, { ...metadata, ...(radio ? { kind: "radio", live: true } : {}) });
         const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
@@ -170,17 +172,18 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
-  const next = () => {
+  const next = (authorize = () => {}) => {
     const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
     const following = state.queue[index + 1];
-    if (following) play(following.id);
+    if (following) play(following.id, false, false, authorize);
     else stop();
   };
 
   return {
     get state() { return structuredClone(state); },
     enrichEntry,
-    loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play") {
+    loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize = () => {}) {
+      authorize();
       if (mode === "play") {
         available();
         if (!entries.length) throw new Error("This playlist is empty. Add items before playing it.");
@@ -190,7 +193,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (mode !== "append") persistProgress(progress.checkpoint, true);
       saveQueue(mode === "append" ? [...state.queue, ...added] : added);
       if (mode === "play") {
-        try { play(added[0]!.id, true); }
+        try { play(added[0]!.id, true, false, authorize); }
         catch (error) {
           if (state.currentEntryId !== added[0]!.id || !state.radioRetry) stop();
           throw error;
@@ -210,9 +213,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;
     },
-    playIfCurrent(intent: number, entryId: string, fromStart = false) {
+    playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}) {
       if (intent !== playIntent) throw new Error("Added to the queue. Playback was canceled by a newer control.");
-      play(entryId, fromStart);
+      play(entryId, fromStart, false, authorize);
     },
     close() {
       playIntent++;
@@ -266,14 +269,15 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       store.editProgress(state.activeProfile.id, mediaId, changes, item);
       invalidate("library");
     },
-    command(action: Action) {
+    command(action: Action, authorize = () => {}) {
+      authorize();
       switch (action.type) {
         case "enqueue":
           if (action.playNow) available();
           if (state.queue.length >= 500) throw new Error("The queue is full. Remove an item before adding another.");
           if (state.queue.some(entry => entry.id === action.entry.id)) throw new Error("That queue entry already exists.");
           saveQueue([...state.queue, { ...action.entry, title: action.entry.title.trim() }]);
-          if (action.playNow) play(action.entry.id, true);
+          if (action.playNow) play(action.entry.id, true, false, authorize);
           else broadcast();
           break;
         case "remove": {
@@ -296,7 +300,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           broadcast();
           break;
         }
-        case "play": play(action.entryId, action.fromStart); break;
+        case "play": play(action.entryId, action.fromStart, false, authorize); break;
         case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);
@@ -344,7 +348,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
             broadcast();
           } else send(action);
           break;
-        case "next": currentPlayback(action.playbackId); next(); break;
+        case "next": currentPlayback(action.playbackId); next(authorize); break;
         case "stop": stop(); break;
         case "enqueueLibrary": case "enqueueAlbum": case "enqueueProviderAlbum": case "enqueueJellyfin": case "enqueueRadio": case "enqueueWeb": throw new Error("Resolve this catalog item before adding it to the queue.");
       }

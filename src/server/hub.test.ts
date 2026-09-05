@@ -23,6 +23,93 @@ const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options:
 
 const bandcampAlbum: ProviderPage = { title: "Album", items: ["first", "second"].map(title => ({ id: title, title, provider: "bandcamp", kind: "media", url: `https://artist.bandcamp.com/track/${title}`, thumbnail: "https://f4.bcbits.com/img/a123_10.jpg" })) };
 
+const controllerApi = (hub: Hub, token: string, path: string, method = "GET", body?: unknown) => fetch(`${hub.origin}${path}`, {
+  method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
+});
+
+async function claimAdministrator(hub: Hub, token: string) {
+  const { code } = await (await controllerApi(hub, hostToken, "/api/controllers/claim-code")).json() as { code: string };
+  expect((await controllerApi(hub, token, "/api/controllers/claim", "POST", { code })).status).toBe(200);
+}
+
+test("revoking one of two controllers closes all its sockets and rejects later HTTP and reconnects", async () => {
+  const { hub } = fixture();
+  const ownerToken = await pair(hub), guestToken = await pair(hub);
+  await claimAdministrator(hub, ownerToken);
+  const owner = new Peer(hub, ownerToken), guest = new Peer(hub, guestToken), anotherTab = new Peer(hub, guestToken);
+  await Promise.all([owner.ready(), guest.ready(), anotherTab.ready()]);
+  const { controller } = await (await controllerApi(hub, guestToken, "/api/controllers/me")).json() as { controller: { id: string } };
+  const closed = [guest, anotherTab].map(peer => new Promise<number>(resolve => peer.socket.addEventListener("close", event => resolve(event.code), { once: true })));
+  expect((await controllerApi(hub, ownerToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+  expect(await Promise.all(closed)).toEqual([4001, 4001]);
+  const snapshotCounts = [guest.messages.length, anotherTab.messages.length];
+  expect(await owner.command({ type: "volume", volume: 29 })).toMatchObject({ ok: true });
+  for (const path of ["/api/controllers/me", "/api/settings", "/api/profiles", "/api/playlists", "/api/providers/favorites", "/api/subtitles"]) expect((await controllerApi(hub, guestToken, path)).status).toBe(401);
+  expect((await fetch(`${hub.origin}/api/ws?token=${guestToken}`, { headers: { Origin: hub.origin } })).status).toBe(401);
+  expect([guest.messages.length, anotherTab.messages.length]).toEqual(snapshotCounts);
+  expect((await controllerApi(hub, ownerToken, "/api/controllers/me")).status).toBe(200);
+});
+
+test("revocation prevents a delayed admitted album from appending or starting playback", async () => {
+  const started = Promise.withResolvers<void>(), finished = Promise.withResolvers<void>(), album = Promise.withResolvers<ProviderPage>();
+  const lookup = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async () => { started.resolve(); const result = await album.promise; finished.resolve(); return result; });
+  try {
+    const { hub, commands } = fixture();
+    hub.session.observe(idle);
+    const ownerToken = await pair(hub), guestToken = await pair(hub);
+    await claimAdministrator(hub, ownerToken);
+    const owner = new Peer(hub, ownerToken), guest = new Peer(hub, guestToken);
+    await Promise.all([owner.ready(), guest.ready()]);
+    const { controller } = await (await controllerApi(hub, guestToken, "/api/controllers/me")).json() as { controller: { id: string } };
+    guest.socket.send(JSON.stringify({ type: "command", requestId: "late-album", action: { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true } }));
+    await started.promise;
+    expect((await controllerApi(hub, ownerToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+    album.resolve(bandcampAlbum);
+    await finished.promise;
+    expect(await owner.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
+    expect(hub.session.state.queue).toEqual([]);
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+    expect(hub.session.state.currentEntryId).toBeNull();
+  } finally { album.resolve(bandcampAlbum); lookup.mockRestore(); }
+});
+
+test("revocation during source resolution prevents the late native load and metadata change", async () => {
+  const started = Promise.withResolvers<void>(), source = Promise.withResolvers<{ source: string; metadata: { title: string } }>();
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockImplementation(async () => { started.resolve(); return source.promise; });
+  try {
+    const { hub, commands } = fixture();
+    hub.session.observe(idle);
+    const ownerToken = await pair(hub), guestToken = await pair(hub);
+    await claimAdministrator(hub, ownerToken);
+    const owner = new Peer(hub, ownerToken), guest = new Peer(hub, guestToken);
+    await Promise.all([owner.ready(), guest.ready()]);
+    const { controller } = await (await controllerApi(hub, guestToken, "/api/controllers/me")).json() as { controller: { id: string } };
+    expect(await guest.command({ type: "enqueueWeb", entryId: "pending", url: "https://example.com/video", title: "Original", playNow: true })).toMatchObject({ ok: true });
+    await started.promise;
+    expect((await controllerApi(hub, ownerToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+    source.resolve({ source: "https://example.com/resolved", metadata: { title: "Late" } });
+    await owner.waitFor(message => message.type === "state" && message.state.player.error?.includes("revoked") === true);
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+    expect(hub.session.state.queue[0]?.title).toBe("Original");
+  } finally { source.resolve({ source: "https://example.com/resolved", metadata: { title: "Late" } }); resolve.mockRestore(); }
+});
+
+test("a known IP accepts the advertised TV origin while arbitrary origins and hosts remain rejected", async () => {
+  const advertised = "http://couch.local:4100";
+  const { hub } = fixture(undefined, [advertised]);
+  const token = await pair(hub);
+  const response = await fetch(`${hub.origin}/api/controllers/me`, { headers: { Origin: advertised, Authorization: `Bearer ${token}` } });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Access-Control-Allow-Origin")).toBe(advertised);
+  const peer = new BunWebSocket(`${hub.origin.replace("http", "ws")}/api/ws?token=${token}`, { headers: { Origin: advertised } });
+  await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
+  peer.close();
+  const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
+  expect(await details.json()).toEqual({ name: "Couch", urls: [advertised, hub.origin], player: "unavailable" });
+  for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
+  expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
+});
+
 test("Bandcamp albums append once in order, play through the host resolver and persist public metadata", async () => {
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
   const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });

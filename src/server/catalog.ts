@@ -5,6 +5,7 @@ import { RadioError, type createRadio } from "./radio";
 import { localMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
+import { ControllerError } from "./controllers";
 
 type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
@@ -51,19 +52,21 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
 
 export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
   return {
-    async handle(request: Request, trusted: boolean): Promise<Response> {
+    async handle(request: Request, trusted: boolean, authorize = () => {}): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
         if (viewing && pathname === "/api/profiles") {
           if (request.method === "GET") return Response.json({ profiles: viewing.store.profiles(), activeProfile: viewing.session.state.activeProfile });
           if (request.method !== "POST") return methodNotAllowed("GET, POST");
           const { name } = await body(request);
+          authorize();
           return Response.json({ profile: viewing.session.createProfile(name) }, { status: 201 });
         }
         const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove)$/.exec(pathname);
         if (viewing && profileEdit) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           const changes = await body(request);
+          authorize();
           const allowed = profileEdit[2] === "rename" ? ["name", "expectedName"] : ["expectedName"];
           if (Object.keys(changes).some(key => !allowed.includes(key))) throw new RequestError("Send only the watching profile change.");
           if (typeof changes.expectedName !== "string" || !changes.expectedName || changes.expectedName.length > 60 || /[\u0000-\u001f\u007f]/.test(changes.expectedName)) throw new RequestError("Reload watching profiles before editing.");
@@ -92,6 +95,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           catch { throw new RequestError("Invalid media identity."); }
           if (!/^(library:[\w-]{1,80}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
           const changes = await body(request);
+          authorize();
           if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))
             || changes.watched !== undefined && typeof changes.watched !== "boolean"
             || changes.clearResume !== undefined && changes.clearResume !== true
@@ -170,7 +174,9 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         if (pathname === "/api/radio/favorites") {
           if (request.method === "GET") return Response.json({ favorites: radio.favorites() });
           if (request.method !== "POST") return methodNotAllowed("GET, POST");
-          return Response.json({ station: radio.saveFavorite((await body(request)).station) });
+          const input = await body(request);
+          authorize();
+          return Response.json({ station: radio.saveFavorite(input.station) });
         }
         const favorite = /^\/api\/radio\/favorites\/([\w-]{1,80})$/.exec(pathname);
         if (favorite) {
@@ -188,7 +194,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         }
         return Response.json({ error: "Not found." }, { status: 404 });
       } catch (error) {
-        if (error instanceof RequestError || error instanceof RadioError || error instanceof ViewingError) return Response.json({ error: error.message }, { status: error.status });
+        if (error instanceof RequestError || error instanceof RadioError || error instanceof ViewingError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
         return Response.json({ error: "The media catalog is temporarily unavailable." }, { status: 500 });
       }
     },

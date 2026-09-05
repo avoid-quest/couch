@@ -41,7 +41,7 @@ async function body(request: Request, field: string) {
   return (value as Record<string, unknown>)[field];
 }
 
-export function createControllers({ store, onChange, recoveryCode }: { store: Store; onChange: () => void; recoveryCode?: string }) {
+export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode }: { store: Store; onChange: () => void; onRevoke?: (id: string) => void; recoveryCode?: string }) {
   if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("The administrator recovery code must contain 32 to 256 hexadecimal characters.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
@@ -72,6 +72,29 @@ export function createControllers({ store, onChange, recoveryCode }: { store: St
         if (path === "/api/controllers/me") {
           if (request.method !== "GET") return methods("GET");
           return json({ ...caller, claimAvailable: claimAvailable() });
+        }
+        if (path === "/api/controllers") {
+          if (request.method !== "GET") return methods("GET");
+          administrator();
+          return json({ controllers: store.controllers() });
+        }
+        const device = /^\/api\/controllers\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
+        if (device && !["claim", "claim-code"].includes(device[1]!)) {
+          administrator();
+          const id = device[1]!;
+          if (!device[2]) {
+            if (request.method !== "DELETE") return methods("DELETE");
+            store.revokeController(id);
+            onRevoke(id);
+            onChange();
+            return json({ ok: true });
+          }
+          if (request.method !== "POST") return methods("POST");
+          const value = await body(request, device[2]);
+          administrator();
+          const controller = device[2] === "name" ? store.renameController(id, value) : store.setControllerRole(id, value);
+          onChange();
+          return json({ controller });
         }
         if (path === "/api/controllers/claim-code") {
           if (request.method !== "GET") return methods("GET");
