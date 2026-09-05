@@ -21,19 +21,68 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Resolve the tested base
+        id: base
+        continue-on-error: true
+        env:
+          BEFORE: ${{ github.event.before }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base="$BEFORE"
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            read -r base head extra <<< "$(git show -s --format=%P HEAD)"
+            [[ "$head" == "$PR_HEAD" && -z "$extra" ]] || exit 1
+          fi
+          [[ "$base" =~ ^[0-9a-f]{40}$ && "$(git rev-parse --is-shallow-repository)" == false ]] || exit 1
+          git cat-file -e "$base^{commit}"
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      - uses: dorny/paths-filter@v4
+        id: paths
+        if: steps.base.outcome == 'success'
+        continue-on-error: true
+        with:
+          token: ''
+          base: ${{ steps.base.outputs.sha }}
+          ref: ${{ github.sha }}
+          predicate-quantifier: every
+          filters: |
+            code: &non-docs
+              - '!*.md'
+              - '!docs/**/*.md'
+              - '!tests/{linux,preview}/README.md'
+            native:
+              - *non-docs
+              - '!{src,tests}/**/*.{ts,tsx,css,html,m3u}'
       - uses: oven-sh/setup-bun@v2
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
         with:
           bun-version: 1.4.2
       - name: Install Linux dependencies
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libmpv-dev libgl1-mesa-dev ffmpeg
       - name: Set up Rust
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
         run: |
           rustup update stable --no-self-update
           rustup default stable
+      - name: Install media test dependency
+        if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false'
+        run: |
+          if ! command -v ffmpeg; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
       - run: bun install --frozen-lockfile
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - run: bun run check
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - run: bun run build
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
