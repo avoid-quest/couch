@@ -16,6 +16,10 @@ export function guideText(value: unknown, max: number, optional = false): string
   if (typeof value !== "string" || value.length > max || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value) || !optional && !value.trim()) fail("The guide contains missing or oversized text fields.");
   return (value as string).trim();
 }
+function guideIdentifier(value: unknown): string {
+  guideText(value, 200);
+  return value as string; // IDs match exactly; only display text is trimmed.
+}
 export function guideUrl(value: unknown, base?: string): string {
   if (typeof value !== "string" || !value || value.length > 4096 || /[\u0000-\u0020\u007f\\|]/.test(value) || !base && !/^https?:\/\//i.test(value)) fail("Use an HTTP or HTTPS URL without embedded credentials or playback headers.");
   try {
@@ -62,6 +66,44 @@ export async function guideFetch(url: string, maximum: number, request: typeof f
   throw new GuideError("The source redirected too many times.", 502);
 }
 
+// Capability detection for direct live media playlists, not HLS playback parsing.
+// RFC 8216 sections 4.3.2.1 and 4.3.3 allow an omitted media sequence, defaulting to zero.
+export function liveHlsPlaylist(text: string, base: string): boolean {
+  const lines = text.replaceAll("\r\n", "\n").split("\n");
+  if (lines.shift() !== "#EXTM3U") return false;
+  let target: number | null = null, duration: number | null = null, longest = 0, segments = 0;
+  const seen = new Set<string>();
+  for (const line of lines) {
+    if (!line) continue;
+    if (line !== line.trim() || /[\u0000-\u001f\u007f]/.test(line)) return false;
+    const tag = line.split(":", 1)[0]!;
+    if (/^#EXT-X-(?:ENDLIST|I-FRAMES-ONLY|START|MEDIA|STREAM-INF|I-FRAME-STREAM-INF|SESSION-DATA|SESSION-KEY)$/.test(tag) || tag === "#EXTM3U") return false;
+    if (["#EXT-X-TARGETDURATION", "#EXT-X-MEDIA-SEQUENCE", "#EXT-X-PLAYLIST-TYPE", "#EXT-X-VERSION"].includes(tag)) {
+      if (seen.has(tag)) return false;
+      seen.add(tag);
+      const value = line.slice(tag.length + 1);
+      if (tag === "#EXT-X-PLAYLIST-TYPE") { if (value !== "EVENT") return false; }
+      else if (tag === "#EXT-X-MEDIA-SEQUENCE") {
+        if (segments || !/^\d{1,20}$/.test(value) || BigInt(value) > 18_446_744_073_709_551_615n) return false;
+      } else {
+        if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) <= 0) return false;
+        if (tag === "#EXT-X-TARGETDURATION") target = Number(value);
+      }
+    } else if (tag === "#EXTINF") {
+      const match = /^#EXTINF:(\d+(?:\.\d+)?),.*$/.exec(line);
+      if (duration !== null || !match || !Number.isFinite(Number(match[1])) || Number(match[1]) <= 0) return false;
+      duration = Number(match[1]);
+    } else if (!line.startsWith("#")) {
+      if (duration === null) return false;
+      try { guideUrl(line, base); } catch { return false; }
+      longest = Math.max(longest, Math.round(duration));
+      duration = null;
+      segments++;
+    }
+  }
+  return target !== null && segments > 0 && duration === null && longest <= target;
+}
+
 export function parseGuideChannels(text: string, sourceId: string, base: string): PrivateChannel[] {
   if (Buffer.byteLength(text) > guideLimits.playlistBytes) fail("The channel list exceeds 2 MiB.");
   const lines = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n").map(line => line.trim());
@@ -87,7 +129,7 @@ export function parseGuideChannels(text: string, sourceId: string, base: string)
   if (parsed.length !== count) fail("Some M3U attributes are invalid.");
   const ids = new Set<string>();
   return parsed.map(channel => {
-    const tvgId = guideText(channel.tvgId, 200);
+    const tvgId = guideIdentifier(channel.tvgId);
     if (ids.has(tvgId)) fail("Each channel needs a unique tvg-id for exact XMLTV mapping.");
     ids.add(tvgId);
     if (["true", "1"].includes(channel.extras?.radio?.toLowerCase() ?? "")) fail("Import television channels here. Use Radio for radio playlists.");
@@ -119,7 +161,7 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
   let elements = 0;
   for (const _ of text.matchAll(/<[A-Za-z_][\w:.-]*(?:\s|\/?>)/g)) if (++elements > guideLimits.elements) fail("The XMLTV guide contains too many elements.");
   if (XMLValidator.validate(text) !== true) fail("The XMLTV guide is not valid XML.");
-  const parsed: unknown = new XMLParser({ ignoreAttributes: false, parseTagValue: false, parseAttributeValue: false, htmlEntities: true, maxNestedTags: guideLimits.nesting,
+  const parsed: unknown = new XMLParser({ ignoreAttributes: false, parseTagValue: false, parseAttributeValue: false, trimValues: false, htmlEntities: true, maxNestedTags: guideLimits.nesting,
     processEntities: { maxEntitySize: 32, maxExpansionDepth: 1, maxTotalExpansions: 1_000_000, maxExpandedLength: guideLimits.xmlBytes },
     isArray: (_name, path) => typeof path === "string" && ["tv.channel", "tv.programme", "tv.programme.title", "tv.programme.desc"].includes(path),
   }).parse(text);
@@ -130,7 +172,7 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
   const defined = new Set<string>();
   for (const definition of definitions) {
     if (!record(definition)) fail("XMLTV has an invalid channel definition.");
-    const id = guideText((definition as Record<string, unknown>)["@_id"], 200);
+    const id = guideIdentifier((definition as Record<string, unknown>)["@_id"]);
     if (defined.has(id)) fail("XMLTV channel IDs must be unique.");
     defined.add(id);
   }
@@ -145,7 +187,7 @@ export function parseGuidePrograms(text: string, channels: PrivateChannel[]): Gu
   const ids = new Set<string>();
   return rows.flatMap(row => {
     if (!record(row)) return fail("XMLTV contains an invalid program.");
-    const channelId = mapping.get(guideText(row["@_channel"], 200));
+    const channelId = mapping.get(guideIdentifier(row["@_channel"]));
     if (!channelId) return [];
     const start = xmltvTime(row["@_start"]), end = xmltvTime(row["@_stop"]);
     if (end <= start || end - start > 7 * 24 * 60 * 60_000) return fail("Programs need a stop time after start, at most seven days later.");

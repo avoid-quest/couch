@@ -21,15 +21,16 @@ const guest: ControllerIdentity = { authority: "controller", controller: null, c
 const hostToken = "private-iptv-host-token-for-tests-123456789";
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n1kAAAAASUVORK5CYII=", "base64");
+const liveManifest = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:3\n#EXTINF:2,\nsegment.ts\n";
 
 function upstream() {
-  let m3u = playlist(), programs = xml(), fail = false;
+  let m3u = playlist(), programs = xml(), manifest = liveManifest, fail = false;
   let gate: Promise<void> | undefined;
   let entered: (() => void) | undefined;
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
     const path = new URL(req.url).pathname;
     if (path === "/logo") return new Response(png);
-    if (path === "/live.m3u8") return new Response("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:3\n#EXTINF:2,\nsegment.ts\n");
+    if (path === "/live.m3u8") return new Response(manifest);
     if (path === "/redirect") return new Response(null, { status: 302, headers: { Location: "/list.m3u?secret=redirect" } });
     if (path === "/list.m3u") { entered?.(); await gate; }
     if (fail) return new Response("https://private.example/token", { status: 503 });
@@ -38,14 +39,14 @@ function upstream() {
   cleanup.push(() => server.stop(true));
   const origin = `http://127.0.0.1:${server.port}`;
   m3u = playlist(origin);
-  return { origin, set m3u(value: string) { m3u = value; }, set xml(value: string) { programs = value; }, set fail(value: boolean) { fail = value; },
+  return { origin, set m3u(value: string) { m3u = value; }, set xml(value: string) { programs = value; }, set manifest(value: string) { manifest = value; }, set fail(value: boolean) { fail = value; },
     block() { const ready = Promise.withResolvers<void>(), release = Promise.withResolvers<void>(); entered = ready.resolve; gate = release.promise; cleanup.push(() => release.resolve()); return { ready: ready.promise, release: () => { gate = undefined; entered = undefined; release.resolve(); } }; },
     definition: { name: "Generated guide", playlistUrl: `${origin}/list.m3u?secret=playlist`, guideUrl: `${origin}/guide.xml?secret=guide` },
   };
 }
-function fixture(databasePath = ":memory:", onChange = () => {}) {
+function fixture(databasePath = ":memory:", onChange = () => {}, onSourcesChanged = (_ids: string[]) => {}) {
   let identity: ControllerIdentity | null = host;
-  const guide = createGuide({ databasePath, onChange });
+  const guide = createGuide({ databasePath, onChange, onSourcesChanged });
   cleanup.push(() => guide.close());
   const api = (path: string, method = "GET", body?: unknown) => guide.handle(new Request(`http://localhost/api/iptv/${path}`, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }), () => identity);
   return { guide, api, set identity(value: ControllerIdentity | null) { identity = value; } };
@@ -66,6 +67,21 @@ test("M3U exact source-scoped mapping keeps channel IDs through URL/name/order c
   expect(programs[0]!.title).toBe("News & café é");
   expect(parseGuidePrograms(xml("Corrected title"), second)[0]!.id).toBe(programs[0]!.id);
   expect(() => parseGuidePrograms(xml("Wrong", "other"), first)).toThrow("match");
+});
+
+test("XMLTV mapping preserves decoded exact IDs and distinct whitespace in channel and program references", () => {
+  const plain = parseGuideChannels(playlist(undefined, "News", "news"), "source", "https://example.com");
+  expect(() => parseGuidePrograms(xml("Padded", " news "), plain)).toThrow("match");
+  const channels = parseGuideChannels(playlist(undefined, "News", "news") + playlist(undefined, "Padded", " news ").split("\n").slice(1).join("\n"), "source", "https://example.com");
+  expect(channels.map(channel => channel.tvgId)).toEqual(["news", " news "]);
+  expect(channels[0]!.id).not.toBe(channels[1]!.id);
+  const guide = xml("Plain", "news").replace("</tv>", xml("Padded", "&#32;news&#x20;").replace(/^<tv>|<\/tv>$/g, "") + "</tv>");
+  const programs = parseGuidePrograms(guide, channels);
+  expect(programs.map(program => program.channelId)).toEqual([channels[0]!.id, channels[0]!.id, channels[1]!.id, channels[1]!.id]);
+  expect(new Set(programs.map(program => program.id)).size).toBe(4);
+  expect(parseGuidePrograms(xml().replaceAll('channel="first"', 'channel=" first "'), parseGuideChannels(playlist(), "source", "https://example.com"))).toEqual([]);
+  const unicode = parseGuideChannels(playlist(undefined, "Café", "café"), "source", "https://example.com");
+  expect(parseGuidePrograms(xml("Unicode", "caf&#233;"), unicode)[0]!.channelId).toBe(unicode[0]!.id);
 });
 
 test("XMLTV offsets, midnight and DST repeated hours normalize to absolute UTC times", () => {
@@ -108,6 +124,34 @@ test("real HTTP import, guide/now-next, raster logo cache and offline restart ex
   expect(reopened.guide.getPlayable(id).source).toContain("secret=stream");
 });
 
+test.each([
+  ["omitted media sequence", liveManifest.replace("#EXT-X-MEDIA-SEQUENCE:3\n", ""), "reload"],
+  ["explicit sequence and discontinuity", liveManifest + "#EXT-X-DISCONTINUITY\n#EXTINF:1.5,Next\nnext.ts\n", "reload"],
+  ["CRLF media playlist", liveManifest.replaceAll("\n", "\r\n"), "reload"],
+  ["empty marker-only playlist", liveManifest.split("#EXTINF:")[0]!, null],
+  ["missing segment URI", liveManifest.replace("segment.ts\n", ""), null],
+  ["missing segment duration", liveManifest.replace("#EXTINF:2,\n", ""), null],
+  ["invalid duration", liveManifest.replace("#EXTINF:2,", "#EXTINF:nope,"), null],
+  ["duration above target", liveManifest.replace("#EXTINF:2,", "#EXTINF:3,"), null],
+  ["invalid target duration", liveManifest.replace("TARGETDURATION:2", "TARGETDURATION:0"), null],
+  ["duplicate target duration", liveManifest + "#EXT-X-TARGETDURATION:2\n", null],
+  ["invalid media sequence", liveManifest.replace("MEDIA-SEQUENCE:3", "MEDIA-SEQUENCE:-1"), null],
+  ["media sequence after segments", liveManifest.replace("#EXT-X-MEDIA-SEQUENCE:3\n", "") + "#EXT-X-MEDIA-SEQUENCE:3\n", null],
+  ["finite playlist", liveManifest + "#EXT-X-ENDLIST\n", null],
+  ["VOD without end marker", liveManifest + "#EXT-X-PLAYLIST-TYPE:VOD\n", null],
+  ["master playlist", "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nvariant.m3u8\n", null],
+  ["mixed master and media tags", liveManifest + '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",URI="audio.m3u8"\n', null],
+  ["provider start offset", liveManifest + "#EXT-X-START:TIME-OFFSET=0\n", null],
+  ["unsafe segment URI", liveManifest.replace("segment.ts", "file:///private/segment.ts"), null],
+] as const)("live-edge HTTP probe handles %s", async (_name, manifest, liveEdge) => {
+  const source = upstream(), app = fixture(); source.manifest = manifest;
+  await add(app.api, source.definition);
+  const id = (await (await app.api("guide")).json() as GuidePage).channels[0]!.id;
+  const response = await app.api(`channels/${id}/capabilities`);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ liveEdge, catchup: null });
+});
+
 test("refresh/replace commit channels and programs together before invalidation; failed replacement keeps current private definition", async () => {
   const source = upstream();
   const dir = mkdtempSync(join(tmpdir(), "couch-iptv-commit-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -121,6 +165,36 @@ test("refresh/replace commit channels and programs together before invalidation;
   expect((await first.api(`sources/${saved.id}`, "POST", { ...source.definition, playlistUrl: `${source.origin}/list.m3u?replacement=private` })).status).toBe(502);
   const db = new Database(path, { readonly: true }); cleanup.push(() => db.close());
   expect(db.query<{ playlist_url: string }, []>("SELECT playlist_url FROM iptv_sources").get()!.playlist_url).toBe(source.definition.playlistUrl);
+});
+
+test("committed replacement, refresh and removal still invalidate and succeed when native stop throws", async () => {
+  const source = upstream();
+  const dir = mkdtempSync(join(tmpdir(), "couch-iptv-stop-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, "guide.sqlite"), observed: string[][] = [], stopped: string[][] = [];
+  const app = fixture(path, () => {
+    const db = new Database(path, { readonly: true });
+    observed.push(db.query<{ title: string }, []>("SELECT title FROM iptv_programs ORDER BY start").all().map(row => row.title));
+    db.close();
+  }, ids => { if (ids.length) { stopped.push(ids); throw new Error("Desktop disconnected"); } });
+  const saved = await add(app.api, source.definition);
+  const id = (await (await app.api("guide")).json() as GuidePage).channels[0]!.id;
+  source.m3u = playlist(source.origin, "Replacement").replace("secret=stream", "secret=replaced");
+  source.xml = xml("Replacement program");
+  const replacement = await app.api(`sources/${saved.id}`, "POST", { ...source.definition, name: "Replacement source", playlistUrl: `${source.origin}/list.m3u?replacement=private` });
+  expect(replacement.status).toBe(200);
+  expect(await replacement.json()).toMatchObject({ source: { id: saved.id, name: "Replacement source", error: null } });
+  expect(app.guide.getPlayable(id).source).toBe(`${source.origin}/live.m3u8?secret=replaced`);
+  const db = new Database(path, { readonly: true }); cleanup.push(() => db.close());
+  expect(db.query<{ playlist_url: string }, []>("SELECT playlist_url FROM iptv_sources").get()!.playlist_url).toBe(`${source.origin}/list.m3u?replacement=private`);
+  source.m3u = playlist(source.origin, "Refreshed"); source.xml = xml("Refreshed program");
+  const refresh = await app.api(`sources/${saved.id}/refresh`, "POST");
+  expect(refresh.status).toBe(200);
+  expect(await refresh.json()).toMatchObject({ source: { id: saved.id, error: null } });
+  expect(app.guide.getPlayable(id).source).toBe(`${source.origin}/live.m3u8?secret=stream`);
+  expect((await app.api(`sources/${saved.id}`, "DELETE")).status).toBe(204);
+  expect((await (await app.api("guide")).json() as GuidePage).channels).toEqual([]);
+  expect(stopped).toEqual([[id], [id], [id]]);
+  expect(observed).toEqual([["News & café é", "Next show"], ["Replacement program", "Next show"], ["Refreshed program", "Next show"], []]);
 });
 
 test("source administration rechecks identity after feed awaits and rejects unpaired/ordinary callers", async () => {

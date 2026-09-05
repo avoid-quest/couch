@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
-import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
+import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => ControllerIdentity | null;
@@ -50,6 +50,12 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     return JSON.parse(row.data);
   };
   const programSelect = "SELECT id, channel_id AS channelId, start, end, title, description FROM iptv_programs";
+  function publishSourcesChanged(ids: string[]) {
+    // A disconnected native player cannot undo a committed guide mutation or
+    // prevent controllers from receiving its invalidation.
+    try { onSourcesChanged(ids); } catch { /* The session owns native availability. */ }
+    onChange();
+  }
 
   async function refresh(source: Definition, guard: () => void, signal: AbortSignal, replacing = false) {
     assertOpen();
@@ -58,6 +64,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
     const controller = new AbortController();
     refreshes.set(source.id, controller);
     const combined = AbortSignal.any([controller.signal, shutdown.signal, signal, AbortSignal.timeout(20_000)]);
+    let changed: string[];
     try {
       const playlist = await guideFetch(source.playlistUrl, guideLimits.playlistBytes, request, combined);
       const channels = parseGuideChannels(Buffer.from(playlist.bytes).toString("utf8"), source.id, playlist.url);
@@ -68,7 +75,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       guard();
       const previous = db.query<{ data: string }, [string]>("SELECT data FROM iptv_channels WHERE source_id = ?").all(source.id).map(row => JSON.parse(row.data) as PrivateChannel);
       const currentUrls = new Map(channels.map(item => [item.id, item.streamUrl]));
-      const changed = previous.filter(item => currentUrls.get(item.id) !== item.streamUrl).map(item => item.id);
+      changed = previous.filter(item => currentUrls.get(item.id) !== item.streamUrl).map(item => item.id);
       db.transaction(() => {
         guard();
         if (!db.query("SELECT id FROM iptv_sources WHERE id = ?").get(source.id) && sources().length >= guideLimits.sources) throw new GuideError("Keep at most eight guide sources.", 409);
@@ -81,11 +88,6 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         for (const item of programs) insertProgram.run(item.id, item.channelId, item.start, item.end, item.title, item.description);
         db.run("DELETE FROM iptv_logos WHERE NOT EXISTS (SELECT 1 FROM iptv_channels c WHERE c.id = iptv_logos.id AND json_extract(c.data, '$.logoUrl') = iptv_logos.url)");
       })();
-      // The queue/player remains session-owned. Cancel a superseded native load
-      // only after the replacement has committed, including its loading state.
-      onSourcesChanged(changed);
-      onChange();
-      return sources().find(item => item.id === source.id)!;
     } catch (error) {
       assertOpen();
       guard();
@@ -96,6 +98,9 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       if (error instanceof GuideError && error.status === 409) throw error;
       throw new GuideError(message, 502);
     } finally { if (refreshes.get(source.id) === controller) refreshes.delete(source.id); }
+    // Keep post-commit effects outside the refresh failure path.
+    publishSourcesChanged(changed);
+    return sources().find(item => item.id === source.id)!;
   }
 
   async function body(req: Request): Promise<Record<string, unknown>> {
@@ -162,8 +167,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
               db.query("DELETE FROM iptv_channels WHERE source_id = ?").run(source.id);
               db.query("DELETE FROM iptv_sources WHERE id = ?").run(source.id);
             })();
-            onSourcesChanged(removed);
-            onChange();
+            publishSourcesChanged(removed);
             return new Response(null, { status: 204 });
           }
           if (sourcePath[2]) return json({ source: await refresh(source, administrator, req.signal) });
@@ -205,7 +209,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
               const text = Buffer.from(media.bytes).toString("utf8");
               // Only a directly supplied live HLS media playlist qualifies here.
               // Master playlists, VOD, and unknown transports keep ordinary Play.
-              if (/^#EXTM3U\s/.test(text) && /^#EXT-X-TARGETDURATION:/m.test(text) && /^#EXT-X-MEDIA-SEQUENCE:/m.test(text) && !/^#EXT-X-ENDLIST\s*$/m.test(text) && channel(item.id).streamUrl === item.streamUrl) liveEdge = "reload";
+              if (liveHlsPlaylist(text, media.url) && channel(item.id).streamUrl === item.streamUrl) liveEdge = "reload";
             } catch { /* A failed capability probe must not prevent playback. */ }
             caller();
             return json({ liveEdge, catchup: null });
