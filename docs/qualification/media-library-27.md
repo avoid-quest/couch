@@ -67,15 +67,19 @@ The selected current show description is applied to all retained episodes with t
 
 ### Browsing source checks
 
-At browsing source `cb4750b9d1465e47eee82322e8a375063b89349a`, above catalog `29a93a44f2b54b42d9157e27c33fc7bcb1b134eb`, these commands completed with exit status **0**:
+For the upper review corrections, above unchanged catalog `29a93a44f2b54b42d9157e27c33fc7bcb1b134eb`, these commands completed with exit status **0**:
 
 | Command | Output artifact |
 | --- | --- |
-| `bun run typecheck` | `.artifacts/browsing/final-typecheck.log` |
-| `bun run build` | `.artifacts/browsing/final-build.log` |
-| `bun x tsc --ignoreConfig --noEmit --target ESNext --module Preserve --moduleResolution Bundler --types bun --skipLibCheck --strict tests/linux/video-library.ts tests/linux/video-library-fixture.ts` | `.artifacts/browsing/final-helper-typecheck.log` |
+| `bun run check` (308 pass, 6 skip, 2,433 assertions) | `.artifacts/browsing/review-check.log` |
+| `bun run build` | `.artifacts/browsing/review-build.log` |
+| `bun x tsc --ignoreConfig --noEmit --target ESNext --module Preserve --moduleResolution Bundler --types bun --skipLibCheck --strict tests/linux/video-library.ts tests/linux/video-library-fixture.ts` | `.artifacts/browsing/review-helper-typecheck.log` |
 
-The helper typecheck emits no output on success; its observed exit status is recorded here. The build produces the frontend and Darwin ARM Bun sidecar. The new native fixture and UI flows have not run, so these checks provide no native playback or visual acceptance evidence. The rebased browsing source is unchanged by `git range-diff`; the corrected catalog's full check result is recorded above.
+The helper typecheck emits no output on success; its observed exit status is recorded here. The build produces the frontend and Darwin ARM Bun sidecar. The new native fixture and UI flows have not run, so these checks provide no native playback or visual acceptance evidence.
+
+Selected show details refresh by stable ID through the existing `GET /api/library/items?showId=...&limit=1` route on library invalidation or reconnect. Current navigation and matching Back history receive the new description while retaining season, query and pagination. No catalog API changed. The native helper edits the actual show NFO and fanart, rescans through Folders, and asserts updated native/phone headings, preserved independent seasons and phone query, then updated Back-view plot and newly decoded fanart. These assertions still await the coordinated native run.
+
+After host restart with the source unavailable, the HTTP helper requests the expected movie artwork with authentication and `cache: no-store`, decodes it in a new `Image`, and checks HTTP 200, JPEG MIME type, SHA-256 matching the expected artwork ID, and 240×360 decoded dimensions. A 404, corrupt payload or different image fails this assertion even if an old movie card still has a decoded blob. The eventual result is saved as `freshArtwork` in `video-library-after-restart.json`; execution remains pending.
 
 The video fixture retains its local five-case queue-entry-to-action conversion. Sharing it would also edit the music fixture helper, which is under concurrent harness ownership, without changing the queue restoration behavior needed by this ticket. The existing controller interactions and stopped-state assertions remain in their respective fixtures; no generic provider abstraction was added.
 

@@ -40,6 +40,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, version, 
   const restoreFocus = useRef<string | null>(null);
   const detailTrigger = useRef<HTMLElement | null>(null);
   const queryId = useId();
+  const showId = "show" in browse ? browse.show.id : null;
   const params = new URLSearchParams({ q: browse.q, offset: String(browse.offset), limit: String(pageSize) });
   if (browse.kind === "movies") params.set("videoType", "movie");
   if (browse.kind === "episodes") { params.set("showId", browse.show.id); params.set("season", browse.season === null ? "unknown" : String(browse.season)); }
@@ -52,10 +53,21 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, version, 
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    void fetch(`${origin}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) }).then(async response => {
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]);
+    const read = async (path: string) => {
+      const response = await fetch(`${origin}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not load your video library.");
+      return result;
+    };
+    void Promise.all([read(path), showId ? read(`/api/library/items?showId=${showId}&limit=1`) : null]).then(([result, selected]) => {
       if (controller.signal.aborted) return;
+      if (showId) {
+        const show: VideoShow | undefined = selected?.items[0]?.video?.show;
+        if (!show || show.id !== showId) throw new Error("This show is no longer in the library.");
+        setBrowse(previous => "show" in previous && previous.show.id === show.id ? { ...previous, show } : previous);
+        setTrail(previous => previous.map(entry => "show" in entry.browse && entry.browse.show.id === show.id ? { ...entry, browse: { ...entry.browse, show } } : entry));
+      }
       if (browse.kind === "shows") setShows(result);
       else if (browse.kind === "seasons") setSeasons(result.items);
       else {
@@ -66,7 +78,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, version, 
     }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load your video library."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [origin, token, active, connected, path, browse.kind, version, refresh]);
+  }, [origin, token, active, connected, path, browse.kind, showId, version, refresh]);
 
   useEffect(() => {
     if (busy || loading || !active || !restoreFocus.current || panel.current?.closest("[hidden]")) return;

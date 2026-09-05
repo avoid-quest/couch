@@ -61,6 +61,47 @@ async function loadedArtwork(ui: UiDriver, context: Context, width: number, desc
   await context.until(description, () => ui.execute("return [...document.querySelectorAll(arguments[0] + ' img')].some(img => img.complete && img.naturalWidth === arguments[1] && img.naturalHeight > 0)", [selector, width]));
 }
 
+async function verifySelectedShowRefresh(context: Context, source: LibrarySource, show: VideoShow) {
+  const { ui, httpRemote, until, api } = context;
+  const nfoPath = "/video-fixtures/Observatory/tvshow.nfo", fanartPath = "/video-fixtures/Observatory/fanart.jpg";
+  const nfo = await Bun.file(nfoPath).text(), fanart = await Bun.file(fanartPath).bytes();
+  await httpRemote.minimize();
+  await ui.section("Library");
+  await ui.button("Shows", '[aria-label="Library view"]');
+  await until("TV retains season two before editing the selected show", () => ui.execute("return document.querySelector(arguments[0])?.textContent.includes('Season 2')", [active]));
+  await httpRemote.restore();
+  await httpRemote.ui.section("Library");
+  await httpRemote.ui.button("Shows", '[aria-label="Library view"]');
+  await httpRemote.ui.type(`${active} input[type=search]`, "the");
+  await httpRemote.ui.button("Search", active);
+  try {
+    await Bun.write(nfoPath, nfo.replace(show.title, "Revised observatory journals").replace(show.plot!, "Updated local show plot."));
+    await Bun.write(fanartPath, await Bun.file("/video-fixtures/Movie/Observatory-poster.jpg").bytes());
+    await rescan(context, source.id);
+    const current = (await api(`/api/library/items?showId=${show.id}&limit=1`)).items[0].video.show as VideoShow;
+    assert.equal(current.title, "Revised observatory journals");
+    assert.notEqual(current.fanartId, show.fanartId);
+    await until("selected TV and phone show headings refresh without changing their seasons or phone search", async () =>
+      await ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1] && document.querySelector(arguments[0])?.textContent.includes('Season 2')", [active, current.title])
+      && await httpRemote.ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1] && document.querySelector(arguments[0])?.textContent.includes('Season 1') && document.querySelector(arguments[0] + ' input[type=search]')?.value === 'the'", [active, current.title]));
+    await ui.click(`${active} [data-back]`);
+    await until("Back history uses the refreshed show title and plot", () => ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1] && document.querySelector('.video-show-summary .video-plot')?.textContent === arguments[2]", [active, current.title, current.plot]));
+    await loadedArtwork(ui, context, 240, "selected show summary decodes newly scanned fanart", ".video-show-summary .video-fanart");
+    await nativeScreenshot(context, "native-video-show-rescanned");
+    await ui.click(`${active} [data-video-season="2"]`);
+    await httpRemote.restore();
+    await httpRemote.ui.click(`${active} [data-back]`);
+    await until("phone Back history also uses the refreshed show description", () => httpRemote.ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1] && document.querySelector('.video-show-summary .video-plot')?.textContent === arguments[2]", [active, current.title, current.plot]));
+    await loadedArtwork(httpRemote.ui, context, 240, "phone decodes newly scanned fanart after Back", ".video-show-summary .video-fanart");
+    await httpRemote.screenshot("http-video-show-rescanned");
+    await httpRemote.ui.click(`${active} [data-video-season="1"]`);
+  } finally { await Bun.write(nfoPath, nfo); await Bun.write(fanartPath, fanart); }
+  await rescan(context, source.id);
+  await until("selected show headings refresh again when original sidecars are restored", async () =>
+    await ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1]", [active, show.title])
+    && await httpRemote.ui.execute("return document.querySelector(arguments[0] + ' h3')?.textContent === arguments[1]", [active, show.title]));
+}
+
 export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLibrary> {
   const { ui, until, api, clients, httpRemote, origin, artifactDir } = context;
   const { first, all, stop } = musicControls(context);
@@ -199,6 +240,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   assert.equal((await api("/api/library/items?q=Rescanned")).items[0].id, movie.id);
   await Bun.write("/video-fixtures/Movie/Observatory.nfo", nfo);
   await rescan(context, source.id);
+  await verifySelectedShowRefresh(context, source, show);
   await rename("/video-fixtures", "/video-fixtures-offline");
   await rescan(context, source.id, "unavailable");
   const offlineMovie = await currentMovie();
@@ -230,7 +272,21 @@ export async function assertVideoLibraryAfterRestart(context: Context, expected:
   await httpRemote.restore();
   await httpRemote.ui.section("Library");
   await httpRemote.ui.button("Movies", '[aria-label="Library view"]');
-  await loadedArtwork(httpRemote.ui, context, 240, "HTTP browser decodes persisted movie artwork after offline restart");
+  const freshArtwork = await httpRemote.ui.request(`/session/${httpRemote.ui.session()}/execute/async`, { args: [movie.artworkId], script: `
+    const id = arguments[0], done = arguments[arguments.length - 1];
+    (async () => {
+      const response = await fetch('/api/library/artwork/' + id, { cache: 'no-store', headers: { Authorization: 'Bearer ' + localStorage.getItem('couch.remote-token') }, signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error('Fresh artwork HTTP ' + response.status);
+      const blob = await response.blob(), url = URL.createObjectURL(blob);
+      try {
+        const image = new Image(); image.src = url; await image.decode();
+        const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+        return { status: response.status, mimeType: blob.type, hash, width: image.naturalWidth, height: image.naturalHeight };
+      } finally { URL.revokeObjectURL(url); }
+    })().then(done, error => done({ error: error.message }));
+  ` });
+  assert.deepEqual(freshArtwork, { status: 200, mimeType: "image/jpeg", hash: movie.artworkId, width: 240, height: 360 }, "Fresh authenticated bytes for the expected movie decode after host restart while its source remains offline");
+  await loadedArtwork(httpRemote.ui, context, 240, "HTTP movie card displays persisted artwork after offline restart", row(movie.id));
   await httpRemote.screenshot("http-video-offline-restart");
   await rename("/video-fixtures-offline", "/video-fixtures");
   await rescan(context, expected.source.id);
@@ -239,7 +295,7 @@ export async function assertVideoLibraryAfterRestart(context: Context, expected:
   await httpRemote.ui.click(`${row(movie.id)} ${labeled(`Resume ${movie.title}`)}`);
   await until("phone resumes the preserved movie point in native playback after restart", () => clients.every(client => client.state?.player.status === "playing" && client.state.player.position >= 6.5 && client.state.player.position < 10 && client.state.queue.find(item => item.id === client.state!.currentEntryId)?.source === `library:${movie.id}`));
   await restoreQueue(context, expected.queue);
-  await Bun.write(`${artifactDir}/video-library-after-restart.json`, JSON.stringify({ movie: (await api(`/api/library/items?q=${encodeURIComponent(movie.title)}`)).items.find((item: LibraryItem) => item.id === movie.id), show: (await api("/api/library/video/shows?q=Observatory")).items[0], queueRestored: true }, null, 2));
+  await Bun.write(`${artifactDir}/video-library-after-restart.json`, JSON.stringify({ movie: (await api(`/api/library/items?q=${encodeURIComponent(movie.title)}`)).items.find((item: LibraryItem) => item.id === movie.id), show: (await api("/api/library/video/shows?q=Observatory")).items[0], freshArtwork, queueRestored: true }, null, 2));
   await httpRemote.ui.section("Queue");
   await httpRemote.minimize();
   await ui.section("Queue");
