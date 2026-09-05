@@ -45,9 +45,9 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "preferences": return id(value.profileId) && object(value.preferences)
       && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed"].includes(key))
       && [value.preferences.audioLanguage, value.preferences.subtitleLanguage].every(language => language === undefined || typeof language === "string" && /^(?:[a-z]{2,3})?$/i.test(language))
-      && (value.preferences.subtitles === undefined || ["auto", "off"].includes(String(value.preferences.subtitles)))
+      && (value.preferences.subtitles === undefined || typeof value.preferences.subtitles === "string" && ["auto", "off"].includes(value.preferences.subtitles))
       && (value.preferences.speed === undefined || number(value.preferences.speed, 4) && value.preferences.speed >= 0.25);
-    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && ["audio", "subtitles", "speed"].includes(String(value.setting));
+    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && typeof value.setting === "string" && ["audio", "subtitles", "speed"].includes(value.setting);
     case "track": return id(value.playbackId) && (value.kind === "audio" || value.kind === "subtitle") && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= (value.kind === "subtitle" ? -1 : 0) && value.index <= 1024;
     case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
