@@ -65,7 +65,7 @@ db.close();
 await mkdir(`${fixtures}/media`, { recursive: true });
 run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "12", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-metadata", "title=Package video", `${fixtures}/media/sample.mp4`]);
 const media = Bun.serve({ hostname: "127.0.0.1", port: 44212, fetch: request => new URL(request.url).pathname === "/sample.mp4" ? new Response(Bun.file(`${fixtures}/media/sample.mp4`)) : new Response('<!doctype html><title>Package web fixture</title><video src="/sample.mp4"></video>', { headers: { "Content-Type": "text/html" } }) });
-run(["docker", "run", "-d", "--name", container, "--platform", "linux/amd64", "--shm-size=1g", "--network", "host", "--mount", `type=bind,source=${fixtures},target=/qualification,readonly`, "--mount", `type=bind,source=${root},target=/evidence`, inputs.runtimeImage, "bash", "/qualification/runtime.sh"]);
+run(["docker", "run", "-d", "--init", "--name", container, "--platform", "linux/amd64", "--shm-size=1g", "--network", "host", "--mount", `type=bind,source=${fixtures},target=/qualification,readonly`, "--mount", `type=bind,source=${root},target=/evidence`, inputs.runtimeImage, "bash", "/qualification/runtime.sh"]);
 let native = "";
 let browser = "";
 let socket: WebSocket | undefined;
@@ -142,6 +142,7 @@ try {
   assert.equal(state.currentEntryId, null);
   assert.equal((await api("/api/library/items")).items.length, 1);
   assert.equal(run(["docker", "exec", container, "cat", "/home/qualifier/legacy-data/keep.txt"]), "Existing user data outside package ownership");
+  await Bun.write(`${root}/coordinator-processes.txt`, run(["docker", "exec", container, "ps", "-C", "couch-server", "-o", "pid,ppid,stat,comm"]));
   assert.equal(run(["docker", "exec", container, "sh", "-c", "pgrep -x couch-server | wc -l"]), "1");
   record("Restart preserves profiles, pairings, source, media and custom data without autoplay");
   await Bun.write(`${root}/result.json`, JSON.stringify({ build: expected, packageSha256: new Bun.CryptoHasher("sha256").update(new Uint8Array(await Bun.file(artifact).arrayBuffer())).digest("hex"), checks, display: "Xvfb software rendering with PulseAudio null output", upgradeFixture: "Same binary repacked with older Debian version; no prior production release exists" }, null, 2));

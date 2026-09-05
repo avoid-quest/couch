@@ -72,6 +72,8 @@ file and uses Docker plus the official tauri-driver 2.0.6 on the build machine.
 The Bun test runner stays outside the destination container. Linux Docker host
 networking connects that runner to tauri-driver's loopback-only listener. The
 native proxy, native WebDriver and HTTP-browser WebDriver use separate ports.
+Docker's init reaps exited children after WebDriver closes the native window;
+the restart check still requires exactly one coordinator process.
 
 The clean container first installs only the package's production closure through
 APT, records it and checks for forbidden development commands/libraries. It then
