@@ -2,6 +2,7 @@ import type { Action, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry
 import type { Store } from "./store";
 import { createProgress, localMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
+import { playbackDefault } from "../shared/playback-default";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
 export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean };
@@ -124,8 +125,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const playbackId = crypto.randomUUID();
     subtitleWarning = null;
     const profileId = state.activeProfile.id;
+    const preferences = { ...state.preferences!.profile };
     state.currentEntryId = entry.id;
-    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], subtitleError: null, nowPlaying: null, error: null };
+    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
     broadcast();
     const failed = (error: unknown) => {
       if (state.player.playbackId !== playbackId) return;
@@ -148,7 +150,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
         if (position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, profileId);
-        send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...state.preferences!.profile, ...state.preferences!.device } });
+        send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
       };
       if (source instanceof Promise) {
         send({ type: "stop" });
@@ -164,7 +166,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     options.deactivate?.();
     state.currentEntryId = null;
     subtitleWarning = null;
-    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
+    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
@@ -274,20 +276,17 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         }
         case "play": play(action.entryId, action.fromStart); break;
-        case "preferences":
+        case "preferences": case "savePlaybackDefault": {
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
-          store.saveProfilePreferences(action.profileId, action.preferences);
-          state.preferences = { ...state.preferences!, profile: { ...action.preferences } };
-          broadcast();
-          break;
-        case "speed":
-          currentPlayback(action.playbackId);
-          const profile = { ...state.preferences!.profile, speed: action.speed };
-          store.saveProfilePreferences(state.activeProfile.id, profile);
+          if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);
+          const patch = action.type === "preferences" ? action.preferences : playbackDefault(state.player, action.setting);
+          if (!patch) throw new Error("This playback choice cannot be saved as a default. Choose a default in Settings, Playback.");
+          const profile = { ...state.preferences!.profile, ...patch };
+          store.saveProfilePreferences(action.profileId, profile);
           state.preferences = { ...state.preferences!, profile };
           broadcast();
-          send(action);
           break;
+        }
         case "audioDelay":
           currentPlayback(action.playbackId);
           store.saveAudioDelay(action.delay);
@@ -295,7 +294,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           broadcast();
           send(action);
           break;
-        case "pause": case "subtitleDelay":
+        case "pause": case "speed": case "subtitleDelay":
           currentPlayback(action.playbackId);
           send(action);
           break;
