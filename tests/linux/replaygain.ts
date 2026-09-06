@@ -66,7 +66,7 @@ export async function verifyReplayGain(context: Context) {
     const sinkInputs = async (): Promise<{ index: number; sink: number }[]> => JSON.parse(Buffer.from(await output(["pactl", "--format=json", "list", "sink-inputs"])).toString());
     const previousInputs = await sinkInputs();
     const path = `${artifactDir}/replaygain-${label}.wav`, log = `${artifactDir}/replaygain-${label}.log`;
-    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-c:a", "pcm_f32le", "-i", "couch-replaygain.monitor", "-t", "5", "-af", "pan=mono|c0=c0", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
+    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-c:a", "pcm_f32le", "-i", "couch-replaygain.monitor", "-t", "5", "-af", "pan=mono|c0=c0,asetpts=N/SR/TB", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
     try {
       await output(["pactl", "set-default-sink", "couch-replaygain"]);
       for (const input of previousInputs) await output(["pactl", "move-sink-input", String(input.index), "couch-replaygain"]);
