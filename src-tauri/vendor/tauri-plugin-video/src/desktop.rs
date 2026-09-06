@@ -1200,6 +1200,7 @@ mod linux_mpv {
 
     struct MpvPlayer {
         session_key: String,
+        cue: bool,
         radio: bool,
         replay_gain: crate::mpv_replaygain::ReplayGain,
         max_video_height: Option<u16>,
@@ -1447,6 +1448,7 @@ mod linux_mpv {
 
         let mut player = MpvPlayer {
             session_key: String::new(),
+            cue: false,
             radio: false,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
             max_video_height: None,
@@ -1513,7 +1515,8 @@ mod linux_mpv {
                 .map_err(mpv_error)?;
         }
         configure_buffer(player, payload)?;
-        configure_start(&player.mpv, payload.start_position)?;
+        player.cue = payload.end_position.is_some();
+        configure_start(&player.mpv, payload.start_position, player.cue)?;
         configure_end(&player.mpv, payload.end_position)?;
         player
             .mpv
@@ -1555,7 +1558,7 @@ mod linux_mpv {
         Ok(())
     }
 
-    fn configure_start(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+    fn configure_start(mpv: &Mpv, position: Option<f64>, cue: bool) -> Result<()> {
         if position.is_some_and(|value| !value.is_finite() || value < 0.0) {
             return Err(Error::InvalidRequest(
                 "startPosition must be finite and nonnegative".into(),
@@ -1565,7 +1568,7 @@ mod linux_mpv {
         // load so radio and subsequent files cannot inherit a resume position.
         let start = position
             .filter(|value| *value > 0.0)
-            .map_or_else(|| "none".to_owned(), |value| value.to_string());
+            .map_or_else(|| "none".to_owned(), |value| crate::mpv_cue::timestamp(value, cue).to_string());
         mpv.set_property("start", start).map_err(mpv_error)
     }
 
@@ -1574,7 +1577,7 @@ mod linux_mpv {
             return Err(Error::InvalidRequest("endPosition must be finite and positive".into()));
         }
         // Reset the bound for each replacement, including ordinary files and radio.
-        mpv.set_property("end", position.map_or_else(|| "none".to_owned(), |value| value.to_string())).map_err(mpv_error)
+        mpv.set_property("end", position.map_or_else(|| "none".to_owned(), |value| crate::mpv_cue::timestamp(value, true).to_string())).map_err(mpv_error)
     }
 
     fn configure_network(player: &MpvPlayer, payload: &NativeOpenRequest) -> Result<()> {
@@ -1689,7 +1692,7 @@ mod linux_mpv {
                     .mpv
                     .command(
                         "seek",
-                        &[&payload.value.max(0.0).to_string(), "absolute+exact"],
+                        &[&crate::mpv_cue::timestamp(payload.value.max(0.0), player.cue).to_string(), "absolute+exact"],
                     )
                     .map_err(mpv_error)?,
                 "volume" => player
@@ -1873,6 +1876,7 @@ mod linux_mpv {
             discard_events(&mut player.mpv)?;
             player.widget.hide();
             player.session_key.clear();
+            player.cue = false;
             player.radio = false;
             player.replay_gain.reset(&player.mpv, crate::NativeReplayGain::Off)?;
             player.loaded = false;
@@ -2205,7 +2209,7 @@ mod linux_mpv {
             for (case, (start, end)) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (Some(400.0 / 75.0), Some(875.0 / 75.0)), (None, None)].into_iter().enumerate() {
                 mpv.command("stop", &[]).unwrap();
                 discard_events(&mut mpv).unwrap();
-                configure_start(&mpv, start).unwrap();
+                configure_start(&mpv, start, end.is_some()).unwrap();
                 configure_end(&mpv, end).unwrap();
                 mpv.command("loadfile", &[source.to_str().unwrap(), "replace"]).unwrap();
                 let deadline = Instant::now() + Duration::from_secs(10);
@@ -2297,7 +2301,7 @@ mod linux_mpv {
                 mpv.command("stop", &[]).unwrap();
                 discard_events(&mut mpv).unwrap();
                 crate::mpv_tracks::reset(&mpv, None).unwrap();
-                configure_start(&mpv, start).unwrap();
+                configure_start(&mpv, start, false).unwrap();
                 mpv.command("loadfile", &[fixture.0.to_str().unwrap(), "replace"])
                     .unwrap();
                 let deadline = Instant::now() + Duration::from_secs(10);
@@ -2334,7 +2338,7 @@ mod linux_mpv {
                 assert_eq!(mpv.get_property::<String>("options/vid").unwrap(), "auto");
             }
             for invalid in [-1.0, f64::NAN, f64::INFINITY] {
-                assert!(configure_start(&mpv, Some(invalid)).is_err());
+                assert!(configure_start(&mpv, Some(invalid), false).is_err());
             }
         }
     }
