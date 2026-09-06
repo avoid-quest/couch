@@ -19,6 +19,13 @@ feature. This covers the former default Cargo check as well as native tests.
 Frontend and sidecar generation still precede Cargo. Release packaging and
 other platforms remain separate product qualification work.
 
+Native jobs generate the frontend and sidecar before running the full Bun checks
+and Cargo tests concurrently. Each command keeps its own process group; the step
+waits for both exit statuses and stops both groups on cancellation. This overlaps
+the media tests' real-time waits with compilation. Keep their freshness limits
+unchanged and measure contention as part of the [native timing follow-up](https://github.com/avoid-quest/couch/issues/105).
+Ordinary jobs keep their existing check-then-build order.
+
 CI omits debug symbols from dev/test artifacts to reduce compilation and cache
 transfer. Debug assertions, overflow checks, and the default optimization level
 remain unchanged. The Ubuntu runner supplies build tools; APT adds WebKit,
