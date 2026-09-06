@@ -100,6 +100,8 @@ systemctl unmask lightdm.service
 systemctl daemon-reload
 systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
 systemctl restart systemd-journald.service
+udevadm trigger --subsystem-match=input --action=change
+udevadm settle --timeout=10
 systemctl enable lightdm.service
 systemctl set-default graphical.target
 systemctl start lightdm.service

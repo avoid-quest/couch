@@ -20,6 +20,8 @@ The installer does not reboot the machine or change its network configuration.
 Running it selects Couch as the LightDM session and enables LightDM startup,
 including removing a previous LightDM mask. It refuses a different configured
 display manager and does not replace an administrator's custom systemd unit.
+After APT installs the Xorg input rules, it refreshes input devices so the first
+graphical login uses the existing system keyboard configuration.
 
 For existing Couch data on the first appliance install, append
 `--data-dir /absolute/path/to/data`. Stop the previous Couch process first.
