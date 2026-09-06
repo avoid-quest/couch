@@ -43,13 +43,15 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
     case "volume": return number(value.volume, 100);
     case "preferences": return id(value.profileId) && object(value.preferences)
-      && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed"].includes(key))
+      && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed", "replayGain"].includes(key))
       && [value.preferences.audioLanguage, value.preferences.subtitleLanguage].every(language => language === undefined || typeof language === "string" && /^(?:[a-z]{2,3})?$/i.test(language))
       && (value.preferences.subtitles === undefined || typeof value.preferences.subtitles === "string" && ["auto", "off"].includes(value.preferences.subtitles))
-      && (value.preferences.speed === undefined || number(value.preferences.speed, 4) && value.preferences.speed >= 0.25);
-    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && typeof value.setting === "string" && ["audio", "subtitles", "speed"].includes(value.setting);
+      && (value.preferences.speed === undefined || number(value.preferences.speed, 4) && value.preferences.speed >= 0.25)
+      && (value.preferences.replayGain === undefined || typeof value.preferences.replayGain === "string" && ["off", "track", "album"].includes(value.preferences.replayGain));
+    case "savePlaybackDefault": return id(value.profileId) && id(value.playbackId) && typeof value.setting === "string" && ["audio", "subtitles", "speed", "replayGain"].includes(value.setting);
     case "track": return id(value.playbackId) && (value.kind === "audio" || value.kind === "subtitle") && typeof value.index === "number" && Number.isInteger(value.index) && value.index >= (value.kind === "subtitle" ? -1 : 0) && value.index <= 1024;
     case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
+    case "replayGain": return id(value.playbackId) && typeof value.mode === "string" && ["off", "track", "album"].includes(value.mode);
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
     case "next": return id(value.playbackId);
     case "stop": return true;
@@ -71,16 +73,21 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
     return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }) } };
   }
   if (value.action.type === "preferences") {
-    const { audioLanguage, subtitleLanguage, subtitles, speed } = value.action.preferences;
+    const { audioLanguage, subtitleLanguage, subtitles, speed, replayGain } = value.action.preferences;
     return { type: "command", requestId: value.requestId, action: { type: "preferences", profileId: value.action.profileId, preferences: {
       ...(audioLanguage === undefined ? {} : { audioLanguage: audioLanguage.toLowerCase() }),
       ...(subtitleLanguage === undefined ? {} : { subtitleLanguage: subtitleLanguage.toLowerCase() }),
       ...(subtitles === undefined ? {} : { subtitles }), ...(speed === undefined ? {} : { speed }),
+      ...(replayGain === undefined ? {} : { replayGain }),
     } } };
   }
   if (value.action.type === "savePlaybackDefault") {
     const { profileId, playbackId, setting } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "savePlaybackDefault", profileId, playbackId, setting } };
+  }
+  if (value.action.type === "replayGain") {
+    const { playbackId, mode } = value.action;
+    return { type: "command", requestId: value.requestId, action: { type: "replayGain", playbackId, mode } };
   }
   return value as ClientMessage;
 }

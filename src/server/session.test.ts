@@ -19,7 +19,7 @@ test("failed database operations do not publish or accept queue, volume, profile
   expect(session.state.queue).toEqual([]);
   expect(session.state.player.volume).toBe(80);
   expect(session.state.activeProfile).toEqual({ id: "household", name: "Household" });
-  expect(session.state.preferences).toEqual({ profile: { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }, device: { audioDelay: 0 } });
+  expect(session.state.preferences).toEqual({ profile: { replayGain: "off", audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }, device: { audioDelay: 0 } });
   expect(session.state.libraryVersion).toBeUndefined();
   expect(publications).toBe(0);
 });

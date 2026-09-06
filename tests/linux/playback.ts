@@ -8,6 +8,7 @@ import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinRes
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
 import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
+import { verifyReplayGain } from "./replaygain";
 import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
 import { verifyRadioSettings } from "./radio-settings";
@@ -39,6 +40,7 @@ const media = Bun.serve({
     "/dash/:file": request => new Response(Bun.file(`/web-fixtures/${request.params.file}`)),
     "/quality.html": () => new Response('<!doctype html><title>DASH quality fixture</title><video src="/quality/manifest.mpd"></video>', { headers: { "Content-Type": "text/html" } }),
     "/quality/:file": request => new Response(Bun.file(`/quality-fixtures/${request.params.file}`)),
+    "/replaygain/:file": request => new Response(Bun.file(`/replaygain-fixtures/${request.params.file}`)),
     "/logo.svg": () => new Response('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#baf3dd"/></svg>', { headers: { "content-type": "image/svg+xml" } }),
   },
   fetch: () => new Response("Not found", { status: 404 }),
@@ -586,6 +588,7 @@ try {
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
   const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
+  const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
   const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
@@ -622,6 +625,7 @@ try {
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
   await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
+  await persistedReplayGain.verifyAfterRestart();
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
   await persistedJellyfinSettings?.verifyAfterRestart();
   await persistedRadioSettings.verifyAfterRestart();
