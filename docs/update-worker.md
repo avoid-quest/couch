@@ -158,7 +158,13 @@ readiness failure. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
 watchdog, or on the dedicated disposable Ubuntu runner in
-[Update worker CI](../.github/workflows/update-worker.yml). Never run it on the
+[Update worker CI](../.github/workflows/updater.yml). Never run it on the
 TV or a development host. That workflow runs both focused suites and both real
 Ubuntu fixtures for companion package, worker, test and workflow changes with
 read-only repository permissions and a five-minute job deadline.
+Feature-branch push and metadata-only events do not run this workflow. A newer
+revision cancels obsolete work for the same pull request. Keep all PR attempts
+and the separate main validation in the [CI timing ledger](ci.md), including
+queue and commit latency, total execution through cleanup and per-job rounded
+minutes. This workflow builds no Couch package or native application. Compare
+its added usage with the existing Check budget before delivery.

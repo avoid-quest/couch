@@ -2,13 +2,18 @@ name: Update worker
 
 on:
   pull_request:
-    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/update-worker.yml']
+    types: [opened, synchronize, reopened]
+    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/updater.yml']
   push:
     branches: [main]
-    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/update-worker.yml']
+    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/updater.yml']
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   dummy-package-transactions:
