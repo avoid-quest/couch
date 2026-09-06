@@ -1,4 +1,6 @@
 import type { CollectionFilter, CollectionSort } from "../shared/collections";
+import { readCueAlbum, type CueAlbum } from "./cue";
+import type { MediaSource } from "./session";
 import type { ManagedFolder } from "../shared/folders";
 import { createMediaFolders, FolderError, type FolderIdentity, type MediaFolders } from "./media-folders";
 import { audioExtensions } from "../shared/media";
@@ -13,7 +15,7 @@ import { readVideoMetadata, videoExtensions, videoMetadataVersion, type Original
 
 type SourceRow = LibrarySource & { path: string };
 type Metadata = { title: string | null; duration: number | null; artist: string | null; album: string | null };
-type ItemRow = LibraryItem & { sourceId: string; path: string; size: number; modified: number; probed: number; metadataVersion: number; fileMetadata?: string | null };
+type ItemRow = LibraryItem & { sourceId: string; path: string; size: number; modified: number; probed: number; metadataVersion: number; fileMetadata?: string | null; cuePath?: string | null; cueTrack?: number | null; cueSource?: number };
 type PublicItemRow = Omit<LibraryItem, "available" | "artists" | "video"> & { available: number; artists: string; video: string | null };
 const publicItem = (row: PublicItemRow): LibraryItem => ({ ...row, artists: JSON.parse(row.artists) as string[], video: row.video ? JSON.parse(row.video) as VideoMetadata : null, available: !!row.available });
 const itemColumns = `i.id, i.title, i.kind, i.duration, i.artist, i.album, i.artists, i.albumArtist, i.albumId,
@@ -61,7 +63,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     UPDATE library_sources SET status = 'idle', error = 'Previous scan was interrupted.' WHERE status = 'scanning';
   `);
   const columns = new Set(db.query<{ name: string }, []>("PRAGMA table_info(library_items)").all().map(column => column.name));
-  for (const [name, type] of Object.entries({ artists: "TEXT NOT NULL DEFAULT '[]'", albumArtist: "TEXT", albumId: "TEXT", discNumber: "INTEGER", trackNumber: "INTEGER", artworkId: "TEXT", metadataVersion: "INTEGER NOT NULL DEFAULT 0", video: "TEXT", fileMetadata: "TEXT" })) {
+  for (const [name, type] of Object.entries({ artists: "TEXT NOT NULL DEFAULT '[]'", albumArtist: "TEXT", albumId: "TEXT", discNumber: "INTEGER", trackNumber: "INTEGER", artworkId: "TEXT", metadataVersion: "INTEGER NOT NULL DEFAULT 0", video: "TEXT", fileMetadata: "TEXT", cuePath: "TEXT", cueTrack: "INTEGER", cueSource: "INTEGER NOT NULL DEFAULT 0" })) {
     if (!columns.has(name)) db.run(`ALTER TABLE library_items ADD COLUMN ${name} ${type}`);
   }
   db.run(`
@@ -125,7 +127,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     }
   }
 
-  async function* files(root: string, directory = root, depth = 0): AsyncGenerator<string> {
+  async function* files(root: string, directory = root, depth = 0, cues = false): AsyncGenerator<string> {
     assertOpen();
     if (depth > 64) throw new Error("Folder nesting exceeds the scan limit.");
     if (!within(root, await realpath(directory)) || (await lstat(directory)).isSymbolicLink()) return;
@@ -134,10 +136,10 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       assertOpen();
       const path = join(directory, entry.name);
       if (entry.isSymbolicLink()) continue;
-      if (entry.isDirectory()) yield* files(root, path, depth + 1);
+      if (entry.isDirectory()) yield* files(root, path, depth + 1, cues);
       else if (entry.isFile()) {
         const extension = extname(entry.name).slice(1).toLowerCase();
-        if (videoExtensions.has(extension) || audioExtensions.has(extension)) yield path;
+        if (cues ? extension === "cue" : videoExtensions.has(extension) || audioExtensions.has(extension)) yield path;
       }
     }
   }
@@ -153,16 +155,16 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
     for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
       ON CONFLICT(sourceId, path) DO UPDATE SET data=excluded.data, seenScan=excluded.seenScan, available=1`).run(item.sourceId, nfo.path, nfo.data, scanId);
-    const row = db.query<{ rowid: number }, (string | number | null)[]>(`INSERT INTO library_items (id, sourceId, path, title, kind, duration, artist, album, size, modified, probed, available, seenScan, artists, albumArtist, albumId, discNumber, trackNumber, artworkId, metadataVersion, video, fileMetadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(sourceId, path) DO UPDATE SET
+    const row = db.query<{ rowid: number }, (string | number | null)[]>(`INSERT INTO library_items (id, sourceId, path, title, kind, duration, artist, album, size, modified, probed, available, seenScan, artists, albumArtist, albumId, discNumber, trackNumber, artworkId, metadataVersion, video, fileMetadata, cuePath, cueTrack, cueSource)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(sourceId, path) DO UPDATE SET
       title=excluded.title, duration=excluded.duration, artist=excluded.artist, album=excluded.album,
       artists=excluded.artists, albumArtist=excluded.albumArtist, albumId=excluded.albumId, discNumber=excluded.discNumber,
       trackNumber=excluded.trackNumber, artworkId=excluded.artworkId, metadataVersion=excluded.metadataVersion,
-      video=excluded.video, fileMetadata=excluded.fileMetadata,
+      video=excluded.video, fileMetadata=excluded.fileMetadata, cuePath=excluded.cuePath, cueTrack=excluded.cueTrack, cueSource=excluded.cueSource,
       size=excluded.size, modified=excluded.modified, probed=excluded.probed, available=1, seenScan=excluded.seenScan RETURNING rowid`)
       .get(item.id, item.sourceId, item.path, item.title, item.kind, item.duration, item.artist, item.album, item.size, item.modified, item.probed, scanId,
         JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
-        item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null)!;
+        item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null, item.cuePath ?? null, item.cueTrack ?? null, item.cueSource ?? 0)!;
     indexItem(row.rowid, item);
     const show = item.video?.show;
     if (show) {
@@ -186,6 +188,9 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     let metadataFailures = 0;
     let videosWithoutProbe = 0;
     let sidecarFailures = 0;
+    const cueErrors: string[] = [];
+    let cueFailures = 0;
+    const cueAudio = new Set<string>();
     const pending = new Set<Promise<void>>();
     const shows = new Map<string, { show: VideoShow; priority: number; path: string }>();
     try {
@@ -200,6 +205,32 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         db.query("UPDATE library_sources SET status = 'unavailable', error = ? WHERE id = ?").run(error instanceof FolderError ? error.message : 'Folder is unavailable. Reconnect the drive or network mount, then scan again.', source.id);
         return getSource(source.id)!;
       }
+      for await (const path of files(root, root, 0, true)) {
+        let album: CueAlbum;
+        try { album = await readCueAlbum(root, relative(root, path), source.id); }
+        catch (error) {
+          cueFailures++;
+          if (cueErrors.length < 3) cueErrors.push(`${basename(path)}: ${error instanceof Error && !("code" in error) ? error.message : "Could not read cue sheet. Check that the file is available and readable."}`);
+          continue;
+        }
+        await verifySource(source);
+        authorize();
+        assertOpen();
+        const info = await lstat(path).catch(() => { throw new Error("Cue sheet became unavailable during the scan."); });
+        authorize();
+        assertOpen();
+        cueAudio.add(album.sourcePath);
+        db.transaction(() => {
+          for (const track of album.tracks) saveItem({
+            id: track.id, sourceId: source.id, path: `${album.cuePath}\0${track.trackNumber}`,
+            cuePath: album.cuePath, cueTrack: track.trackNumber, title: track.title, kind: "audio", duration: track.duration,
+            artist: track.artist, artists: track.artist ? [track.artist] : [], album: album.title, albumArtist: album.artist,
+            albumId: album.id, discNumber: 1, trackNumber: track.trackNumber, artworkId: album.music.artwork?.id ?? null,
+            size: info.size, modified: info.mtimeMs, probed: 1, metadataVersion: musicMetadataVersion, available: true,
+          }, scanId, album.music.artwork ? [album.music.artwork] : [], []);
+        })();
+        scannedItems.set(source.id, (scannedItems.get(source.id) ?? 0) + album.tracks.length);
+      }
       const inspect = async (path: string) => {
         assertOpen();
         await verifySource(source);
@@ -212,7 +243,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const unchanged = previous?.size === info.size && previous.modified === info.mtimeMs;
         const kind = videoExtensions.has(extname(path).slice(1).toLowerCase()) ? "video" : "audio";
         if (kind === "video" && !executable) videosWithoutProbe++;
-        if (kind === "audio" && previous && unchanged && previous.metadataVersion === musicMetadataVersion && previous.probed) {
+        if (kind === "audio" && previous && unchanged && previous.metadataVersion === musicMetadataVersion && previous.probed && !!previous.cueSource === cueAudio.has(localPath)) {
           authorize();
           scannedItems.set(source.id, (scannedItems.get(source.id) ?? 0) + 1);
           db.query("UPDATE library_items SET seenScan = ?, available = 1 WHERE id = ?").run(scanId, previous.id);
@@ -243,11 +274,11 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         authorize();
         scannedItems.set(source.id, (scannedItems.get(source.id) ?? 0) + 1);
         if (scannedItems.get(source.id)! % 25 === 0) notify();
-        saveItem({ id: previous?.id ?? crypto.randomUUID(), sourceId: source.id, path: localPath,
+        saveItem({ id: previous?.id ?? crypto.randomUUID(), sourceId: source.id, path: localPath, cueSource: Number(cueAudio.has(localPath)),
           title: localVideo?.title ?? metadata?.title ?? (kind === "audio" ? retained?.title : null) ?? basename(path, extname(path)), kind,
           duration: metadata?.duration ?? (kind === "video" ? localVideo?.runtime : retained?.duration) ?? null,
-          artist: metadata?.artist ?? retained?.artist ?? null, album: metadata?.album ?? retained?.album ?? null, size: info.size, modified: info.mtimeMs,
-          artists: music?.artists ?? retained?.artists ?? [], albumArtist: music?.albumArtist ?? retained?.albumArtist ?? null, albumId: music?.albumId ?? retained?.albumId ?? null,
+          artist: metadata?.artist ?? retained?.artist ?? null, album: cueAudio.has(localPath) ? null : metadata?.album ?? retained?.album ?? null, size: info.size, modified: info.mtimeMs,
+          artists: music?.artists ?? retained?.artists ?? [], albumArtist: music?.albumArtist ?? retained?.albumArtist ?? null, albumId: cueAudio.has(localPath) ? null : music?.albumId ?? retained?.albumId ?? null,
           discNumber: music?.discNumber ?? retained?.discNumber ?? null, trackNumber: music?.trackNumber ?? retained?.trackNumber ?? null,
           artworkId: kind === "video" ? localVideo?.artworkId ?? null : music?.artwork?.id ?? retained?.artworkId ?? null,
           video: localVideo?.video ?? null, fileMetadata: kind === "video" && metadata ? JSON.stringify(metadata) : null,
@@ -277,6 +308,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         db.query("UPDATE library_sources SET status = 'ready', lastScanned = ?, error = NULL, warning = ? WHERE id = ?")
           .run(Date.now(), [videosWithoutProbe ? "Install ffprobe to read video durations and tags. Files are still playable." : null,
             metadataFailures ? `Could not read metadata from ${metadataFailures} file${metadataFailures === 1 ? "" : "s"}. Audio metadata is limited to 512 MiB files.` : null,
+            cueFailures ? `Skipped ${cueFailures} cue sheet${cueFailures === 1 ? "" : "s"}. ${cueErrors.join(" ")}` : null,
             sidecarFailures ? `Skipped ${sidecarFailures} invalid or oversized NFO/artwork sidecar read${sidecarFailures === 1 ? "" : "s"}. Media is still playable.` : null].filter(Boolean).join(" ") || null, source.id);
       })();
     } catch (error) {
@@ -466,14 +498,26 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       if (!/^[a-f0-9]{64}$/.test(id)) return null;
       return db.query<{ data: Uint8Array; mimeType: string }, [string]>("SELECT data, mimeType FROM library_artwork WHERE id = ?").get(id);
     },
-    async getPlayable(id: string): Promise<{ source: string; title: string }> {
+    async getPlayable(id: string): Promise<MediaSource & { title: string }> {
       assertOpen();
-      const item = db.query<{ title: string; path: string; root: string; sourceId: string }, [string]>(`
-        SELECT i.title, i.path, s.path AS root, s.id AS sourceId FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
+      const item = db.query<{ title: string; path: string; root: string; sourceId: string; cuePath: string | null; cueTrack: number | null }, [string]>(`
+        SELECT i.title, i.path, i.cuePath, i.cueTrack, s.path AS root, s.id AS sourceId FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
       if (!item) throw new Error("Library item not found.");
       try {
         await verifySource(getSource(item.sourceId)!);
         const root = await realpath(item.root);
+        if (item.cuePath !== null) {
+          const album = await readCueAlbum(root, item.cuePath, item.sourceId);
+          const track = album.tracks.find(track => track.id === id && track.trackNumber === item.cueTrack);
+          if (!track) throw new Error();
+          await verifySource(getSource(item.sourceId)!);
+          const path = join(root, album.sourcePath);
+          const canonical = await realpath(path);
+          if (root !== item.root || !within(root, canonical) || (await lstat(path)).isSymbolicLink() || !(await lstat(canonical)).isFile()) throw new Error();
+          if (!getSource(item.sourceId)) throw new Error();
+          return { source: pathToFileURL(canonical).href, title: track.title,
+            segment: { start: track.start, end: track.end }, metadata: { duration: track.duration } };
+        }
         const path = join(root, item.path);
         const canonical = await realpath(path);
         if (root !== item.root || !within(root, canonical) || (await lstat(path)).isSymbolicLink() || !(await lstat(canonical)).isFile()) throw new Error();

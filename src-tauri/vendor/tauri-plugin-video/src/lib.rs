@@ -22,6 +22,8 @@ mod mpv_radio;
 mod mpv_iptv;
 #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
 mod mpv_replaygain;
+#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+mod mpv_cue;
 
 pub use error::{Error, Result};
 

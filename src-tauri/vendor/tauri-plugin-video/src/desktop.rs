@@ -1200,6 +1200,7 @@ mod linux_mpv {
 
     struct MpvPlayer {
         session_key: String,
+        cue: bool,
         radio: bool,
         replay_gain: crate::mpv_replaygain::ReplayGain,
         max_video_height: Option<u16>,
@@ -1447,6 +1448,7 @@ mod linux_mpv {
 
         let mut player = MpvPlayer {
             session_key: String::new(),
+            cue: false,
             radio: false,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
             max_video_height: None,
@@ -1513,7 +1515,9 @@ mod linux_mpv {
                 .map_err(mpv_error)?;
         }
         configure_buffer(player, payload)?;
-        configure_start(&player.mpv, payload.start_position)?;
+        player.cue = payload.end_position.is_some();
+        configure_start(&player.mpv, payload.start_position, player.cue)?;
+        configure_end(&player.mpv, payload.end_position)?;
         player
             .mpv
             .set_property(
@@ -1554,7 +1558,7 @@ mod linux_mpv {
         Ok(())
     }
 
-    fn configure_start(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+    fn configure_start(mpv: &Mpv, position: Option<f64>, cue: bool) -> Result<()> {
         if position.is_some_and(|value| !value.is_finite() || value < 0.0) {
             return Err(Error::InvalidRequest(
                 "startPosition must be finite and nonnegative".into(),
@@ -1564,8 +1568,16 @@ mod linux_mpv {
         // load so radio and subsequent files cannot inherit a resume position.
         let start = position
             .filter(|value| *value > 0.0)
-            .map_or_else(|| "none".to_owned(), |value| value.to_string());
+            .map_or_else(|| "none".to_owned(), |value| crate::mpv_cue::timestamp(value, cue).to_string());
         mpv.set_property("start", start).map_err(mpv_error)
+    }
+
+    fn configure_end(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+        if position.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+            return Err(Error::InvalidRequest("endPosition must be finite and positive".into()));
+        }
+        // Reset the bound for each replacement, including ordinary files and radio.
+        mpv.set_property("end", position.map_or_else(|| "none".to_owned(), |value| crate::mpv_cue::timestamp(value, true).to_string())).map_err(mpv_error)
     }
 
     fn configure_network(player: &MpvPlayer, payload: &NativeOpenRequest) -> Result<()> {
@@ -1680,7 +1692,7 @@ mod linux_mpv {
                     .mpv
                     .command(
                         "seek",
-                        &[&payload.value.max(0.0).to_string(), "absolute+exact"],
+                        &[&crate::mpv_cue::timestamp(payload.value.max(0.0), player.cue).to_string(), "absolute+exact"],
                     )
                     .map_err(mpv_error)?,
                 "volume" => player
@@ -1864,6 +1876,7 @@ mod linux_mpv {
             discard_events(&mut player.mpv)?;
             player.widget.hide();
             player.session_key.clear();
+            player.cue = false;
             player.radio = false;
             player.replay_gain.reset(&player.mpv, crate::NativeReplayGain::Off)?;
             player.loaded = false;
@@ -2176,6 +2189,66 @@ mod linux_mpv {
         };
 
         #[test]
+        fn cue_bounds_limit_decoded_lossless_audio_and_reset_for_replacement() {
+            let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/fixtures/cue/album.flac");
+            let output = std::env::temp_dir().join(format!("couch-cue-{}.wav", std::process::id()));
+            // PCM output runs unthrottled, so actual decoding does not add 18 seconds to CI.
+            let mut mpv = Mpv::with_initializer(|init| {
+                init.set_option("vo", "null")?;
+                init.set_option("ao", "pcm")?;
+                init.set_option("ao-pcm-file", output.to_str().unwrap())?;
+                init.set_option("audio-format", "s16")?;
+                init.set_option("audio-channels", "mono")?;
+                init.set_option("audio-samplerate", 44100_i64)?;
+                init.set_option("gapless-audio", "no")?;
+                init.set_option("audio-display", "no")?;
+                Ok(())
+            }).unwrap();
+            let artifacts = std::env::var_os("COUCH_CUE_PCM_ARTIFACTS").map(std::path::PathBuf::from);
+            if let Some(path) = &artifacts { fs::create_dir_all(path).unwrap(); }
+            for (case, (start, end)) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (Some(400.0 / 75.0), Some(875.0 / 75.0)), (None, None)].into_iter().enumerate() {
+                mpv.command("stop", &[]).unwrap();
+                discard_events(&mut mpv).unwrap();
+                configure_start(&mpv, start, end.is_some()).unwrap();
+                configure_end(&mpv, end).unwrap();
+                mpv.command("loadfile", &[source.to_str().unwrap(), "replace"]).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let mut loaded = false;
+                loop {
+                    assert!(Instant::now() < deadline, "Cue lossless decode did not finish");
+                    match mpv.wait_event(0.05) {
+                        Some(Ok(Event::FileLoaded)) => loaded = true,
+                        Some(Ok(Event::EndFile(_))) if loaded => break,
+                        Some(Err(error)) => panic!("Cue decode: {error}"),
+                        _ => {}
+                    }
+                }
+                let decoded = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(&output)
+                    .args(["-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
+                assert!(decoded.status.success(), "{}", String::from_utf8_lossy(&decoded.stderr));
+                let expected = ((end.unwrap_or(18.0) - start.unwrap_or(0.0)) * 44100.0_f64).round() as usize;
+                let reference = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(&source)
+                    .args(["-af", &format!("atrim=start_sample={}:end_sample={}", (start.unwrap_or(0.0) * 44100.0).round() as usize, (end.unwrap_or(18.0) * 44100.0).round() as usize), "-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
+                assert!(reference.status.success());
+                let first_difference = decoded.stdout.chunks_exact(2).zip(reference.stdout.chunks_exact(2)).position(|(actual, expected)| actual != expected);
+                let diagnostic = format!("case={case} start={start:?} end={end:?} actual_samples={} expected_samples={expected} reference_samples={} first_differing_sample={first_difference:?}", decoded.stdout.len() / 2, reference.stdout.len() / 2);
+                eprintln!("{diagnostic}");
+                if let Some(path) = &artifacts {
+                    fs::copy(&output, path.join(format!("case-{case}.wav"))).unwrap();
+                    fs::write(path.join(format!("case-{case}-actual.s16le")), &decoded.stdout).unwrap();
+                    fs::write(path.join(format!("case-{case}-reference.s16le")), &reference.stdout).unwrap();
+                    fs::write(path.join(format!("case-{case}.txt")), &diagnostic).unwrap();
+                }
+                assert_eq!(decoded.stdout.len() / 2, expected, "The cue must decode exactly its bounded sample count: {diagnostic}");
+                assert_eq!(decoded.stdout, reference.stdout, "Decoded samples must come from this cue segment: {diagnostic}");
+            }
+            assert_eq!(mpv.get_property::<String>("options/start").unwrap(), "none");
+            assert_eq!(mpv.get_property::<String>("options/end").unwrap(), "none");
+            drop(mpv);
+            let _ = fs::remove_file(output);
+        }
+
+        #[test]
         fn resume_start_seeks_before_playback_and_resets_for_following_loads() {
             struct Fixture(std::path::PathBuf);
             impl Drop for Fixture {
@@ -2228,7 +2301,7 @@ mod linux_mpv {
                 mpv.command("stop", &[]).unwrap();
                 discard_events(&mut mpv).unwrap();
                 crate::mpv_tracks::reset(&mpv, None).unwrap();
-                configure_start(&mpv, start).unwrap();
+                configure_start(&mpv, start, false).unwrap();
                 mpv.command("loadfile", &[fixture.0.to_str().unwrap(), "replace"])
                     .unwrap();
                 let deadline = Instant::now() + Duration::from_secs(10);
@@ -2265,7 +2338,7 @@ mod linux_mpv {
                 assert_eq!(mpv.get_property::<String>("options/vid").unwrap(), "auto");
             }
             for invalid in [-1.0, f64::NAN, f64::INFINITY] {
-                assert!(configure_start(&mpv, Some(invalid)).is_err());
+                assert!(configure_start(&mpv, Some(invalid), false).is_err());
             }
         }
     }

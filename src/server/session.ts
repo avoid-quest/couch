@@ -6,7 +6,7 @@ import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean };
+export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean };
 type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
   deactivate?: () => void;

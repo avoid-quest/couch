@@ -18,11 +18,14 @@ find src src-tauri scripts packaging tests -type f -not -path '*/binaries/*' -pr
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video dash_selection
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video resume_start
+cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video cue_bounds
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video external_subtitles
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video iptv_live_start
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video radio_metadata
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video replaygain_native_policy -- --nocapture
 bun tests/linux/fixtures.ts
+mkdir -p /mnt/cue-fixtures
+cp tests/fixtures/cue/album.cue tests/fixtures/cue/album.flac tests/fixtures/cue/missing.cue /mnt/cue-fixtures/
 bun tests/linux/replaygain-fixtures.ts /replaygain-fixtures
 mkdir -p /root/.config /artifacts
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/artifacts/pulseaudio.log
