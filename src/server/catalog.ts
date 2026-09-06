@@ -7,7 +7,7 @@ import type { Store } from "./store";
 import type { createSession } from "./session";
 
 type Services = {
-  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
+  library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlistStations">;
   jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
@@ -19,10 +19,6 @@ class RequestError extends Error {
 
 function methodNotAllowed(methods: string) {
   return Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: methods } });
-}
-
-function requireHost(trusted: boolean) {
-  if (!trusted) throw new RequestError("Manage media sources on the TV.", 403);
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
@@ -54,12 +50,6 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
 }
 
 export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
-  function startScan(source: LibrarySource) {
-    // The library publishes scan progress and owns job completion during shutdown.
-    void library.scan(source.id).catch(() => {});
-    return library.listSources().find(candidate => candidate.id === source.id) ?? source;
-  }
-
   return {
     async handle(request: Request, trusted: boolean): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
@@ -116,22 +106,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         }
         if (pathname === "/api/library/sources") {
           if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });
-          if (request.method !== "POST") return methodNotAllowed("GET, POST");
-          requireHost(trusted);
-          const { path } = await body(request);
-          if (typeof path !== "string" || !path.trim() || path.length > 4096 || /[\0\r\n]/.test(path)) throw new RequestError("Choose a folder on the TV.");
-          let source: LibrarySource;
-          try { source = await library.addSource(path); }
-          catch { throw new RequestError("Could not open this folder. Choose an available folder on the TV."); }
-          return Response.json({ source: startScan(source) }, { status: 202 });
-        }
-        const scan = /^\/api\/library\/sources\/([\w-]{1,80})\/scan$/.exec(pathname);
-        if (scan) {
-          if (request.method !== "POST") return methodNotAllowed("POST");
-          requireHost(trusted);
-          const source = library.listSources().find(source => source.id === scan[1]);
-          if (!source) throw new RequestError("Library folder not found.", 404);
-          return Response.json({ source: startScan(source) }, { status: 202 });
+          return methodNotAllowed("GET");
         }
         if (pathname === "/api/library/items") {
           if (request.method !== "GET") return methodNotAllowed("GET");

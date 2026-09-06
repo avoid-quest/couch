@@ -1,10 +1,11 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../shared/protocol";
 import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
+import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as bandcampModule from "./providers/bandcamp";
 import * as webMediaModule from "./web-media";
@@ -383,7 +384,7 @@ async function delayedCatalog(kind: "library" | "jellyfin") {
     const createLibrary = libraryModule.createLibrary;
     let library!: ReturnType<typeof createLibrary>;
     const spy = spyOn(libraryModule, "createLibrary").mockImplementation(options => {
-      library = createLibrary({ ...options, ffprobePath: null });
+      library = createLibrary({ ...options, folders: foldersModule.createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null }), ffprobePath: null });
       const getPlayable = library.getPlayable;
       library.getPlayable = async id => {
         if (id === itemId) { entered.resolve(); await gate.promise; }
@@ -693,7 +694,11 @@ test("limits repeated pairing attempts", async () => {
 });
 
 test("catalog HTTP authenticates native CORS requests and shares only approved local files", async () => {
-  const { hub, databasePath, commands } = fixture();
+  const createFolders = foldersModule.createMediaFolders;
+  const folderService = spyOn(foldersModule, "createMediaFolders").mockImplementation(() => createFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null }));
+  let initial: ReturnType<typeof fixture>;
+  try { initial = fixture(); } finally { folderService.mockRestore(); }
+  const { hub, databasePath, commands } = initial;
   const token = await pair(hub);
   const api = (path: string, token: string, method = "GET", body?: unknown, origin = "http://tauri.localhost") => fetch(`${hub.origin}${path}`, { method, headers: { Origin: origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const preflight = await fetch(`${hub.origin}/api/library/sources`, { method: "OPTIONS", headers: { Origin: "http://tauri.localhost", "Access-Control-Request-Headers": "Authorization, Content-Type" } });
@@ -702,13 +707,15 @@ test("catalog HTTP authenticates native CORS requests and shares only approved l
   expect((await api("/api/library/sources", "invalid")).status).toBe(401);
   expect((await api("/api/library/sources", token, "GET", undefined, "https://foreign.example")).status).toBe(403);
   expect((await api("/api/library/sources", token, "POST", { path: "/tmp" })).status).toBe(403);
-  const directory = join(databasePath, "..");
+  const directory = realpathSync(join(databasePath, ".."));
   writeFileSync(join(directory, "Local song.mp3"), "not a real mp3; filename fallback");
   const host = new Peer(hub, hostToken);
   const remote = new Peer(hub, token);
   await Promise.all([host.ready(), remote.ready()]);
   const response = await api("/api/library/sources", hostToken, "POST", { path: directory });
-  expect(response.status).toBe(202);
+  expect(response.status).toBe(201);
+  const { sources: addedSources } = await response.json() as { sources: { id: string }[] };
+  expect((await api(`/api/library/sources/${addedSources[0]!.id}/scan`, hostToken, "POST")).status).toBe(202);
   expect(response.headers.get("access-control-allow-origin")).toBe("http://tauri.localhost");
   await remote.waitFor(message => message.type === "state" && (message.state.libraryVersion ?? 0) >= 3);
   const sources = await (await api("/api/library/sources", token)).json();

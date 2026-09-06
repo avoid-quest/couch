@@ -1,3 +1,4 @@
+import { createMediaFolders } from "./media-folders";
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,12 +11,14 @@ import { createRadio } from "./radio";
 import { openStore } from "./store";
 import { createSession } from "./session";
 
+const folders = createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null });
+
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
 
 function fixture() {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "couch-catalog-")));
-  const library = createLibrary({ databasePath: ":memory:", ffprobePath: null });
+  const library = createLibrary({ folders, databasePath: ":memory:", ffprobePath: null });
   const radio = createRadio({ databasePath: ":memory:", discover: async () => { throw new Error("private upstream details"); } });
   let connected = false;
   let connectCalls = 0;
@@ -53,19 +56,14 @@ function fixture() {
   return { directory, library, radio, jellyfin, catalog, settings, request, invalidations, session, store, connectCalls: () => connectCalls };
 }
 
-test("only the host can add or scan folders; remotes browse indexed media without paths", async () => {
+test("catalog keeps source mutation in Settings while remotes browse indexed media without paths", async () => {
   const { directory, library, request } = fixture();
   writeFileSync(join(directory, "Local song.mp3"), "audio fixture");
-  expect((await request("/api/library/sources", "POST", { path: directory })).status).toBe(403);
+  for (const trusted of [false, true]) expect((await request("/api/library/sources", "POST", { path: directory }, trusted)).status).toBe(405);
   expect(library.listSources()).toEqual([]);
-  const added = await request("/api/library/sources", "POST", { path: directory }, true);
-  expect(added.status).toBe(202);
-  const { source } = await added.json() as { source: { id: string; path: string; status: string } };
-  expect(source.path).toBe(directory);
-  expect(source.status).toBe("scanning");
+  const source = await library.addSource(directory);
   await library.scan(source.id);
-  expect((await request(`/api/library/sources/${source.id}/scan`, "POST")).status).toBe(403);
-  expect((await request("/api/library/sources/missing/scan", "POST", undefined, true)).status).toBe(404);
+  expect((await request(`/api/library/sources/${source.id}/scan`, "POST", undefined, true)).status).toBe(404);
   const remoteSources = await (await request("/api/library/sources")).text();
   expect(remoteSources).not.toContain(directory);
   expect(remoteSources).not.toContain('"path"');
@@ -136,7 +134,7 @@ test("rejects invalid pagination and reports supported methods without running m
   }
   const wrongMethod = await request("/api/library/sources", "DELETE");
   expect(wrongMethod.status).toBe(405);
-  expect(wrongMethod.headers.get("Allow")).toBe("GET, POST");
+  expect(wrongMethod.headers.get("Allow")).toBe("GET");
   expect((await request("/api/missing")).status).toBe(404);
 });
 

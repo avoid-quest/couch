@@ -5,6 +5,8 @@ import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
 import { createSession } from "./session";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
+import { createMediaFolders } from "./media-folders";
+import { createFolderSettings } from "./folder-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
 import { createRadioSettings } from "./radio-settings";
@@ -78,8 +80,10 @@ export function createHub(options: HubOptions) {
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode) => { session.loadQueue(entries, mode); } });
-  const library = createLibrary({ databasePath: options.databasePath, onChange: () => session.invalidate("library") });
+  const folders = createMediaFolders();
+  const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => session.invalidate("library") });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
+  const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller") });
@@ -154,6 +158,7 @@ export function createHub(options: HubOptions) {
       if (caller.controller) store.touchController(caller.controller.id);
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
+      if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, identity));
       if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
       return server.upgrade(request, { data: { trusted, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
