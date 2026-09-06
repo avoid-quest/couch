@@ -6,6 +6,8 @@ import type { Root } from "react-dom/client";
 let root: Root, window: Window, tick: () => void;
 let programGate: ReturnType<typeof Promise.withResolvers<void>> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
+let recordingPage: any = null;
+const recordingPosts: { path: string; body: any }[] = [];
 const ranges: { start: number; end: number }[] = [], groups: string[] = [];
 let interval: ReturnType<typeof spyOn>, request: ReturnType<typeof spyOn>;
 const zone = process.env.TZ;
@@ -24,7 +26,7 @@ const click = async (label: string) => { await act(async () => button(label).cli
 beforeEach(async () => {
   process.env.TZ = "Europe/Rome";
   setSystemTime(new Date(2026, 9, 24, 23, 59, 30));
-  ranges.length = 0; groups.length = 0;
+  ranges.length = 0; groups.length = 0; recordingPosts.length = 0; recordingPage = null;
   window = new Window({ url: "http://localhost" });
   for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -33,8 +35,16 @@ beforeEach(async () => {
   }
   const set = globalThis.setInterval;
   interval = spyOn(globalThis, "setInterval").mockImplementation(((callback: () => void, delay: number) => { if (delay === 60_000) tick = callback; return set(callback, delay); }) as typeof set);
-  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
+    if (url.pathname.startsWith("/api/recordings")) {
+      if (init?.method === "POST") {
+        const body = init.body ? JSON.parse(String(init.body)) : undefined; recordingPosts.push({ path: url.pathname, body });
+        if (url.pathname.endsWith("/schedule")) return Response.json({ job: { title: body.title }, existing: false });
+        if (url.pathname.endsWith("/cancel")) recordingPage.jobs[0].status = "cancelled";
+      }
+      return Response.json(recordingPage ?? { configured: false, revision: 0, checkedAt: null, error: null, jobs: [] });
+    }
     if (url.pathname.endsWith("/capabilities")) return Response.json({ liveEdge: "reload", catchup: null });
     if (url.pathname.endsWith("/programs")) {
       const range = { start: Number(url.searchParams.get("start")), end: Number(url.searchParams.get("end")) }; ranges.push(range);
@@ -116,4 +126,32 @@ test("Go live invokes its explicit current-playback callback without ordinary Pl
   expect(request.mock.calls.slice(before).some((call: unknown[]) => String(call[0]).endsWith("/play"))).toBeFalse();
   await render("https://ordinary.test/live.m3u8"); await flush();
   expect(button("Go live")).toBeUndefined();
+});
+
+
+test("Record submits the selected future airing and setup revision, while pending cancel uses its current job revision", async () => {
+  recordingPage = { configured: true, revision: 7, checkedAt: null, error: null, jobs: [{ id: "pending", programId: "saved", channelId: "news", channelName: "News", title: "Saved recording", start: Date.now() + 60_000, end: Date.now() + 120_000, status: "pending", cause: null, revision: 4, cancelRequested: false }] };
+  const { GuidePanel } = await import("./GuidePanel");
+  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} recordingsVersion={2} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  await click("Programs");
+  expect([...document.querySelectorAll("button")].some(node => node.textContent === "Record programme")).toBe(false);
+  await click("Next day"); await click("Record programme");
+  const selected = programs()[1]!;
+  expect(recordingPosts[0]).toEqual({ path: "/api/recordings/schedule", body: { revision: 7, programId: selected.id, title: selected.title, start: selected.start, end: selected.end } });
+  await click("Close"); await click("Recordings");
+  expect(document.body.textContent).toContain("Saved recording");
+  await click("Cancel pending recording");
+  expect(recordingPosts.at(-1)).toEqual({ path: "/api/recordings/pending/cancel", body: { revision: 4 } });
+  expect(document.body.textContent).toContain("Cancelled");
+});
+
+test("offline recording snapshots retain their status with disabled play, cancellation and refresh controls", async () => {
+  recordingPage = { configured: true, revision: 1, checkedAt: Date.now(), error: "Backend unavailable", jobs: ["pending", "completed"].map((status, index) => ({ id: String(index), programId: "saved", channelId: "news", channelName: "News", title: status, start: Date.now(), end: Date.now() + 60_000, status, cause: null, revision: 2, cancelRequested: false })) };
+  const { GuidePanel } = await import("./GuidePanel");
+  const render = (connected: boolean) => root.render(<GuidePanel origin="http://localhost" token="test" connected={connected} canPlay host={false} version={1} recordingsVersion={3} controllerVersion={1} onGoLive={() => {}} active />);
+  await act(async () => render(true)); await flush(); await click("Recordings");
+  await act(async () => render(false)); await flush();
+  for (const label of ["Refresh status", "Cancel pending recording", "Play on TV"]) expect(button(label).disabled).toBe(true);
+  expect(document.body.textContent).toContain("This remote is offline");
+  expect(document.body.textContent).toContain("Backend unavailable");
 });
