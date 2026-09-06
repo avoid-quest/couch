@@ -12,9 +12,9 @@ export function migratePreviewMedia(databasePath: string) {
       db.run("CREATE TABLE IF NOT EXISTS preview_migrations (id TEXT PRIMARY KEY)");
       if (db.query("SELECT 1 FROM preview_migrations WHERE id = 'media-child-v1'").get()) return 0;
       const sources = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'library_sources'").get()
-        ? db.query<{ id: string; path: string }, []>("SELECT id, path FROM library_sources WHERE (path = '/media' OR path LIKE '/media/%') AND path <> '/media/host' AND path NOT LIKE '/media/host/%'").all() : [];
-      // Existing child-layout paths are already current; never prefix them again.
-      for (const source of sources) if (db.query("SELECT 1 FROM library_sources WHERE path = ?").get(`/media/host${source.path.slice(6)}`)) throw new Error("Saved preview source paths collide at /media/host. No paths were changed; resolve the duplicate definitions before restarting the preview.");
+        ? db.query<{ id: string; path: string }, []>("SELECT id, path FROM library_sources WHERE path = '/media' OR path LIKE '/media/%'").all() : [];
+      // Without the marker, "host" may be a real child of the old mounted directory.
+      if (sources.some(source => source.path === "/media/host" || source.path.startsWith("/media/host/"))) throw new Error("Saved preview media layout is ambiguous. No paths were changed. Keep the data volume and follow the retained-mount recovery steps in tests/preview/README.md before restarting.");
       for (const source of sources) db.query("UPDATE library_sources SET path = ? WHERE id = ?").run(`/media/host${source.path.slice(6)}`, source.id);
       db.query("INSERT INTO preview_migrations VALUES ('media-child-v1')").run();
       return sources.length;

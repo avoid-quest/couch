@@ -59,19 +59,33 @@ test("fresh preview records the layout before new Sources are added", async () =
 });
 
 
-test("existing child-layout paths stay unchanged and collisions leave all rows and the marker untouched", async () => {
+test("marker-absent host paths are ambiguous and leave all source rows and the marker untouched", async () => {
   const root = await mkdtemp(join(tmpdir(), "couch-preview-collision-"));
   const path = join(root, "couch.sqlite");
   const db = new Database(path);
   try {
     db.run("CREATE TABLE library_sources (id TEXT PRIMARY KEY, path TEXT UNIQUE); INSERT INTO library_sources VALUES ('old', '/media'), ('current', '/media/host'), ('nested', '/media/Music')");
     const before = db.query("SELECT * FROM library_sources ORDER BY id").all();
-    expect(() => migratePreviewMedia(path)).toThrow("collide");
+    expect(() => migratePreviewMedia(path)).toThrow("ambiguous");
     expect(db.query("SELECT * FROM library_sources ORDER BY id").all()).toEqual(before);
     expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'preview_migrations'").get()).toBeNull();
-    db.query("DELETE FROM library_sources WHERE id = 'old'").run();
-    expect(migratePreviewMedia(path)).toBe(1);
-    expect(db.query("SELECT path FROM library_sources WHERE id = 'current'").get()).toEqual({ path: "/media/host" });
+    db.query("DELETE FROM library_sources WHERE id = 'current'").run();
+    expect(migratePreviewMedia(path)).toBe(2);
+    expect(db.query("SELECT path FROM library_sources WHERE id = 'old'").get()).toEqual({ path: "/media/host" });
     expect(db.query("SELECT path FROM library_sources WHERE id = 'nested'").get()).toEqual({ path: "/media/host/Music" });
+  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+for (const savedPath of ["/media/host", "/media/host/Albums"]) test(`an old legitimate ${savedPath} source is never silently reinterpreted as the new layout`, async () => {
+  const root = await mkdtemp(join(tmpdir(), "couch-preview-ambiguous-"));
+  const path = join(root, "couch.sqlite");
+  const db = new Database(path);
+  try {
+    db.run("CREATE TABLE library_sources (id TEXT PRIMARY KEY, path TEXT UNIQUE)");
+    db.query("INSERT INTO library_sources VALUES ('old-child', ?)").run(savedPath);
+    expect(() => migratePreviewMedia(path)).toThrow("ambiguous");
+    expect(db.query("SELECT * FROM library_sources").all()).toEqual([{ id: "old-child", path: savedPath }]);
+    expect(db.query("SELECT 1 FROM sqlite_master WHERE name = 'preview_migrations'").get()).toBeNull();
   } finally { db.close(); await rm(root, { recursive: true, force: true }); }
 });
