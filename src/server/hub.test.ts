@@ -825,10 +825,11 @@ test("paired HTTP controllers rename and race removal with shared durable state 
   await Promise.all([first, second].map(peer => peer.waitFor(message => message.type === "state" && message.state.activeProfile.name === renamed.name)));
   expect(first.state.preferences?.profile.speed).toBe(1.25);
   expect((await api(hub, firstToken, `/api/profiles/${profile.id}/rename`, { name: "Stale", expectedName: profile.name })).status).toBe(409);
+  first.messages.length = second.messages.length = 0;
   const races = await Promise.all([firstToken, secondToken].map(token => api(hub, token, `/api/profiles/${profile.id}/remove`, { expectedName: renamed.name })));
   expect(races.map(response => response.status).sort()).toEqual([200, 404]);
   await Promise.all([first, second].map(peer => peer.waitFor(message => message.type === "state" && message.state.activeProfile.id === "household")));
-  expect(first.state.preferences?.profile.speed).toBe(1);
+  for (const peer of [first, second]) expect(peer.state.preferences?.profile.speed).toBe(1);
   const reconnected = new Peer(hub, secondToken);
   await reconnected.ready();
   expect(reconnected.state.activeProfile).toEqual({ id: "household", name: "Household" });
