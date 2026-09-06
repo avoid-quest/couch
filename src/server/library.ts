@@ -157,7 +157,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     if (row) indexItem(row.rowid, publicItem(row));
   });
 
-  const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[], importFailed: boolean) => {
+  const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[], importFailed = false) => {
     for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
     for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
       ON CONFLICT(sourceId, path) DO UPDATE SET data=excluded.data, seenScan=excluded.seenScan, available=1`).run(item.sourceId, nfo.path, nfo.data, scanId);
