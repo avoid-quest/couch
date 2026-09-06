@@ -7,7 +7,7 @@ user_systemctl() {
 }
 case "${1:-status}" in
     status) user_systemctl status couch-tv.service --no-pager ;;
-    restart) user_systemctl reset-failed couch-tv.service; user_systemctl restart couch-tv.service ;;
+    restart) user_systemctl reset-failed couch-tv.service || true; user_systemctl restart couch-tv.service ;;
     stop) user_systemctl stop couch-tv.service ;;
     recover-admin)
         # Serialize replacement and restart. Only the runtime user can read the
@@ -22,7 +22,7 @@ case "${1:-status}" in
         chown root:couch-tv "$temporary"
         chmod 0640 "$temporary"
         mv -f "$temporary" /run/couch-appliance/recovery.env
-        user_systemctl reset-failed couch-tv.service
+        user_systemctl reset-failed couch-tv.service || true
         user_systemctl restart couch-tv.service
         printf 'Pair your replacement browser, then use this administrator code within 10 minutes:\n%s\n' "$code"
         ;;
