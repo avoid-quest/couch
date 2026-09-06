@@ -42,9 +42,8 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     db.query("UPDATE library_items SET title=?, artworkId=?, video=? WHERE id=?").run(title, artworkId, JSON.stringify(video), id);
     reindex(id);
   }
-  function capture(current: LibraryItem, originals: OriginalVideoNfo[], importFailed: boolean) {
+  function capture(current: LibraryItem, originals: OriginalVideoNfo[]) {
     if (!current.video) return;
-    if (importFailed && saved(current.id)) { apply(current.id); return; }
     const original = originals.find(nfo => { try { return parseVideoNfo(nfo.data).type === (current.video!.type === "episode" ? "episodedetails" : "movie"); } catch { return false; } })?.data ?? null;
     db.query(`INSERT INTO library_metadata (itemId, base, original, originals) VALUES (?, ?, ?, ?)
       ON CONFLICT(itemId) DO UPDATE SET base=excluded.base, original=excluded.original, originals=excluded.originals`).run(current.id, JSON.stringify(metadataValues(current)), original,
@@ -80,7 +79,8 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     const stem = basename(current.path, extname(current.path));
     const placements: Record<string, string> = { "metadata.nfo": `${stem}.nfo` };
     const video = item(current).video!;
-    const arts = [[current.artworkId, video.type === "episode" ? `${stem}-thumb` : `${stem}-poster`],
+    const showPoster = video.type === "episode" && current.artworkId === video.show?.artworkId && !("artworkId" in JSON.parse(state.changes));
+    const arts = [[current.artworkId, showPoster ? "poster" : video.type === "episode" ? `${stem}-thumb` : `${stem}-poster`],
       [video.fanartId, video.type === "episode" ? "fanart" : `${stem}-fanart`]] as const;
     for (const [index, [id, name]] of arts.entries()) {
       if (!id) continue;
@@ -88,7 +88,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
       if (!image) throw new MetadataError("Artwork is no longer available. Reload before exporting.", 409);
       const filename = `artwork-${index}.${image.mimeType === "image/png" ? "png" : "jpg"}`;
       files[filename] = image.data;
-      placements[filename] = `${name}.${image.mimeType === "image/png" ? "png" : "jpg"}`;
+      placements[filename] = `${name}.${image.mimeType === "image/png" ? "png" : "jpg"}${showPoster && index === 0 ? " in the original show folder" : ""}`;
     }
     const originals: Array<{ name: string; data: string }> = JSON.parse(state.originals);
     if (video.show) {
@@ -98,14 +98,13 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     }
     originals.forEach((nfo, index) => { files[`original-${index}.nfo`] = Buffer.from(nfo.data, "base64"); });
     files["placement.json"] = JSON.stringify({ mediaFilename: basename(current.path), placements, originals: originals.map((nfo, index) => ({ file: `original-${index}.nfo`, importedFilename: nfo.name })), metadata: view(id) }, null, 2);
-    files["README.txt"] = "Couch metadata export\nDownloaded to this browser's download destination. No TV files were written.\nExtract into an empty folder, inspect metadata.nfo, and use placement.json to rename and place sidecars beside the original media. Back up existing sidecars before explicitly replacing them. Original media is not included. original-*.nfo files are unchanged imported snapshots, not replacement sidecars.\nSupported fields: title, originaltitle, plot, year, premiered/aired, genre; episode season, episode, showtitle; selected TMDB uniqueid. Other imported XML elements, attributes and comments are preserved. XML formatting may change. Runtime remains imported. PNG/JPEG poster or episode thumb and fanart are included when available. A show-level fanart belongs beside tvshow.nfo. For episodes, place show.nfo as tvshow.nfo in the original show folder to preserve a corrected series title; its unknown imported fields are retained too.\n";
+    files["README.txt"] = "Couch metadata export\nDownloaded to this browser's download destination. No TV files were written.\nExtract into an empty folder, inspect metadata.nfo, and use placement.json to rename and place sidecars beside the original media. Back up existing sidecars before explicitly replacing them. Original media is not included. original-*.nfo files are unchanged imported snapshots, not replacement sidecars.\nSupported fields: title, originaltitle, plot, year, premiered/aired, genre; episode season, episode, showtitle; selected TMDB uniqueid. Other imported XML elements, attributes and comments are preserved. XML formatting may change. Runtime remains imported. PNG/JPEG poster or episode thumb and fanart are included when available. A show-level poster or fanart belongs beside tvshow.nfo. For episodes, place show.nfo as tvshow.nfo in the original show folder to preserve a corrected series title; its unknown imported fields are retained too.\n";
     const blob = await new Bun.Archive(files).blob();
     authorize();
     return new Response(blob, { headers: { "Content-Type": "application/x-tar", "Content-Disposition": `attachment; filename="couch-metadata-${id}.tar"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
   }
   return {
     capture, apply,
-    importedValues(id: string): MetadataValues | null { const state = saved(id); return state ? JSON.parse(state.base) : null; },
     removeSource(sourceId: string) { db.query("DELETE FROM library_metadata WHERE itemId IN (SELECT id FROM library_items WHERE sourceId=?)").run(sourceId); },
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const authorize = () => {
@@ -178,6 +177,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
         }
         only("revision", "changes", "artwork", "clearMatch");
         if (value.clearMatch !== undefined && value.clearMatch !== true) throw new MetadataError("Invalid match correction.");
+        if (value.changes === undefined && (value.clearMatch || value.artwork !== undefined)) value.changes = {};
         const changes = value.changes && typeof value.changes === "object" && !Array.isArray(value.changes) && !Object.keys(value.changes).length && (value.clearMatch || value.artwork) ? {} : metadataChanges(value.changes, current.type === "episode");
         let image: VideoArtwork | null = null;
         if (value.artwork !== undefined) {

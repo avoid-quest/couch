@@ -7,7 +7,7 @@ a changed scan makes an older edit fail with HTTP 409. Correction values, origin
 artwork and the searchable catalog commit in one SQLite transaction. Source
 media and sidecars are never written. Rescans reapply saved per-field corrections.
 Cached metadata remains available when the source folder or provider is offline.
-Malformed, oversized or unreadable NFO reads keep the last valid import snapshot
+Malformed, oversized or unreadable NFO reads keep the last valid snapshot of that sidecar. Other valid episode or show sidecars still update. This preserves the import snapshot
 and video classification; they do not discard unknown fields before export.
 
 The supported editable fields are title, original title, plot, release year/date,
@@ -59,7 +59,7 @@ The archive contains:
 - `show.nfo` for episodes, with the corrected series title. Place it as
   `tvshow.nfo` in the original show folder, as described in the manifest.
 - Available PNG/JPEG poster or episode thumb and fanart. The manifest gives the
-  corresponding sidecar names. Show fanart belongs in the show folder.
+  corresponding sidecar names. Show fanart and a show-poster fallback belong in the show folder; a chosen episode image uses the episode thumb destination.
 - Byte-identical `original-*.nfo` import snapshots, which are reference copies.
 - `placement.json` with source basenames, destination instructions and value
   origins, plus a short README.

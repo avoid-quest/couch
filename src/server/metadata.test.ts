@@ -212,7 +212,7 @@ test("clearing a chosen match suppresses an imported TMDB ID in export and reimp
   await f.request(`items/${f.id}/match`, { revision: before.revision, previewId: preview.id });
   const matched = await f.view();
   expect(matched.match?.id).toBe(456);
-  expect((await f.request(`items/${f.id}/edit`, { revision: matched.revision, changes: {}, clearMatch: true })).status).toBe(200);
+  expect((await f.request(`items/${f.id}/edit`, { revision: matched.revision, clearMatch: true })).status).toBe(200);
   await f.library.scan(f.source.id);
   const cleared = await f.view();
   expect(cleared.match).toBeNull();
@@ -248,4 +248,64 @@ test("a failed episode NFO never promotes its manual series title into a sibling
   expect(await files.get("show.nfo")!.text()).toContain("<title>Imported series</title>");
   expect(await files.get("show.nfo")!.text()).not.toContain("Manual episode series");
   expect(await files.get("metadata.nfo")!.text()).toContain("<showtitle>Imported series</showtitle>");
+});
+
+
+test("standalone artwork corrections need no placeholder changes object", async () => {
+  const f = await fixture();
+  const before = await f.view();
+  expect((await f.request(`items/${f.id}/edit`, { revision: before.revision, artwork: cover.toString("base64") })).status).toBe(200);
+  const after = await f.view();
+  expect(after.values.title).toBe(before.values.title);
+  expect(after.values.artworkId).not.toBeNull();
+  expect(after.origins.artworkId).toBe("Manual");
+});
+
+test("an episode's imported show-poster fallback exports back to the show folder", async () => {
+  const f = await fixture(true);
+  await Bun.write(join(f.media, "poster.png"), cover);
+  await f.library.scan(f.source.id);
+  const current = await f.view();
+  const exported = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: current.revision })).arrayBuffer()).files();
+  expect(JSON.parse(await exported.get("placement.json")!.text()).placements["artwork-0.png"]).toBe("poster.png in the original show folder");
+  const imported = join(f.root, "poster-reimport"); await mkdir(imported);
+  await Bun.write(join(imported, "sample.mkv"), "episode fixture");
+  await Bun.write(join(imported, "sample.nfo"), exported.get("metadata.nfo")!);
+  await Bun.write(join(imported, "tvshow.nfo"), exported.get("show.nfo")!);
+  await Bun.write(join(imported, "poster.png"), exported.get("artwork-0.png")!);
+  const source = await f.library.addSource(imported); await f.library.scan(source.id);
+  const episode = f.library.search().items.find(item => item.id !== f.id)!;
+  expect(episode.video?.show?.artworkId).toBe(current.values.artworkId);
+  expect(episode.artworkId).toBe(current.values.artworkId);
+  // Explicitly choosing the same image makes it an episode correction instead.
+  expect((await f.request(`items/${f.id}/edit`, { revision: (await f.view()).revision, artwork: cover.toString("base64") })).status).toBe(200);
+  const manual = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: (await f.view()).revision })).arrayBuffer()).files();
+  expect(JSON.parse(await manual.get("placement.json")!.text()).placements["artwork-0.png"]).toBe("sample-thumb.png");
+});
+
+test("each failed NFO retains its own snapshot while the other sidecar can update", async () => {
+  const f = await fixture(true);
+  const originalShow = '<tvshow><title>Original series</title><unknown>Original show field</unknown></tvshow>';
+  await Bun.write(join(f.media, "tvshow.nfo"), originalShow); await f.library.scan(f.source.id);
+  await f.request(`items/${f.id}/edit`, { revision: (await f.view()).revision, changes: { title: "Manual title" } });
+  const updatedEpisode = '<episodedetails><title>Updated imported title</title><plot>Updated plot</plot><season>2</season><episode>3</episode><unknown>Updated episode field</unknown></episodedetails>';
+  await Bun.write(join(f.media, "sample.nfo"), updatedEpisode);
+  await Bun.write(join(f.media, "tvshow.nfo"), '<tvshow><broken>');
+  await f.library.scan(f.source.id);
+  expect((await f.view()).values).toMatchObject({ title: "Manual title", showTitle: "Original series", plot: "Updated plot", season: 2, episode: 3 });
+  let exported = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: (await f.view()).revision })).arrayBuffer()).files();
+  expect(await exported.get("metadata.nfo")!.text()).toContain("Updated episode field");
+  expect(await exported.get("show.nfo")!.text()).toContain("Original show field");
+  expect(await exported.get("original-0.nfo")!.text()).toBe(updatedEpisode);
+  await Bun.write(join(f.media, "sample.nfo"), '<episodedetails><broken>');
+  await Bun.write(join(f.media, "tvshow.nfo"), '<tvshow><title>Updated series</title><unknown>Updated show field</unknown></tvshow>');
+  await f.library.scan(f.source.id);
+  const current = await f.view();
+  expect(current.type).toBe("episode");
+  expect(current.values).toMatchObject({ title: "Manual title", showTitle: "Updated series", plot: "Updated plot", season: 2, episode: 3 });
+  expect(current.origins.showTitle).toBe("Imported/local"); expect(current.origins.title).toBe("Manual");
+  exported = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: current.revision })).arrayBuffer()).files();
+  expect(await exported.get("metadata.nfo")!.text()).toContain("Updated episode field");
+  expect(await exported.get("show.nfo")!.text()).toContain("Updated show field");
+  expect(await exported.get("original-0.nfo")!.text()).toBe(updatedEpisode);
 });
