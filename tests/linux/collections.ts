@@ -24,19 +24,16 @@ async function webdriver(path: string, body?: unknown, method = body === undefin
   return result.value;
 }
 const ui = new UiDriver(webdriver, () => sessionId);
-const navigationTrace: unknown[] = [];
-async function traceNavigation(phase: string) {
-  const state = await ui.execute(`
-    const list = document.querySelector('[aria-label="Collection preview"]');
-    const identify = element => element instanceof HTMLElement ? { node: window.collectionNavigationId(element), tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element), connected: element.isConnected, rect: element.getBoundingClientRect().toJSON() } : null;
-    return { focused: document.hasFocus(), visibility: document.visibilityState, active: identify(document.activeElement), list: list && { scroll: list.scrollTop, rect: list.getBoundingClientRect().toJSON(), rows: [...list.children].map(identify) }, events: window.collectionNavigationEvents ?? [] };
-  `);
-  navigationTrace.push({ phase, state });
-  await Bun.write(`${artifactDir}/navigation-trace.json`, JSON.stringify(navigationTrace, null, 2));
+async function persistNavigation(phase: string, final?: unknown) {
+  const events = await ui.execute("return window.collectionNavigationTrace ?? null");
+  if (events) await Bun.write(`${artifactDir}/navigation-trace.json`, JSON.stringify({ phase, final, events }, null, 2));
 }
 async function launch() {
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("native app connects", () => ui.execute("return document.querySelector('[role=status]')?.textContent === 'Connected'"), 30_000);
+  await until("unclaimed administrator Settings opens after launch", () => ui.execute("return document.querySelector('[role=dialog] h2')?.textContent === 'Settings'"));
+  await ui.button("Close", '[role="dialog"]');
+  await until("startup Settings dialog and overlay close", () => ui.execute("return !document.querySelector('[role=dialog][data-state=open], [data-slot=dialog-overlay][data-state=open]')"));
 }
 async function api(path: string, body?: unknown, index = 0, method = body === undefined ? "GET" : "POST") {
   const response = await fetch(`${origin}${path}`, { method, headers: { Origin: origin, Authorization: `Bearer ${clients[index]!.token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
@@ -109,7 +106,6 @@ try {
   await fixtures();
   await until("official Tauri driver ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   await launch();
-  await ui.key(keys.escape);
   await ui.click(".pair-shortcut");
   const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
   await ui.key(keys.escape);
@@ -182,32 +178,36 @@ try {
   assert.equal(traversal.items.length, 40);
   await open(ui); await ui.button("All collections", panel);
   await ui.execute(`
-    window.collectionNavigationEvents = [];
+    window.collectionNavigationTrace = [];
     const nodes = new WeakMap(); let nextNode = 0;
-    window.collectionNavigationId = element => { if (!nodes.has(element)) nodes.set(element, ++nextNode); return nodes.get(element); };
-    for (const type of ['keydown', 'keyup', 'focusin', 'focusout', 'focus', 'blur']) window.addEventListener(type, event => {
-      const element = event.target, list = document.querySelector('[aria-label="Collection preview"]');
-      window.collectionNavigationEvents.push({ type, key: event.key, prevented: event.defaultPrevented, time: performance.now(), focused: document.hasFocus(), target: element instanceof HTMLElement ? { node: window.collectionNavigationId(element), tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element) } : 'window' });
-      if (window.collectionNavigationEvents.length > 100) window.collectionNavigationEvents.shift();
-    });
+    const identify = element => {
+      if (!(element instanceof HTMLElement)) return null;
+      if (!nodes.has(element)) nodes.set(element, ++nextNode);
+      return { node: nodes.get(element), tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), connected: element.isConnected, rect: element.getBoundingClientRect().toJSON() };
+    };
+    const record = (event, phase) => {
+      const list = document.querySelector('[aria-label="Collection preview"]');
+      window.collectionNavigationTrace.push({ phase, type: event.type, key: event.key, prevented: event.defaultPrevented, time: performance.now(), focused: document.hasFocus(), visibility: document.visibilityState, target: identify(event.target), active: identify(document.activeElement), list: list && { scroll: list.scrollTop, rect: list.getBoundingClientRect().toJSON(), rows: [...list.children].map(identify) } });
+      if (window.collectionNavigationTrace.length > 100) window.collectionNavigationTrace.shift();
+    };
+    for (const type of ['keydown', 'keyup', 'focusin', 'focusout', 'focus', 'blur']) window.addEventListener(type, event => record(event, 'capture'), true);
+    for (const type of ['keydown', 'keyup']) window.addEventListener(type, event => record(event, 'bubble'));
   `);
   await ui.button("Long previewSaved filter", panel); await selected(ui, "Long preview");
   await ui.execute("const list = document.querySelector('[aria-label=\"Collection preview\"]'); list.scrollTop = 0; list.querySelector('li').focus();");
   for (let index = 1; index <= 12; index++) {
-    await traceNavigation(`before physical Down ${index}`);
     await ui.key(keys.down);
-    await traceNavigation(`after physical Down ${index}`);
     await until(`physical Down traverses preview row ${index + 1}`, () => ui.execute("return document.activeElement === document.querySelectorAll('[aria-label=\"Collection preview\"] li')[arguments[0]]", [index]));
   }
   const physicalScroll = await ui.execute("return document.querySelector('[aria-label=\"Collection preview\"]').scrollTop");
   assert.ok(physicalScroll > 0);
   for (let index = 13; index <= 24; index++) {
-    await traceNavigation(`before paired Down ${index}`);
     await clients[1]!.command({ type: "navigate", key: "down" });
-    await traceNavigation(`after paired Down ${index}`);
     await until(`paired Down traverses preview row ${index + 1}`, () => ui.execute("return document.activeElement === document.querySelectorAll('[aria-label=\"Collection preview\"] li')[arguments[0]]", [index]));
   }
-  assert.equal(await ui.execute("const list=document.querySelector('[aria-label=\"Collection preview\"]'), row=list.children[24], bounds=list.getBoundingClientRect(), rect=row.getBoundingClientRect(); return document.activeElement === row && list.scrollTop > arguments[0] && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1", [physicalScroll]), true, "Paired navigation scrolls farther and reveals its final preview row");
+  const finalNavigation = await ui.execute("const list=document.querySelector('[aria-label=\"Collection preview\"]'), row=list.children[24], bounds=list.getBoundingClientRect(), rect=row.getBoundingClientRect(); return { focused: document.activeElement === row, scroll: list.scrollTop, previousScroll: arguments[0], visible: rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1, row: rect.toJSON(), list: bounds.toJSON() }", [physicalScroll]);
+  await persistNavigation("traversal complete", finalNavigation);
+  assert.equal(finalNavigation.focused && finalNavigation.scroll > physicalScroll && finalNavigation.visible, true, "Paired navigation scrolls farther and reveals its final preview row");
   await capture("native-long-collection-navigation");
   await ui.button("All collections", panel); await ui.button("Film night2 movies", panel); await selected(ui, "Film night");
   await ui.button("Edit collection", panel);
@@ -250,7 +250,7 @@ try {
   await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "passed", checks, source: process.env.COUCH_QUALIFICATION_HEAD, manual: manual.id, music: music.id, previewWidths: [320, 375, 390, 768, 1024, 1440, 1920], editorWidths: [390], note: "Ubuntu software rendering and a null audio sink qualify software behavior only." }, null, 2));
 } catch (error) {
   await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "failed", checks, error: String(error) }, null, 2));
-  if (navigationTrace.length && sessionId) await traceNavigation("failure").catch(() => {});
+  if (sessionId) await persistNavigation("failure").catch(() => {});
   for (const [index, remote] of remotes.entries()) {
     await Bun.write(`${artifactDir}/phone-${index}-failure-dom.txt`, String(await remote.ui.execute("return document.body.innerText").catch(() => "")));
     await remote.screenshot(`phone-${index}-failure`).catch(() => {});
