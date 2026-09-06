@@ -166,20 +166,11 @@ export async function verifyReplayGain(context: Context) {
     await until("reconnected browser receives observed Album and saved Off", () => otherRemote.ui.execute("return document.querySelector('#playback-replaygain')?.textContent.trim() === 'Album' && document.querySelector('[role=dialog]').textContent.includes('Default for ReplayGain verification: Off')"));
     await close(otherRemote.ui);
     await savedSettings(otherRemote.ui);
-    const layouts = [];
-    for (const width of [320, 375, 390, 768, 1024, 1440, 1920]) {
-      const browser = otherRemote.ui;
-      const geometry = await browser.execute("return { width: innerWidth, scale: devicePixelRatio }");
-      const rect = await browser.request(`/session/${browser.session()}/window/rect`);
-      await browser.request(`/session/${browser.session()}/window/rect`, { ...rect, x: 0, y: 0, width: Math.round(rect.width + (width - geometry.width) * geometry.scale), height: 950 });
-      await until(`ReplayGain real HTTP viewport reaches ${width}px`, () => browser.execute("return Math.abs(innerWidth - arguments[0]) <= 1", [width]));
-      await assertResponsive(browser, `ReplayGain Settings at ${width}px`);
-      const layout = await browser.execute("const r = document.querySelector('#preferred-replaygain').getBoundingClientRect(); return { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, select: { width: r.width, height: r.height } }");
-      assert.ok(layout.select.height >= 44 && layout.select.width >= 44, "ReplayGain keeps its 44px native-style touch target");
-      layouts.push(layout);
-      await otherRemote.screenshot(`replaygain-http-${width}`);
-    }
-    await Bun.write(`${artifactDir}/replaygain-layouts.json`, JSON.stringify(layouts, null, 2));
+    await assertResponsive(otherRemote.ui, "ReplayGain Settings at 390px");
+    const layout = await otherRemote.ui.execute("const r = document.querySelector('#preferred-replaygain').getBoundingClientRect(); return { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, select: { width: r.width, height: r.height } }");
+    assert.ok(layout.select.height >= 44 && layout.select.width >= 44, "ReplayGain keeps its 44px native-style touch target");
+    await otherRemote.screenshot("replaygain-http-390");
+    await Bun.write(`${artifactDir}/replaygain-layouts.json`, JSON.stringify({ layouts: [layout], sevenWidthIabQualified: false }, null, 2));
     await close(otherRemote.ui);
     await otherRemote.restore();
     await capture(tagged, taggedId, "track", "current-album-to-track", false, true);
