@@ -7,6 +7,7 @@ let root: Root, window: Window, tick: () => void;
 let programGate: ReturnType<typeof Promise.withResolvers<void>> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 let recordingPage: any = null;
+let authority = "controller";
 const recordingPosts: { path: string; body: any }[] = [];
 const ranges: { start: number; end: number }[] = [], groups: string[] = [];
 let interval: ReturnType<typeof spyOn>, request: ReturnType<typeof spyOn>;
@@ -26,7 +27,7 @@ const click = async (label: string) => { await act(async () => button(label).cli
 beforeEach(async () => {
   process.env.TZ = "Europe/Rome";
   setSystemTime(new Date(2026, 9, 24, 23, 59, 30));
-  ranges.length = 0; groups.length = 0; recordingPosts.length = 0; recordingPage = null;
+  ranges.length = 0; groups.length = 0; recordingPosts.length = 0; recordingPage = null; authority = "controller";
   window = new Window({ url: "http://localhost" });
   for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -38,6 +39,8 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.pathname.startsWith("/api/recordings")) {
+      if (url.pathname.endsWith("/setup")) return Response.json({ configured: true, revision: 1, mappings: [] });
+      if (url.pathname.endsWith("/channels")) return Response.json({ channels: [] });
       if (init?.method === "POST") {
         const body = init.body ? JSON.parse(String(init.body)) : undefined; recordingPosts.push({ path: url.pathname, body });
         if (url.pathname.endsWith("/schedule")) return Response.json({ job: { title: body.title }, existing: false });
@@ -56,7 +59,7 @@ beforeEach(async () => {
       const filtered = channels.filter(channel => !group || channel.group === group);
       return Response.json({ channels: filtered, total: filtered.length, groups: ["all", "Sport"], sources: [{ id: "source", name: "Test", channelCount: 2, programCount: 5, updatedAt: 0, error: null }], at: Date.now() });
     }
-    return Response.json({ authority: "controller" });
+    return Response.json({ authority });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const { GuidePanel } = await import("./GuidePanel");
@@ -154,4 +157,34 @@ test("offline recording snapshots retain their status with disabled play, cancel
   for (const label of ["Refresh status", "Cancel pending recording", "Play on TV"]) expect(button(label).disabled).toBe(true);
   expect(document.body.textContent).toContain("This remote is offline");
   expect(document.body.textContent).toContain("Backend unavailable");
+});
+
+
+test("paired navigation cannot select a portalled recording setup option on the host", async () => {
+  authority = "host";
+  const { GuidePanel } = await import("./GuidePanel");
+  const { applyTvNavigation } = await import("./navigation");
+  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  await click("Recordings"); await click("Recording setup");
+  const trigger = document.querySelector<HTMLElement>("#recording-guide-channel")!;
+  await act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }))); await flush();
+  const listbox = document.querySelector<HTMLElement>('[role="listbox"]')!;
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  expect(dialog.contains(listbox)).toBe(false);
+  expect(listbox.querySelectorAll('[role="option"]').length).toBe(2);
+  // happy-dom has no layout; both real Radix portals must count as rendered.
+  const layout = spyOn(window.HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as ReturnType<typeof window.HTMLElement.prototype.getClientRects>);
+  try {
+    const option = listbox.querySelector<HTMLElement>('[role="option"]')!;
+    await act(async () => option.focus());
+    const focused = document.activeElement;
+    await act(async () => { applyTvNavigation("down"); applyTvNavigation("select"); }); await flush();
+    expect(document.activeElement).toBe(focused);
+    expect(document.querySelector('[role="listbox"]')).toBe(listbox);
+    expect(trigger.textContent).toBe("Select a guide channel");
+    // Physical pointer selection still works with the guard enabled.
+    await act(async () => { option.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); option.dispatchEvent(new MouseEvent("click", { bubbles: true })); }); await flush();
+    expect(trigger.textContent).toBe("News · news");
+    expect(recordingPosts).toEqual([]);
+  } finally { layout.mockRestore(); }
 });

@@ -56,7 +56,7 @@ export function RecordingsPanel({ remote, channels, connected, canPlay, host, or
   }
   return <Dialog open={open} onOpenChange={value => { setOpen(value); if (!value) { setSettings(false); setError(null); setNotice(""); } }}>
     <DialogTrigger asChild><Button variant="outline"><CircleDot aria-hidden="true" />Recordings</Button></DialogTrigger>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+    <DialogContent data-tv-local-only={host && settings || undefined} className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader><DialogTitle>Recordings</DialogTitle><DialogDescription>Schedule future programmes from the guide. Completed recordings play on the TV.</DialogDescription></DialogHeader>
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={!connected || !!pending || !remote.page?.configured} onClick={() => void mutate("refresh")}><RefreshCw aria-hidden="true" />Refresh status</Button>{administrator && <Button variant="outline" data-tv-local-only={host || undefined} disabled={!connected || !!pending} onClick={() => setSettings(value => !value)}><Settings2 aria-hidden="true" />{settings ? "Back to recordings" : "Recording setup"}</Button>}</div>
       {(error || remote.error || remote.page?.error) && <Alert variant="destructive"><AlertDescription>{error || remote.error || remote.page?.error}</AlertDescription></Alert>}
