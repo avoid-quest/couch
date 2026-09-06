@@ -245,11 +245,11 @@ export async function assertNativePortal(ui: UiDriver, selector: string, artifac
   }
 }
 
-export async function startHttpRemote(origin: string, code: string, artifacts: string, until: Wait, port = 4446) {
+export async function startHttpRemote(origin: string, code: string, artifacts: string, until: Wait, port = 4446, scale = 1.25) {
   const endpoint = `http://127.0.0.1:${port}`;
   const name = port === 4446 ? "http" : `http-${port}`;
   const windowClass = port === 4446 ? "CouchHttpTest" : `CouchHttpTest${port}`;
-  const browserDriver = Bun.spawn(["WebKitWebDriver", `--port=${port}`], { env: { ...process.env, GDK_DPI_SCALE: "1.25" }, stdout: Bun.file(`${artifacts}/${name}-driver.log`), stderr: Bun.file(`${artifacts}/${name}-browser.log`) });
+  const browserDriver = Bun.spawn(["WebKitWebDriver", `--port=${port}`], { env: { ...process.env, GDK_DPI_SCALE: String(scale) }, stdout: Bun.file(`${artifacts}/${name}-driver.log`), stderr: Bun.file(`${artifacts}/${name}-browser.log`) });
   let session = "";
   const request: Request = async (path, body, method = body === undefined ? "GET" : "POST") => {
     const response = await fetch(`${endpoint}${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
@@ -311,7 +311,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     await assertResponsive(ui, "Phone queue");
     return { ui, theme, close, refresh: () => request(`/session/${session}/refresh`, {}),
       minimize: () => request(`/session/${session}/window/minimize`, {}),
-      restore: () => request(`/session/${session}/window/rect`, { x: 1000, y: 0, width: 488, height: 900 }),
+      restore: () => request(`/session/${session}/window/rect`, { x: 1000, y: 0, width: Math.round(390 * scale), height: 900 }),
       screenshot: async (name: string) => { const png = await request(`/session/${session}/screenshot`); await Bun.write(`${artifacts}/${name}.png`, Buffer.from(png, "base64")); } };
   } catch (error) {
     const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), status: document.querySelector('.header-status')?.textContent, codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled, viewport: { width: innerWidth, height: innerHeight, scale: devicePixelRatio } }").catch(() => null);
