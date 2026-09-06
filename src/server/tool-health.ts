@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { ManagedToolHealth, ToolHealth, ToolObservation } from "../shared/tool-health";
@@ -66,7 +66,7 @@ export function createToolHealth(options: Options) {
   }
 
   async function collect(signal: AbortSignal): Promise<ToolHealth> {
-    const packages: { installed: ToolObservation; path: string; resolved: string | null; expectedVersion: string | null }[] = [];
+    const packages: { installed: ToolObservation; path: string; resolved: string | null; identity: { dev: number; ino: number } | null; expectedVersion: string | null }[] = [];
     for (const tool of managedTools) {
       const expected = expectedHelper(options.helpers, tool.file), packagePath = join(directory, tool.file);
       let installed: ToolObservation = observation("unknown", "Package integrity is available only for a packaged Ubuntu build with release helper metadata.");
@@ -79,22 +79,24 @@ export function createToolHealth(options: Options) {
           installed = code === "ENOENT" ? observation("missing", "The package tool is missing.") : code === "ELOOP" ? observation("corrupt", "The package tool was replaced by a symbolic link. It was not executed.") : observation("unknown", "The package tool could not be read within the check limits.");
         }
       }
-      packages.push({ installed, path: packagePath, resolved: signal.aborted ? null : await realpath(packagePath).catch(() => null), expectedVersion: expected?.version ?? null });
+      packages.push({ installed, path: packagePath, resolved: signal.aborted ? null : await realpath(packagePath).catch(() => null), identity: signal.aborted ? null : await stat(packagePath).catch(() => null), expectedVersion: expected?.version ?? null });
     }
     const tools: ManagedToolHealth[] = [];
     async function effectiveProbe(name: "yt-dlp" | "Deno" | "ffprobe", executable: string | null) {
       if (!executable) return { result: observation("missing", "The executable was not found."), packageIndex: -1 };
       if (signal.aborted) return { result: unknown(), packageIndex: -1 };
       const resolved = await realpath(executable).catch(() => null);
+      const identity = await stat(executable).catch(() => null);
       const exact = packages.findIndex(p => executable === p.path || resolved === p.path);
-      const packageIndex = exact >= 0 ? exact : packages.findIndex(p => !!resolved && resolved === p.resolved);
+      const packageIndex = exact >= 0 ? exact : packages.findIndex(p => !!resolved && resolved === p.resolved || !!identity && identity.dev === p.identity?.dev && identity.ino === p.identity.ino);
       const packaged = packages[packageIndex];
       const result = packaged ? managedTools[packageIndex]!.name === name ? packaged.installed : observation("error", "The effective executable points to a different package tool.") : resolved ? await probe(name, executable, signal) : observation("missing", "The effective executable was not found or could not be resolved.");
       return { result, packageIndex };
     }
     for (const [index, tool] of managedTools.entries()) {
       const packaged = packages[index]!;
-      const executable = env[tool.variable] || Bun.which(tool.file, { PATH: env.PATH ?? "/usr/bin:/bin" });
+      const override = env[tool.variable];
+      const executable = override?.includes("/") ? override : Bun.which(override || tool.file, { PATH: env.PATH ?? "/usr/bin:/bin" });
       const { result, packageIndex } = await effectiveProbe(tool.name, executable);
       const usesPackage = packageIndex === index;
       const source = usesPackage ? "package" : env[tool.variable] ? "environment" : executable ? "search-path" : "unavailable";

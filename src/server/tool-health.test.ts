@@ -1,6 +1,6 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -68,6 +68,32 @@ test("PATH fallback and aliases cannot hide or execute damaged package tools", a
   expect(report.tools[0]!.effective.status).toBe("error");
   expect(report.tools[1]!.effective.status).toBe("corrupt");
   expect(calls).toEqual([join(f.directory, "yt-dlp"), join(f.bin, "ffprobe")]);
+});
+
+test("hard links to corrupt package tools are blocked for overrides, cross-tool aliases and ffprobe", async () => {
+  const f = await fixture();
+  await writeFile(join(f.directory, "deno"), "corrupt");
+  await link(join(f.directory, "deno"), join(f.bin, "deno"));
+  await link(join(f.directory, "deno"), join(f.bin, "yt-dlp"));
+  await rm(join(f.bin, "ffprobe")); await link(join(f.directory, "deno"), join(f.bin, "ffprobe"));
+  const calls: string[] = [];
+  const report = await f.report({ env: { PATH: f.bin, COUCH_DENO: join(f.bin, "deno") }, command: async (path, args, env) => { calls.push(path); return runDiagnosticCommand(path, args, env); } });
+  expect(report.tools[0]!.effective.status).toBe("error");
+  expect(report.tools[1]!.effective.status).toBe("corrupt");
+  expect(report.tools[1]!.effective.source).toBe("package");
+  expect(report.ffprobe.status).toBe("error");
+  expect(calls).toEqual([join(f.directory, "yt-dlp")]);
+});
+
+test("bare environment overrides resolve through PATH and retain override provenance", async () => {
+  const f = await fixture();
+  await writeFile(join(f.bin, "custom-extractor"), "#!/bin/sh\necho 2026.01.01\n", { mode: 0o755 });
+  const report = await f.report({ env: { ...f.options.env, COUCH_YT_DLP: "custom-extractor" } });
+  expect(report.tools[0]!.installed.status).toBe("ready");
+  expect(report.tools[0]!.effective).toEqual({ source: "environment", status: "ready", version: "2026.01.01", error: null });
+  const missing = await f.report({ env: { ...f.options.env, COUCH_YT_DLP: "absent-extractor" } });
+  expect(missing.tools[0]!.effective.source).toBe("environment");
+  expect(missing.tools[0]!.effective.status).toBe("missing");
 });
 
 test("symlink replacement, oversized archives and unreadable version results do not become success", async () => {
