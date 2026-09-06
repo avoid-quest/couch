@@ -1,3 +1,4 @@
+import { loadedBuild } from "../shared/build";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -66,6 +67,20 @@ export function App() {
   const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
   const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
+  useEffect(() => {
+    if (!nativeHost || !credentials) return;
+    const stop = new AbortController();
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !stop.signal.aborted; attempt++) {
+        try {
+          const response = await fetch(`${credentials.origin}/api/maintenance/frontend`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ build: loadedBuild }), signal: AbortSignal.any([stop.signal, AbortSignal.timeout(2_000)]) });
+          if (response.ok || response.status === 404) return;
+        } catch { /* A trial stays closed until this loaded asset identity is received. */ }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    })();
+    return () => stop.abort();
+  }, [credentials]);
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   navigation.current = key => {
@@ -193,7 +208,7 @@ export function App() {
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   const statusLabel = booting ? "Starting player" : {
-    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected",
+    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected", "build-mismatch": "Refresh this page to load the TV’s current version",
   }[status];
 
   return (

@@ -8,11 +8,11 @@ from receipt import Rejected, SHA, enrolled_key, load_json
 from retention import identity, require_format, save, sync_directory
 
 TOKEN = re.compile(r"[a-f0-9]{32}\Z")
-FINISHED = {"succeeded", "failed"}
+FINISHED = {"succeeded", "failed", "restored"}
 
 
 def public(record):
-    return {key: record.get(key) for key in ("updateId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt")}
+    return {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision")}
 
 
 class Transactions:
@@ -30,8 +30,8 @@ class Transactions:
             self.record = pending[0] if pending else None
         if self.record:
             with storage.lock():
-                # Recovery after package mutation is intentionally owned by the
-                # later recovery layer. Never guess success or restart a loop.
+                # Interrupted mutation needs explicit SSH restoration or
+                # inspection. Never guess success or restart an install loop.
                 interrupted = self.record["phase"] not in ("accepted", "preflight")
                 self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
                 self.persist()
@@ -63,6 +63,17 @@ class Transactions:
                 return public(self.record)
             files = list(self.directory.glob("*.json"))
             return public(load_json(max(files, key=lambda path: path.stat().st_mtime_ns).read_bytes())) if files else None
+
+    def context(self):
+        """Private startup authority for the app, never a phone status response."""
+        with self.mutex:
+            if not self.record or self.record["phase"] in FINISHED:
+                return None
+            value = dict(self.record)
+            if value["phase"] == "restoring":
+                value.update(value["restoration"])
+                value["phase"] = {"trial": "trial", "committing": "committing"}.get(value["stage"], "restoring")
+            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt")}
 
     def submit(self, request):
         if not isinstance(request, dict) or set(request) != {"candidateId", "requestId", "confirmInterrupt"} or not isinstance(request["candidateId"], str) or not SHA.fullmatch(request["candidateId"]) or not isinstance(request["requestId"], str) or not TOKEN.fullmatch(request["requestId"]) or type(request["confirmInterrupt"]) is not bool:

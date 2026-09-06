@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "../linux/build";
 import { strict as assert } from "node:assert";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -110,7 +111,7 @@ try {
   const connect = async () => {
     state = undefined;
     const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-    socket = new BunWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${previousToken}`, { headers: { Origin: origin } });
+    socket = new BunWebSocket(await remoteSocketUrl(origin, previousToken), { headers: { Origin: origin } });
     socket.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "state") state = message.state; else if (message.type === "result") commands.get(message.requestId)?.(message); };
     await until("Existing remote connects to the one native coordinator", async () => state);
   };

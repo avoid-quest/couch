@@ -17,7 +17,7 @@ if (version !== tauri.version || version !== cargo.package.version) throw new Er
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
 const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim() !== "";
 const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? await Bun.file("src-tauri/resources/tools.json").json() : null;
-const buildInfo = JSON.stringify({ version: releaseVersion(version, process.env.COUCH_RELEASE_ID), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, bun: Bun.version, packaged: helpers !== null, helpers });
+const buildInfo = JSON.stringify({ version: releaseVersion(version, process.env.COUCH_RELEASE_ID), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged: helpers !== null, helpers });
 await Bun.write("src-tauri/build-info.json", buildInfo);
 
 await rm("dist", { recursive: true, force: true });
@@ -27,6 +27,7 @@ const frontend = await Bun.build({
   entrypoints: ["src/client/index.html"],
   outdir: "dist",
   target: "browser",
+  define: { "process.env.COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
   minify: true,
   plugins: [tailwind],
 });

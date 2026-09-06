@@ -22,6 +22,7 @@ import { PairedRemotes } from "./PairedRemotes";
 import { UpdatesSettings } from "./UpdatesSettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { knownConnection } from "./connection";
+import { readUpdateRequest } from "./update-request";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
@@ -72,6 +73,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   const origin = credentials?.origin;
   const token = credentials?.token;
   const administrator = !host && identity?.authority === "administrator";
+  useEffect(() => { if (origin && administrator && readUpdateRequest(origin)) { setSection("updates"); setOpen(true); } }, [origin, administrator]);
   const canWrite = connected && !loading && !pending;
   const urls = host?.urls ?? details?.urls ?? [];
   const setupUrl = urls[0];

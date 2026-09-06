@@ -18,6 +18,7 @@ pub enum Request {
     Layout(VideoRect),
     Observe,
     Diagnostics(String),
+    Readiness { nonce: String, deadline: std::time::Instant },
     Shutdown,
 }
 
@@ -32,6 +33,16 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             Ok(Request::Observe | Request::Command(PlaybackCommand::Stop))
         );
         let result = match request {
+            Ok(Request::Readiness { nonce, deadline }) => {
+                let ok = player.readiness(&app, deadline).is_ok();
+                let build = serde_json::from_str::<serde_json::Value>(
+                    option_env!("COUCH_BUILD_INFO").unwrap_or("{}"),
+                ).unwrap_or(serde_json::Value::Null);
+                app.state::<Host>().report_message(serde_json::json!({
+                    "type": "readiness", "nonce": nonce, "ok": ok, "build": build,
+                }));
+                continue;
+            }
             Ok(Request::Diagnostics(request_id)) => {
                 // A slow display/property query must not occupy the playback worker.
                 // Only one query may remain in flight, even after the pipe timeout.
@@ -76,6 +87,22 @@ struct Player {
 }
 
 impl Player {
+    fn readiness(&self, app: &AppHandle, deadline: std::time::Instant) -> Result<(), String> {
+        if self.state.playback_id.is_some() || std::time::Instant::now() >= deadline {
+            return Err("Native readiness requires an idle player and a current request".into());
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use tauri_plugin_video::VideoExt;
+            app.video().desktop().readiness_native(deadline).map_err(|error| error.to_string())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = app;
+            Err("Native update readiness requires the Ubuntu player".into())
+        }
+    }
+
     fn command(&mut self, app: &AppHandle, command: PlaybackCommand) -> Result<(), String> {
         match command {
             PlaybackCommand::Load {

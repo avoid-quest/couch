@@ -248,6 +248,14 @@ pub fn run() {
                                 Ok(SidecarMessage::Playback { command }) => {
                                     let _ = host.player.send(player::Request::Command(command));
                                 }
+                                Ok(SidecarMessage::Readiness { nonce }) => {
+                                    if nonce.len() == 32 && nonce.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                                        let _ = host.player.send(player::Request::Readiness {
+                                            nonce,
+                                            deadline: std::time::Instant::now() + std::time::Duration::from_secs(2),
+                                        });
+                                    }
+                                }
                                 Ok(SidecarMessage::Diagnostics { request_id }) => {
                                     if uuid::Uuid::parse_str(&request_id).is_ok() {
                                         let _ = host.player.send(player::Request::Diagnostics(request_id));

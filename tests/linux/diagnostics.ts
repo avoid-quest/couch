@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import type { Diagnostics } from "../../src/shared/diagnostics";
 import type { SessionState } from "../../src/shared/protocol";
@@ -53,7 +54,7 @@ try {
   await phone.ui.key(keys.escape); await phone.minimize();
   let state: SessionState | null = null;
   const NativeWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-  socket = new NativeWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${guest}`, { headers: { origin } });
+  socket = new NativeWebSocket(await remoteSocketUrl(origin, guest), { headers: { origin } });
   socket.onmessage = event => { const message = JSON.parse(String(event.data)); if (message.type === "state") state = message.state; };
   await until("ordinary remote receives player state", () => state !== null);
   await tv.type("#media-url", "http://127.0.0.1:4200/fixture.mkv");

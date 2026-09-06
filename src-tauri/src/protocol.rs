@@ -22,6 +22,9 @@ pub enum SidecarMessage {
     Playback {
         command: PlaybackCommand,
     },
+    Readiness {
+        nonce: String,
+    },
     Diagnostics {
         #[serde(rename = "requestId")]
         request_id: String,

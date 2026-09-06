@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""Operator receipt enrollment. The phone-update worker is not activated yet."""
+"""Administrator receipt enrollment, phone-update activation and explicit trial restoration."""
 import argparse
 import json
 import os
@@ -8,12 +8,16 @@ import sys
 sys.path.insert(0, "/usr/lib/couch-appliance/updater")
 from receipt import Rejected
 from retention import Retention
+from operator_client import enable, request
+from transactions import TOKEN
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status")
+    commands.add_parser("enable")
+    commands.add_parser("restore").add_argument("update_id")
     commands.add_parser("enroll-current").add_argument("receipt")
     args = parser.parse_args()
     if os.geteuid() != 0:
@@ -21,7 +25,16 @@ def main():
     os.umask(0o077)
     try:
         storage = Retention()
-        result = storage.enroll(args.receipt) if args.command == "enroll-current" else {"current": storage.read("current.json"), "active": storage.read("active.json"), "phoneUpdates": "unavailable"}
+        if args.command == "enroll-current":
+            result = storage.enroll(args.receipt)
+        elif args.command == "enable":
+            result = enable(storage)
+        elif args.command == "restore":
+            if not TOKEN.fullmatch(args.update_id):
+                raise Rejected("Use the exact updateId recorded by status.")
+            result = request({"op": "restore", "updateId": args.update_id})
+        else:
+            result = {"current": storage.read("current.json"), "active": storage.read("active.json"), "phoneUpdates": "enabled" if os.path.isfile("/etc/couch/manual-updates.enabled") else "disabled"}
         print(json.dumps(result, indent=2))
     except (Rejected, OSError) as error:
         print(str(error) if isinstance(error, Rejected) else "Update storage could not be accessed safely.", file=sys.stderr)

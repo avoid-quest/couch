@@ -65,3 +65,18 @@ test("unpackaged installation reports unavailable and never accepts a fake downl
   expect((await state(updates)).status).toBe("unavailable");
   expect((await updates.handle(request("/stage", { candidateId: candidate.summary.id }), admin)).status).toBe(409);
 });
+
+
+test("trial startup does not run background update producers until admission opens", async () => {
+  let open = false, checks = 0;
+  const directory = await mkdtemp(join(tmpdir(), "couch-trial-updates-"));
+  const updates = createUpdates(directory, { version: "1", revision: "a".repeat(40) }, { check: async () => { checks++; return null; }, stage: async () => {} } as unknown as UpdateFeed, 5, () => open);
+  try {
+    await Bun.sleep(20);
+    expect(checks).toBe(0);
+    expect((await updates.handle(request("/check", {}), admin)).status).toBe(503);
+    open = true;
+    await Bun.sleep(20);
+    expect(checks).toBeGreaterThan(0);
+  } finally { await updates.close(); await rm(directory, { recursive: true, force: true }); }
+});

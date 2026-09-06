@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import { mkdir, rename } from "node:fs/promises";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
@@ -69,9 +70,9 @@ class Remote {
 
   constructor(readonly token: string) { this.connect(); }
 
-  connect() {
+  async connect() {
     this.state = null;
-    this.socket = new BunWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${this.token}`, { headers: { origin } });
+    this.socket = new BunWebSocket(await remoteSocketUrl(origin, this.token), { headers: { origin } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data)) as ServerMessage;
       if (message.type === "state") this.state = message.state;

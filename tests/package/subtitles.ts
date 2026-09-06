@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "../linux/build";
 import { strict as assert } from "node:assert";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -44,10 +45,10 @@ class Remote {
   socket!: WebSocket;
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
   constructor(readonly token: string) { this.connect(); }
-  connect() {
+  async connect() {
     this.state = null;
     const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-    this.socket = new Socket(`${origin.replace("http", "ws")}/api/ws?token=${this.token}`, { headers: { origin } });
+    this.socket = new Socket(await remoteSocketUrl(origin, this.token), { headers: { origin } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data));
       if (message.type === "state") this.state = message.state;

@@ -71,6 +71,40 @@ impl<R: Runtime> DesktopVideo<R> {
         self.run_on_main(move |_| linux::stats(payload))
     }
 
+    // Readiness shares GTK's existing singleton and never opens a media source.
+    #[cfg(target_os = "linux")]
+    pub fn readiness_native(&self, deadline: std::time::Instant) -> crate::Result<()> {
+        #[cfg(feature = "mpv-runtime")]
+        {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            self.main_sender.try_send(Box::new(move |app| {
+                if std::time::Instant::now() >= deadline {
+                    return;
+                }
+                // A blocked libmpv initializer cannot leave a trial's GTK thread
+                // hung forever. This watchdog runs outside that owning thread.
+                let (completed, watchdog) = mpsc::sync_channel(1);
+                std::thread::spawn(move || {
+                    if watchdog.recv_timeout(Duration::from_secs(3)).is_err() {
+                        std::process::exit(1);
+                    }
+                });
+                let result = linux_mpv::readiness(app);
+                let _ = completed.send(());
+                if std::time::Instant::now() < deadline {
+                    let _ = sender.send(result);
+                }
+            })).map_err(|_| crate::Error::Pipeline("native readiness queue is full".into()))?;
+            receiver.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .map_err(|_| crate::Error::Pipeline("native readiness timed out".into()))?
+        }
+        #[cfg(not(feature = "mpv-runtime"))]
+        {
+            let _ = deadline;
+            Err(crate::Error::Pipeline("libmpv readiness is unavailable".into()))
+        }
+    }
+
     // Private host diagnostics use a fixed property allowlist, never media URLs or headers.
     pub fn diagnostic_properties(&self, payload: NativeSessionRequest) -> crate::Result<std::collections::BTreeMap<String, Option<String>>> {
         #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
@@ -1258,7 +1292,8 @@ mod linux_mpv {
                 load_source(player, &payload)?;
                 return snapshot(player);
             }
-            let mut player = create_player(&payload)?;
+            let mut player = create_player()?;
+            load_source(&mut player, &payload)?;
             if std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some() {
                 eprintln!("mpv init: collecting initial snapshot");
             }
@@ -1271,7 +1306,23 @@ mod linux_mpv {
         })
     }
 
-    fn create_player(payload: &NativeOpenRequest) -> Result<MpvPlayer> {
+    pub fn readiness<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+        super::linux_surface::ensure_host(app)?;
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if slot.is_none() {
+                *slot = Some(create_player()?);
+            }
+            let player = slot.as_ref().unwrap();
+            if !player.session_key.is_empty() {
+                return Err(Error::Pipeline("native readiness cannot interrupt a media session".into()));
+            }
+            player.mpv.get_property::<String>("mpv-version").map_err(mpv_error)?;
+            Ok(())
+        })
+    }
+
+    fn create_player() -> Result<MpvPlayer> {
         let trace = std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some();
         if trace {
             eprintln!("mpv init: begin");
@@ -1304,10 +1355,10 @@ mod linux_mpv {
         let widget = gl_area.clone().upcast::<gtk::Widget>();
         super::linux_surface::place_widget(
             &widget,
-            payload.x,
-            payload.y,
-            payload.width,
-            payload.height,
+            -2.0,
+            -2.0,
+            1.0,
+            1.0,
         )?;
         gl_area.realize();
         gl_area.make_current();
@@ -1446,7 +1497,7 @@ mod linux_mpv {
         // for a consumer after its immediate callback races this connection.
         gl_area.queue_render();
 
-        let mut player = MpvPlayer {
+        let player = MpvPlayer {
             session_key: String::new(),
             cue: false,
             radio: false,
@@ -1477,13 +1528,7 @@ mod linux_mpv {
             default_live_start,
             error: render_error,
         };
-        if trace {
-            eprintln!("mpv init: loading source");
-        }
-        load_source(&mut player, payload)?;
-        if trace {
-            eprintln!("mpv init: source command complete");
-        }
+        player.widget.hide();
         Ok(player)
     }
 

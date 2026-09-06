@@ -30,7 +30,7 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); window.happyDOM.abort();
+  await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); }); request.mockRestore(); window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
@@ -88,4 +88,72 @@ test("channel picker sends Preview separately from the manual installation polic
   expect(preview).toBeDefined();
   await act(async () => { preview.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); preview.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
   expect(calls.find(call => call.url.endsWith("/channel"))?.body).toEqual({ channel: "preview" });
+});
+
+test("install persists its identity before sending and requires an explicit restart action", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null };
+  request.mockImplementation((async (input, init) => {
+    if (String(input).endsWith("/api/tools")) return Response.json({}, { status: 503 });
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ url: String(input), body, signal: init?.signal as AbortSignal });
+    if (String(input).endsWith("/install")) {
+      const saved = JSON.parse(window.localStorage.getItem("couch.update-request:http://localhost")!);
+      expect(saved.requestId).toBe(body.install.requestId);
+      return Response.json({ transaction: { updateId: "c".repeat(32), requestId: saved.requestId, candidateId: saved.candidateId, version: saved.version, revision: saved.revision, phase: "accepted", error: null, createdAt: 1, updatedAt: 1 } });
+    }
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Install update").click());
+  expect(calls.filter(call => call.url.endsWith("/install"))).toHaveLength(0);
+  expect(document.body.textContent).toContain("Other remotes will disconnect");
+  await act(async () => button("Install and restart").click());
+  const sent = calls.find(call => call.url.endsWith("/install"))!.body as { install: { requestId: string; candidateId: string; confirmInterrupt: boolean } };
+  expect(sent.install.requestId).toMatch(/^[a-f0-9]{32}$/);
+  expect(sent.install.candidateId).toBe(report.candidate!.id);
+  expect(sent.install.confirmInterrupt).toBe(false);
+});
+
+test("a lost install reply keeps its retry identity through disconnect without replaying installation", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null };
+  const installed: unknown[] = [];
+  request.mockImplementation((async (input, init) => {
+    if (String(input).endsWith("/api/tools")) return Response.json({}, { status: 503 });
+    if (String(input).endsWith("/install")) { installed.push(JSON.parse(String(init?.body))); throw new Error("disconnected"); }
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Install update").click());
+  await act(async () => button("Install and restart").click());
+  await render(false);
+  expect(document.body.textContent).toContain("The TV is restarting or offline");
+  await render(true);
+  expect(installed).toHaveLength(1);
+  await act(async () => button("Retry same request").click());
+  expect(installed).toHaveLength(2);
+  expect(installed[0]).toEqual(installed[1]);
+});
+
+
+test("an older finished transaction cannot erase a newly saved request whose delivery is unknown", async () => {
+  const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };
+  window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify(saved));
+  report.installation = { enabled: true, transaction: { updateId: "c".repeat(32), requestId: "d".repeat(32), candidateId: "e".repeat(64), version: "old", revision: "old", phase: "succeeded", error: null, createdAt: 1, updatedAt: 1 } };
+  await render(false);
+  expect(JSON.parse(window.localStorage.getItem("couch.update-request:http://localhost")!)).toEqual(saved);
+  expect(button("Retry same request")).toBeTruthy();
+  expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
+});
+
+
+test("a refreshed administrator page reopens Updates for its durable pending request", async () => {
+  const { Settings } = await import("./Settings");
+  window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify({ candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision }));
+  await act(async () => root.render(<Settings credentials={{ origin: "http://localhost", token: "admin" }} connected={false} status="reconnecting" identity={{ authority: "administrator", controller: null, claimAvailable: false }} host={null} details={null} administratorClaimed pairingRequired={false} reachable={false} name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
+  expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+  expect(document.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Updates");
+  expect(document.body.textContent).toContain("Retry same request");
+  expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
 });

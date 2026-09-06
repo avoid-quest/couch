@@ -1,5 +1,7 @@
 """Ubuntu operations with fixed service, package and credential boundaries."""
 import os
+import fcntl
+from contextlib import contextmanager
 from pathlib import Path
 import pwd
 import shutil
@@ -158,3 +160,51 @@ class Ubuntu:
     def commit(self, record):
         if self.coordinator("commit", record).get("admissionOpen") is not True:
             raise Rejected("The new app did not confirm completion of maintenance.")
+
+    def stop_for_restore(self):
+        self.systemctl("mask", "--runtime", "couch-tv.service")
+        self.systemctl("stop", "couch-tv.service")
+        if self.systemctl("show", "couch-tv.service", "--property=MainPID", "--value") != "0" or self.systemctl("show", "couch-tv.service", "--property=ActiveState", "--value") not in ("inactive", "failed"):
+            raise Rejected("Stop the full Couch service before restoring its data.")
+        group = self.systemctl("show", "couch-tv.service", "--property=ControlGroup", "--value")
+        if group and (not group.startswith("/") or ".." in Path(group).parts or any(path.read_text().strip() for path in (Path("/sys/fs/cgroup") / group.lstrip("/")).rglob("cgroup.procs"))):
+            raise Rejected("Couch writers remain in the service process group.")
+
+    @contextmanager
+    def package_lock(self):
+        descriptors = []
+        try:
+            for path in ("/var/lib/dpkg/lock-frontend", "/var/lib/dpkg/lock"):
+                descriptor = os.open(path, os.O_RDWR | os.O_NOFOLLOW)
+                descriptors.append(descriptor)
+                fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            yield
+        except BlockingIOError as error:
+            raise Rejected("Another package operation is running. Retry SSH restoration after it finishes.") from error
+        finally:
+            for descriptor in descriptors:
+                os.close(descriptor)
+
+    def unchanged_previous(self, previous):
+        with self.package_lock():
+            try:
+                current = installed()
+                return not run("/usr/bin/dpkg", "--audit").strip() and all(current.get(key) == previous[key] for key in ("version", "revision", "dataFormat"))
+            except Rejected:
+                return False
+
+    def package_health(self):
+        if run("/usr/bin/dpkg", "--audit").strip():
+            raise Rejected("Repair the package manager through SSH before continuing restoration.")
+
+    def restore_packages(self, record, packages):
+        self.apt(record, ["--allow-downgrades", "install", *map(str, packages)])
+        self.package_health()
+
+    def restore_data(self, backup):
+        from recovery import restore_data
+        return restore_data(self.data(), backup)
+
+    def start_restored_trial(self, record):
+        self.systemctl("unmask", "--runtime", "couch-tv.service")
+        self.start_trial(record)

@@ -1,4 +1,4 @@
-"""Socket-activated root worker. Shipped disabled until the real app protocol lands."""
+"""Socket-activated root worker. Shipped disabled until explicit SSH activation."""
 import json
 import os
 import pwd
@@ -15,6 +15,7 @@ from retention import Retention
 from transactions import Transactions
 from ubuntu import Ubuntu
 from maintenance import remaining
+from recovery import restore
 
 
 class Handler(socketserver.BaseRequestHandler):
@@ -42,6 +43,8 @@ class Handler(socketserver.BaseRequestHandler):
             operation = request.pop("op", None)
             if operation == "status" and set(request) <= {"requestId"}:
                 result = {"transaction": self.server.transactions.status(request.get("requestId"))}
+            elif operation == "context" and not request:
+                result = {"context": self.server.transactions.context()}
             elif operation == "install":
                 record, start = self.server.transactions.submit(request)
                 # Start independently of whether the caller receives this reply.
@@ -49,6 +52,8 @@ class Handler(socketserver.BaseRequestHandler):
                     self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)
                     self.server.worker.start()
                 result = {"transaction": record}
+            elif operation == "restore" and uid == 0 and set(request) == {"updateId"}:
+                result = {"transaction": restore(self.server.transactions, request["updateId"])}
             elif operation == "hook" and uid == 0 and set(request) == {"updateId"}:
                 result = self.server.transactions.hook(request["updateId"], pid)
             else:

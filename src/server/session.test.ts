@@ -147,8 +147,71 @@ test.each(["player loss", "profile change", "shutdown"])("%s cancels pending cat
   if (transition === "player loss") { session.observe({ ...idle, status: "unavailable" }); session.observe(idle); }
   if (transition === "profile change") session.selectProfile(session.createProfile("Guest").id);
   if (transition === "shutdown") session.close();
-  session.command({ type: "enqueue", entry: { id: "late", title: "Late", source: "https://media.example/late" } });
+  const enqueue = () => session.command({ type: "enqueue", entry: { id: "late", title: "Late", source: "https://media.example/late" } });
+  if (transition === "shutdown") expect(enqueue).toThrow("update");
+  else enqueue();
   expect(() => session.playIfCurrent(pending, "late")).toThrow("Playback was canceled");
   expect(commands.filter(command => command.type === "load")).toEqual([]);
   store.close();
+});
+
+test("maintenance saves the last observation and suppresses later EOF, controls and native callbacks", () => {
+  const store = openStore(":memory:");
+  const commands: PlaybackCommand[] = [];
+  let observations = 0;
+  const session = createSession(store, command => commands.push(command), () => {}, { now: () => 1_000, observe: () => observations++ });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "file:///one.mp4" }, playNow: true });
+    session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "file:///two.mp4" } });
+    const player = { ...idle, playbackId: session.state.player.playbackId, status: "playing" as const, duration: 100, position: 12 };
+    session.observe(player);
+    session.observe({ ...player, position: 17 });
+    session.quiesce();
+    const saved = store.history("household");
+    expect(saved[0]?.position).toBe(17);
+    const previous = [commands.length, observations];
+    session.observe({ ...player, status: "ended", position: 100 });
+    session.observe({ ...idle, status: "unavailable" });
+    expect([commands.length, observations]).toEqual(previous);
+    expect(() => session.command({ type: "volume", volume: 1 })).toThrow("update");
+    expect(() => session.createProfile("Late")).toThrow("update");
+  } finally { session.close(); store.close(); }
+});
+
+test("maintenance propagates a failed progress checkpoint and keeps callbacks stopped", () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {}, { now: () => 1_000 });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "file:///one.mp4" }, playNow: true });
+    const player = { ...idle, playbackId: session.state.player.playbackId, status: "playing" as const, duration: 100, position: 12 };
+    session.observe(player);
+    session.observe({ ...player, position: 17 });
+    const save = store.saveProgress;
+    store.saveProgress = () => { throw new Error("disk full"); };
+    expect(() => session.quiesce()).toThrow("Could not save viewing progress");
+    expect(() => session.command({ type: "stop" })).toThrow("update");
+    session.observe({ ...player, position: 99 });
+    store.saveProgress = save;
+    session.quiesce();
+    expect(store.history("household")[0]?.position).toBe(17);
+  } finally { session.close(); store.close(); }
+});
+
+test("a source resolution finishing after maintenance cannot persist metadata or load media", async () => {
+  const store = openStore(":memory:");
+  const source = Promise.withResolvers<MediaSource>();
+  const commands: PlaybackCommand[] = [];
+  const session = createSession(store, command => commands.push(command), () => {}, { resolveSource: () => source.promise });
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://example.com/one" }, playNow: true });
+    session.quiesce();
+    source.resolve({ source: "https://example.com/resolved", metadata: { duration: 123 } });
+    await source.promise;
+    await Promise.resolve();
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+    expect(store.queue[0]?.duration).toBeUndefined();
+  } finally { session.close(); store.close(); }
 });

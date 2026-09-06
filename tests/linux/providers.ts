@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import type { Action, QueueEntry, ServerMessage, SessionState } from "../../src/shared/protocol";
 import type { ProviderId, ProviderItem } from "../../src/shared/providers";
@@ -78,9 +79,9 @@ async function api(path: string, index = 0) {
   assert.equal(response.status, 200);
   return response.json() as Promise<any>;
 }
-function connect(remote: typeof remotes[number]) {
+async function connect(remote: typeof remotes[number]) {
   remote.state = null;
-  remote.socket = new BunWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${remote.token}`, { headers: { origin } });
+  remote.socket = new BunWebSocket(await remoteSocketUrl(origin, remote.token), { headers: { origin } });
   remote.socket.onmessage = event => {
     const message = JSON.parse(String(event.data)) as ServerMessage;
     if (message.type === "state") remote.state = message.state;
