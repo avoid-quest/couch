@@ -99,6 +99,7 @@ export class UiDriver {
 
   async type(selector: string, text: string) {
     const id = await this.element(selector);
+    await this.clickElement(id);
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});
     if (text) await this.request(`/session/${this.session()}/element/${id}/value`, { text });
   }
@@ -218,19 +219,28 @@ export async function assertNativePortal(ui: UiDriver, selector: string, artifac
   assert.ok(sample.overlapsVideo && sample.height > 0, `${name} overlaps the native video aperture`);
   assert.equal(sample.color[3], 255, `${name} has an opaque background`);
   const path = `${artifacts}/${name}.png`;
-  const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", path], { stdout: "ignore", stderr: "inherit" });
-  assert.equal(await capture.exited, 0);
-  const decode = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdout: "pipe", stderr: "inherit" });
-  const pixels = new Uint8Array(await new Response(decode.stdout).arrayBuffer());
-  assert.equal(await decode.exited, 0);
-  let matches = 0;
-  for (let y = sample.y; y < sample.y + sample.height; y++) for (let x = sample.x; x < sample.x + sample.width; x++) {
-    const offset = (y * 1600 + x) * 3;
-    if (sample.color.slice(0, 3).every((value: number, index: number) => Math.abs(pixels[offset + index]! - value) <= 2)) matches++;
+  const started = performance.now();
+  const attempts: { elapsedMs: number; matches: number }[] = [];
+  for (;;) {
+    const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", path], { stdout: "ignore", stderr: "inherit" });
+    assert.equal(await capture.exited, 0);
+    const decode = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdout: "pipe", stderr: "inherit" });
+    const pixels = new Uint8Array(await new Response(decode.stdout).arrayBuffer());
+    assert.equal(await decode.exited, 0);
+    let matches = 0;
+    for (let y = sample.y; y < sample.y + sample.height; y++) for (let x = sample.x; x < sample.x + sample.width; x++) {
+      const offset = (y * 1600 + x) * 3;
+      if (sample.color.slice(0, 3).every((value: number, index: number) => Math.abs(pixels[offset + index]! - value) <= 2)) matches++;
+    }
+    attempts.push({ elapsedMs: performance.now() - started, matches });
+    await Bun.write(`${artifacts}/${name}-paint.json`, JSON.stringify({ sample, minimumRatio: 0.75, attempts }, null, 2));
+    // Native paint can follow stable DOM geometry and finished CSS animations.
+    // The narrow edge avoids controls; a dialog footer can have its own background.
+    if (matches >= sample.width * sample.height * 0.75) return;
+    if (attempts.length === 1) await Bun.write(`${artifacts}/${name}-first.png`, Bun.file(path));
+    assert.ok(performance.now() - started < 3_000, `${name} paints above native video (${matches}/${sample.width * sample.height} background pixels)`);
+    await Bun.sleep(50);
   }
-  // The narrow inside edge avoids text and inputs. The dialog footer can have
-  // its own background; the bright native fixture has none of these gray pixels.
-  assert.ok(matches >= sample.width * sample.height * 0.75, `${name} paints above native video (${matches}/${sample.width * sample.height} background pixels)`);
 }
 
 export async function startHttpRemote(origin: string, code: string, artifacts: string, until: Wait, port = 4446) {
