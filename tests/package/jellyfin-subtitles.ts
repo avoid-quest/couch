@@ -7,16 +7,16 @@ import { sha256, startSubtitleFixture } from "./jellyfin-subtitle-fixture";
 
 // Opt-in: the named disposable runtime must already contain the exact reviewed package.
 const container = process.env.JELLYFIN_NATIVE_CONTAINER!;
+assert.ok(container && process.env.JELLYFIN_SUBTITLE_EVIDENCE && process.env.SUBTITLE_CORPUS && process.env.JELLYFIN_EXPECTED_REVISION, "Set the runtime, private evidence directory, corpus and reviewed revision");
 const artifacts = resolve(process.env.JELLYFIN_SUBTITLE_EVIDENCE!);
 const corpus = resolve(process.env.SUBTITLE_CORPUS!);
 const port = Number(process.env.JELLYFIN_NATIVE_PORT ?? 45500);
 const origin = `http://127.0.0.1:${port}`;
 const nativePort = Number(process.env.JELLYFIN_NATIVE_DRIVER ?? 45544), phonePort = Number(process.env.JELLYFIN_PHONE_DRIVER ?? 45545);
-assert.ok(container && process.env.JELLYFIN_SUBTITLE_EVIDENCE && process.env.SUBTITLE_CORPUS);
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
 const checks: string[] = [], measurements: unknown[] = [];
 const record = (label: string) => { checks.push(label); console.log(`PASS ${label}`); };
-const run = (...args: string[]) => { const result = Bun.spawnSync(args, { stderr: "inherit" }); assert.equal(result.exitCode, 0, args[0]); return result.stdout; };
+const run = (...args: string[]) => { const result = Bun.spawnSync(args, { stderr: "inherit", timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }); assert.equal(result.exitCode, 0, args[0]); return result.stdout; };
 const exec = (...args: string[]) => run("docker", "exec", "-u", "subtitle", "-e", "DISPLAY=:99", container, ...args);
 async function until(label: string, check: () => unknown | Promise<unknown>, timeout = 30_000) {
   const end = Date.now() + timeout;
@@ -57,7 +57,7 @@ const first = () => remotes[0]!.state!;
 const all = (predicate: (state: SessionState) => boolean) => remotes.every(remote => remote.state && predicate(remote.state));
 const command = (action: Action) => remotes[0]!.command(action);
 async function api(path: string, token: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
-  const response = await fetch(origin + path, { method, headers: { origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await fetch(origin + path, { method, headers: { origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
   assert.ok(response.ok, `${path}: ${response.status}`); return response.json() as Promise<any>;
 }
 const files = () => exec("find", "/tmp", "-maxdepth", "2", "-path", "/tmp/couch-subtitles-*/*", "-type", "f").toString().trim().split("\n").filter(Boolean);
@@ -95,7 +95,7 @@ try {
   if (await tv.execute("return !!document.querySelector('[role=dialog]')")) await tv.key(keys.escape);
   const connection = await driver(nativePort, `/session/${native}/execute/async`, { script: "const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke('connection_info').then(done)", args: [] });
   for (const name of ["PGS remote one", "PGS remote two"]) remotes.push(new Remote((await api("/api/pair", "", { code: connection.pairingCode, name })).token));
-  await until("two HTTP remotes receive shared state", () => all(() => true));
+  await until("two HTTP remotes receive stopped native state", () => all(state => state.player.status === "idle"));
   await api("/api/jellyfin", connection.token, { url: fixture.containerUrl, username: fixture.username, password: fixture.password });
   const build = await api("/api/build", connection.token);
   assert.ok(build.packaged && !build.dirty); assert.equal(build.revision, process.env.JELLYFIN_EXPECTED_REVISION, "Exact reviewed package revision");
@@ -116,12 +116,32 @@ try {
   browser = (await driver(phonePort, "/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", "webkitgtk:browserOptions": { args: ["--automation", "--class=JellyfinSubtitlePhone"] } } } })).sessionId;
   await driver(phonePort, `/session/${browser}/url`, { url: `http://127.0.0.1:45300` });
   await until("phone shows pairing form", () => phone.execute("return !!document.querySelector('#pairing-code')"));
+  // The retained WebKitGTK fixture uses fractional scale; use its tested native click coordinates.
+  phone.clickElement = async id => {
+    await phone.revealElement(id);
+    let previous = "";
+    await phone.waitFor("HTTP click target is stable and unobstructed", async () => {
+      const point = await phone.execute("const e=arguments[0]; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(), x=r.x+r.width/2,y=r.y+r.height/2; return !e.matches(':disabled') && r.width>0 && r.height>0 && e.contains(document.elementFromPoint(x,y)) ? JSON.stringify({x:x*devicePixelRatio,y:outerHeight-innerHeight*devicePixelRatio+y*devicePixelRatio}) : '';", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
+      const stable = !!point && point === previous; previous = point; return stable;
+    });
+    const point = JSON.parse(previous);
+    const window = exec("xdotool", "search", "--onlyvisible", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
+    exec("xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
+  };
   await phone.type("#pairing-code", connection.pairingCode); await phone.button("Connect");
   await until("real phone pairs", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   await select(phone, -1); await select(phone, index);
   for (const width of [390, 768, 1440]) {
-    await driver(phonePort, `/session/${browser}/window/rect`, { width, height: 900 }); await settings(phone);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rect = await driver(phonePort, `/session/${browser}/window/rect`), actual = await phone.execute("return innerWidth");
+      if (actual === width) break;
+      await driver(phonePort, `/session/${browser}/window/rect`, { width: Math.round(rect.width * width / actual), height: 950 });
+    }
+    await settings(phone);
+    const geometry = await phone.execute("const r=document.querySelector('[role=dialog]').getBoundingClientRect(); return {width:innerWidth,scroll:document.documentElement.scrollWidth,left:r.left,right:r.right};");
+    assert.equal(geometry.width, width); assert.ok(geometry.scroll <= width + 1 && geometry.left >= 0 && geometry.right <= width);
     assert.ok(await phone.execute("return document.querySelector('[role=dialog]').textContent.includes('subtitle timing')"));
+    await phone.execute("document.querySelector('[role=dialog] [role=alert]').scrollIntoView({block:'center'})");
     await Bun.write(`${artifacts}/phone-${width}.png`, Buffer.from(await driver(phonePort, `/session/${browser}/screenshot`), "base64")); await phone.key(keys.escape);
   }
   await driver(phonePort, `/session/${browser}/window/minimize`, {});
@@ -133,6 +153,13 @@ try {
   await load("Raw"); assert.deepEqual(files(), []); assert.ok(!first().player.tracks?.some(track => track.kind === "subtitle")); assert.ok(first().player.subtitleError?.includes("sidecars are unavailable"));
   for (const title of ["Invalid", "Missing"]) { await load(title); assert.deepEqual(files(), []); assert.ok(!first().player.tracks?.some(track => track.kind === "subtitle")); assert.ok(first().player.subtitleError?.includes("could not be loaded")); }
   record("direct SUP and invalid or missing Matroska sidecars leave video playable with a useful error");
+  await load("Zero");
+  const failedEntry = crypto.randomUUID();
+  await command({ type: "enqueueJellyfin", entryId: failedEntry, itemId: fixture.item("Failed").Id });
+  await fixture.removeQueuedMovie();
+  await command({ type: "play", entryId: failedEntry });
+  await until("failed source resolution leaves an error on both remotes", () => all(state => state.player.status === "error"));
+  await until("failed-before-load replacement releases retired PGS after native Stop", () => files().length === 0);
   await load("Zero"); await stop();
   await load("Zero"); await api("/api/jellyfin", connection.token, undefined, "DELETE"); await until("disconnect stops playback on both remotes", () => all(state => state.player.status === "idle")); assert.deepEqual(files(), []);
   await api("/api/jellyfin", connection.token, { url: fixture.containerUrl, username: fixture.username, password: fixture.password }); await load("Zero");
@@ -145,6 +172,6 @@ finally {
   remotes.forEach(remote => remote.socket.close());
   if (browser) await driver(phonePort, `/session/${browser}`, undefined, "DELETE").catch(() => {});
   if (native) await driver(nativePort, `/session/${native}`, undefined, "DELETE").catch(() => {});
-  if (connected) run("docker", "network", "disconnect", fixture.network, container);
-  await fixture.close();
+  try { if (connected) run("docker", "network", "disconnect", fixture.network, container); }
+  finally { await fixture.close(); }
 }
