@@ -187,7 +187,7 @@ class RealTransactions(unittest.TestCase):
                     with open("/var/lib/dpkg/lock-frontend", "w") as lock:
                         fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                         call(request, disconnect=True)
-                        self.until(lambda: engine.record is not None)
+                        self.until(lambda: engine.record is not None and engine.record["requestId"] == request["requestId"])
                         update_id = engine.record["updateId"]
                         duplicate = call(request)
                         self.assertEqual(duplicate["transaction"]["updateId"], update_id)
