@@ -22,6 +22,7 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     calls.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined, signal: init?.signal as AbortSignal });
     expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer admin");
+    if (String(input).endsWith("/api/tools")) return Response.json({ checkedAt: new Date().toISOString(), cacheSeconds: 10, tools: [], ffprobe: { status: "missing", version: null, error: "Executable was not found." } });
     return Response.json(report);
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
@@ -38,6 +39,7 @@ test("shows running identity, separate manual policy, notes and only exact-candi
   await render();
   for (const value of ["abc123", "0.1.0+build.1.1", "Manual", "Stable", "Second release notes", "Last successful check"]) expect(document.body.textContent).toContain(value);
   expect(button("Check now").disabled).toBe(false);
+  expect(button("Check tools").disabled).toBe(false);
   await act(async () => button("Download update").click());
   expect(calls.find(call => call.url.endsWith("/stage"))?.body).toEqual({ candidateId: report.candidate!.id });
   expect([...document.querySelectorAll("button")].some(node => /install/i.test(node.textContent || ""))).toBe(false);
