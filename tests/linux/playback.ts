@@ -12,6 +12,7 @@ import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
+import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 
 const origin = "http://127.0.0.1:4100";
@@ -452,6 +453,8 @@ try {
       await type("#jellyfin-password", config.password);
       await click(".jellyfin-connect button.primary-button");
       await until("native UI authenticates with real Jellyfin server", async () => (await api("/api/jellyfin")).connected === true, 30_000);
+      await ui.key(keys.escape);
+      await until("native Jellyfin Sources form closes before library playback", () => execute("return !document.querySelector('[role=dialog]')"));
     }
     await connectJellyfin();
     const catalog = await api("/api/jellyfin/items?q=Linux&startIndex=0", undefined, 1);
@@ -483,9 +486,12 @@ try {
     await until("Jellyfin playback can restart before disconnect", () => all(state => state.player.status === "playing" && state.currentEntryId === entryId));
     await click('[data-action="jellyfin-settings"]');
     await click('[data-action="jellyfin-disconnect"]');
+    await ui.button("Disconnect and stop Jellyfin", '[aria-label="Jellyfin settings"]');
     await until("disconnecting Jellyfin stops its active media for every remote", async () =>
       all(state => state.player.status === "idle") && (await api("/api/jellyfin")).connected === false,
     );
+    await ui.key(keys.escape);
+    await until("native disconnect confirmation closes before reconnect", () => execute("return !document.querySelector('[role=dialog]')"));
     await connectJellyfin();
     startShutdownPlayback = async () => {
       await clients[1]!.command({ type: "play", entryId });
@@ -634,6 +640,7 @@ try {
   const persistedMusic = await verifyMusic(musicContext);
   const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -665,6 +672,7 @@ try {
   await assertMusicAfterRestart(musicContext, persistedMusic);
   await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
+  await persistedJellyfinSettings?.verifyAfterRestart();
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === importedStations[0].id));

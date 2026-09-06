@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { Action, ConnectionInfo, PlaybackPreferences as Preferences } from "../shared/protocol";
 import type { WatchingProfile } from "../shared/library";
+import { SettingsSources } from "./SettingsSources";
 import { SetupQr } from "./SetupQr";
 import { QualitySelect } from "./QualitySelect";
 import type { useVideoQualityPreference } from "./video-quality";
@@ -32,10 +33,14 @@ type Props = {
   preferences?: Preferences;
   onCommand: (action: Action) => Promise<boolean>;
   initialOpen?: boolean;
+  sourcesRequest?: number;
+  jellyfinVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion }: Props) {
   const [open, setOpen] = useState(initialOpen);
+  const [section, setSection] = useState("general");
+  useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [draftName, setDraftName] = useState(name);
   const [savedName, setSavedName] = useState(name);
@@ -136,17 +141,18 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   </div>;
 
   return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); }}>
-    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings"><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
-    <DialogContent className={`max-h-[calc(100dvh-2rem)] overflow-y-auto ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
+    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("general")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
+    <DialogContent data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
       <DialogHeader>
         <DialogTitle className={host ? "text-lg" : undefined}>Settings</DialogTitle>
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
-      <Tabs defaultValue="general" className="min-w-0 gap-4">
+      <Tabs value={section} onValueChange={setSection} activationMode={host ? "manual" : "automatic"} className="min-w-0 gap-4">
         <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
           <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
+          <TabsTrigger value="sources" className="min-h-11" data-tv-local-only={host ? "" : undefined}>Sources</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
         </TabsList>
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
@@ -196,6 +202,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <p className="text-muted-foreground">Saved in this browser for new online videos. You can choose another quality when adding a video.</p>
           <p className="text-muted-foreground">Existing queue entries, other remotes and the TV's display resolution stay unchanged.</p>
           {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
+        </TabsContent>
+        <TabsContent value="sources" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`} data-tv-local-only={host ? "" : undefined}>
+          <SettingsSources credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} />
         </TabsContent>
         <TabsContent value="connection" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
