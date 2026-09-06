@@ -35,6 +35,7 @@ beforeEach(async () => {
   interval = spyOn(globalThis, "setInterval").mockImplementation(((callback: () => void, delay: number) => { if (delay === 60_000) tick = callback; return set(callback, delay); }) as typeof set);
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
+    if (url.pathname.endsWith("/capabilities")) return Response.json({ liveEdge: "reload", catchup: null });
     if (url.pathname.endsWith("/programs")) {
       const range = { start: Number(url.searchParams.get("start")), end: Number(url.searchParams.get("end")) }; ranges.push(range);
       if (programGate) await programGate.promise;
@@ -50,7 +51,7 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   const { GuidePanel } = await import("./GuidePanel");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} controllerVersion={1} active />));
+  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />));
   await flush();
 });
 
@@ -101,4 +102,18 @@ test("the real group all is distinct from All groups in the rendered Select and 
   expect([...document.querySelectorAll(".guide-channel")].map(node => node.getAttribute("data-channel-id"))).toEqual(["sport"]);
   await select("All groups"); expect(groups.at(-1)).toBe("");
   expect([...document.querySelectorAll(".guide-channel")].map(node => node.getAttribute("data-channel-id"))).toEqual(["news", "sport"]);
+});
+
+
+test("Go live invokes its explicit current-playback callback without ordinary Play", async () => {
+  const { GuidePanel } = await import("./GuidePanel");
+  let calls = 0;
+  const render = async (currentSource: string) => act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} controllerVersion={1} currentSource={currentSource} onGoLive={() => calls++} active />));
+  await render("iptv:news"); await flush();
+  const before = request.mock.calls.length;
+  await click("Go live");
+  expect(calls).toBe(1);
+  expect(request.mock.calls.slice(before).some((call: unknown[]) => String(call[0]).endsWith("/play"))).toBeFalse();
+  await render("https://ordinary.test/live.m3u8"); await flush();
+  expect(button("Go live")).toBeUndefined();
 });

@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { GuideSources, type GuideRequest } from "./GuideSources";
 import "./guide.css";
 
-type Props = { origin: string; token: string; connected: boolean; canPlay: boolean; host: boolean; version: number; controllerVersion: number; currentSource?: string; active: boolean };
+type Props = { origin: string; token: string; connected: boolean; canPlay: boolean; host: boolean; version: number; controllerVersion: number; currentSource?: string; onGoLive: () => void; active: boolean };
 const time = (value: number) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 const range = (program: GuideProgram) => `${time(program.start)} – ${time(program.end)}`;
 
@@ -30,7 +30,7 @@ function GuideLogo({ channel, request, version }: { channel: GuideChannel; reque
   return <span className="guide-logo" aria-hidden="true">{url ? <img src={url} alt="" onError={() => setUrl(null)} /> : <Tv />}</span>;
 }
 
-export function GuidePanel({ origin, token, connected, canPlay, host, version, controllerVersion, currentSource, active }: Props) {
+export function GuidePanel({ origin, token, connected, canPlay, host, version, controllerVersion, currentSource, onGoLive, active }: Props) {
   const [page, setPage] = useState<GuidePage | null>(null);
   const [query, setQuery] = useState(""); const [group, setGroup] = useState(""); const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<GuideChannel | null>(null);
@@ -97,7 +97,7 @@ export function GuidePanel({ origin, token, connected, canPlay, host, version, c
       <ul className="guide-channel-list">{page?.channels.map(channel => <li key={channel.id} className="guide-channel" data-channel-id={channel.id}>
         <div className="guide-channel-name"><GuideLogo channel={channel} request={request} version={version} /><div><h3>{channel.name}</h3><p className="text-xs text-muted-foreground">{channel.group || "TV"}{currentSource === `iptv:${channel.id}` && " · On TV"}</p></div></div>
         <div className="guide-now-next"><p><span>Now</span>{channel.now ? <><strong>{channel.now.title}</strong><time>{range(channel.now)}</time></> : <strong>No program listed</strong>}</p><p><span>Next</span>{channel.next ? <><strong>{channel.next.title}</strong><time>{time(channel.next.start)}</time></> : <strong>No program listed</strong>}</p></div>
-        <div className="guide-channel-actions"><Button disabled={!connected || !canPlay} aria-label={`Play ${channel.name}`} onClick={() => void enqueue(channel, true)}><Play aria-hidden="true" />Play</Button><Button variant="secondary" disabled={!connected} aria-label={`Queue ${channel.name}`} onClick={() => void enqueue(channel, false)}><Plus aria-hidden="true" />Queue</Button><Button variant="outline" onClick={event => { returnFocus.current = event.currentTarget; setSelected(channel); setDay(0); }}><ListVideo aria-hidden="true" />Programs</Button>{liveEdge === channel.id && <Button variant="outline" disabled={!connected || !canPlay} onClick={() => void enqueue(channel, true)} title="Reload this live HLS channel at the current live point"><Radio aria-hidden="true" />Go live</Button>}</div>
+        <div className="guide-channel-actions"><Button disabled={!connected || !canPlay} aria-label={`Play ${channel.name}`} onClick={() => void enqueue(channel, true)}><Play aria-hidden="true" />Play</Button><Button variant="secondary" disabled={!connected} aria-label={`Queue ${channel.name}`} onClick={() => void enqueue(channel, false)}><Plus aria-hidden="true" />Queue</Button><Button variant="outline" onClick={event => { returnFocus.current = event.currentTarget; setSelected(channel); setDay(0); }}><ListVideo aria-hidden="true" />Programs</Button>{liveEdge === channel.id && currentSource === `iptv:${channel.id}` && <Button variant="outline" disabled={!connected || !canPlay} onClick={onGoLive} title="Return to live playback. Slow feeds may pause to buffer."><Radio aria-hidden="true" />Go live</Button>}</div>
       </li>)}</ul>
       {!loading && page?.total === 0 && <p className="guide-empty">No channels match this search.</p>}
       {!!page && page.total > 50 && <nav className="flex items-center justify-between gap-3" aria-label="Guide pages"><Button variant="outline" disabled={offset === 0} onClick={() => setOffset(value => Math.max(0, value - 50))}><ChevronLeft />Previous</Button><span className="text-sm">{offset + 1}–{Math.min(offset + 50, page.total)}</span><Button variant="outline" disabled={offset + 50 >= page.total} onClick={() => setOffset(value => value + 50)}>Next<ChevronRight /></Button></nav>}

@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,14 +8,27 @@ import { clockFrame, guideClock } from "./iptv-clock";
 
 export const appleGuideSample = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8";
 export const appleGuidePermission = "https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/StreamingMediaGuide/UsingHTTPLiveStreaming/UsingHTTPLiveStreaming.html";
-type RequestRecord = { path: string; at: number; native: boolean; sequence?: number; sha256?: string; aborted?: number };
+type SegmentHold = { record?: RequestRecord; release?: () => void };
+type RequestRecord = { path: string; at: number; native: boolean; sequence?: number; sha256?: string; aborted?: number; heldAt?: number; releasedAt?: number; manifest?: string; servedAt?: number; sequences?: number[] };
 
-export async function createGuideFixture(port = 4202, ffmpeg = "ffmpeg") {
+export async function createGuideFixture(port = 4202, ffmpeg = "ffmpeg", artifactDir?: string) {
   const binary = Bun.which(ffmpeg); assert.ok(binary, "FFmpeg is available for the generated guide fixture");
   const directory = await mkdtemp(join(tmpdir(), "couch-iptv-streams-"));
   const encoders: Bun.Subprocess<"pipe", "ignore", "ignore">[] = [], writers: Promise<void>[] = [];
   const hashes: { name: string; sha256: string }[] = [], requests: RequestRecord[] = [];
+  const archive = artifactDir ? join(artifactDir, "iptv-streams") : undefined;
+  if (archive) mkdirSync(archive, { recursive: true });
   const waiting = new Set<() => void>();
+  let holdSegment: SegmentHold | undefined;
+  let manifestCount = 0;
+  const archiveSegment = (name: string, bytes = readFileSync(join(directory, name))) => {
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    if (archive && !existsSync(join(archive, name))) {
+      writeFileSync(join(archive, name), bytes);
+      appendFileSync(join(archive, "segments.jsonl"), JSON.stringify({ name, sha256, bytes: bytes.length }) + "\n");
+    }
+    return sha256;
+  };
   let closing = false, failure: unknown, server: Bun.Server<undefined> | undefined;
   const close = async () => {
     if (closing) return;
@@ -91,38 +105,71 @@ export async function createGuideFixture(port = 4202, ffmpeg = "ffmpeg") {
       return text.replace(/#EXT-X-MEDIA-SEQUENCE:\d+/, `#EXT-X-MEDIA-SEQUENCE:${first - delay}`)
         .replace(/(?:red|blue)-(\d+)\.ts/g, (_match, sequence: string) => `/${color}/segments/${Number(sequence) - delay}.ts`);
     };
+    const serveManifest = async (color: string, record: RequestRecord) => {
+      const text = await manifest(color);
+      record.sequences = [...text.matchAll(/segments\/(\d+)\.ts/g)].map(match => Number(match[1]));
+      if (archive) {
+        record.manifest = `manifest-${++manifestCount}.m3u8`;
+        writeFileSync(join(archive, record.manifest), text);
+        for (const sequence of record.sequences) archiveSegment(`${color}-${sequence}.ts`);
+        record.servedAt = Date.now();
+        appendFileSync(join(archive, "manifests.jsonl"), JSON.stringify({ ...record, sha256: createHash("sha256").update(text).digest("hex") }) + "\n");
+      }
+      record.servedAt ??= Date.now();
+      return new Response(text, { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
+    };
     server = Bun.serve({ hostname: "127.0.0.1", port, idleTimeout: 0, async fetch(req) {
       const path = new URL(req.url).pathname;
-      const record: RequestRecord = { path, at: Date.now(), native: req.headers.get("user-agent") !== "Couch/0.1" };
-      assert.ok(requests.length < 5_000, "Guide fixture request log remains bounded");
-      requests.push(record);
-      req.signal.addEventListener("abort", () => { record.aborted = Date.now(); }, { once: true });
-      if (path === "/channels.m3u") return failed ? new Response("Source unavailable", { status: 503 }) : new Response("#EXTM3U\n" + channels.map(channel => `#EXTINF:-1 tvg-id="${channel.id}" tvg-logo="${origin}/logo.png?private=logo" group-title="${channel.id === "apple" ? "Public test" : "Generated signals"}",${channel.name}\n${channel.id === "apple" ? channel.path : origin + (channel.id === "slow" && slowReplacement ? "/blue/live.m3u8?replacement=1" : channel.path)}`).join("\n") + "\n");
-      if (path === "/guide.xml") return failed ? new Response("Guide unavailable", { status: 503 }) : new Response(`<tv>${channels.map(channel => `<channel id="${channel.id}"><display-name>${channel.name}</display-name></channel>`).join("")}${channels.flatMap(channel => Array.from({ length: 192 }, (_, index) => {
-        const start = schedule - 24 * 3_600_000 + index * 3_600_000;
-        return `<programme channel="${channel.id}" start="${stamp(start)}" stop="${stamp(start + 3_600_000)}"><title>${channel.name} ${revision === 1 ? "caf&#233; &#xE9;" : "updated"} ${index}</title><desc>Generated schedule for playback qualification. This is not a broadcaster schedule.</desc></programme>`;
-      })).join("")}</tv>`);
-      if (path === "/logo.png") return new Response(Bun.file(join(directory, "logo.png")));
-      if (path === "/slow.m3u8") {
-        await new Promise<void>(resolve => { const release = () => { waiting.delete(release); resolve(); }; waiting.add(release); req.signal.addEventListener("abort", release, { once: true }); });
-        return new Response(await manifest("red"), { headers: { "Content-Type": "application/vnd.apple.mpegurl" } });
+      try {
+        const record: RequestRecord = { path, at: Date.now(), native: req.headers.get("user-agent") !== "Couch/0.1" };
+        assert.ok(requests.length < 5_000, "Guide fixture request log remains bounded");
+        requests.push(record);
+        req.signal.addEventListener("abort", () => { record.aborted = Date.now(); }, { once: true });
+        if (path === "/channels.m3u") return failed ? new Response("Source unavailable", { status: 503 }) : new Response("#EXTM3U\n" + channels.map(channel => `#EXTINF:-1 tvg-id="${channel.id}" tvg-logo="${origin}/logo.png?private=logo" group-title="${channel.id === "apple" ? "Public test" : "Generated signals"}",${channel.name}\n${channel.id === "apple" ? channel.path : origin + (channel.id === "slow" && slowReplacement ? "/blue/live.m3u8?replacement=1" : channel.path)}`).join("\n") + "\n");
+        if (path === "/guide.xml") return failed ? new Response("Guide unavailable", { status: 503 }) : new Response(`<tv>${channels.map(channel => `<channel id="${channel.id}"><display-name>${channel.name}</display-name></channel>`).join("")}${channels.flatMap(channel => Array.from({ length: 192 }, (_, index) => {
+          const start = schedule - 24 * 3_600_000 + index * 3_600_000;
+          return `<programme channel="${channel.id}" start="${stamp(start)}" stop="${stamp(start + 3_600_000)}"><title>${channel.name} ${revision === 1 ? "caf&#233; &#xE9;" : "updated"} ${index}</title><desc>Generated schedule for playback qualification. This is not a broadcaster schedule.</desc></programme>`;
+        })).join("")}</tv>`);
+        if (path === "/logo.png") return new Response(Bun.file(join(directory, "logo.png")));
+        if (path === "/slow.m3u8") {
+          await new Promise<void>(resolve => { const release = () => { waiting.delete(release); resolve(); }; waiting.add(release); req.signal.addEventListener("abort", release, { once: true }); });
+          return await serveManifest("red", record);
+        }
+        const live = /^\/(red|blue)\/live.m3u8$/.exec(path);
+        if (live) return await serveManifest(live[1]!, record);
+        const segment = /^\/(red|blue)\/segments\/(\d+)\.ts$/.exec(path);
+        if (segment) {
+          record.sequence = Number(segment[2]);
+          if (holdSegment && !holdSegment.record && record.native && segment[1] === "blue") {
+            const hold = holdSegment; hold.record = record; record.heldAt = Date.now();
+            if (archive) appendFileSync(join(archive, "holds.jsonl"), JSON.stringify(record) + "\n");
+            await new Promise<void>(resolve => {
+              const release = () => { record.releasedAt ??= Date.now(); waiting.delete(release); resolve(); };
+              hold.release = release; waiting.add(release); req.signal.addEventListener("abort", release, { once: true });
+            });
+            if (archive) appendFileSync(join(archive, "holds.jsonl"), JSON.stringify(record) + "\n");
+          }
+          const name = `${segment[1]}-${record.sequence}.ts`, file = Bun.file(join(directory, name));
+          if (!await file.exists()) return new Response("Segment outside retained window", { status: 404 });
+          const bytes = await file.bytes(); record.sha256 = archiveSegment(name, Buffer.from(bytes));
+          if (!hashes.some(item => item.name === name)) hashes.push({ name, sha256: record.sha256 });
+          return new Response(bytes, { headers: { "Content-Type": "video/mp2t" } });
+        }
+        return new Response("Unknown fixture", { status: 404 });
+      } catch (error) {
+        failure = error;
+        if (archive) appendFileSync(join(archive, "failures.jsonl"), JSON.stringify({ path, at: Date.now(), error: error instanceof Error ? error.message : String(error) }) + "\n");
+        throw error;
       }
-      const live = /^\/(red|blue)\/live.m3u8$/.exec(path);
-      if (live) return new Response(await manifest(live[1]!), { headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-store" } });
-      const segment = /^\/(red|blue)\/segments\/(\d+)\.ts$/.exec(path);
-      if (segment) {
-        record.sequence = Number(segment[2]);
-        const name = `${segment[1]}-${record.sequence}.ts`, file = Bun.file(join(directory, name));
-        if (!await file.exists()) return new Response("Segment outside retained window", { status: 404 });
-        const bytes = await file.bytes(); record.sha256 = createHash("sha256").update(bytes).digest("hex");
-        if (!hashes.some(item => item.name === name)) hashes.push({ name, sha256: record.sha256 });
-        return new Response(bytes, { headers: { "Content-Type": "video/mp2t" } });
-      }
-      return new Response("Unknown fixture", { status: 404 });
     } });
     origin = `http://127.0.0.1:${server.port}`;
     return { origin, definition: { name: "IPTV qualification", playlistUrl: `${origin}/channels.m3u?private=playlist`, guideUrl: `${origin}/guide.xml?private=guide` },
       hashes, currentSequence, startStreams, get epoch() { return started; }, encoding: { ffmpegVersion, ffmpegSha256, clock: guideClock }, requests: () => structuredClone(requests),
+      holdNextSegment() {
+        assert.ok(!holdSegment, "Only one bounded native segment hold is active");
+        const hold: SegmentHold = {}; holdSegment = hold;
+        return { get request() { return hold.record && structuredClone(hold.record); }, release() { hold.release?.(); if (holdSegment === hold) holdSegment = undefined; } };
+      },
       delayLive(seconds: number) { assert.ok([0, 20].includes(seconds), "Live negative control uses a bounded twenty-second delay"); delayedSegments = seconds / 2; },
       set failed(value: boolean) { failed = value; },
       update() { revision++; }, replaceSlow() { slowReplacement = true; }, resetSlow() { slowReplacement = false; },

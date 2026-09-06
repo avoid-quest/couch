@@ -1,4 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { assertLiveFrame, clockFrame, clockLag, decodeClock, guideClock, type ClockCapture } from "./iptv-clock";
 import { createGuideFixture } from "./iptv-fixture";
 
@@ -33,8 +37,10 @@ test.skipIf(!ffmpeg)("delayed-window readiness follows published HLS when elapse
 }, 20_000);
 
 test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps; a delayed reload fails the same freshness assertion", async () => {
-  const fixture = await createGuideFixture(0, ffmpeg!);
+  const archive = await mkdtemp(join(tmpdir(), "couch-iptv-archive-test-"));
+  const fixture = await createGuideFixture(0, ffmpeg!, archive);
   const captured: unknown[] = [];
+  let passed = false;
   try {
     await fixture.startStreams();
     const sample = async (): Promise<ClockCapture> => {
@@ -65,14 +71,28 @@ test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps
     const delayed = await sample();
     expect(() => assertLiveFrame(delayed)).toThrow("Presented IPTV frame exceeds");
     expect(clockLag(delayed).minimumLagMs).toBeGreaterThan(20_000);
+    const served = fixture.requests().findLast(request => request.manifest)!;
+    const archived = await Bun.file(join(archive, "iptv-streams", served.manifest!)).text();
+    expect(archived).toBe((captured.at(-1) as { manifest: string }).manifest);
+    expect(Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(archived)![1])).toBe(served.sequences![0]!);
+    const records = (await Bun.file(join(archive, "iptv-streams", "segments.jsonl")).text()).trim().split("\n").map(line => JSON.parse(line) as { name: string; sha256: string });
+    for (const sequence of served.sequences!) {
+      const name = `blue-${sequence}.ts`;
+      expect(createHash("sha256").update(await Bun.file(join(archive, "iptv-streams", name)).bytes()).digest("hex")).toBe(records.find(record => record.name === name)!.sha256);
+    }
     await Bun.sleep(2_500);
     const delayedNext = await sample(); expect(delayedNext.tick).toBeGreaterThan(delayed.tick);
     expect(() => assertLiveFrame(delayedNext)).toThrow("Presented IPTV frame exceeds");
     fixture.delayLive(0);
     expect(assertLiveFrame(await sample()).maximumLagMs).toBeLessThanOrEqual(guideClock.maxLagMs);
     expect(fixture.requests().filter(request => request.sequence !== undefined).every(request => /^[a-f0-9]{64}$/.test(request.sha256 ?? ""))).toBeTrue();
+    await fixture.close();
+    expect(await Bun.file(join(archive, "iptv-streams", "manifests.jsonl")).exists()).toBeTrue();
+    passed = true;
   } finally {
     if (process.env.COUCH_IPTV_CLOCK_EVIDENCE) await Bun.write(process.env.COUCH_IPTV_CLOCK_EVIDENCE, JSON.stringify({ qualification: "Local H264 decode and scaling only; no native presentation or HTTP UI acceptance", epoch: fixture.epoch, encoding: fixture.encoding, captured, hashes: fixture.hashes }, null, 2));
     await fixture.close();
+    if (passed) await rm(archive, { recursive: true, force: true });
+    else console.error(`Failed IPTV archive regression evidence retained at ${archive}`);
   }
 }, 50_000);

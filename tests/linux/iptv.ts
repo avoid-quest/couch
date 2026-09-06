@@ -92,16 +92,35 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     await until("the live fixture advances at least eight segments while paused", async () => await fixture.currentSequence() >= beforeLive + 8, 20_000);
     await httpRemote.restore(); await httpRemote.ui.section("Guide");
     await until("probed live HLS exposes the Go live action", () => httpRemote.ui.execute("return [...document.querySelectorAll('.guide-channel-actions button')].some(button=>button.textContent==='Go live')"));
+    const starts: unknown[] = []; evidence.liveStarts = starts;
     const reload = async () => {
       const old = first().player.playbackId;
-      await httpRemote.restore(); await httpRemote.ui.section("Guide"); await httpRemote.ui.button("Go live");
+      await httpRemote.restore(); await httpRemote.ui.section("Guide");
+      const at = Date.now(), boundary = fixture.requests().length;
+      const start: Record<string, unknown> = { at, oldPlayback: old, boundary }; starts.push(start);
+      await httpRemote.ui.button("Go live");
+      await write();
       await until("Go live starts a new native load of the live channel", () => playing(blue.id) && first().player.playbackId !== old, 25_000);
       await httpRemote.minimize();
+      const requests = fixture.requests().slice(boundary);
+      const probes = requests.filter(request => !request.native && request.path === "/blue/live.m3u8");
+      const native = requests.filter(request => request.native && request.path.startsWith("/blue/") && request.at >= (probes[0]?.servedAt ?? Infinity));
+      const manifest = native[0], segment = native[1];
+      Object.assign(start, { playbackId: first().player.playbackId, probes, requests, manifest, segment }); await write();
+      assert.equal(probes.length, 1, "Explicit Go live has one fresh host eligibility probe after its action boundary");
+      assert.ok(manifest?.sequences?.length && segment?.sequence !== undefined, "The fresh probe is followed by an unambiguous native manifest and first segment");
+      assert.equal(segment.sequence, manifest.sequences.at(-1), "Explicit Go live starts at the newest complete advertised segment");
+    };
+    const captures: Record<string, Awaited<ReturnType<typeof captureGuideClock>>[]> = {}; evidence.captures = captures;
+    const capture = async (name: string, suffix: string) => {
+      const frame = await captureGuideClock(ui, artifactDir, `${name}-${suffix}`, fixture.epoch);
+      (captures[name] ??= []).push(frame); await write();
+      return frame;
     };
     const frames = async (name: string) => {
-      const first = await captureGuideClock(ui, artifactDir, `${name}-first`, fixture.epoch);
+      const first = await capture(name, "first");
       await Bun.sleep(1_000);
-      const second = await captureGuideClock(ui, artifactDir, `${name}-second`, fixture.epoch);
+      const second = await capture(name, "second");
       assert.ok(second.tick > first.tick && second.captureStart > first.captureEnd, "Native presented frames and fixture clock both advance between captures");
       return [first, second];
     };
@@ -121,6 +140,54 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     } finally { fixture.delayLive(0); }
     await reload();
     evidence.liveRecovery = (await frames("native-iptv-live-recovery")).map(frame => ({ ...frame, ...assertLiveFrame(frame) }));
+
+    const steady = await fixture.currentSequence();
+    await until("fresh native playback crosses three more published segments before the delivery stall", async () => playing(blue.id) && await fixture.currentSequence() >= steady + 3, 20_000);
+    const stalledPlayback = first().player.playbackId;
+    const hold = fixture.holdNextSegment();
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    let stalledFrames: Awaited<ReturnType<typeof captureGuideClock>>[] = [];
+    const stall: Record<string, unknown> = { playbackId: stalledPlayback, holdMs: 12_000, recoveryLimitMs: 25_000 }; evidence.liveStall = stall;
+    try {
+      await until("native playback requests the held future blue segment", () => !!hold.request?.heldAt, 20_000);
+      const heldAt = hold.request!.heldAt!; stall.request = hold.request; await write();
+      releaseTimer = setTimeout(() => hold.release(), Math.max(0, heldAt + 12_000 - Date.now()));
+      await Bun.sleep(Math.max(0, heldAt + 8_000 - Date.now()));
+      const firstStalled = await capture("native-iptv-stalled", "first");
+      await Bun.sleep(1_000);
+      const secondStalled = await capture("native-iptv-stalled", "second");
+      stalledFrames = [firstStalled, secondStalled]; stall.frames = stalledFrames; await write();
+      await Bun.sleep(Math.max(0, heldAt + 12_000 - Date.now()));
+    } finally {
+      if (releaseTimer) clearTimeout(releaseTimer);
+      hold.release(); stall.request = hold.request; await write();
+    }
+    assert.ok(!hold.request!.aborted && hold.request!.releasedAt! - hold.request!.heldAt! >= 12_000, "Native segment delivery remains held for the complete twelve-second fault");
+    assert.equal(stalledFrames[0]!.tick, stalledFrames[1]!.tick, "The bounded delivery hold actually stalls presented video");
+    assert.equal(first().player.playbackId, stalledPlayback, "A delivery stall preserves current playback authority");
+    const releasedAt = hold.request!.releasedAt!, stalledPosition = first().player.position;
+    await until("the same native load resumes after held segment delivery", () => playing(blue.id) && first().player.playbackId === stalledPlayback && first().player.position > stalledPosition + 1, 25_000);
+    const recovered = await frames("native-iptv-stall-resumed");
+    stall.recovered = recovered; await write();
+    assert.ok(recovered[0]!.tick > stalledFrames[1]!.tick && recovered[1]!.captureEnd - releasedAt <= 25_000, "The same stalled load resumes advancing pixels within twenty-five seconds");
+    await reload();
+    evidence.liveStallRecovery = (await frames("native-iptv-stall-live-recovery")).map(frame => ({ ...frame, ...assertLiveFrame(frame) }));
+
+    for (const control of ["stop", "replacement"] as const) {
+      await api(`channels/${blue.id}/play`, "POST");
+      await until("blue channel plays before held-segment cancellation", () => playing(blue.id), 25_000);
+      const pending = fixture.holdNextSegment(), old = first().player.playbackId;
+      try {
+        await until("native segment is pending before a newer control", () => !!pending.request?.heldAt, 20_000);
+        if (control === "stop") await stop();
+        else {
+          await api(`channels/${red.id}/play`, "POST");
+          await until("replacement red channel owns native playback", () => playing(red.id) && first().player.playbackId !== old, 25_000);
+        }
+      } finally { pending.release(); evidence[`heldSegment${control}`] = pending.request; await write(); }
+      await Bun.sleep(600);
+      assert.ok(control === "stop" ? all(state => state.currentEntryId === null) : playing(red.id) && first().player.playbackId !== old, "Late segment delivery cannot defeat Stop or newer playback");
+    }
 
     const startSlow = async () => {
       const at = Date.now();
@@ -181,5 +248,5 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       await remote.ui.section("Queue"); await remote.minimize();
       evidence.restart = true; await write();
     } };
-  } finally { clearInterval(observe); await write(); }
+  } catch (error) { evidence.failure = error instanceof Error ? error.message : String(error); throw error; } finally { clearInterval(observe); await write(); }
 }
