@@ -206,3 +206,32 @@ test("watching profiles and progress APIs validate edits and expose path-free ca
   session.command({ type: "play", entryId: "queued" });
   expect((await request("/api/profiles/household/select", "POST")).status).toBe(409);
 });
+
+test("profile edits validate HTTP bodies consistently and leave the Jellyfin account alone", async () => {
+  const { request, catalog, connectCalls, invalidations, session } = fixture();
+  await request("/api/jellyfin", "POST", { url: "http://jellyfin.example", username: "viewer", password: "valid" }, true);
+  const account = await (await request("/api/jellyfin")).json();
+  const { profile } = await (await request("/api/profiles", "POST", { name: "Viewer" })).json();
+  const rename = `/api/profiles/${profile.id}/rename`, remove = `/api/profiles/${profile.id}/remove`;
+  for (const name of [null, 42, {}, "", " ", "x".repeat(61), "bad\nname", "hOuSeHoLd"]) {
+    const create = await request("/api/profiles", "POST", { name });
+    const edit = await request(rename, "POST", { name, expectedName: profile.name });
+    expect(edit.status).toBe(400);
+    expect(await edit.json()).toEqual(await create.json());
+  }
+  for (const path of [rename, remove]) {
+    expect((await request(path)).status).toBe(405);
+    for (const value of [[], null, {}, { expectedName: null }, { expectedName: "" }, { expectedName: "x".repeat(61) }, { expectedName: "Viewer", role: "administrator" }]) expect((await request(path, "POST", value)).status).toBe(400);
+    const malformed = new Request(`http://localhost${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
+    expect((await catalog.handle(malformed, false)).status).toBe(400);
+  }
+  expect(await (await request(rename, "POST", { name: "Renamed", expectedName: profile.name })).json()).toEqual({ profile: { ...profile, name: "Renamed" } });
+  expect((await request(remove, "POST", { expectedName: profile.name })).status).toBe(409);
+  await request(`/api/profiles/${profile.id}/select`, "POST");
+  expect(await (await request(remove, "POST", { expectedName: "Renamed" })).json()).toEqual({ activeProfile: { id: "household", name: "Household" } });
+  expect((await request(remove, "POST", { expectedName: "Renamed" })).status).toBe(404);
+  expect(session.state.activeProfile.id).toBe("household");
+  expect(await (await request("/api/jellyfin")).json()).toEqual(account);
+  expect(connectCalls()).toBe(1);
+  expect(invalidations).toEqual(["jellyfin"]);
+});

@@ -223,8 +223,29 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.player.playbackId = null;
     },
     invalidate,
-    createProfile(name: string) {
+    createProfile(name: unknown) {
       const profile = store.createProfile(name);
+      invalidate("library");
+      return profile;
+    },
+    renameProfile(id: string, name: unknown, expectedName: string) {
+      const profile = store.renameProfile(id, name, expectedName);
+      if (state.activeProfile.id === id) state.activeProfile = profile;
+      invalidate("library");
+      return profile;
+    },
+    removeProfile(id: string, expectedName: string) {
+      if (["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop playback before removing a watching profile. Pausing keeps the current profile.", 409);
+      const preferences = id === state.activeProfile.id ? store.playbackPreferences("household") : state.preferences;
+      const profile = store.removeProfile(id, expectedName);
+      progress.forgetProfile(id);
+      if (state.activeProfile.id === id) {
+        playIntent++;
+        state.activeProfile = profile;
+        state.preferences = preferences;
+        state.progressError = null;
+        cancelRadioRetry();
+      }
       invalidate("library");
       return profile;
     },
