@@ -149,6 +149,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     const reimport = await api("sources", "POST", fixture.definition); assert.equal(reimport.status, 201);
     saved = (await reimport.json() as { source: GuideSource }).source;
     const publicChannel = (await page()).channels.find(channel => channel.tvgId === "apple")!;
+    await httpRemote.restore();
     await httpRemote.ui.section("Guide");
     await until("reimported public test channel reaches the phone", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0])", [`[data-channel-id="${publicChannel.id}"]`]));
     await httpRemote.ui.button(`Play ${apple.name}`);
