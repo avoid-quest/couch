@@ -5,6 +5,7 @@ import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote 
 import { assertNativeVideoPixels } from "./pixels";
 import { assertLiveFrame, clockLag } from "./iptv-clock";
 import { captureGuideClock } from "./iptv-native-clock";
+import { assertGuideStart } from "./iptv-start";
 import { appleGuidePermission, appleGuideSample, type GuideFixture } from "./iptv-fixture";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
@@ -101,15 +102,10 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       await httpRemote.ui.button("Go live");
       await write();
       await until("Go live starts a new native load of the live channel", () => playing(blue.id) && first().player.playbackId !== old, 25_000);
+      const observedPlayingAt = Date.now(), requests = fixture.requests().slice(boundary);
+      Object.assign(start, { observedPlayingAt, playbackId: first().player.playbackId, requests, correlationLimit: "HTTP requests have no playback ID. Ambiguous complete traces fail startup qualification; the independent native load-sequence and pixel gates remain required." }); await write();
+      Object.assign(start, assertGuideStart(requests)); await write();
       await httpRemote.minimize();
-      const requests = fixture.requests().slice(boundary);
-      const probes = requests.filter(request => !request.native && request.path === "/blue/live.m3u8");
-      const native = requests.filter(request => request.native && request.path.startsWith("/blue/") && request.at >= (probes[0]?.servedAt ?? Infinity));
-      const manifest = native[0], segment = native[1];
-      Object.assign(start, { playbackId: first().player.playbackId, probes, requests, manifest, segment }); await write();
-      assert.equal(probes.length, 1, "Explicit Go live has one fresh host eligibility probe after its action boundary");
-      assert.ok(manifest?.sequences?.length && segment?.sequence !== undefined, "The fresh probe is followed by an unambiguous native manifest and first segment");
-      assert.equal(segment.sequence, manifest.sequences.at(-1), "Explicit Go live starts at the newest complete advertised segment");
     };
     const captures: Record<string, Awaited<ReturnType<typeof captureGuideClock>>[]> = {}; evidence.captures = captures;
     const capture = async (name: string, suffix: string) => {
