@@ -22,6 +22,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
+import { createCollections } from "./collections";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -95,6 +96,7 @@ export function createHub(options: HubOptions) {
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const folders = createMediaFolders();
   const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => session.invalidate("library") });
+  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
@@ -214,7 +216,7 @@ export function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
       if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, identity));
       if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, identity));
-      if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
+      if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
       return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     },
     websocket: {
@@ -333,6 +335,7 @@ export function createHub(options: HubOptions) {
       await server.stop(true);
       subtitles.close();
       playlists.close();
+      collections.close();
       await Promise.all([library.close(), jellyfin.close()]);
       radio.close();
       store.close();

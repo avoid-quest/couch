@@ -1,3 +1,4 @@
+import type { CollectionFilter, CollectionSort } from "../shared/collections";
 import type { ManagedFolder } from "../shared/folders";
 import { createMediaFolders, FolderError, type FolderIdentity, type MediaFolders } from "./media-folders";
 import { audioExtensions } from "../shared/media";
@@ -390,6 +391,25 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         FROM library_items i JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY ${order} i.title COLLATE NOCASE, i.id LIMIT ? OFFSET ?`)
         .all(...args, limit, offset);
       return { items: rows.map(publicItem), total, offset, limit };
+    },
+    collectionItems(filter: CollectionFilter, sort: CollectionSort, descending: boolean): LibrarySearch {
+      const clauses = [filter.kind === "audio" ? "i.kind = 'audio'" : "json_extract(i.video, '$.type') = ?"];
+      const args: (string | number)[] = filter.kind === "audio" ? [] : [filter.kind];
+      for (const [field, column] of Object.entries({ title: "i.title", artist: "i.artist", album: "i.album", show: "json_extract(i.video, '$.show.title')" })) {
+        const value = filter[field as "title" | "artist" | "album" | "show"];
+        if (value) { clauses.push(`${column} LIKE ? ESCAPE '\\'`); args.push(searchPattern(value)); }
+      }
+      if (filter.year !== undefined) { clauses.push("json_extract(i.video, '$.year') = ?"); args.push(filter.year); }
+      if (filter.genre) { clauses.push("EXISTS (SELECT 1 FROM json_each(i.video, '$.genres') WHERE value LIKE ? ESCAPE '\\')"); args.push(searchPattern(filter.genre)); }
+      const direction = descending ? "DESC" : "ASC";
+      const orders = sort === "year" ? ["json_extract(i.video, '$.year')"] : sort === "album" ? ["i.albumArtist COLLATE NOCASE", "i.album COLLATE NOCASE", "i.discNumber", "i.trackNumber"] : [];
+      orders.push("i.title COLLATE NOCASE", "i.id");
+      const where = `WHERE ${clauses.join(" AND ")}`;
+      return db.transaction(() => ({
+        items: db.query<PublicItemRow, (string | number)[]>(`SELECT ${itemColumns} FROM library_items i JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY ${orders.map(column => `${column} ${direction}`).join(", ")} LIMIT 500`).all(...args).map(publicItem),
+        total: db.query<{ count: number }, (string | number)[]>(`SELECT COUNT(*) AS count FROM library_items i ${where}`).get(...args)!.count,
+        offset: 0, limit: 500,
+      }))();
     },
     videoShows(options: { query?: string; offset?: number; limit?: number } = {}): VideoShows {
       const { offset, limit } = page(options);
