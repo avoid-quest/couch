@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JellyfinItems } from "../shared/jellyfin";
 import { createCatalog } from "./catalog";
+import { createJellyfinSettings } from "./jellyfin-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
 import { openStore } from "./store";
@@ -21,13 +22,16 @@ function fixture() {
   const invalidations: string[] = [];
   const jellyfin = {
     status: () => ({ connected, serverName: connected ? "Living room" : null, username: connected ? "viewer" : null }),
-    connect: async (input: { url: string; username: string; password: string }) => {
+    connection: () => ({ ...jellyfin.status(), url: connected ? "http://private-jellyfin:8096" : null }),
+    test: async () => jellyfin.status(),
+    connect: async (input: { url: string; username: string; password: string }, _authorize?: () => void, changed?: () => void) => {
       connectCalls++;
       if (input.password === "private-password") throw new Error(`Upstream request failed: ${input.url}; password=${input.password}`);
       connected = true;
+      changed?.();
       return jellyfin.status();
     },
-    disconnect: async () => { connected = false; },
+    disconnect: async (_authorize?: () => void, changed?: () => void) => { connected = false; changed?.(); },
     items: async (options: { query?: string; startIndex?: number } = {}): Promise<JellyfinItems> => {
       if (options.query === "fail") throw new Error("Authorization: secret-token");
       return { items: [], total: 0, startIndex: options.startIndex ?? 0 };
@@ -35,12 +39,18 @@ function fixture() {
   };
   const store = openStore(":memory:");
   const session = createSession(store, () => {}, () => {});
-  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => invalidations.push(kind) });
+  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
+  const settings = createJellyfinSettings({ jellyfin, invalidate: () => invalidations.push("jellyfin") });
   cleanup.push(async () => { session.close(); store.close(); await library.close(); radio.close(); rmSync(directory, { recursive: true, force: true }); });
-  const request = (path: string, method = "GET", value?: unknown, trusted = false) => catalog.handle(new Request(`http://localhost:4100${path}`, {
-    method, ...(value === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }),
-  }), trusted);
-  return { directory, library, radio, jellyfin, catalog, request, invalidations, session, store, connectCalls: () => connectCalls };
+  const request = (path: string, method = "GET", value?: unknown, trusted = false) => {
+    const input = new Request(`http://localhost:4100${path}`, {
+      method, ...(value === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }),
+    });
+    return path === "/api/jellyfin"
+      ? settings.handle(input, () => ({ controller: null, authority: trusted ? "host" : "controller", claimAvailable: false }))
+      : catalog.handle(input, trusted);
+  };
+  return { directory, library, radio, jellyfin, catalog, settings, request, invalidations, session, store, connectCalls: () => connectCalls };
 }
 
 test("only the host can add or scan folders; remotes browse indexed media without paths", async () => {
@@ -71,7 +81,6 @@ test("folder errors cannot disclose filesystem paths to remotes", async () => {
   const catalog = createCatalog({
     ...context,
     library: { ...context.library, listSources: () => [{ ...source, status: "error", error: `EACCES: ${context.directory}/private` }] },
-    invalidate: () => {},
   });
   const response = await catalog.handle(new Request("http://localhost/api/library/sources"), false);
   const text = await response.text();
@@ -80,7 +89,7 @@ test("folder errors cannot disclose filesystem paths to remotes", async () => {
 });
 
 test("rejects malformed requests before changing a provider and hides upstream credentials", async () => {
-  const { catalog, request, connectCalls, invalidations } = fixture();
+  const { settings, request, connectCalls, invalidations } = fixture();
   const credentials = { url: "http://private-jellyfin:8096", username: "viewer", password: "private-password" };
   expect((await request("/api/jellyfin", "POST", credentials)).status).toBe(403);
   expect((await request("/api/jellyfin", "DELETE")).status).toBe(403);
@@ -88,7 +97,7 @@ test("rejects malformed requests before changing a provider and hides upstream c
     expect((await request("/api/jellyfin", "POST", value, true)).status).toBe(400);
   }
   const malformed = new Request("http://localhost/api/jellyfin", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
-  expect((await catalog.handle(malformed, true)).status).toBe(400);
+  expect((await settings.handle(malformed, () => ({ authority: "host", controller: null, claimAvailable: false }))).status).toBe(400);
   expect(connectCalls()).toBe(0);
   const failed = await request("/api/jellyfin", "POST", credentials, true);
   expect(failed.status).toBe(502);

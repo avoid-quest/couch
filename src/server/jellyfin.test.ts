@@ -17,7 +17,7 @@ function fixture({ directPlay = true, mediaStreams = [], playbackWait, authWait,
   const item = { Id: itemId, Name: "Local test movie", Type: "Movie", RunTimeTicks: 900_000_000, ProductionYear: 2026, UserData: { PlaybackPositionTicks: 110_000_000, Played: false }, Path: "/private/server/path", ImageTags: { Primary: "private-image-tag" } };
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/^\/jellyfin/, "");
+    const path = url.pathname.replace(/^\/(?:jellyfin|alias)/, "");
     const body = request.method === "POST" && request.headers.get("content-type")?.includes("application/json") ? await request.json().catch(() => null) as Record<string, unknown> | null : null;
     requests.push({ path, url, authorization: request.headers.get("Authorization"), body });
     if (path === "/System/Info/Public") return Response.json({ ServerName: "Test library", Id: "test-server", Version: "10.11.0" });
@@ -392,7 +392,7 @@ describe("Jellyfin source", () => {
     await disconnecting;
     expect(upstream.requests.filter(request => request.path === "/Sessions/Logout")).toHaveLength(1);
     expect(jellyfin.status().connected).toBe(false);
-    await expect(jellyfin.items()).rejects.toThrow("Connect a Jellyfin server on the TV first");
+    await expect(jellyfin.items()).rejects.toThrow("Connect Jellyfin in Settings > Sources first");
   });
 
   test("closing while authentication is pending cannot write or reopen a closed source", async () => {
@@ -448,6 +448,19 @@ describe("Jellyfin source", () => {
     await Promise.all([disconnecting, connecting]);
     expect(events).toEqual(["authenticate", "authenticate", "logout-start", "logout-end", "authenticate"]);
     expect((await jellyfin.items()).items[0]!.id).toBe(itemId);
+  });
+
+  test("replacing the server URL with an alias keeps its reused device token active", async () => {
+    const upstream = fixture();
+    const jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const alias = upstream.url.replace(/\/jellyfin$/, "/alias");
+    await jellyfin.connect(credentials(alias));
+    expect(jellyfin.connection().url).toBe(alias);
+    expect(upstream.requests.filter(request => request.path === "/Sessions/Logout")).toHaveLength(0);
+    expect((await jellyfin.items()).items[0]!.id).toBe(itemId);
+    await jellyfin.disconnect();
+    expect(upstream.requests.filter(request => request.path === "/Sessions/Logout")).toHaveLength(1);
   });
 
   test("native player loss stops reporting at the last observed position even without a playback ID", async () => {
