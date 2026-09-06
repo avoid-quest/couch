@@ -25,7 +25,8 @@ bun tests/linux/fixtures.ts
 bun tests/linux/replaygain-fixtures.ts /replaygain-fixtures
 mkdir -p /root/.config /artifacts
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/artifacts/pulseaudio.log
-pactl load-module module-null-sink sink_name=couch format=float32le rate=48000 channels=2 > /artifacts/pulseaudio-module.txt
+pactl load-module module-null-sink sink_name=couch > /artifacts/pulseaudio-module.txt
+pactl load-module module-null-sink sink_name=couch-replaygain format=float32le rate=48000 channels=2 > /artifacts/replaygain-pulseaudio-module.txt
 pactl set-default-sink couch
 exec dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24 +extension GLX' \
   bash -c 'openbox > /artifacts/openbox.log 2>&1 & if [ -n "${COUCH_TEST_PROVIDERS:-}${COUCH_TEST_PROVIDER_CATALOGS:-}" ]; then exec bun tests/linux/providers.ts; else exec bun tests/linux/playback.ts; fi'

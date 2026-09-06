@@ -62,20 +62,32 @@ export async function verifyReplayGain(context: Context) {
       await stop();
       await clients[0]!.command({ type: "preferences", profileId: first().activeProfile.id, preferences: { replayGain: mode, speed: 1 } });
     }
+    const previousSink = Buffer.from(await output(["pactl", "get-default-sink"])).toString().trim();
+    const sinkInputs = async (): Promise<{ index: number; sink: number }[]> => JSON.parse(Buffer.from(await output(["pactl", "--format=json", "list", "sink-inputs"])).toString());
+    const previousInputs = await sinkInputs();
     const path = `${artifactDir}/replaygain-${label}.wav`, log = `${artifactDir}/replaygain-${label}.log`;
-    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-c:a", "pcm_f32le", "-i", "couch.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
+    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-c:a", "pcm_f32le", "-i", "couch-replaygain.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
     try {
+      await output(["pactl", "set-default-sink", "couch-replaygain"]);
+      for (const input of previousInputs) await output(["pactl", "move-sink-input", String(input.index), "couch-replaygain"]);
       await until("float audio capture is running before Play", async () => await Bun.file(log).exists() && (await Bun.file(log).text()).includes("Output #0"));
       const input = (await Bun.file(log).text()).split("Output #0")[0]!;
-      assert.match(input, /Input #0, pulse,[\s\S]*Audio: pcm_f32le[^\n]*48000 Hz[^\n]*stereo[^\n]*flt/, "Pulse input negotiates float32 before output conversion");
+      assert.match(input, /Input #0, pulse,[\s\S]*Audio: pcm_f32le[^\n]*48000 Hz[^\n]*(?:stereo|2 channels)[^\n]*flt/, "Pulse input negotiates float32 before output conversion");
       const sinks = Buffer.from(await output(["pactl", "list", "short", "sinks"])).toString();
-      assert.match(sinks, /\bcouch\s+[^\n]*float32le 2ch 48000Hz/, "Pulse sink retains float32 samples at the reference rate");
+      assert.match(sinks, /\bcouch-replaygain\s+[^\n]*float32le 2ch 48000Hz/, "Pulse sink retains float32 samples at the reference rate");
       await Bun.write(`${artifactDir}/replaygain-${label}-sinks.txt`, sinks);
       if (current) {
         await clients[0]!.command({ type: "replayGain", playbackId: before.playbackId!, mode });
         await until("current mode changes on both controllers without reloading or saving", () => all(state => state.player.playbackId === before.playbackId && state.player.replayGain === mode && JSON.stringify(state.preferences) === JSON.stringify(before.preferences)));
         await clients[0]!.command({ type: "pause", playbackId: before.playbackId!, paused: false });
       } else await play(id);
+      const dedicatedSink = Number(sinks.split("\n").find(line => line.split("\t")[1] === "couch-replaygain")!.split("\t")[0]);
+      const activeInputs = await sinkInputs();
+      assert.ok(activeInputs.length > 0, "Native playback has an actual PulseAudio output stream");
+      for (const input of activeInputs) if (input.sink !== dedicatedSink) await output(["pactl", "move-sink-input", String(input.index), "couch-replaygain"]);
+      const routedInputs = await sinkInputs();
+      assert.ok(routedInputs.length > 0 && routedInputs.every(input => input.sink === dedicatedSink), "Actual native output is routed into the dedicated captured sink");
+      await Bun.write(`${artifactDir}/replaygain-${label}-routing.json`, JSON.stringify({ previousSink, previousInputs, routedInputs }, null, 2));
       const excluded = radio || fixture.name === "video" || fixture.name === "r128-overflow";
       await until("native ReplayGain mode matches music eligibility on both controllers", () => all(state => excluded ? state.player.replayGain === undefined : state.player.replayGain === mode));
       const player = structuredClone(first().player);
@@ -99,7 +111,12 @@ export async function verifyReplayGain(context: Context) {
       await Bun.write(`${artifactDir}/replaygain-captures.json`, JSON.stringify({ versions, captures, physicalOutputQualified: false }, null, 2));
     } finally {
       if (recorder.exitCode === null) { recorder.kill("SIGKILL"); await recorder.exited; }
-      await stop();
+      try { await stop(); } finally {
+        await output(["pactl", "set-default-sink", previousSink]);
+        for (const input of await sinkInputs()) await output(["pactl", "move-sink-input", String(input.index), String(previousInputs.find(previous => previous.index === input.index)?.sink ?? previousSink)]);
+        assert.equal(Buffer.from(await output(["pactl", "get-default-sink"])).toString().trim(), previousSink, "Capture restores the original PulseAudio default");
+        await Bun.write(`${artifactDir}/replaygain-${label}-restored-routing.json`, JSON.stringify({ defaultSink: previousSink, sinkInputs: await sinkInputs() }, null, 2));
+      }
     }
   };
   await stop();
