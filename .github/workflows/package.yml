@@ -2,6 +2,14 @@ name: Package
 
 on:
   workflow_dispatch:
+    inputs:
+      notes:
+        description: Release notes for this build
+        required: true
+        type: string
+  push:
+    # main is the Preview integration branch.
+    branches: [main]
   pull_request:
     types: [labeled]
 
@@ -10,9 +18,12 @@ permissions:
 
 jobs:
   ubuntu-deb:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'qualify-package'
+    if: github.event_name != 'pull_request' || github.event.label.name == 'qualify-package'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      COUCH_RELEASE_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+      COUCH_RELEASE_NOTES: ${{ inputs.notes }}
     concurrency:
       group: package-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -43,7 +54,7 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
           tauriScript: bun scripts/desktop.ts
-          args: --bundles deb --config src-tauri/tauri.package.conf.json -- --locked
+          args: --bundles deb --config .artifacts/tauri-release.conf.json -- --locked
       - name: Preserve the exact artifact and matching source
         run: |
           mkdir -p .artifacts/package-release
@@ -57,10 +68,18 @@ jobs:
         run: cargo install tauri-driver --version 2.0.6 --locked
       - name: Qualify the exact Debian package on clean Ubuntu
         run: bun tests/package/qualify.ts .artifacts/package-release/*.deb
+      - name: Assemble the qualified release and matching appliance package
+        run: bun scripts/package-release.ts
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: couch-release-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/qualified-release/
+          if-no-files-found: error
+          retention-days: 90
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: couch-ubuntu24.04-amd64-${{ github.event.pull_request.head.sha || github.sha }}
+          name: couch-qualification-${{ github.run_id }}.${{ github.run_attempt }}
           path: |
             .artifacts/package-release/
             .artifacts/package-qualification/

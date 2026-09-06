@@ -2,7 +2,9 @@ import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { installMediaTools, mediaReleases } from "./setup-media";
 import inputs from "../packaging/inputs.json";
-import { packageManager } from "../package.json";
+import { packageManager, version } from "../package.json";
+import packageConfig from "../src-tauri/tauri.package.conf.json";
+import { releaseVersion } from "./release-version";
 
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
@@ -30,6 +32,7 @@ if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean comm
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
 await mkdir(staging, { recursive: true });
+await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, version: releaseVersion(version, process.env.COUCH_RELEASE_ID) }));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
 const helpers = {} as Record<string, { version: string; sha256: string; archiveSha256: string }>;
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
