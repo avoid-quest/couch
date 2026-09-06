@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { Diagnostics } from "../shared/diagnostics";
-import { AdvancedSettings } from "./AdvancedSettings";
+let AdvancedSettings: typeof import("./AdvancedSettings").AdvancedSettings;
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -30,6 +30,7 @@ beforeEach(async () => {
     expect(init.headers).toEqual({ Authorization: "Bearer admin" });
     return Response.json(report);
   }) as typeof fetch);
+  ({ AdvancedSettings } = await import("./AdvancedSettings"));
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
