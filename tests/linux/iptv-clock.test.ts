@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { assertLiveFrame, clockFrame, clockLag, decodeClock, guideClock, type ClockCapture } from "./iptv-clock";
 import { createGuideFixture } from "./iptv-fixture";
 
@@ -17,6 +17,21 @@ test("video clock decodes timestamps and rejects damaged, absent and stale marke
 });
 
 const ffmpeg = process.env.COUCH_IPTV_FFMPEG ?? Bun.which("ffmpeg");
+test.skipIf(!ffmpeg)("delayed-window readiness follows published HLS when elapsed time gets ahead", async () => {
+  const fixture = await createGuideFixture(0, ffmpeg!);
+  try {
+    await fixture.startStreams();
+    const clock = spyOn(Date, "now").mockReturnValue(fixture.epoch + 36_000);
+    let sequence: number | Promise<number>;
+    try { sequence = fixture.currentSequence(); } finally { clock.mockRestore(); }
+    // Use the same gate and manifest request as the native and decoder negative controls.
+    if (await sequence >= 18) fixture.delayLive(20);
+    const response = await fetch(`${fixture.origin}/blue/live.m3u8`);
+    expect(response.status).toBe(200);
+    expect(await sequence).toBeLessThan(18);
+  } finally { await fixture.close(); }
+}, 20_000);
+
 test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps; a delayed reload fails the same freshness assertion", async () => {
   const fixture = await createGuideFixture(0, ffmpeg!);
   const captured: unknown[] = [];
@@ -38,7 +53,14 @@ test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps
     await Bun.sleep(2_500);
     const second = await sample(); expect(second.tick).toBeGreaterThan(first.tick); assertLiveFrame(second);
     // Retain a complete six-segment window twenty seconds behind current output.
-    while (fixture.currentSequence() < 18) await Bun.sleep(250);
+    const deadline = Date.now() + 40_000;
+    let publishedSequence: number;
+    do {
+      publishedSequence = await fixture.currentSequence();
+      captured.push({ readiness: { observedAt: Date.now(), elapsedMs: Date.now() - fixture.epoch, publishedSequence } });
+      expect(Date.now()).toBeLessThan(deadline);
+      if (publishedSequence < 18) await Bun.sleep(250);
+    } while (publishedSequence < 18);
     fixture.delayLive(20);
     const delayed = await sample();
     expect(() => assertLiveFrame(delayed)).toThrow("Presented IPTV frame exceeds");

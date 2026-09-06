@@ -34,7 +34,12 @@ export async function createGuideFixture(port = 4202, ffmpeg = "ffmpeg") {
     let started = Date.now(), monotonicStart = performance.now();
     const schedule = Math.floor(started / 3_600_000) * 3_600_000;
     let failed = false, revision = 1, slowReplacement = false, delayedSegments = 0;
-    const currentSequence = () => Math.floor((Date.now() - started) / 2000);
+    const currentSequence = async () => {
+      const text = await Bun.file(join(directory, "blue.m3u8")).text();
+      const sequence = [...text.matchAll(/blue-(\d+)\.ts/g)].at(-1)?.[1];
+      assert.ok(sequence !== undefined, "Live guide manifest contains a published segment");
+      return Number(sequence);
+    };
     const logo = Bun.spawn([binary, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=green:size=32x32", "-frames:v", "1", join(directory, "logo.png")], { stdout: "ignore", stderr: "inherit" });
     assert.equal(await logo.exited, 0, "Generated guide logo encoding succeeds");
     // The runner constructs fixtures before other suites; encode only for guide qualification.

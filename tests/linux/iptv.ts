@@ -88,8 +88,8 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     assert.equal(await ui.execute("return window.__iptvStage===document.querySelector('.video-stage')"), true, "Channel switches preserve the mounted native VideoStage");
     await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
     await until("live HLS pauses on both controllers", () => all(state => state.player.status === "paused"));
-    const beforeLive = fixture.currentSequence(), oldPlayback = first().player.playbackId;
-    await until("the live fixture advances at least eight segments while paused", () => fixture.currentSequence() >= beforeLive + 8, 20_000);
+    const beforeLive = await fixture.currentSequence(), oldPlayback = first().player.playbackId;
+    await until("the live fixture advances at least eight segments while paused", async () => await fixture.currentSequence() >= beforeLive + 8, 20_000);
     await httpRemote.restore(); await httpRemote.ui.section("Guide");
     await until("probed live HLS exposes the Go live action", () => httpRemote.ui.execute("return [...document.querySelectorAll('.guide-channel-actions button')].some(button=>button.textContent==='Go live')"));
     const reload = async () => {
@@ -108,7 +108,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     const resumedAt = Date.now(); await reload();
     const liveFrames = await frames("native-iptv-live");
     evidence.liveEdge = { beforeLive, oldPlayback, resumedAt, playbackId: first().player.playbackId, frames: liveFrames.map(frame => ({ ...frame, ...assertLiveFrame(frame) })) };
-    await until("fixture retains a complete delayed live window", () => fixture.currentSequence() >= 18, 40_000);
+    await until("fixture retains a complete delayed live window", async () => await fixture.currentSequence() >= 18, 40_000);
     try {
       fixture.delayLive(20); await reload();
       const delayedFrames = await frames("native-iptv-delayed-reload");
