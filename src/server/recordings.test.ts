@@ -28,28 +28,35 @@ function fixture() {
   let fail = false, loseCreate = false, loseCancel = false, writeAllowed = false, missingChannel = false, incomplete = false, createCount = 0;
   let blockCreate: Promise<void> | undefined;
   let blockChannels: Promise<void> | undefined;
-  let hideViewer = false, keepCancel = false, loseProbeCreate = false, missingProbeCreate = false, probeCount = 0;
+  let backendTimeOffset = 0;
+  let changeAfterWriteCheck = false;
+  let hideViewer = false, hideFailedRecorder = false, hideFailedViewer = false, keepCancel = false, loseProbeCreate = false, missingProbeCreate = false, probeCount = 0;
   let rows: Record<string, unknown>[] = [];
   const calls: { path: string; account: string; body: URLSearchParams }[] = [];
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
     const account = Buffer.from(req.headers.get("Authorization")?.slice(6) ?? "", "base64").toString().split(":")[0]!;
     const path = new URL(req.url).pathname, body = new URLSearchParams(await req.text()); calls.push({ path, account, body });
     if (fail) return new Response("private backend path /recordings/secret", { status: 503 });
-    if (path === "/api/access/whoami") return Response.json({ username: account, admin: false, dvr: true });
+    if (path === "/api/access/whoami") return Response.json({ username: account, admin: false, dvr: true, time: Math.floor(Date.now() / 1000) + backendTimeOffset });
     if (path === "/api/dvr/entry/class") return Response.json({});
     if (path === "/api/dvr/config/grid") return Response.json({ entries: [{ uuid: profileId }], total: 1 });
     if (path === "/api/channel/grid") { await blockChannels; return Response.json({ entries: missingChannel ? [] : [{ uuid: backendChannel, name: "Backend channel", enabled: true, services: ["service"] }], total: missingChannel ? 0 : 1 }); }
-    if (path === "/api/dvr/entry/grid") { const entries = account === "viewer" && hideViewer ? [] : rows; return Response.json({ entries, total: entries.length + Number(incomplete) }); }
+    if (path === "/api/dvr/entry/grid" || path === "/api/dvr/entry/grid_failed") {
+      const filter = JSON.parse(body.get("filter") ?? "[]")[0];
+      const matching = rows.filter(row => (!filter || new RegExp(filter.value, "i").test(String(row.owner))) && (path.endsWith("grid") || row.sched_status === "completedError"));
+      const entries = matching.filter(row => !(account === "viewer" && hideViewer) && !(row.sched_status === "completedError" && (account === "viewer" ? hideFailedViewer : hideFailedRecorder)));
+      return Response.json({ entries, total: matching.length + Number(incomplete) });
+    }
     if (path === "/api/dvr/entry/create") {
       const conf = JSON.parse(body.get("conf")!);
       if (conf.enabled === false) probeCount++; else createCount++;
       if (conf.enabled === false && missingProbeCreate) return new Response("lost", { status: 502 });
-      rows.push({ uuid: (createCount + probeCount).toString(16).padStart(32, "0"), enabled: conf.enabled, channel: conf.channel, owner: "recorder", comment: conf.comment, start: conf.start, stop: conf.stop, sched_status: "scheduled", status: "Scheduled", filesize: 0, errorcode: 0 });
+      rows.push({ uuid: (createCount + probeCount).toString(16).padStart(32, "0"), enabled: conf.enabled, channel: conf.channel, owner: account, comment: conf.comment, start: conf.start, stop: conf.stop, start_extra: conf.start_extra, stop_extra: conf.stop_extra, sched_status: conf.enabled === false ? "completedError" : "scheduled", status: "Scheduled", filesize: 0, errorcode: 0 });
       await blockCreate;
       return loseCreate || conf.enabled === false && loseProbeCreate ? new Response("lost", { status: 502 }) : Response.json({ uuid: rows.at(-1)!.uuid });
     }
-    if (path === "/api/dvr/entry/cancel") { if (!keepCancel) rows = rows.filter(row => row.uuid !== body.get("uuid")); return loseCancel ? new Response("lost", { status: 502 }) : Response.json({}); }
-    if (path === "/api/idnode/save") return new Response("", { status: writeAllowed ? 200 : 403 });
+    if (path === "/api/dvr/entry/cancel" || path === "/api/idnode/delete") { if (!keepCancel) rows = rows.filter(row => row.uuid !== body.get("uuid")); return loseCancel ? new Response("lost", { status: 502 }) : Response.json({}); }
+    if (path === "/api/idnode/save") { if (changeAfterWriteCheck) rows[0]!.filename = "/changed-after-permission-check.ts"; return new Response("", { status: writeAllowed ? 200 : 403 }); }
     return new Response("", { status: 404 });
   } });
   cleanup.push(() => server.stop(true));
@@ -65,7 +72,9 @@ function fixture() {
   };
   const schedule = () => api("/schedule", "POST", { programId: selected.program.id, start: selected.program.start, end: selected.program.end, title: selected.program.title, revision: 2 });
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
-    get probeCount() { return probeCount; }, set blockChannels(value: Promise<void> | undefined) { blockChannels = value; }, set hideViewer(value: boolean) { hideViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
+    set backendTimeOffset(value: number) { backendTimeOffset = value; },
+    set changeAfterWriteCheck(value: boolean) { changeAfterWriteCheck = value; },
+    get probeCount() { return probeCount; }, set blockChannels(value: Promise<void> | undefined) { blockChannels = value; }, set hideViewer(value: boolean) { hideViewer = value; }, set hideFailedRecorder(value: boolean) { hideFailedRecorder = value; }, set hideFailedViewer(value: boolean) { hideFailedViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
     set fail(value: boolean) { fail = value; }, set loseCreate(value: boolean) { loseCreate = value; }, set loseCancel(value: boolean) { loseCancel = value; }, set writeAllowed(value: boolean) { writeAllowed = value; }, set missingChannel(value: boolean) { missingChannel = value; }, set incomplete(value: boolean) { incomplete = value; }, set identity(value: ControllerIdentity | null) { identity = value; }, set selected(value: typeof selected) { selected = value; }, set blockCreate(value: Promise<void> | undefined) { blockCreate = value; },
     async reopen() { await recordings.close(); recordings = make(); },
   };
@@ -177,10 +186,10 @@ test("empty-library setup rejects playback without view-all or with manage-all r
   for (const writable of [false, true]) {
     const app = fixture(); app.hideViewer = !writable; app.writeAllowed = writable;
     const response = await app.api("/setup", "POST", { ...app.input, revision: 0 });
-    expect(response.status).toBe(409); expect((await response.json()).error).toContain(writable ? "read-only" : "view-all");
+    expect(response.status).toBe(409); expect((await response.json()).error).toContain(writable ? "read-only" : "View all");
     expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows).toHaveLength(0); expect(app.probeCount).toBe(1);
     const conf = JSON.parse(app.calls.find(call => call.path === "/api/dvr/entry/create")!.body.get("conf")!);
-    expect(conf.enabled).toBe(false); expect(conf.start).toBeGreaterThan(Date.now() / 1000 + 86_399); expect(conf.stop - conf.start).toBe(60);
+    expect(conf.enabled).toBe(false); expect(conf.stop + conf.stop_extra * 60).toBeLessThan(Date.now() / 1000); expect(conf.start_extra).toBe(1); expect(conf.stop_extra).toBe(1); expect(conf.stop - conf.start).toBe(60);
     expect((await app.schedule()).status).toBe(409); expect(app.createCount).toBe(0);
   }
 });
@@ -209,7 +218,7 @@ test("setup remains blocked until disabled-entry cleanup is confirmed after rest
   await app.reopen(); app.keepCancel = false; app.loseCancel = true;
   expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(200);
   expect(app.probeCount).toBe(1); expect(app.rows).toHaveLength(0); expect(app.recordings.snapshot().configured).toBe(true);
-  expect(app.calls.filter(call => call.path === "/api/dvr/entry/cancel").map(call => call.body.get("uuid"))).toEqual([id, id]);
+  expect(app.calls.filter(call => call.path === "/api/idnode/delete").map(call => call.body.get("uuid"))).toEqual([id, id]);
 });
 
 
@@ -217,7 +226,7 @@ test("a setup saved before permission qualification cannot schedule until verifi
   const app = fixture(); await app.setup();
   const database = new Database(app.databasePath);
   const row = database.query<{ data: string }, []>("SELECT data FROM recording_setup WHERE id = 1").get()!;
-  const legacy = JSON.parse(row.data); delete legacy.qualified;
+  const legacy = JSON.parse(row.data); delete legacy.qualificationVersion; legacy.qualified = true;
   database.query("UPDATE recording_setup SET data = ? WHERE id = 1").run(JSON.stringify(legacy)); database.close();
   await app.reopen();
   expect(app.recordings.snapshot().configured).toBe(false);
@@ -266,4 +275,92 @@ test("a programme that starts during backend verification is rejected before dur
     expect(response.status).toBe(409); expect((await response.json()).error).toContain("started while checking");
     expect(app.createCount).toBe(0); expect(app.recordings.snapshot().jobs).toHaveLength(0);
   } finally { gate.resolve(); clock.mockRestore(); }
+});
+
+test("failed-view is qualified independently for both accounts, with durable cleanup after permission repair", async () => {
+  for (const recorder of [false, true]) {
+    const app = fixture(); app.hideFailedRecorder = recorder; app.hideFailedViewer = !recorder;
+    const response = await app.api("/setup", "POST", { ...app.input, revision: 0 });
+    expect(response.status).toBe(recorder ? 502 : 409); expect((await response.json()).error).toContain("Failed view");
+    expect(app.recordings.snapshot().configured).toBe(false); expect(app.recordings.snapshot().jobs).toHaveLength(0); expect(app.createCount).toBe(0);
+    expect(app.probeCount).toBe(1);
+    if (recorder) {
+      expect(app.rows).toHaveLength(1); expect(app.rows[0]).toMatchObject({ enabled: false, sched_status: "completedError", filesize: 0 });
+      const uuid = String(app.rows[0]!.uuid);
+      expect(app.calls.some(call => call.path === "/api/idnode/delete")).toBe(false);
+      await app.reopen();
+      expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(502); expect(app.probeCount).toBe(1);
+      app.hideFailedRecorder = false;
+      expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(200);
+      expect(app.calls.filter(call => call.path === "/api/idnode/delete").map(call => call.body.get("uuid"))).toEqual([uuid]);
+      expect(app.probeCount).toBe(1);
+    }
+    expect(app.rows).toHaveLength(0);
+  }
+});
+
+test("owner-scoped totals exclude unrelated recordings and treat regex characters in usernames literally", async () => {
+  const app = fixture(); app.input.username = "recorder.[a]+(b)?^$|{2}\\end";
+  const foreign = { uuid: "9".repeat(32), owner: "other", channel: backendChannel, start: now / 1000, stop: now / 1000 + 60, sched_status: "scheduled" };
+  app.rows.push(foreign, { ...foreign, uuid: "8".repeat(32), sched_status: "completedError" });
+  await app.setup(); const pending = await job(await app.schedule());
+  expect(app.recordings.snapshot().jobs).toHaveLength(1); expect(pending.status).toBe("pending");
+  expect(app.rows.filter(row => row.owner === "other")).toHaveLength(2);
+  const filters = app.calls.filter(call => call.path.startsWith("/api/dvr/entry/grid")).map(call => JSON.parse(call.body.get("filter")!)[0]);
+  expect(filters.length).toBeGreaterThan(0);
+  for (const filter of filters) {
+    expect(filter.field).toBe("owner"); expect(new RegExp(filter.value, "i").test(app.input.username)).toBe(true);
+    expect(new RegExp(filter.value, "i").test(`prefix${app.input.username}`)).toBe(false);
+    expect(new RegExp(filter.value, "i").test(`${app.input.username}suffix`)).toBe(false);
+    expect(new RegExp(filter.value, "i").test("other")).toBe(false);
+  }
+  const cancelled = await job(await app.api(`/${pending.id}/cancel`, "POST", { revision: pending.revision }));
+  expect(cancelled.status).toBe("cancelled"); expect(app.rows).toHaveLength(2);
+});
+
+test("case-colliding owners fail closed before setup creates a permission entry", async () => {
+  const app = fixture(); app.rows.push({ uuid: "9".repeat(32), owner: "RECORDER", sched_status: "scheduled" });
+  const response = await app.api("/setup", "POST", { ...app.input, revision: 0 });
+  expect(response.status).toBe(502); expect((await response.json()).error).toContain("letter case");
+  expect(app.probeCount).toBe(0); expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows).toHaveLength(1);
+});
+
+test("legacy future intents finish exact cleanup before a newly admitted failed check can qualify setup", async () => {
+  for (const phase of ["submitted", "cleanup"]) {
+    const app = fixture(), uuid = "9".repeat(32), id = crypto.randomUUID(), start = Math.floor(Date.now() / 1000) + 86400;
+    const connection = JSON.stringify([app.input.endpoint, app.input.username, app.input.playbackUsername, profileId]);
+    const database = new Database(app.databasePath);
+    database.query("INSERT INTO recording_qualification VALUES (1, ?)").run(JSON.stringify({ connection, id, channel: backendChannel, start, stop: start + 60, phase, failure: null })); database.close();
+    app.rows.push({ uuid, owner: app.input.username, channel: backendChannel, comment: `Couch:permission:${id}`, start, stop: start + 60, enabled: false, filesize: 0, sched_status: "scheduled" });
+    const response = await app.api("/setup", "POST", { ...app.input, revision: 0 });
+    expect(response.status).toBe(200); expect(app.probeCount).toBe(1); expect(app.rows).toHaveLength(0);
+    const deletes = app.calls.filter(call => call.path === "/api/idnode/delete");
+    expect(deletes).toHaveLength(2); expect(deletes[0]!.body.get("uuid")).toBe(uuid); expect(deletes[1]!.body.get("uuid")).not.toBe(uuid);
+    expect(app.calls.filter(call => call.path === "/api/dvr/entry/grid_failed")).toHaveLength(2);
+    expect(app.recordings.snapshot().configured).toBe(true);
+  }
+});
+
+test("invalid backend clock and a changed disabled probe cannot qualify setup or delete an unverified entry", async () => {
+  const app = fixture(); app.backendTimeOffset = 120;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(409); expect(app.probeCount).toBe(0);
+  app.backendTimeOffset = 0;
+  const gate = Promise.withResolvers<void>(); app.blockCreate = gate.promise;
+  const pending = app.api("/setup", "POST", { ...app.input, revision: 0 });
+  try {
+    for (let i = 0; i < 100 && !app.probeCount; i++) await Bun.sleep(1);
+    expect(app.rows).toHaveLength(1); expect(app.rows[0]!.enabled).toBe(false);
+    app.rows[0]!.filename = "/unexpected/media.ts";
+  } finally { gate.resolve(); }
+  expect((await pending).status).toBe(409); expect(app.calls.some(call => call.path === "/api/idnode/delete")).toBe(false);
+  expect(app.recordings.snapshot().configured).toBe(false); expect(app.createCount).toBe(0);
+});
+
+test("permission-check deletion revalidates the entry after asynchronous rights checks", async () => {
+  const app = fixture(); app.changeAfterWriteCheck = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(409);
+  expect(app.calls.some(call => call.path === "/api/idnode/save")).toBe(true);
+  expect(app.calls.some(call => call.path === "/api/idnode/delete")).toBe(false);
+  expect(app.rows).toHaveLength(1); expect(app.rows[0]!.filename).toBe("/changed-after-permission-check.ts");
+  expect(app.recordings.snapshot().configured).toBe(false); expect(app.createCount).toBe(0);
 });

@@ -4,7 +4,7 @@ export class RecordingError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 export type RecordingConnection = { endpoint: string; username: string; password: string; playbackUsername: string; playbackPassword: string; profileId: string };
-export type RecordingVerification = { connection: string; id: string; channel: string; start: number; stop: number; phase: "submitted" | "cleanup"; failure: string | null };
+export type RecordingVerification = { version?: 2; connection: string; id: string; channel: string; start: number; stop: number; phase: "submitted" | "cleanup"; failure: string | null };
 export type VerificationStore = { authorize: () => void; load: () => RecordingVerification | null; save: (value: RecordingVerification | null) => void };
 export type BackendJob = { uuid: string; channel: string; comment: string; owner: string; start: number; stop: number; sched_status: string; status: string; filesize: number; errorcode: number };
 export const backendUuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
@@ -44,62 +44,92 @@ export function createTvheadend(connection: RecordingConnection, shutdown: Abort
     return value;
   }
   async function grid(path: string, playback = false, signal = shutdown) {
-    const value = await call(path, { limit: "1000" }, playback, signal);
-    if (!Array.isArray(value.entries) || !Number.isInteger(value.total) || Number(value.total) > 1000 || Number(value.total) !== value.entries.length || !value.entries.every(record)) return fail("The backend listing is incomplete or exceeds 1,000 entries. Reconciliation is paused.");
+    const ownerScoped = path === "dvr/entry/grid" || path === "dvr/entry/grid_failed";
+    // Tvheadend filters before counting, but its string filters are case-insensitive
+    // POSIX regular expressions. The exact-owner check below rejects collisions.
+    const owner = `^${connection.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
+    const value = await call(path, { limit: "1000", ...(ownerScoped ? { filter: JSON.stringify([{ field: "owner", type: "string", value: owner }]) } : {}) }, playback, signal);
+    if (!Array.isArray(value.entries) || !Number.isInteger(value.total) || Number(value.total) > 1000 || Number(value.total) !== value.entries.length || !value.entries.every(record)) return fail(`The backend listing is incomplete or exceeds 1,000 entries. Reconciliation is paused.${ownerScoped ? " Check Failed view for both accounts and View all for playback, then retry with the same accounts." : ""}`);
+    if (ownerScoped && value.entries.some(row => row.owner !== connection.username)) return fail("The backend owner filter returned another account. Use recorder usernames that do not differ only by letter case.");
     return value.entries as Record<string, unknown>[];
   }
-  async function qualify(channels: { uuid: string }[], store: VerificationStore, signal: AbortSignal) {
+  async function qualify(channels: { uuid: string }[], backendTime: number, store: VerificationStore, signal: AbortSignal) {
     const identity = JSON.stringify([connection.endpoint, connection.username, connection.playbackUsername, connection.profileId]);
     let intent = store.load();
     if (intent && intent.connection !== identity) throw new RecordingError("Finish the pending disabled recording check with its original backend and accounts before changing their identity.", 409);
+    if (intent && intent.version !== undefined && intent.version !== 2) throw new RecordingError("This permission check belongs to a newer Couch version. Finish it with that version before changing setup.", 409);
     if (!intent) {
       if (!channels[0]) throw new RecordingError("The backend needs an enabled channel with a service before recording setup can be verified.", 409);
-      const start = Math.ceil(Date.now() / 1000) + 86_400;
-      intent = { connection: identity, id: crypto.randomUUID(), channel: channels[0].uuid, start, stop: start + 60, phase: "submitted", failure: null };
+      const start = backendTime - 180;
+      intent = { version: 2, connection: identity, id: crypto.randomUUID(), channel: channels[0].uuid, start, stop: start + 60, phase: "submitted", failure: null };
       signal.throwIfAborted(); store.authorize();
       store.save(intent);
       // Persist the attempt before sending. A missing response never permits
       // another create; the next request reconciles this exact disabled entry.
-      await call("dvr/entry/create", { conf: JSON.stringify({ enabled: false, channel: intent.channel, config_name: connection.profileId, start, stop: intent.stop, start_extra: 0, stop_extra: 0, disp_title: "Couch recording permission check", comment: `Couch:permission:${intent.id}` }) }, false, signal).catch(() => {});
+      // Explicit one-minute padding overrides profile/channel padding. Even the
+      // padded stop is elapsed; enabled:false independently prevents capture.
+      await call("dvr/entry/create", { conf: JSON.stringify({ enabled: false, channel: intent.channel, config_name: connection.profileId, start, stop: intent.stop, start_extra: 1, stop_extra: 1, disp_title: "Couch recording permission check", comment: `Couch:permission:${intent.id}` }) }, false, signal).catch(() => {});
     }
     const marker = `Couch:permission:${intent.id}`;
     const matching = (rows: Record<string, unknown>[]) => rows.filter(row => row.comment === marker);
+    const checkEntry = (row: Record<string, unknown>) => {
+      const identityChanged = !backendUuid(row.uuid) || row.owner !== connection.username || row.channel !== intent.channel || row.start !== intent.start || row.stop !== intent.stop;
+      const unsafe = row.enabled !== false && row.enabled !== 0 || Number(row.filesize) !== 0 || row.filename || row.sched_status === "recording" || row.sched_status === "recordingError";
+      if (identityChanged || unsafe || intent.version === 2 && (row.start_extra !== 1 || row.stop_extra !== 1)) throw new RecordingError("The disabled permission check changed on the backend. Its administrator must resolve it before setup can finish.", 409);
+    };
     const rows = matching(await grid("dvr/entry/grid", false, signal));
     if (rows.length > 1) throw new RecordingError("The backend has duplicate disabled permission checks. Its administrator must reconcile them before setup can finish.", 409);
     const row = rows[0];
     if (!row && intent.phase === "submitted") throw new RecordingError("The backend has not confirmed the disabled permission check. Setup remains blocked; retry verification to reconcile it without creating another entry.", 409);
-    if (row && (!backendUuid(row.uuid) || row.owner !== connection.username || row.channel !== intent.channel || row.start !== intent.start || row.stop !== intent.stop || row.enabled !== false && row.enabled !== 0 || Number(row.filesize) > 0 || row.sched_status === "recording")) throw new RecordingError("The disabled permission check changed on the backend. Its administrator must resolve it before setup can finish.", 409);
+    if (row) checkEntry(row);
     if (row && intent.phase === "submitted") {
-      try {
-        const visible = (await grid("dvr/entry/grid", true, signal)).find(item => item.uuid === row.uuid);
-        if (!visible || visible.owner !== connection.username || visible.comment !== marker) throw new RecordingError("The playback account needs view-all DVR access to read the recorder account's entries.", 409);
-        await call("idnode/save", { node: JSON.stringify({ uuid: row.uuid }) }, true, signal, 403);
-      } catch (reason) {
-        intent.failure = reason instanceof RecordingError ? reason.message : "Playback permissions could not be verified. Retry setup after checking the backend.";
+      if (intent.version === 2) {
+        try {
+          const failed = (await grid("dvr/entry/grid_failed", false, signal)).find(item => item.uuid === row.uuid && item.comment === marker);
+          if (!failed) throw new RecordingError("The disabled entry has not confirmed failed-record visibility. Check Failed view for both accounts and retry setup.", 409);
+          const visible = (await grid("dvr/entry/grid_failed", true, signal)).find(item => item.uuid === row.uuid && item.comment === marker);
+          if (!visible) throw new RecordingError("Playback needs View all and Failed view DVR access to read the recorder account's failed entries.", 409);
+          await call("idnode/save", { node: JSON.stringify({ uuid: row.uuid }) }, true, signal, 403);
+        } catch (reason) {
+          intent.failure = reason instanceof RecordingError ? reason.message : "Playback permissions could not be verified. Retry setup after checking the backend.";
+        }
       }
       intent.phase = "cleanup"; store.save(intent);
     }
     if (row) {
       // Clean up even if this HTTP caller left. The disabled entry cannot
       // capture media, and durable cleanup intent survives an app shutdown.
-      await call("dvr/entry/cancel", { uuid: String(row.uuid) }, false, shutdown).catch(() => {});
+      const current = matching(await grid("dvr/entry/grid", false, shutdown));
+      if (current.length > 1 || current[0] && current[0].uuid !== row.uuid) throw new RecordingError("The disabled permission check changed identity before cleanup. Setup remains blocked.", 409);
+      if (current[0]) {
+        checkEntry(current[0]);
+        await call("idnode/delete", { uuid: String(row.uuid) }, false, shutdown).catch(() => {});
+      }
       if (matching(await grid("dvr/entry/grid", false, shutdown)).length) throw new RecordingError("The disabled permission check still needs backend cleanup. Setup is blocked; retry verification to finish cleanup.", 409);
     }
     store.save(null);
     if (intent.failure) throw new RecordingError(intent.failure, 409);
+    return intent.version === 2;
   }
   return {
     async verify(signal = shutdown, verification?: VerificationStore) {
+      let backendTime = 0;
       for (const playback of [false, true]) {
         const identity = await call("access/whoami", {}, playback, signal);
         if (identity.username !== (playback ? connection.playbackUsername : connection.username) || identity.admin || !identity.dvr) throw new RecordingError("Use authenticated non-administrator recorder and playback accounts with DVR access on Tvheadend API 20 or newer.", 409);
+        if (!playback && verification) {
+          if (!Number.isSafeInteger(identity.time) || Math.abs(Number(identity.time) - Date.now() / 1000) > 60) throw new RecordingError("The backend clock must agree with Couch within one minute before setup can be verified.", 409);
+          backendTime = Number(identity.time);
+        }
       }
       await call("dvr/entry/class", {}, false, signal);
       const profiles = await grid("dvr/config/grid", false, signal);
       if (!profiles.some(item => item.uuid === connection.profileId)) throw new RecordingError("This recorder account cannot use the selected recording profile.", 409);
       await grid("dvr/entry/grid", true, signal);
       const channels = await this.channels(signal);
-      if (verification) await qualify(channels, verification, signal);
+      // Legacy future checks can only finish their cleanup. A new failed check
+      // must then pass before this configuration receives the current version.
+      if (verification && !await qualify(channels, backendTime, verification, signal)) await qualify(channels, backendTime, verification, signal);
       return channels;
     },
     async channels(signal = shutdown) {
