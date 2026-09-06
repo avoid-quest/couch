@@ -6,6 +6,7 @@ import { assertNativeUiPixels, assertNativeVideoPixels } from "./pixels";
 import { UiDriver, assertNativePortal, assertResponsive, assertTheme, keys, qualityLabel, startHttpRemote } from "./ui";
 import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinResume } from "./progress";
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
+import { addTVFolder, verifyFolderSettings } from "./folder-settings";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
 import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
 import { verifyReplayGain } from "./replaygain";
@@ -31,10 +32,10 @@ const driver = Bun.spawn(["tauri-driver"], {
 const media = Bun.serve({
   hostname: "127.0.0.1", port: 4200,
   routes: {
-    "/multitrack.mkv": () => new Response(Bun.file("/fixtures/multitrack.mkv")),
+    "/multitrack.mkv": () => new Response(Bun.file("/mnt/fixtures/multitrack.mkv")),
     "/radio.mp3": request => {
       plainMediaAuth.push(request.headers.has("authorization") || request.headers.has("x-emby-token"));
-      return new Response(Bun.file("/fixtures/radio.mp3"));
+      return new Response(Bun.file("/mnt/fixtures/radio.mp3"));
     },
     "/web.html": () => new Response('<!doctype html><title>Local web fixture</title><meta property="og:image" content="http://127.0.0.1:4200/logo.svg"><video controls poster="http://127.0.0.1:4200/logo.svg"><source src="/dash/manifest.mpd" type="application/dash+xml"></video>', { headers: { "Content-Type": "text/html" } }),
     "/dash/:file": request => new Response(Bun.file(`/web-fixtures/${request.params.file}`)),
@@ -533,22 +534,8 @@ try {
   await verifyVideoQuality({ ui, httpRemote: httpRemote!, otherRemote: secondHttpRemote, until, clients, artifactDir, screenshot });
   await secondHttpRemote.minimize();
 
-  await section("Library");
-  await click('.library-heading button');
-  let folderWindow = "";
-  await until("native library folder picker opens", async () => {
-    folderWindow = (await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output.split("\n")[0] ?? "";
-    return !!folderWindow;
-  });
-  assert.equal((await xdotool("windowactivate", "--sync", folderWindow)).code, 0);
-  // Leave GTK's Recent view before submitting an explicit folder location.
-  assert.equal((await xdotool("key", "--clearmodifiers", "alt+Home")).code, 0);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+l")).code, 0);
-  assert.equal((await xdotool("type", "--clearmodifiers", "/fixtures/")).code, 0);
-  assert.equal((await xdotool("key", "Return")).code, 0);
-  await Bun.sleep(300);
-  if ((await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output) await xdotool("key", "Return");
-  await until("native folder selection scans media for paired remotes", async () => {
+  await addTVFolder(ui, until, "fixtures");
+  await until("Sources folder selection scans media for paired remotes", async () => {
     const { sources } = await api("/api/library/sources");
     return sources.some((source: any) => source.status === "ready" && source.itemCount >= 2);
   }, 30_000);
@@ -590,6 +577,7 @@ try {
   const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
   const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedFolderSettings = await verifyFolderSettings(musicContext);
   const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
   const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
@@ -629,6 +617,7 @@ try {
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
   await persistedJellyfinSettings?.verifyAfterRestart();
   await persistedRadioSettings.verifyAfterRestart();
+  await persistedFolderSettings.verifyAfterRestart();
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.equal((await api("/api/library/items?q=Linux&offset=0&limit=30")).items[0].id, library.items[0].id);

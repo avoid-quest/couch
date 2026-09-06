@@ -32,7 +32,7 @@ export async function startJellyfinFixture({ root, image, artifacts }: { root: s
     const endpoint = process.env.DOCKER_HOST || await run(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]);
     docker = ["docker", "--config", dockerConfig, "--host", endpoint];
     await mkdir(join(directory, "generated"));
-    await run(["run", "--rm", "--mount", `type=bind,source=${root},target=/source,readonly`, "--mount", `type=bind,source=${join(directory, "generated")},target=/fixtures`, image, "bun", "/source/tests/linux/fixtures.ts"]);
+    await run(["run", "--rm", "--mount", `type=bind,source=${root},target=/source,readonly`, "--mount", `type=bind,source=${join(directory, "generated")},target=/mnt/fixtures`, image, "bun", "/source/tests/linux/fixtures.ts"]);
     for (const [folder, filename] of [["Movies/Fixture", "multitrack.mkv"], ["Music/Fixture/Fixture", "radio.mp3"]] as const) {
       await mkdir(join(media, folder), { recursive: true });
       await Bun.write(join(media, folder, filename), Bun.file(join(directory, "generated", filename)));
