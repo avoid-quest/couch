@@ -6,7 +6,7 @@ tar -C /source --exclude=target --exclude=binaries -cf - \
   package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/setup-media.test.ts tests/replaygain-audio.test.ts | tar -xf -
 bun install --frozen-lockfile
 { bun --version; rustc --version; cargo install --list; pkg-config --modversion webkit2gtk-4.1 mpv; yt-dlp --version; deno --version; } > /artifacts/versions.txt
-bun run check
+COUCH_IPTV_CLOCK_EVIDENCE=/artifacts/iptv-clock-preflight.json bun run check
 bun run desktop:build --debug --no-bundle
 mkdir -p /work/bin
 cp /cache/target/debug/couch /cache/target/debug/couch-server /work/bin/
