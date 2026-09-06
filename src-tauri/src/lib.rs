@@ -155,6 +155,10 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
 }
 
 pub fn run() {
+    if std::env::args().any(|arg| arg == "--version") {
+        println!("{}", option_env!("COUCH_BUILD_INFO").unwrap_or("{\"packaged\":false}"));
+        return;
+    }
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
@@ -180,7 +184,10 @@ pub fn run() {
             choose_folder
         ])
         .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
+            let data_dir = match std::env::var_os("COUCH_DATA_DIR") {
+                Some(path) => std::path::PathBuf::from(path),
+                None => app.path().app_data_dir()?,
+            };
             prepare_data_dir(&data_dir)?;
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
@@ -204,7 +211,8 @@ pub fn run() {
                 ("COUCH_YT_DLP", "yt-dlp"),
                 ("COUCH_DENO", "deno"),
             ] {
-                let path = data_dir.join("tools").join(name);
+                let bundled = app.path().resource_dir()?.join("tools").join(name);
+                let path = if bundled.is_file() { bundled } else { data_dir.join("tools").join(name) };
                 if std::env::var_os(variable).is_none() && path.is_file() {
                     sidecar = sidecar.env(variable, path);
                 }
@@ -257,6 +265,9 @@ pub fn run() {
                                 .send(player::Request::Command(protocol::PlaybackCommand::Stop));
                             host.child.lock().expect("sidecar lock poisoned").take();
                             host.child_exited.send_replace(true);
+                            if !host.shutting_down.load(Ordering::Relaxed) {
+                                handle.exit(1);
+                            }
                         }
                         _ => {}
                     }

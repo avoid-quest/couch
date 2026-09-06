@@ -3,6 +3,12 @@ import { join } from "node:path";
 import frontend from "./client/index.html";
 import { createHub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
+import { buildInfo } from "./server/build-info";
+
+if (process.argv.includes("--version")) {
+  console.log(JSON.stringify(buildInfo));
+  process.exit(0);
+}
 
 const native = process.env.COUCH_NATIVE === "1";
 const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
