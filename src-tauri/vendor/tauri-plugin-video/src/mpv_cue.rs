@@ -3,7 +3,7 @@
 // 44.1 kHz fixture's fractional CD markers do not round below their sample.
 // Canonical cue bounds, relative progress and ordinary files stay unchanged.
 pub(crate) fn timestamp(position: f64, cue: bool) -> f64 {
-    if cue && position > 0.0 { position.next_up().min(f64::MAX) } else { position }
+    if cue && position > 0.0 && position < f64::MAX { f64::from_bits(position.to_bits() + 1) } else { position }
 }
 
 #[cfg(test)]
@@ -33,6 +33,8 @@ mod tests {
             assert_eq!(timestamp(position, false).to_bits(), position.to_bits());
             assert!(timestamp(position, true).is_finite());
         }
-        assert_eq!(timestamp(0.0, true), 0.0);
+        for position in [0.0, -0.0, -1.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            assert_eq!(timestamp(position, true).to_bits(), position.to_bits());
+        }
     }
 }
