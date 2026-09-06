@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { strict as assert } from "node:assert";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -100,17 +101,23 @@ try {
   const build = await api("/api/build", connection.token);
   assert.ok(build.packaged && !build.dirty); assert.equal(build.revision, process.env.JELLYFIN_EXPECTED_REVISION, "Exact reviewed package revision");
   await Bun.write(`${artifacts}/identity.json`, JSON.stringify({ build, binaries: exec("sha256sum", "/usr/bin/couch", "/usr/bin/couch-server").toString(), helper: sha256(await Bun.file(import.meta.path).arrayBuffer()), environment: "Ubuntu amd64 package, Xvfb software pixels, null audio" }, null, 2));
+  let lastPgsPath = "";
   const load = async (title: string) => {
     const previous = first().player.playbackId;
     await command({ type: "enqueueJellyfin", entryId: crypto.randomUUID(), itemId: fixture.item(title).Id, playNow: true });
     await until(`${title} plays natively on both remotes`, () => all(state => state.player.playbackId !== previous && state.player.status === "playing" && state.player.position > 0));
     await command({ type: "pause", playbackId: first().player.playbackId!, paused: true }); await until("native playback pauses", () => all(state => state.player.status === "paused"));
+    if (title === "Zero") {
+      const downloaded = files(); assert.equal(downloaded.length, 1); assert.match(downloaded[0]!, /\.sup$/);
+      assert.notEqual(downloaded[0], lastPgsPath, "Each retirement starts with a freshly downloaded PGS file");
+      assert.equal(exec("stat", "-c", "%a", downloaded[0]!).toString().trim(), "600");
+      assert.equal(sha256(exec("cat", downloaded[0]!)), fixture.summary.zero.responseHash);
+      lastPgsPath = downloaded[0]!; record("fresh complete private PGS exists before retirement");
+    }
   };
   await load("Zero");
   const index = first().player.tracks!.find(track => track.kind === "subtitle" && track.language === "eng")!.index;
-  const privateFiles = files(); assert.equal(privateFiles.length, 1); assert.match(privateFiles[0]!, /\.sup$/);
-  assert.equal(exec("stat", "-c", "%a", privateFiles[0]!).toString().trim(), "600");
-  assert.equal(sha256(exec("cat", privateFiles[0]!)), fixture.summary.zero.responseHash);
+  const privateFiles = files();
   assert.ok(all(state => state.player.subtitleError?.includes("start after zero") === true));
   await select(tv, -1); await select(tv, index);
   browser = (await driver(phonePort, "/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", "webkitgtk:browserOptions": { args: ["--automation", "--class=JellyfinSubtitlePhone"] } } } })).sessionId;
@@ -125,8 +132,10 @@ try {
       const stable = !!point && point === previous; previous = point; return stable;
     });
     const point = JSON.parse(previous);
+    await phone.execute("const target=arguments[0]; window.__httpPointer=null; document.addEventListener('pointerdown', event => { window.__httpPointer={hit:target.contains(event.target)}; }, {once:true,capture:true});", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
     const window = exec("xdotool", "search", "--onlyvisible", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
     exec("xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
+    assert.ok((await phone.execute("return window.__httpPointer"))?.hit, "HTTP pointer reaches its intended control after X11 translation");
   };
   await phone.type("#pairing-code", connection.pairingCode); await phone.button("Connect");
   await until("real phone pairs", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
@@ -148,7 +157,17 @@ try {
   for (const [time, visible] of [[1, false], [4, true], [7, false], [10, true], [13, false], [4, true]] as const) await pixels(index, time, visible);
   const playingSessions = (await fixture.request("/Sessions")).filter((session: any) => session.Client === "Couch" && session.NowPlayingItem);
   assert.equal(playingSessions.length, 1); record("one upstream Couch playback session serves all remotes");
-  for (const remote of remotes) for (const secret of [fixture.token, fixture.password, fixture.containerUrl, ...privateFiles, "/media/"]) assert.ok(!JSON.stringify(remote.state).includes(secret));
+  const database = new Database(`${artifacts}/data/couch.sqlite`, { readonly: true });
+  let couchToken: string;
+  try {
+    const row = database.query<{ device_id: string; configuration: string }, []>("SELECT device_id, configuration FROM jellyfin WHERE id=1").get()!;
+    const configuration = JSON.parse(row.configuration);
+    assert.ok(configuration.accessToken && configuration.accessToken !== fixture.token, "Inspect the actual Couch credential privately");
+    assert.equal(configuration.url, fixture.containerUrl);
+    assert.equal(row.device_id, playingSessions[0].DeviceId); assert.equal(configuration.userId, playingSessions[0].UserId);
+    couchToken = configuration.accessToken;
+  } finally { database.close(); }
+  for (const remote of remotes) for (const secret of [couchToken, fixture.token, fixture.password, fixture.containerUrl, ...privateFiles, "/media/"]) assert.ok(!JSON.stringify(remote.state).includes(secret));
   record("ordinary snapshots contain no upstream credentials or native paths");
   await load("Raw"); assert.deepEqual(files(), []); assert.ok(!first().player.tracks?.some(track => track.kind === "subtitle")); assert.ok(first().player.subtitleError?.includes("sidecars are unavailable"));
   for (const title of ["Invalid", "Missing"]) { await load(title); assert.deepEqual(files(), []); assert.ok(!first().player.tracks?.some(track => track.kind === "subtitle")); assert.ok(first().player.subtitleError?.includes("could not be loaded")); }

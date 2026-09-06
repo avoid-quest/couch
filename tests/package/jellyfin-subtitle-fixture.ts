@@ -20,16 +20,27 @@ export function pgsPackets(bytes: Uint8Array) {
 export async function startSubtitleFixture(corpusPath: string, evidencePath: string) {
   const corpus = resolve(corpusPath), evidence = resolve(evidencePath);
   const name = `couch-jellyfin-subtitles-${crypto.randomUUID().slice(0, 8)}`;
-  let container = false, network = false;
+  const owner = `couch.subtitle-fixture=${name}`, converter = `${name}-convert`;
   const run = async (...args: string[]) => {
     const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
     const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     assert.equal(code, 0, error);
     return output.trim();
   };
+  const removeOwned = async (kind: "container" | "network", resource: string) => {
+    let info;
+    try { info = JSON.parse(await run(kind, "inspect", resource))[0]; }
+    catch (error) { if (/No such (container|network|object)/i.test(String(error))) return; throw error; }
+    assert.equal((kind === "container" ? info.Config.Labels : info.Labels)?.["couch.subtitle-fixture"], name, "Cleanup owns the exact resource");
+    try { await run(kind, "rm", ...(kind === "container" ? ["--force"] : []), resource); }
+    catch (error) { if (!/No such (container|network|object)/i.test(String(error))) throw error; }
+  };
   const close = async () => {
-    try { if (container) await run("rm", "--force", name); }
-    finally { if (network) await run("network", "rm", name); }
+    // Names are known before create: a lost CLI response must not skip daemon-created resources.
+    const results = await Promise.allSettled([removeOwned("container", name), removeOwned("container", converter)]);
+    results.push(...await Promise.allSettled([removeOwned("network", name)]));
+    const failures = results.filter(result => result.status === "rejected");
+    if (failures.length) throw new AggregateError(failures.map(result => result.reason), "Fixture cleanup failed");
   };
   try {
     await mkdir(evidence, { recursive: true, mode: 0o700 });
@@ -48,15 +59,15 @@ export async function startSubtitleFixture(corpusPath: string, evidencePath: str
     assert.deepEqual(pgsPackets(anchored).slice(2), pgsPackets(original));
     await Bun.write(`${evidence}/original.sup`, original);
     await Bun.write(`${evidence}/zero.sup`, anchored);
-    await run("run", "--rm", "--cpus", "2", "--memory", "2g", "--mount", `type=bind,source=${evidence},target=/evidence`, "--entrypoint", "/bin/sh", image, "-c", 'for kind in original zero; do /usr/lib/jellyfin-ffmpeg/ffmpeg -v error -y -copyts -i /evidence/$kind.sup -c:s copy -f matroska /evidence/$kind.mks; done');
+    await run("run", "--rm", "--name", converter, "--label", owner, "--cpus", "2", "--memory", "2g", "--mount", `type=bind,source=${evidence},target=/evidence`, "--entrypoint", "/bin/sh", image, "-c", 'for kind in original zero; do /usr/lib/jellyfin-ffmpeg/ffmpeg -v error -y -copyts -i /evidence/$kind.sup -c:s copy -f matroska /evidence/$kind.mks; done');
     for (const variant of ["Zero", "Raw", "Late", "Invalid", "Missing", "Failed"]) {
       const folder = `${evidence}/media/${variant}`;
       await mkdir(folder, { recursive: true });
       await Bun.write(`${folder}/${variant}.mkv`, background);
       await Bun.write(`${folder}/${variant}.eng.${variant === "Raw" ? "sup" : "mks"}`, Bun.file(`${evidence}/${variant === "Raw" ? "original.sup" : variant === "Late" ? "original.mks" : "zero.mks"}`));
     }
-    await run("network", "create", name); network = true;
-    await run("run", "--detach", "--name", name, "--network", name, "--network-alias", "jellyfin", "--publish", "127.0.0.1::8096", "--cpus", "2", "--memory", "2g", "--mount", `type=bind,source=${evidence}/media,target=/media,readonly`, "--tmpfs", "/config", "--tmpfs", "/cache", image); container = true;
+    await run("network", "create", "--label", owner, name);
+    await run("run", "--detach", "--name", name, "--label", owner, "--network", name, "--network-alias", "jellyfin", "--publish", "127.0.0.1::8096", "--cpus", "2", "--memory", "2g", "--mount", `type=bind,source=${evidence}/media,target=/media,readonly`, "--tmpfs", "/config", "--tmpfs", "/cache", image);
     const binding = await run("port", name, "8096/tcp");
     assert.match(binding, /^127\.0\.0\.1:\d+$/);
     const url = `http://${binding}`;
