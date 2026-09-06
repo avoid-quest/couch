@@ -76,7 +76,8 @@ test("cue library queue, saved playlist and relative progress survive restart wi
   const tracks = library.albumTracks(album.id).items;
   const store = openStore(databasePath);
   const commands: PlaybackCommand[] = [];
-  const session = createSession(store, command => commands.push(command), () => {}, { resolveSource: entry => library.getPlayable(entry.source.slice(8)) });
+  let loaded = Promise.withResolvers<PlaybackCommand>();
+  const session = createSession(store, command => { commands.push(command); if (command.type === "load") loaded.resolve(command); }, () => {}, { resolveSource: entry => library.getPlayable(entry.source.slice(8)) });
   const playlists = createPlaylists({ databasePath, onChange: () => {}, queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const idle = { playbackId: null, status: "idle" as const, position: 0, duration: null, volume: 80, seekable: false, error: null };
   session.observe(idle);
@@ -86,15 +87,14 @@ test("cue library queue, saved playlist and relative progress survive restart wi
   const snapshot = await saved.json() as { playlist: { id: string } };
   const entry = session.state.queue[1]!;
   session.command({ type: "play", entryId: entry.id });
-  await Bun.sleep(20);
+  expect(await loaded.promise).toMatchObject({ type: "load", segment: { start: 400 / 75, end: 875 / 75 } });
   const playbackId = session.state.player.playbackId!;
-  expect(commands.at(-1)).toMatchObject({ type: "load", segment: { start: 400 / 75, end: 875 / 75 } });
   session.observe({ ...idle, playbackId, status: "paused", position: 2, duration: 475 / 75, seekable: true });
   session.command({ type: "stop" });
   expect(store.progress("household", entry.source)?.position).toBe(2);
+  loaded = Promise.withResolvers<PlaybackCommand>();
   session.command({ type: "play", entryId: entry.id });
-  await Bun.sleep(20);
-  expect(commands.at(-1)).toMatchObject({ startPosition: 2, segment: { start: 400 / 75, end: 875 / 75 } });
+  expect(await loaded.promise).toMatchObject({ startPosition: 2, segment: { start: 400 / 75, end: 875 / 75 } });
   session.command({ type: "stop" });
   playlists.close(); store.close(); await library.close();
   const reopened = createLibrary({ databasePath, folders, ffprobePath: null });
