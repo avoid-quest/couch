@@ -1,0 +1,35 @@
+name: Update worker
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/updater.yml']
+  push:
+    branches: [main]
+    paths: ['packaging/appliance/**', 'scripts/test-update-*.py', 'scripts/build-appliance.sh', '.github/workflows/updater.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dummy-package-transactions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check retained receipts and transaction state
+        run: |
+          python3 -B scripts/test-update-retention.py
+          python3 -B scripts/test-update-transactions.py
+      - name: Verify signatures, archives and dummy package installation
+        # This dedicated disposable runner installs only the fixture's tiny
+        # packages. No Couch build, native session, release key or service runs.
+        run: |
+          sudo timeout --signal=KILL 60s python3 -B scripts/test-update-retention-ubuntu.py
+          sudo timeout --signal=KILL 120s python3 -B scripts/test-update-transactions-ubuntu.py
