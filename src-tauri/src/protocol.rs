@@ -46,6 +46,8 @@ pub enum PlaybackCommand {
         max_video_height: Option<u16>,
         #[serde(default, deserialize_with = "deserialize_start_position")]
         start_position: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_segment")]
+        segment: Option<PlaybackSegment>,
         #[serde(default)]
         preferences: PlaybackPreferences,
         #[serde(default)]
@@ -143,6 +145,26 @@ pub struct ExternalSubtitle {
     pub title: String,
     #[serde(default)]
     pub language: Option<String>,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub struct PlaybackSegment {
+    pub start: f64,
+    pub end: f64,
+}
+
+impl PlaybackSegment {
+    pub fn duration(self) -> f64 { self.end - self.start }
+    pub fn absolute(self, position: f64) -> f64 { self.start + position.clamp(0.0, self.duration()) }
+    pub fn relative(self, position: f64) -> f64 { (position - self.start).clamp(0.0, self.duration()) }
+}
+
+fn deserialize_segment<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<PlaybackSegment>, D::Error> {
+    let segment = Option::<PlaybackSegment>::deserialize(deserializer)?;
+    if segment.is_some_and(|value| !value.start.is_finite() || !value.end.is_finite() || value.start < 0.0 || value.end <= value.start) {
+        return Err(serde::de::Error::custom("segment requires finite increasing nonnegative bounds"));
+    }
+    Ok(segment)
 }
 
 fn deserialize_start_position<'de, D: serde::Deserializer<'de>>(
@@ -243,6 +265,23 @@ pub struct VideoRect {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cue_segments_validate_and_translate_private_positions() {
+        for bounds in ["null", r#"{"start":5.333333333333333,"end":11.666666666666666}"#] {
+            let command = format!(r#"{{"type":"load","playbackId":"cue","source":"/album.flac","segment":{bounds}}}"#);
+            assert!(serde_json::from_str::<PlaybackCommand>(&command).is_ok());
+        }
+        for bounds in [r#"{"start":-1,"end":2}"#, r#"{"start":2,"end":2}"#, r#"{"start":3,"end":2}"#, r#"{"start":0,"end":1e999}"#] {
+            let command = format!(r#"{{"type":"load","playbackId":"cue","source":"/album.flac","segment":{bounds}}}"#);
+            assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
+        }
+        let segment = PlaybackSegment { start: 5.0, end: 11.0 };
+        assert_eq!(segment.absolute(2.0), 7.0);
+        assert_eq!(segment.absolute(99.0), 11.0);
+        assert_eq!(segment.relative(4.0), 0.0);
+        assert_eq!(segment.relative(99.0), 6.0);
+    }
 
     #[test]
     fn replaygain_private_pipe_defaults_and_strict_modes() {

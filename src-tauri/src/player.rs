@@ -9,7 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::protocol::{
-    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlayerState, ReplayGainMode, TrackKind, VideoRect,
+    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlaybackSegment, PlayerState, ReplayGainMode, TrackKind, VideoRect,
 };
 use crate::Host;
 
@@ -72,6 +72,7 @@ struct Player {
     diagnostics_pending: Arc<AtomicBool>,
     state: PlayerState,
     rect: VideoRect,
+    segment: Option<PlaybackSegment>,
 }
 
 impl Player {
@@ -84,11 +85,14 @@ impl Player {
                 audio_source,
                 max_video_height,
                 start_position,
+                segment,
                 preferences,
                 subtitles,
                 radio,
                 go_live,
             } => {
+                self.segment = segment;
+                let start_position = segment.map(|bounds| bounds.absolute(start_position.filter(|position| *position < bounds.duration()).unwrap_or(0.0))).or(start_position);
                 self.state = PlayerState {
                     playback_id: Some(playback_id),
                     status: "loading",
@@ -148,7 +152,7 @@ impl Player {
                 position,
             } => {
                 if self.state.playback_id.as_deref() == Some(&playback_id) {
-                    self.control(app, "seek", position, -1)?;
+                    self.control(app, "seek", self.segment.map_or(position, |bounds| bounds.absolute(position)), -1)?;
                 }
                 Ok(())
             }
@@ -207,6 +211,7 @@ impl Player {
                 Ok(())
             }
             PlaybackCommand::Stop => {
+                self.segment = None;
                 let result = self.close(app);
                 // The coordinator retires this playback ID before requesting stop.
                 // Report a close failure against that stopped session as well.
@@ -246,6 +251,7 @@ impl Player {
             "audioUri": audio_source,
             "maxVideoHeight": max_video_height,
             "startPosition": start_position,
+            "endPosition": self.segment.map(|bounds| bounds.end),
             "preferences": preferences,
             "subtitles": subtitles,
             "radio": radio,
@@ -413,9 +419,9 @@ impl Player {
         } else {
             "paused"
         };
-        self.state.position = snapshot.current_time_seconds.max(0.0);
+        self.state.position = self.segment.map_or(snapshot.current_time_seconds.max(0.0), |bounds| bounds.relative(snapshot.current_time_seconds));
         self.state.duration =
-            (snapshot.duration_seconds > 0.0).then_some(snapshot.duration_seconds);
+            self.segment.map(|bounds| bounds.duration()).or_else(|| (snapshot.duration_seconds > 0.0).then_some(snapshot.duration_seconds));
         self.state.volume = observed.volume.clamp(0.0, 1.0) * 100.0;
         self.state.seekable = observed.seekable;
         self.state.speed = observed.speed;
@@ -452,10 +458,10 @@ impl Player {
         self.state.chapters = observed
             .chapters
             .into_iter()
-            .filter(|chapter| chapter.position.is_finite() && chapter.position >= 0.0)
+            .filter(|chapter| chapter.position.is_finite() && chapter.position >= 0.0 && self.segment.is_none_or(|bounds| chapter.position >= bounds.start && chapter.position < bounds.end))
             .map(|chapter| crate::protocol::Chapter {
                 title: chapter.title,
-                position: chapter.position,
+                position: self.segment.map_or(chapter.position, |bounds| bounds.relative(chapter.position)),
             })
             .collect();
         self.state.error = None;
@@ -520,6 +526,25 @@ mod tests {
                 "language": "ita", "label": "Italian", "codec": "aac", "selected": true }]
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn cue_observations_use_relative_positions_duration_and_chapters() {
+        let mut player = Player { segment: Some(PlaybackSegment { start: 8.0, end: 14.0 }), ..Player::default() };
+        player.apply(snapshot()).unwrap();
+        assert_eq!(player.state.position, 3.0);
+        assert_eq!(player.state.duration, Some(6.0));
+        assert_eq!(player.state.chapters[0].position, 2.0);
+        let mut end = snapshot();
+        end.current_time_seconds = 15.0;
+        end.mpv_state.as_mut().unwrap().ended = true;
+        player.apply(end).unwrap();
+        assert_eq!(player.state.position, 6.0);
+        assert_eq!(player.state.status, "ended");
+        player.segment = None;
+        player.apply(snapshot()).unwrap();
+        assert_eq!(player.state.position, 11.0);
+        assert_eq!(player.state.duration, Some(20.0));
     }
 
     #[test]

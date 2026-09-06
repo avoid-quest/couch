@@ -7,6 +7,7 @@ import { UiDriver, assertNativePortal, assertResponsive, assertTheme, keys, qual
 import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinResume } from "./progress";
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
 import { addTVFolder, verifyFolderSettings } from "./folder-settings";
+import { verifyCue, assertCueAfterRestart } from "./cue";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
 import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
 import { verifyReplayGain } from "./replaygain";
@@ -579,6 +580,7 @@ try {
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
+  const persistedCue = await verifyCue({ ...musicContext, screenshot });
   const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
   const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
@@ -631,6 +633,7 @@ try {
   await assertLocalProgressAfterRestart(progressContext, persistedProgress);
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
+  await assertCueAfterRestart(musicContext, persistedCue);
   await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
   await persistedReplayGain.verifyAfterRestart();
   await persistedClaim.verifyAfterRestart(clients, httpRemote);

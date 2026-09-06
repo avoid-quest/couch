@@ -62,6 +62,8 @@ pub struct NativeOpenRequest {
     #[serde(default)]
     pub start_position: Option<f64>,
     #[serde(default)]
+    pub end_position: Option<f64>,
+    #[serde(default)]
     pub preferences: NativePlaybackPreferences,
     #[serde(default)]
     pub subtitles: Vec<NativeSubtitle>,

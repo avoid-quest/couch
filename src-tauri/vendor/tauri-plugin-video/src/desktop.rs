@@ -1514,6 +1514,7 @@ mod linux_mpv {
         }
         configure_buffer(player, payload)?;
         configure_start(&player.mpv, payload.start_position)?;
+        configure_end(&player.mpv, payload.end_position)?;
         player
             .mpv
             .set_property(
@@ -1566,6 +1567,14 @@ mod linux_mpv {
             .filter(|value| *value > 0.0)
             .map_or_else(|| "none".to_owned(), |value| value.to_string());
         mpv.set_property("start", start).map_err(mpv_error)
+    }
+
+    fn configure_end(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+        if position.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+            return Err(Error::InvalidRequest("endPosition must be finite and positive".into()));
+        }
+        // Reset the bound for each replacement, including ordinary files and radio.
+        mpv.set_property("end", position.map_or_else(|| "none".to_owned(), |value| value.to_string())).map_err(mpv_error)
     }
 
     fn configure_network(player: &MpvPlayer, payload: &NativeOpenRequest) -> Result<()> {
@@ -2174,6 +2183,55 @@ mod linux_mpv {
             process::Command,
             time::{Duration, SystemTime, UNIX_EPOCH},
         };
+
+        #[test]
+        fn cue_bounds_limit_decoded_lossless_audio_and_reset_for_replacement() {
+            let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/fixtures/cue/album.flac");
+            let output = std::env::temp_dir().join(format!("couch-cue-{}.wav", std::process::id()));
+            // PCM output runs unthrottled, so actual decoding does not add 18 seconds to CI.
+            let mut mpv = Mpv::with_initializer(|init| {
+                init.set_option("vo", "null")?;
+                init.set_option("ao", "pcm")?;
+                init.set_option("ao-pcm-file", output.to_str().unwrap())?;
+                init.set_option("audio-format", "s16")?;
+                init.set_option("audio-channels", "mono")?;
+                init.set_option("audio-samplerate", 44100_i64)?;
+                init.set_option("gapless-audio", "no")?;
+                init.set_option("audio-display", "no")?;
+                Ok(())
+            }).unwrap();
+            for (start, end) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (None, None)] {
+                mpv.command("stop", &[]).unwrap();
+                discard_events(&mut mpv).unwrap();
+                configure_start(&mpv, start).unwrap();
+                configure_end(&mpv, end).unwrap();
+                mpv.command("loadfile", &[source.to_str().unwrap(), "replace"]).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(10);
+                let mut loaded = false;
+                loop {
+                    assert!(Instant::now() < deadline, "Cue lossless decode did not finish");
+                    match mpv.wait_event(0.05) {
+                        Some(Ok(Event::FileLoaded)) => loaded = true,
+                        Some(Ok(Event::EndFile(_))) if loaded => break,
+                        Some(Err(error)) => panic!("Cue decode: {error}"),
+                        _ => {}
+                    }
+                }
+                let decoded = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(&output)
+                    .args(["-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
+                assert!(decoded.status.success(), "{}", String::from_utf8_lossy(&decoded.stderr));
+                let expected = ((end.unwrap_or(18.0) - start.unwrap_or(0.0)) * 44100.0_f64).round() as usize;
+                assert_eq!(decoded.stdout.len() / 2, expected, "The cue must decode exactly its bounded sample count");
+                let reference = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(&source)
+                    .args(["-af", &format!("atrim=start_sample={}:end_sample={}", (start.unwrap_or(0.0) * 44100.0).round() as usize, (end.unwrap_or(18.0) * 44100.0).round() as usize), "-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
+                assert!(reference.status.success());
+                assert_eq!(decoded.stdout, reference.stdout, "Decoded samples must come from this cue segment");
+            }
+            assert_eq!(mpv.get_property::<String>("options/start").unwrap(), "none");
+            assert_eq!(mpv.get_property::<String>("options/end").unwrap(), "none");
+            drop(mpv);
+            let _ = fs::remove_file(output);
+        }
 
         #[test]
         fn resume_start_seeks_before_playback_and_resets_for_following_loads() {
