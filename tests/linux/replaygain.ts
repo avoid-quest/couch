@@ -10,7 +10,7 @@ type Context = MusicContext & { otherRemote: MusicContext["httpRemote"] & { refr
 type Fixture = { name: string; file: string; reference: string; expectedDb: Record<ReplayGainMode, number>; sha256: string };
 
 async function output(args: string[]) {
-  const child = Bun.spawn(args, { stdout: "pipe", stderr: "inherit" });
+  const child = Bun.spawn(args, { stdout: "pipe", stderr: "inherit", timeout: 15_000, killSignal: "SIGKILL" });
   const [code, bytes] = await Promise.all([child.exited, new Response(child.stdout).arrayBuffer()]);
   assert.equal(code, 0, `${args[0]} completes`);
   return bytes;
@@ -56,7 +56,7 @@ export async function verifyReplayGain(context: Context) {
     await stop();
     await clients[0]!.command({ type: "preferences", profileId: first().activeProfile.id, preferences: { replayGain: mode, speed: 1 } });
     const path = `${artifactDir}/replaygain-${label}.wav`, log = `${artifactDir}/replaygain-${label}.log`;
-    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-i", "couch.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log) });
+    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-i", "couch.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
     try {
       await until("float audio capture is running before Play", async () => await Bun.file(log).exists() && (await Bun.file(log).text()).includes("Output #0"));
       await play(id);
@@ -64,7 +64,10 @@ export async function verifyReplayGain(context: Context) {
       await until("native ReplayGain mode matches music eligibility on both controllers", () => all(state => excluded ? state.player.replayGain === undefined : state.player.replayGain === mode));
       const player = structuredClone(first().player);
       assert.equal(await recorder.exited, 0, "Actual Couch audio recording completes");
+      const recording = JSON.parse(Buffer.from(await output(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels,codec_name", "-of", "json", path])).toString()).streams[0];
+      assert.deepEqual(recording, { codec_name: "pcm_f32le", sample_rate: String(manifest.sampleRate), channels: 1 }, "Actual capture preserves float samples at the reference rate");
       const captured = new Float32Array(await output(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "f32le", "-ar", String(manifest.sampleRate), "-ac", "1", "-"]));
+      assert.ok(captured.length >= manifest.sampleRate * 4.5 && captured.length <= manifest.sampleRate * 5.1, "Actual capture contains approximately five seconds of audio");
       assert.ok(captured.every(Number.isFinite), "Malformed gain tags never produce nonfinite captured samples");
       const pcm = new Int16Array(await Bun.file(`/replaygain-fixtures/${fixture.reference}.s16le`).arrayBuffer());
       const reference = Float64Array.from(pcm, value => value / 32768);
@@ -78,7 +81,7 @@ export async function verifyReplayGain(context: Context) {
       captures.push({ label, fixture: fixture.file, fixtureSha256: fixture.sha256, mode, radio, player, captureSha256: createHash("sha256").update(Buffer.from(await Bun.file(path).arrayBuffer())).digest("hex"), ...measured });
       await Bun.write(`${artifactDir}/replaygain-captures.json`, JSON.stringify({ versions, captures, physicalOutputQualified: false }, null, 2));
     } finally {
-      if (recorder.exitCode === null) { recorder.kill("SIGINT"); await recorder.exited; }
+      if (recorder.exitCode === null) { recorder.kill("SIGKILL"); await recorder.exited; }
       await stop();
     }
   };
