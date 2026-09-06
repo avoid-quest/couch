@@ -124,13 +124,13 @@ try {
   browser = (await driver(phonePort, "/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", "webkitgtk:browserOptions": { args: ["--automation", "--class=JellyfinSubtitlePhone"] } } } })).sessionId;
   await driver(phonePort, `/session/${browser}/url`, { url: `http://127.0.0.1:45300` });
   await until("phone shows pairing form", () => phone.execute("return !!document.querySelector('#pairing-code')"));
-  await driver(phonePort, `/session/${browser}/window/rect`, { x: 1000, y: 0, width: 488, height: 950 });
+  await driver(phonePort, `/session/${browser}/window/rect`, { x: 0, y: 0, width: 488, height: 950 });
   const phoneRect = await driver(phonePort, `/session/${browser}/window/rect`), phoneWidth = await phone.execute("return innerWidth");
   await driver(phonePort, `/session/${browser}/window/rect`, { width: Math.round(phoneRect.width * 390 / phoneWidth), height: 950 });
   await until("pairing viewport is phone sized", async () => await phone.execute("return innerWidth") === 390);
   // The retained WebKitGTK fixture uses fractional scale; use its tested native click coordinates.
   phone.clickElement = async id => {
-    const window = exec("xdotool", "search", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
+    const window = exec("xdotool", "search", "--onlyvisible", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
     exec("xdotool", "windowmap", "--sync", window, "windowactivate", "--sync", window);
     await phone.revealElement(id);
     const target = { "element-6066-11e4-a52e-4f735466cecf": id };
@@ -143,7 +143,7 @@ try {
     });
     const point = JSON.parse(previous);
     await phone.execute("const target=arguments[0]; window.__httpPointer=null; document.addEventListener('pointerdown', event => { window.__httpPointer={hit:target.contains(event.target)}; }, {once:true,capture:true});", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
-    exec("xdotool", "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
+    exec("xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
     assert.ok((await phone.execute("return window.__httpPointer"))?.hit, "HTTP pointer reaches its intended control after X11 translation");
   };
   await phone.type("#pairing-code", connection.pairingCode); await phone.button("Connect");
@@ -153,7 +153,7 @@ try {
     for (let attempt = 0; attempt < 3; attempt++) {
       const rect = await driver(phonePort, `/session/${browser}/window/rect`), actual = await phone.execute("return innerWidth");
       if (actual === width) break;
-      await driver(phonePort, `/session/${browser}/window/rect`, { width: Math.round(rect.width * width / actual), height: 950 });
+      await driver(phonePort, `/session/${browser}/window/rect`, { x: 0, y: 0, width: Math.round(rect.width * width / actual), height: 950 });
     }
     await settings(phone);
     const geometry = await phone.execute("const r=document.querySelector('[role=dialog]').getBoundingClientRect(); return {width:innerWidth,scroll:document.documentElement.scrollWidth,left:r.left,right:r.right};");
