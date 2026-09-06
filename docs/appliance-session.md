@@ -1,0 +1,66 @@
+# Ubuntu TV session
+
+`couch-appliance` supplies the production session for Ubuntu 24.04 x86_64. It
+depends on the separately versioned `couch` package. The release manifest records
+both versions and hashes. Install through the documented `install-couch` entry
+point so APT finishes before LightDM starts.
+
+LightDM logs the locked `couch-tv` account into the Couch Xorg session on `seat0`.
+Its home is `/var/lib/couch`. It has no sudo access; the existing SSH account and
+its groups remain unchanged. PAM starts its systemd user manager and grants the
+active seat access to display/audio devices. Openbox supplies window management;
+PipeWire, its PulseAudio compatibility server and WirePlumber supply user audio.
+
+The user unit `couch-tv.service` starts `/usr/bin/couch`. That native process owns
+one `/usr/bin/couch-server` and exits nonzero when the coordinator dies. Systemd
+restarts the complete control group after five seconds, up to five starts within
+120 seconds. A deliberate `couch-session stop` stays stopped. The surrounding
+LightDM session remains alive after exhaustion and shows recovery instructions,
+so another login cannot silently reset the restart budget. Native and coordinator
+output goes to the persistent journal.
+
+From the SSH administrator or a local console reached with Ctrl+Alt+F3:
+
+```sh
+sudo couch-session status
+sudo couch-session logs
+sudo couch-session restart
+```
+
+`restart` clears the failed-start budget and restarts the complete application.
+`sudo couch-session stop` pauses it for diagnosis. For display-server trouble,
+inspect `sudo journalctl -b -u lightdm` and `/var/log/lightdm/`. To recover to a
+console on every boot, run `sudo systemctl disable --now lightdm` and
+`sudo systemctl set-default multi-user.target`. SSH and the reserved recovery VT
+remain available. Re-running the installer restores the appliance startup.
+
+The package conffile `/etc/couch/appliance.env` sets the absolute `COUCH_DATA_DIR`.
+The fresh default is `/var/lib/couch/.local/share/quest.avoid.couch`. Keep an
+existing custom value on upgrade. The native application's ordinary data
+precedence still applies outside this unit: explicit `COUCH_DATA_DIR`, then
+`$XDG_DATA_HOME/quest.avoid.couch`, then `$HOME/.local/share/quest.avoid.couch`.
+Package upgrades do not move or remove data, profiles, pairings, sources or media.
+WirePlumber's saved routes and volume stay under the same runtime home.
+
+At login the session disables X11 screensaver/DPMS blanking and selects the first
+connected external output as primary, falling back to the laptop panel. Logind
+ignores idle time. With an external display connected or the laptop docked, lid
+closure leaves the TV running. With only the laptop display, lid closure suspends
+on AC and battery. The power button, suspend key and administrator power commands
+retain their normal behavior. No power targets are masked. Package defaults live
+under `/usr/lib/systemd/`; administrator drop-ins under `/etc` retain priority.
+
+Build the companion package on Linux with `sh scripts/build-appliance.sh`. It
+needs `git` and `dpkg-deb` only and records its Git revision in
+`/usr/share/doc/couch-appliance/build-info.json`. It does not rebuild the native
+application. The session does not wait for network access, so local home and
+stored media remain usable during offline boot.
+
+The contracts above require separate qualification of a real LightDM boot,
+coordinator/native failures, and physical picture/audio. Xvfb and a software
+audio sink cannot establish those hardware results.
+
+References: [LightDM configuration](https://github.com/canonical/lightdm/blob/main/data/lightdm.conf),
+[Ubuntu 24.04 logind policy](https://manpages.ubuntu.com/manpages/noble/man5/logind.conf.5.html),
+[Ubuntu PipeWire audio package](https://packages.ubuntu.com/noble/pipewire-audio),
+and [Debian maintainer-script requirements](https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html).

@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" = 0 ] || { echo 'Run with sudo from the administrator account.' >&2; exit 1; }
+uid=$(id -u couch-tv)
+user_systemctl() {
+    runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user "$@"
+}
+case "${1:-status}" in
+    status) user_systemctl status couch-tv.service --no-pager ;;
+    restart) user_systemctl reset-failed couch-tv.service; user_systemctl restart couch-tv.service ;;
+    stop) user_systemctl stop couch-tv.service ;;
+    logs) journalctl "_UID=$uid" --user-unit=couch-tv.service --no-pager -n 200 ;;
+    *) echo 'Usage: couch-session {status|restart|stop|logs}' >&2; exit 2 ;;
+esac
