@@ -60,11 +60,13 @@ fi
 # are configured. Preserve the administrator's existing policy on every exit.
 rm -f "$state/original-policy"
 [[ ! -e $policy && ! -L $policy ]] || cp -a "$policy" "$state/original-policy"
+sync -f "$state"
 touch "$state/policy-active"
 sync -f "$state"
 trap restore_policy EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+rm -f "$policy"
 printf '#!/bin/sh\nexit 101\n' > "$policy"
 chmod 0755 "$policy"
 if systemctl is-active --quiet lightdm; then systemctl stop lightdm; fi
