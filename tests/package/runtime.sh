@@ -23,6 +23,8 @@ ldconfig -p | grep libmpv.so.2 > /evidence/mpv-linkage.txt
 ffprobe -version > /evidence/ffprobe-version.txt
 
 useradd -m -s /bin/bash qualifier
+install -d -o qualifier -g qualifier -m 700 /home/qualifier/Videos
+install -o qualifier -g qualifier -m 600 /qualification/media/sample.mp4 /home/qualifier/Videos/sample.mp4
 install -d -o qualifier -g qualifier -m 700 /home/qualifier/legacy-data
 install -o qualifier -g qualifier -m 600 /qualification/couch.sqlite /home/qualifier/legacy-data/couch.sqlite
 install -o qualifier -g qualifier -m 600 /qualification/keep.txt /home/qualifier/legacy-data/keep.txt
