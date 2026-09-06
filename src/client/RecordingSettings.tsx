@@ -57,6 +57,7 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
     <p className="text-sm text-muted-foreground">Use Tvheadend API 20 or newer with Basic authentication over HTTPS, or HTTP on loopback. Give the recorder basic DVR access. Give a separate playback account basic/view-all DVR access and streaming, with no administrator or manage-all rights.</p>
+    <p className="text-sm text-muted-foreground">Verification briefly adds a disabled "Couch recording permission check" entry to Tvheadend. It cannot record. Couch removes it before saving setup. If verification or cleanup is interrupted, verify again with the same backend and accounts.</p>
     <form className="space-y-3" onSubmit={event => void save(event)}>
       <h3 className="font-medium">{setup?.configured ? "Replace private credentials" : "Connect a recording backend"}</h3>
       {fields.map(([key, label, type]) => <div key={key} className="space-y-1"><Label htmlFor={`recording-${key}`}>{label}</Label><Input id={`recording-${key}`} value={credentials[key]} type={type} autoComplete="off" spellCheck={false} autoCapitalize="none" required maxLength={key === "profileId" ? 32 : key === "endpoint" ? 2048 : key.toLowerCase().includes("password") ? 4096 : 200} disabled={!connected || busy || !setup} onChange={event => setCredentials(previous => ({ ...previous, [key]: event.target.value }))} /></div>)}
