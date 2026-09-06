@@ -150,6 +150,16 @@ The existing success notice for the earlier Play request persisted after playbac
 
 Independent final source/evidence review accepted `e90c24c → 7fec38b → 6a70f8f` without findings. The native executable still embeds 43dd. The original full attempt remains failed, and replay 4 omits administrator claim plus the complete runner's later shared restart checks. Final integration, corrected native build and full official `bun run test:linux --jellyfin`, reviewed delivery and preserved-data preview remain required.
 
+## Integrated runner correction
+
+The stack joined landed main `d729e162179fdfd2f1dd9a0f124e49775004079d` without conflicts. Independent integration review confirmed all three catalog and eight browsing patches were unchanged at lower `46b49262d3a0dbb4aa7873c3c505e96a863102db` and upper `9b231c26419c97907d195d81445a7d3b7f3cc5e4`. Both hosted checks passed.
+
+The full official attempt at `9b231c2` started on 2026-09-06 at 11:51:26 UTC and exited 1 before tests or native compilation. The launcher copied the landed `scripts/package-prepare.ts` but omitted its imported `packaging/inputs.json`; Linux typechecking reported TS2307. The prior `.artifacts/linux` directory was archived before this run, and this new failure is retained separately under `.artifacts/media-library-27/fullrun-9b231c2`.
+
+The correction includes `packaging` in the existing source-copy list and source-hash manifest. A disposable Linux container executed the corrected actual copy commands and `bun run typecheck` with no shared caches, Cargo or Jellyfin. It exited 0, and copied `packaging/inputs.json` matched the source SHA-256 `d114820abdecb007909dcbb9ceba9ff3c63343a4e0367fac53407953ff6048c4`. This proves the copy/typecheck correction only. A complete native run remains required. Evidence is in `.artifacts/media-library-27/launcher-copy-fix`.
+
+Before this attempt, the earlier replay 4 container was stopped with `AutoRemove=false` to release memory. Its restored fixture and writable layer remain intact, and its private data directory was copied and hashed after shutdown. No retained runtime was removed.
+
 ## Official references
 
 - [Kodi movie NFO](https://kodi.wiki/view/NFO_files/Movies), [episode NFO](https://kodi.wiki/view/NFO_files/Episodes), [TV show NFO](https://kodi.wiki/view/NFO_files/TV_shows)

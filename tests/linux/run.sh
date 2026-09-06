@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The source mount is read-only. Linux outputs and application data never reach host targets.
 tar -C /source --exclude=target --exclude=binaries -cf - \
-  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts tests/linux tests/setup-media.test.ts | tar -xf -
+  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/setup-media.test.ts | tar -xf -
 bun install --frozen-lockfile
 { bun --version; rustc --version; cargo install --list; pkg-config --modversion webkit2gtk-4.1 mpv; yt-dlp --version; deno --version; } > /artifacts/versions.txt
 bun run check
@@ -14,7 +14,7 @@ mkdir -p /artifacts/bin
 cp /work/bin/* /artifacts/bin/
 sha256sum /work/bin/* > /artifacts/binaries.sha256
 sha256sum package.json bun.lock bunfig.toml components.json tsconfig.json > /artifacts/sources.sha256
-find src src-tauri scripts tests -type f -not -path '*/binaries/*' -print0 | sort -z | xargs -0 sha256sum >> /artifacts/sources.sha256
+find src src-tauri scripts packaging tests -type f -not -path '*/binaries/*' -print0 | sort -z | xargs -0 sha256sum >> /artifacts/sources.sha256
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video dash_selection
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video resume_start
