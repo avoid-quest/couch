@@ -5,7 +5,7 @@ export class RecordingError extends Error {
 }
 export type RecordingConnection = { endpoint: string; username: string; password: string; playbackUsername: string; playbackPassword: string; profileId: string };
 export type RecordingVerification = { connection: string; id: string; channel: string; start: number; stop: number; phase: "submitted" | "cleanup"; failure: string | null };
-export type VerificationStore = { load: () => RecordingVerification | null; save: (value: RecordingVerification | null) => void };
+export type VerificationStore = { authorize: () => void; load: () => RecordingVerification | null; save: (value: RecordingVerification | null) => void };
 export type BackendJob = { uuid: string; channel: string; comment: string; owner: string; start: number; stop: number; sched_status: string; status: string; filesize: number; errorcode: number };
 export const backendUuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{32}$/.test(value);
 const fail = (message: string): never => { throw new RecordingError(message, 502); };
@@ -56,7 +56,7 @@ export function createTvheadend(connection: RecordingConnection, shutdown: Abort
       if (!channels[0]) throw new RecordingError("The backend needs an enabled channel with a service before recording setup can be verified.", 409);
       const start = Math.ceil(Date.now() / 1000) + 86_400;
       intent = { connection: identity, id: crypto.randomUUID(), channel: channels[0].uuid, start, stop: start + 60, phase: "submitted", failure: null };
-      signal.throwIfAborted();
+      signal.throwIfAborted(); store.authorize();
       store.save(intent);
       // Persist the attempt before sending. A missing response never permits
       // another create; the next request reconciles this exact disabled entry.

@@ -27,6 +27,7 @@ function fixture() {
   let selected = { channel, program }, identity: ControllerIdentity | null = host;
   let fail = false, loseCreate = false, loseCancel = false, writeAllowed = false, missingChannel = false, incomplete = false, createCount = 0;
   let blockCreate: Promise<void> | undefined;
+  let blockChannels: Promise<void> | undefined;
   let hideViewer = false, keepCancel = false, loseProbeCreate = false, missingProbeCreate = false, probeCount = 0;
   let rows: Record<string, unknown>[] = [];
   const calls: { path: string; account: string; body: URLSearchParams }[] = [];
@@ -37,7 +38,7 @@ function fixture() {
     if (path === "/api/access/whoami") return Response.json({ username: account, admin: false, dvr: true });
     if (path === "/api/dvr/entry/class") return Response.json({});
     if (path === "/api/dvr/config/grid") return Response.json({ entries: [{ uuid: profileId }], total: 1 });
-    if (path === "/api/channel/grid") return Response.json({ entries: missingChannel ? [] : [{ uuid: backendChannel, name: "Backend channel", enabled: true, services: ["service"] }], total: missingChannel ? 0 : 1 });
+    if (path === "/api/channel/grid") { await blockChannels; return Response.json({ entries: missingChannel ? [] : [{ uuid: backendChannel, name: "Backend channel", enabled: true, services: ["service"] }], total: missingChannel ? 0 : 1 }); }
     if (path === "/api/dvr/entry/grid") { const entries = account === "viewer" && hideViewer ? [] : rows; return Response.json({ entries, total: entries.length + Number(incomplete) }); }
     if (path === "/api/dvr/entry/create") {
       const conf = JSON.parse(body.get("conf")!);
@@ -64,7 +65,7 @@ function fixture() {
   };
   const schedule = () => api("/schedule", "POST", { programId: selected.program.id, start: selected.program.start, end: selected.program.end, title: selected.program.title, revision: 2 });
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
-    get probeCount() { return probeCount; }, set hideViewer(value: boolean) { hideViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
+    get probeCount() { return probeCount; }, set blockChannels(value: Promise<void> | undefined) { blockChannels = value; }, set hideViewer(value: boolean) { hideViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
     set fail(value: boolean) { fail = value; }, set loseCreate(value: boolean) { loseCreate = value; }, set loseCancel(value: boolean) { loseCancel = value; }, set writeAllowed(value: boolean) { writeAllowed = value; }, set missingChannel(value: boolean) { missingChannel = value; }, set incomplete(value: boolean) { incomplete = value; }, set identity(value: ControllerIdentity | null) { identity = value; }, set selected(value: typeof selected) { selected = value; }, set blockCreate(value: Promise<void> | undefined) { blockCreate = value; },
     async reopen() { await recordings.close(); recordings = make(); },
   };
@@ -233,4 +234,21 @@ test("incomplete cleanup keeps the disabled verification intent and cannot commi
   expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows[0]!.enabled).toBe(false); expect(app.probeCount).toBe(1);
   app.incomplete = false; app.keepCancel = false;
   expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(200); expect(app.probeCount).toBe(1);
+});
+
+
+test("revocation at the last setup prerequisite prevents creating a permission-check intent", async () => {
+  for (const revoked of [guest, null]) {
+    const app = fixture(), gate = Promise.withResolvers<void>(); app.blockChannels = gate.promise;
+    const pending = app.api("/setup", "POST", { ...app.input, revision: 0 });
+    try {
+      for (let i = 0; i < 100 && !app.calls.some(call => call.path === "/api/channel/grid"); i++) await Bun.sleep(1);
+      expect(app.calls.some(call => call.path === "/api/channel/grid")).toBe(true);
+      app.identity = revoked;
+    } finally { gate.resolve(); }
+    expect((await pending).status).toBe(revoked ? 403 : 401);
+    expect(app.probeCount).toBe(0); expect(app.recordings.snapshot().configured).toBe(false);
+    const database = new Database(app.databasePath);
+    expect(database.query("SELECT * FROM recording_qualification").all()).toHaveLength(0); database.close();
+  }
 });

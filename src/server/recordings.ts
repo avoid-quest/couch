@@ -140,6 +140,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
             const connection = connectionInput(value);
             if (previous && jobs().length && ["endpoint", "username", "playbackUsername", "profileId"].some(key => connection[key as keyof RecordingConnection] !== previous.connection[key as keyof RecordingConnection])) throw new RecordingError("Existing jobs belong to this backend and accounts. Keep their identity when replacing credentials.", 409);
             const channels = await backend({ revision: 0, connection, mappings: [] }).verify(req.signal, {
+              authorize: () => { administrator(); guard(); },
               load: () => { const row = db.query<{ data: string }, []>("SELECT data FROM recording_qualification WHERE id = 1").get(); return row ? JSON.parse(row.data) as RecordingVerification : null; },
               save: intent => { if (intent) db.query("INSERT OR REPLACE INTO recording_qualification VALUES (1, ?)").run(JSON.stringify(intent)); else db.run("DELETE FROM recording_qualification WHERE id = 1"); },
             });
