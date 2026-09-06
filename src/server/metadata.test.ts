@@ -82,6 +82,7 @@ test("concurrent edits and an aborted SQL write leave title, artwork, search and
 test("episode order changes sorting and exports the corrected order", async () => {
   const f = await fixture(true);
   const original = await f.view();
+  expect((await f.request(`items/${f.id}/edit`, { revision: original.revision, changes: { showTitle: null } })).status).toBe(400);
   expect((await f.request(`items/${f.id}/edit`, { revision: original.revision, changes: { season: 0, episode: 2, title: "Special" } })).status).toBe(200);
   await f.library.scan(f.source.id);
   expect(f.library.getItem(f.id)?.video).toMatchObject({ season: 0, episode: 2 });

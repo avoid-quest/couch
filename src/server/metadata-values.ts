@@ -15,6 +15,7 @@ export function metadataChanges(value: unknown, episode: boolean): Partial<Metad
   if (!value || typeof value !== "object" || Array.isArray(value) || !Object.keys(value).length) throw new MetadataError("Choose a metadata correction.");
   const changes = value as Partial<MetadataValues>;
   for (const [key, value] of Object.entries(changes)) {
+    if (key === "showTitle" && (episode ? value === null : value !== null)) throw new MetadataError("Episodes need a series title; movies do not have one.");
     if (["title", "originalTitle", "plot", "showTitle"].includes(key)) {
       if (value === null && key !== "title") continue;
       if (typeof value !== "string" || !value.trim() || value !== value.trim() || value.length > (key === "plot" ? 4000 : 300) || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new MetadataError(`Invalid ${key}.`);
