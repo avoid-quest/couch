@@ -7,6 +7,7 @@ import { browseYouTube } from "./youtube";
 import { browseTwitch } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
+import { ControllerError } from "../controllers";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
 const adapters: Record<ProviderId, Adapter> = { youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp };
@@ -57,7 +58,7 @@ export function createProviders({ databasePath, onChange = () => {}, browse = ad
   const wrongMethod = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
 
   return {
-    async handle(request: Request): Promise<Response> {
+    async handle(request: Request, authorize = () => {}): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
         if (closed) throw new ProviderError("The provider catalog is closing.", 503);
@@ -66,6 +67,7 @@ export function createProviders({ databasePath, onChange = () => {}, browse = ad
           if (request.method !== "POST") return wrongMethod("GET, POST");
           if (request.headers.get("Content-Type")?.split(";")[0]?.trim() !== "application/json") throw new ProviderError("Send a JSON object.", 400);
           const body: unknown = await request.json().catch(() => { throw new ProviderError("Invalid JSON body.", 400); });
+          authorize();
           if (!object(body)) throw new ProviderError("Send a JSON object.", 400);
           const item = savedItem(body.item);
           if (closed) throw new ProviderError("The provider catalog is closing.", 503);
@@ -101,7 +103,7 @@ export function createProviders({ databasePath, onChange = () => {}, browse = ad
           return Response.json(page);
         } finally { active--; }
       } catch (error) {
-        if (error instanceof ProviderError) return Response.json({ error: error.message }, { status: error.status });
+        if (error instanceof ProviderError || error instanceof ControllerError) return Response.json({ error: error.message }, { status: error.status });
         return Response.json({ error: "The provider could not complete this request. Try again shortly." }, { status: 502 });
       }
     },

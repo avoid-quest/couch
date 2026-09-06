@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import type { ExternalSubtitle, PlayerState } from "../shared/protocol";
 import type { MediaSource } from "./session";
+import { ControllerError } from "./controllers";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
 
@@ -62,7 +63,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
         return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: "Some external subtitles could not be loaded. Try again or add a subtitle file." } : {}) };
       } catch (error) { paths.forEach(remove); throw error; }
     },
-    async handle(request: Request) {
+    async handle(request: Request, authorize = () => {}) {
       const json = (body: unknown, status = 200) => Response.json(body, { status });
       if (request.method !== "POST") return json({ error: "Use POST to add a subtitle file." }, 405);
       const url = new URL(request.url);
@@ -77,6 +78,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
       let path: string | undefined;
       try {
         const bytes = new Uint8Array(await request.arrayBuffer());
+        authorize();
         if (!bytes.length || bytes.length > subtitleSizeLimit) return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
         const content = new TextDecoder().decode(bytes);
         if (content.includes("\0") || (extension === ".ass" || extension === ".ssa" ? !/\[Events\]/i.test(content) : !/\d{2}:\d{2}[,.]\d{3}\s+-->/.test(content))) return json({ error: "This file does not contain supported text subtitles." }, 400);
@@ -87,8 +89,9 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
         attach(playbackId, { source: path, title: name });
         files.set(path, playbackId);
         return json({ ok: true });
-      } catch {
+      } catch (error) {
         if (path) remove(path);
+        if (error instanceof ControllerError) return json({ error: error.message }, error.status);
         return json({ error: "Could not add the subtitle. Check the current playback and the TV's storage." }, 400);
       } finally { pending--; }
     },
