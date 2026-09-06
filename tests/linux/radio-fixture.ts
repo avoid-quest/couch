@@ -42,7 +42,7 @@ function metadataBlock(title: string) {
 // Real MP3 bytes, ICY framing and paced responses exercise libmpv's HTTP reader.
 // Each case has its own URL, so counts include every native attempt and cannot
 // hide retries behind a reset counter. There is no application test endpoint.
-export async function createRadioFixture(mediaPath = "/fixtures/radio.mp3", port = 4201) {
+export async function createRadioFixture(mediaPath = "/mnt/fixtures/radio.mp3", port = 4201) {
   const original = new Uint8Array(await Bun.file(mediaPath).arrayBuffer());
   const audio = withoutId3(original);
   const cases = new Map<string, RadioCase>();

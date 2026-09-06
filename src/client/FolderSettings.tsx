@@ -121,7 +121,7 @@ export function FolderSettings({ credentials, connected, canManage, version }: P
       </div>
       <p className="text-sm text-muted-foreground">Couch uses these permitted locations. It does not mount network shares or move files. Add each mounted folder as its own source.</p>
     </div>}
-    <ul className="space-y-3">{sources.map(source => <li key={source.id}>
+    <ul className="space-y-3">{sources.map(source => <li key={source.id} data-folder-source={source.id}>
       <Card className="min-w-0 gap-3 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2"><strong className="min-w-0 break-all">{source.name}</strong><Badge variant={source.status === "error" || source.status === "unavailable" ? "destructive" : "secondary"}>{labels[source.status]}</Badge></div>
         {canManage && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}

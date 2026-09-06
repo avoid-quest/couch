@@ -78,7 +78,7 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
   try {
     for (const key of ["select", "down", "right", "select"] as const) await navigate(ui, guest, until, key);
     assert.equal(await ui.execute("return document.activeElement === window.__claimProbe.button"), true, "Remote arrows cannot move focus inside the pre-opened local Library dialog");
-    assert.deepEqual(await get("/api/library/sources"), beforeSources, "Remote OK cannot rescan the existing library folders");
+    assert.deepEqual(await get("/api/library/sources"), beforeSources, "Remote OK cannot open the folder manager from the existing Library summary");
   } finally { await stopProbe(ui); }
 
   // The current folder dialog has no nested selector. This DOM regression models

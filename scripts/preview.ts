@@ -90,6 +90,6 @@ try {
 
 console.log(`\nRemote control (real web UI): ${remote}`);
 console.log(`Linux TV screen (Docker preview): ${desktop}${remoteUrls.map(url => `\nPhone remote: ${url}`).join("")}`);
-console.log(`Use the pairing code shown on the Linux TV screen. Open /fixtures/multitrack.mkv there to try playback.${media ? " Your media folder is /media inside Linux." : " To use your files, restart with --media /path/to/folder."}`);
+console.log(`Use the pairing code shown on the Linux TV screen. Open /mnt/fixtures/multitrack.mkv there to try playback.${media ? " Your media folder is /media inside Linux." : " To use your files, restart with --media /path/to/folder."}`);
 console.log("This Docker preview uses software video and silent audio. It keeps running until bun run preview:linux stop.");
 if (process.platform === "darwin") await Bun.spawn(["open", remote], { stdout: "ignore", stderr: "ignore" }).exited;
