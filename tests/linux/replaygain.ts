@@ -24,8 +24,8 @@ export async function verifyReplayGain(context: Context) {
   const manifest = await Bun.file("/replaygain-fixtures/manifest.json").json();
   const fixtures = manifest.fixtures as Fixture[];
   const versions = Buffer.from(await output(["dpkg-query", "--show", "libmpv2", "ffmpeg"])).toString();
-  assert.ok(/libmpv2\s+[^\n]*0\.37\./.test(versions), "Capture expectations explicitly target Ubuntu mpv 0.37");
   await Bun.write(`${artifactDir}/replaygain-versions.txt`, versions);
+  assert.ok(/^libmpv2(?::[a-z0-9-]+)?\s+0\.37\./m.test(versions), "Capture expectations explicitly target Ubuntu mpv 0.37");
   await Bun.write(`${artifactDir}/replaygain-fixtures.json`, JSON.stringify(manifest, null, 2));
   const ids: string[] = [];
   const captures: unknown[] = [];
