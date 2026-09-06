@@ -52,6 +52,12 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("resumed cue pauses before Next", () => all(state => state.player.status === "paused"));
   await httpRemote.ui.button("Next in queue", ".player-controls");
   await until("phone Next starts the final cue from relative zero", () => all(state => state.currentEntryId === entries[2]!.id && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2));
+  await stop();
+  await clients[0]!.command({ type: "play", entryId: entries[1]!.id, fromStart: true });
+  await until("middle cue starts before testing natural segment EOF", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position > 0));
+  const middlePlaybackId = first().player.playbackId;
+  await clients[1]!.command({ type: "seek", playbackId: middlePlaybackId!, position: tracks[1]!.duration! - 0.6 });
+  await until("middle cue native EOF automatically advances to the final ordered track", () => all(state => state.currentEntryId === entries[2]!.id && state.player.playbackId !== middlePlaybackId && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2 && Math.abs(state.player.duration! - tracks[2]!.duration!) < 0.01));
   await clients[1]!.command({ type: "seek", playbackId: first().player.playbackId!, position: tracks[2]!.duration! - 0.6 });
   await until("final cue reaches physical file EOF without replaying the whole album", () => all(state => state.currentEntryId === entries[2]!.id && state.player.status === "ended" && Math.abs(state.player.duration! - tracks[2]!.duration!) < 0.01));
   await stop();
@@ -60,6 +66,8 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   assert.ok(ordinary);
   const ordinaryEntry = crypto.randomUUID();
   await clients[0]!.command({ type: "enqueueLibrary", entryId: ordinaryEntry, itemId: ordinary.id });
+  await clients[0]!.command({ type: "play", entryId: entries[1]!.id, fromStart: true });
+  await until("middle cue sets an end bound shorter than the replacement source", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && Math.abs(state.player.duration! - tracks[1]!.duration!) < 0.01));
   await clients[0]!.command({ type: "play", entryId: ordinaryEntry, fromStart: true });
   await until("ordinary replacement begins at file zero with full duration", () => all(state => state.currentEntryId === ordinaryEntry && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2 && state.player.duration === 18));
   await clients[1]!.command({ type: "seek", playbackId: first().player.playbackId!, position: 12 });
