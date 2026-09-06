@@ -1,0 +1,33 @@
+#!/usr/bin/python3 -I
+"""Operator receipt enrollment. The phone-update worker is not activated yet."""
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, "/usr/lib/couch-appliance/updater")
+from receipt import Rejected
+from retention import Retention
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("status")
+    commands.add_parser("enroll-current").add_argument("receipt")
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        parser.error("Run with sudo from the administrator account.")
+    os.umask(0o077)
+    try:
+        storage = Retention()
+        result = storage.enroll(args.receipt) if args.command == "enroll-current" else {"current": storage.read("current.json"), "active": storage.read("active.json"), "phoneUpdates": "unavailable"}
+        print(json.dumps(result, indent=2))
+    except (Rejected, OSError) as error:
+        print(str(error) if isinstance(error, Rejected) else "Update storage could not be accessed safely.", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

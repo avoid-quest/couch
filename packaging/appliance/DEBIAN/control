@@ -4,7 +4,7 @@ Architecture: all
 Maintainer: avoid-quest <support@avoid.quest>
 Section: video
 Priority: optional
-Depends: couch (>= 0.1.0), adduser, acl, dbus-user-session, libpam-systemd, lightdm, lightdm-gtk-greeter, xserver-xorg, openbox, x11-xserver-utils, x11-utils, pipewire-audio, pulseaudio-utils
+Depends: couch (>= 0.1.0), adduser, acl, dbus-user-session, libpam-systemd, lightdm, lightdm-gtk-greeter, xserver-xorg, openbox, x11-xserver-utils, x11-utils, pipewire-audio, pulseaudio-utils, python3, gpgv
 Description: Supervised Couch TV session for Ubuntu 24.04
  LightDM starts Couch as an unprivileged user with Xorg, Openbox and
  PipeWire audio. Install through install-couch to finish APT before launch.
