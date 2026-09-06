@@ -1,6 +1,7 @@
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import frontend from "./client/index.html";
+import { createNativeDiagnostics } from "./server/diagnostics-native";
 import { createHub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
@@ -23,7 +24,9 @@ function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
+const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const hub = createHub({
+  ...(native ? { nativeDiagnostics: nativeDiagnostics.collect } : {}),
   hostname: process.env.COUCH_HOST ?? "0.0.0.0",
   port: Number(process.env.COUCH_PORT ?? 4100),
   databasePath: join(dataDir, "couch.sqlite"),
@@ -55,6 +58,7 @@ let closing = false;
 async function close() {
   if (closing) return;
   closing = true;
+  nativeDiagnostics.close();
   await hub.close();
   process.exit(0);
 }
@@ -75,6 +79,7 @@ if (native) {
         if (!line) continue;
         const message: HostMessage = JSON.parse(line);
         if (message.type === "player") hub.session.observe(message.state);
+        else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);
         else if (message.type === "shutdown") await close();
       }
     }

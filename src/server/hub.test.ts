@@ -944,3 +944,29 @@ test("paired HTTP controllers rename and race removal with shared durable state 
   expect(restarted.commands).toEqual([]);
   expect((await (await api(restarted.hub, secondToken, "/api/profiles")).json()).profiles).toEqual([{ id: "household", name: "Household" }]);
 });
+
+test("only a claimed administrator can read sanitized diagnostics through HTTP", async () => {
+  const { hub, commands } = fixture();
+  const token = await pair(hub), guest = await pair(hub);
+  const api = (token: string, path: string, body?: unknown) => fetch(`${hub.origin}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  expect((await api(token, "/api/diagnostics")).status).toBe(403);
+  expect((await api(hostToken, "/api/diagnostics/export")).status).toBe(403);
+  const { code } = await (await api(hostToken, "/api/controllers/claim-code")).json();
+  expect((await api(token, "/api/controllers/claim", { code })).status).toBe(200);
+  hub.session.observe({ ...idle, error: `Failed https://user:secret@example.test/private?signature=secret ${hub.pairingCode} ${hostToken}` });
+  const previousCommands = [...commands];
+  const response = await api(token, "/api/diagnostics/export");
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  for (const secret of [hub.pairingCode, hostToken, "signature=secret", "user:secret"]) expect(text).not.toContain(secret);
+  const report = JSON.parse(text);
+  expect(report.native).toBeNull(); expect(report.nativeError).toContain("not connected");
+  expect(report.recent.some((entry: { source: string }) => entry.source === "Playback")).toBe(true);
+  expect(report.configuration.some((fact: { name: string; value: unknown }) => fact.name === "Listen port" && fact.value === hub.server.port)).toBe(true);
+  expect((await api(guest, "/api/diagnostics/export")).status).toBe(403);
+  expect(commands).toEqual(previousCommands);
+});

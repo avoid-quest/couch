@@ -21,6 +21,8 @@ import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
+import { createDiagnostics } from "./diagnostics";
+import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
 import { createGuide } from "./iptv";
 
@@ -32,6 +34,7 @@ type HubOptions = {
   pairingCode?: string;
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
+  nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
   frontend?: HTMLBundle;
   development?: boolean;
   advertisedUrls?: string[];
@@ -65,8 +68,9 @@ export function createHub(options: HubOptions) {
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
-  const jellyfin = createJellyfin(options.databasePath, { onWarning: message => console.error(message), onProgress: () => session.invalidate("jellyfin") });
+  const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
   const session = createSession(store, options.sendPlayer, state => {
+    if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
     resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
@@ -116,6 +120,18 @@ export function createHub(options: HubOptions) {
     if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
     session.invalidate("jellyfin");
   } });
+  const diagnostics = createDiagnostics({
+    databasePath: options.databasePath,
+    runtime: () => ({ hostname, port: server.port!, native: !!options.nativeDiagnostics }),
+    native: options.nativeDiagnostics ?? (() => Promise.resolve(null)),
+    secrets: [options.hostToken, pairingCode, options.adminRecoveryCode ?? ""],
+    sources: () => [
+      ...library.listSources(),
+      ...guide.sources().map(source => ({ name: source.name, status: source.error ? "Error" : source.updatedAt ? "Loaded" : "Not loaded", error: source.error })),
+      ...radio.playlists().map(source => ({ name: source.name, status: source.error ? "Error" : source.updatedAt ? "Loaded" : "Not loaded", error: source.error })),
+      { name: "Jellyfin", status: jellyfin.status().connected ? "Configured" : "Not connected" },
+    ],
+  });
   let pairWindow = Date.now();
   let pairAttempts = 0;
 
@@ -182,6 +198,7 @@ export function createHub(options: HubOptions) {
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       const authorize = () => { if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401); };
       if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, identity));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
@@ -274,6 +291,7 @@ export function createHub(options: HubOptions) {
           }
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };
+          diagnostics.log.add("Controller command", result.error);
         }
         socket.send(JSON.stringify(result));
       },
