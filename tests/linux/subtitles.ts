@@ -64,7 +64,7 @@ async function nativeFrame(artifactDir: string, name: string) {
   return pixels;
 }
 
-async function assertSubtitlePixels(context: Context, subtitle: MediaTrack, name: string) {
+export async function assertSubtitlePixels(context: Context, subtitle: MediaTrack, name: string) {
   const { ui, artifactDir, until } = context;
   const { first, all, track } = controls(context);
   assert.ok(all(state => state.player.status === "paused"), "Subtitle pixel comparison uses the same paused video frame");

@@ -17,6 +17,7 @@ import { QueuePanel } from "./QueuePanel";
 import { Settings } from "./Settings";
 import { useVideoQualityPreference } from "./video-quality";
 import { useInterfaceSize } from "./interface-size";
+import { TvAppearancePreview } from "./AppearanceSettings";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
 import { Gamepad2, LayoutGrid, House, SlidersHorizontal, ArrowUpRight } from "lucide-react";
@@ -47,7 +48,6 @@ function errorText(error: unknown) {
 }
 
 export function App() {
-  useInterfaceSize(nativeHost);
   const [credentials, setCredentials] = useState<Credentials | null>(storedCredentials);
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
@@ -65,6 +65,7 @@ export function App() {
   const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
   const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
+  useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   navigation.current = key => {
     if (!nativeHost) return;
@@ -198,6 +199,7 @@ export function App() {
     <div className={`app-shell ${nativeHost ? `tv-shell${tv.browsing ? " tv-browsing" : ""}${tv.controlsVisible ? " tv-controls-visible" : ""}` : `remote-shell remote-${remoteMode}`}`}>
 
       <main id="main">
+        {nativeHost && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
         {nativeHost && <VideoStage active={active} title={current?.title || "Your media"}
           audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
@@ -210,7 +212,7 @@ export function App() {
           {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
           {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>
-          {(!nativeHost || state) && <Settings libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
+          {(!nativeHost || state) && <Settings libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
         </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
           <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>

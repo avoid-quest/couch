@@ -17,6 +17,7 @@ import { QualitySelect } from "./QualitySelect";
 import type { useVideoQualityPreference } from "./video-quality";
 import { PlaybackPreferences } from "./PlaybackPreferences";
 import { AppearanceSettings } from "./AppearanceSettings";
+import type { TvAppearance } from "../shared/appearance";
 import { PairedRemotes } from "./PairedRemotes";
 import { knownConnection } from "./connection";
 
@@ -35,6 +36,7 @@ type Props = {
   administratorClaimed: boolean;
   name: string;
   version: number;
+  appearance?: TvAppearance;
   onReconnect: () => void;
   onPairAgain: () => void;
   profile?: WatchingProfile;
@@ -47,7 +49,7 @@ type Props = {
   libraryVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [section, setSection] = useState("general");
   useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
@@ -172,9 +174,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="sources" className="min-h-11" data-tv-local-only={host ? "" : undefined}>Sources</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
-          {!host && <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>}
+          <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>
         </TabsList>
-        {!host && <TabsContent value="appearance" className="min-w-0"><AppearanceSettings native={false} /></TabsContent>}
+        <TabsContent value="appearance" className="min-w-0"><AppearanceSettings native={!!host} credentials={credentials} connected={connected} administrator={administrator || !!host && identity?.authority === "host"} appearance={appearance} /></TabsContent>
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>

@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import { networkInterfaces } from "node:os";
 import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
 import { createSession } from "./session";
+import { createAppearance } from "./appearance";
 import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import { createMediaFolders } from "./media-folders";
@@ -94,6 +95,7 @@ export function createHub(options: HubOptions) {
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
   } });
+  const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
     const state = session.state;
@@ -166,6 +168,7 @@ export function createHub(options: HubOptions) {
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       const authorize = () => { if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401); };
       if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
       if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, identity));
@@ -280,6 +283,7 @@ export function createHub(options: HubOptions) {
       shutdown.abort();
       for (const controller of inspections.values()) controller.abort();
       session.close();
+      appearance.close();
       providers.close();
       await server.stop(true);
       subtitles.close();

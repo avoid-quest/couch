@@ -1,5 +1,6 @@
 import type { VideoQuality } from "./providers";
 import type { WatchingProfile } from "./library";
+import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
 export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio" };
@@ -45,6 +46,7 @@ export type SessionState = {
   playlistVersion?: number;
   controllerVersion?: number;
   installationName?: string;
+  appearance?: TvAppearance;
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
 };

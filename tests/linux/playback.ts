@@ -17,6 +17,7 @@ import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
 import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
+import { verifyAppearance } from "./appearance";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
 import { preparePublicConnection, verifyConnection, verifyRecovery } from "./connection";
 
@@ -583,6 +584,7 @@ try {
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
   const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
   const persistedProfiles = await verifyProfileManagement(profileContext);
+  const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
   const connectionContext = { origin, ui, httpRemote, until, artifactDir };
   await verifyConnection(connectionContext);
   await httpRemote.restore();
@@ -628,6 +630,7 @@ try {
   await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
   await persistedReplayGain.verifyAfterRestart();
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
+  await persistedAppearance.verifyAfterRestart();
   await persistedJellyfinSettings?.verifyAfterRestart();
   await persistedRadioSettings.verifyAfterRestart();
   await persistedFolderSettings.verifyAfterRestart();

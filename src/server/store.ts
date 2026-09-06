@@ -6,6 +6,7 @@ import type { HistoryItem, WatchingProfile } from "../shared/library";
 import type { Controller } from "../shared/controllers";
 import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
+import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 
 type ProgressRow = Omit<HistoryItem, "watched"> & { watched: number };
 const progressView = (row: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched });
@@ -62,6 +63,8 @@ export function openStore(path: string) {
     );
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
+    CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
+    INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
 
   const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
@@ -93,6 +96,11 @@ export function openStore(path: string) {
   };
 
   return {
+    tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
+    saveTvInterfaceSize(size: InterfaceSize) {
+      if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");
+      db.query("UPDATE installation_appearance SET scale = ? WHERE id = 1").run(size);
+    },
     queue: JSON.parse(stored.queue) as QueueEntry[],
     volume: stored.volume,
     profiles() { return db.query<WatchingProfile, []>("SELECT id, name FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all(); },
