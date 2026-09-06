@@ -77,6 +77,12 @@ test("the corpus rejects malformed frames, missing files and unsupported multi-f
   }
 });
 
+test("raw INDEX timestamps reject numeric suffixes before the maintained parser normalizes them", () => {
+  for (const timestamp of ["00:05:25suffix", "00suffix:05:25", "00:05suffix:25", "00:05:25.5", "00:05:25 extra", "00:05:25:00"]) {
+    expect(() => parseCueSheet(sheet.replace("00:05:25", timestamp))).toThrow();
+  }
+});
+
 test("subset validation rejects inputs that the tolerant parser could otherwise normalize", () => {
   for (const invalid of [
     sheet.replace("TRACK 01", "TRACK 01suffix"), sheet.replace("INDEX 01", "INDEX 01suffix"),

@@ -31,6 +31,7 @@ export function parseCueSheet(text: string) {
     if (!command) continue;
     if (!commands.has(command)) throw new Error(`Unsupported cue command: ${command.slice(0, 40)}.`);
     if (["TRACK", "INDEX"].includes(command) && !/^\d{2}$/.test(words[1] ?? "")) throw new Error("Cue TRACK and INDEX numbers must have two digits.");
+    if (command === "INDEX" && !/^INDEX\s+\d{2}\s+\d+:\d+:\d+$/i.test(line.trim())) throw new Error("Cue INDEX times must use unsigned minute, second and frame numbers.");
     if (command === "TRACK" && ++tracks > cueLimits.tracks) throw new Error("Cue sheets support at most 99 tracks.");
   }
   const { sheet } = parse(text, { fatal: true, checkAtLeastOneTrack: true });
