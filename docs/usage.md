@@ -110,9 +110,15 @@ and the Jellyfin connection.
 Playback does not start automatically after a restart. Press Play or Resume to
 continue from the saved position, or choose Play from start to restart an item.
 Local progress belongs to the selected watching profile, initially Household.
-Use the profile button beside Playback settings to create or select a name;
-stop playback before switching. Paired phones and laptops are controllers,
-not watching profiles. Jellyfin progress belongs to its connected account.
+Use the profile button beside Playback settings to create, select, rename or
+remove a watching profile from the TV or a paired remote. Renaming keeps the
+profile's saved preferences, resume points, watched marks and local history.
+Removal asks you to confirm that those local records will be deleted; other
+viewers keep theirs. The shared default can be renamed but cannot be removed,
+and becomes selected when you remove the current viewer. Stop playback before
+switching or removing profiles; pausing keeps that guard. Renaming is available
+during playback. Paired phones and laptops remain controllers. These operations
+leave Jellyfin's connected account and history, and administrator access unchanged.
 
 For browser development without a native player:
 

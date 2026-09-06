@@ -15,6 +15,7 @@ import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
 import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
+import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -588,6 +589,8 @@ try {
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
   const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
+  const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
+  const persistedProfiles = await verifyProfileManagement(profileContext);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -614,6 +617,7 @@ try {
   ));
   await until("real HTTP browser reconnects after desktop restart without stale actions", async () => await httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.textContent === 'Ready' && document.querySelectorAll('.queue-entry').length === arguments[0]", [queueBeforeRestart.length]));
   await httpRemote.ui.key(keys.escape);
+  await assertProfilesAfterRestart(profileContext, persistedProfiles);
   await assertLocalProgressAfterRestart(progressContext, persistedProgress);
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
