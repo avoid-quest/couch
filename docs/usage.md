@@ -196,9 +196,9 @@ and [Jellyfin](https://github.com/avoid-quest/couch/issues/18) is separate work.
 
 ### Recover administrator access
 
-Recovery requires trusted local or SSH access to the TV computer. Stop Couch, generate
-a fresh secret of 32 to 256 hexadecimal characters, and supply it through
-`COUCH_ADMIN_RECOVERY_CODE` when restarting the app. For example, use
+Recovery requires trusted local or SSH access to the TV computer. For a source
+checkout, stop Couch, generate a fresh secret of 32 to 256 hexadecimal characters,
+and supply it through `COUCH_ADMIN_RECOVERY_CODE` when restarting the app. For example, use
 `openssl rand -hex 32` to generate a secret, then run these commands in a local
 Bash terminal in a source checkout, entering the secret at the hidden prompt:
 
@@ -216,12 +216,12 @@ that deadline nor makes a consumed secret reusable. An expired or consumed secre
 requires a fresh value and another local restart. Recovery grants administration
 to the replacement browser; it does not revoke the old administrator.
 
-For an installed appliance, use its documented stop/start invocation and pass the
-same environment variable to the process that launches Couch in the TV session.
-An SSH shell must restart that existing session through its supervisor; launching
-a second desktop from SSH is not a recovery procedure. The installed supervisor
-invocation and its target SSH qualification belong to the appliance boot/package
-work and are still pending; the commands above cover a local source checkout.
+For an installed appliance, run `sudo couch-session recover-admin` in a private
+administrator terminal on the TV computer or over SSH. It generates a fresh code
+and restarts the existing supervised TV application. Pair the replacement browser
+and enter the printed code as described above. Keep the command output out of
+logs and issue comments. See [Ubuntu TV session](appliance-session.md) for the
+installed session's operation and recovery details.
 
 Bun removes the recovery variable from its environment before starting media
 helpers. The server stores a hash, and never sends the secret in a snapshot or
