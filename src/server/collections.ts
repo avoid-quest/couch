@@ -27,9 +27,23 @@ function text(value: unknown, limit = 200): string {
 }
 async function body(request: Request) {
   if (request.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new CollectionError("Send a JSON object.");
-  if (Number(request.headers.get("Content-Length")) > 65_536) throw new CollectionError("Collection command is too large.", 413);
-  const raw = await request.text();
-  if (raw.length > 65_536) throw new CollectionError("Collection command is too large.", 413);
+  // A full definition may contain 500 cached titles of up to 300 UTF-16 units.
+  const maxBytes = 1_048_576;
+  if (Number(request.headers.get("Content-Length")) > maxBytes) throw new CollectionError("Collection command is too large.", 413);
+  const reader = request.body?.getReader();
+  if (!reader) throw new CollectionError("Send a JSON object.");
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.length;
+      if (bytes > maxBytes) { await reader.cancel(); throw new CollectionError("Collection command is too large.", 413); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const raw = Buffer.concat(chunks).toString("utf8");
   let input: unknown;
   try { input = JSON.parse(raw); } catch { throw new CollectionError("Invalid JSON body."); }
   if (!object(input)) throw new CollectionError("Send a JSON object.");

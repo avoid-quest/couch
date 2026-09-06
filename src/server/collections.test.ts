@@ -142,3 +142,25 @@ test("preview bounds large catalog results to 500 and shutdown rejects a body st
   gate.resolve();
   expect((await pending).status).toBe(503);
 });
+
+test("a complete 500-film definition with maximum Unicode titles can be renamed and reordered", async () => {
+  const f = await fixture();
+  const db = new Database(f.databasePath);
+  const film = db.query<{ id: string }, []>("SELECT id FROM library_items WHERE kind = 'video'").get()!;
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(library_items)").all().map(column => column.name);
+  db.transaction(() => {
+    for (let index = 0; index < 500; index++) db.query(`INSERT INTO library_items (${columns.join(",")}) SELECT ${columns.map(column => ["id", "path", "title"].includes(column) ? "?" : column).join(",")} FROM library_items WHERE id = ?`).run(`film-${index}`, `/fixture/film-${index}`, "映".repeat(300), film.id);
+  })();
+  db.close();
+  const members = Array.from({ length: 500 }, (_, index) => ({ id: `film-${index}`, title: "Movie" }));
+  const created = await create(f.service, { name: "Long films", filter: null, sort: "manual", descending: false, members });
+  const read = await (await request(f.service, "GET", `/${created.collection.id}`)).json() as CollectionPreview;
+  const { id, revision, updatedAt: _updatedAt, ...definition } = read.collection;
+  expect(new TextEncoder().encode(JSON.stringify(definition)).length).toBeGreaterThan(450_000);
+  const renamed = await request(f.service, "POST", `/${id}`, { revision, definition: { ...definition, name: "Renamed films" } });
+  expect(renamed.status).toBe(200);
+  const reordered = await request(f.service, "POST", `/${id}`, { revision: 2, definition: { ...definition, name: "Renamed films", members: [...definition.members].reverse() } });
+  expect(reordered.status).toBe(200);
+  expect((await reordered.json()).items[0].id).toBe("film-499");
+  expect((await request(f.service, "POST", "", { definition, padding: "x".repeat(1_048_576) })).status).toBe(413);
+});
