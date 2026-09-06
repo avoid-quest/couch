@@ -511,7 +511,11 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
           const track = album.tracks.find(track => track.id === id && track.trackNumber === item.cueTrack);
           if (!track) throw new Error();
           await verifySource(getSource(item.sourceId)!);
-          return { source: pathToFileURL(join(root, album.sourcePath)).href, title: track.title,
+          const path = join(root, album.sourcePath);
+          const canonical = await realpath(path);
+          if (root !== item.root || !within(root, canonical) || (await lstat(path)).isSymbolicLink() || !(await lstat(canonical)).isFile()) throw new Error();
+          if (!getSource(item.sourceId)) throw new Error();
+          return { source: pathToFileURL(canonical).href, title: track.title,
             segment: { start: track.start, end: track.end }, metadata: { duration: track.duration } };
         }
         const path = join(root, item.path);

@@ -149,3 +149,32 @@ test("revocation during the final cue stat prevents catalog publication", async 
     expect(library.albumTracks(album.id).items).toEqual(originalTracks);
   } finally { intercept.mockRestore(); }
 });
+
+
+test("cue playback rejects an ancestor replaced after cue validation and before path handoff", async () => {
+  const { root, media, library, source, folders } = await setup();
+  const nested = join(media, "nested"), outside = join(root, "outside");
+  await mkdir(nested); await mkdir(outside);
+  await rename(join(media, "album.flac"), join(nested, "album.flac"));
+  await copyFile(join(fixtures, "album.flac"), join(outside, "album.flac"));
+  await writeFile(join(media, "album.cue"), (await Bun.file(join(media, "album.cue")).text()).replace("album.flac", "nested/album.flac"));
+  await library.scan(source.id);
+  const album = library.musicAlbums().items[0]!;
+  const track = library.albumTracks(album.id).items[1]!;
+  const original = folders.verify;
+  let verified = 0;
+  const intercept = spyOn(folders, "verify").mockImplementation(async (path, identity) => {
+    const result = await original(path, identity);
+    // getPlayable verifies again only after readCueAlbum has returned and closed its descriptors.
+    if (++verified === 2) {
+      await rename(nested, join(media, "original"));
+      await fs.symlink(outside, nested);
+    }
+    return result;
+  });
+  try {
+    await expect(library.getPlayable(track.id)).rejects.toThrow("unavailable");
+    expect(verified).toBe(2);
+    expect(library.albumTracks(album.id).items.find(item => item.id === track.id)?.available).toBe(false);
+  } finally { intercept.mockRestore(); }
+});
