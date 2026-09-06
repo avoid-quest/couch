@@ -104,7 +104,8 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = { type: "player"; state: PlayerState } | { type: "shutdown" };
+export type HostMessage = { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
 export type SidecarMessage =
   | ({ type: "ready" } & ConnectionInfo)
-  | { type: "playback"; command: PlaybackCommand };
+  | { type: "playback"; command: PlaybackCommand }
+  | { type: "diagnostics"; requestId: string };

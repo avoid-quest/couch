@@ -1,5 +1,9 @@
 use std::collections::BTreeMap;
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    mpsc::{Receiver, RecvTimeoutError},
+    Arc,
+};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
@@ -13,6 +17,7 @@ pub enum Request {
     Command(PlaybackCommand),
     Layout(VideoRect),
     Observe,
+    Diagnostics(String),
     Shutdown,
 }
 
@@ -27,6 +32,21 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             Ok(Request::Observe | Request::Command(PlaybackCommand::Stop))
         );
         let result = match request {
+            Ok(Request::Diagnostics(request_id)) => {
+                // A slow display/property query must not occupy the playback worker.
+                // Only one query may remain in flight, even after the pipe timeout.
+                if !player.diagnostics_pending.swap(true, Ordering::Relaxed) {
+                    let pending = player.diagnostics_pending.clone();
+                    let app = app.clone();
+                    let playback_id = player.state.playback_id.clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        let report = crate::diagnostics::collect(&app, playback_id);
+                        app.state::<Host>().report_message(serde_json::json!({ "type": "diagnostics", "requestId": request_id, "report": report }));
+                        pending.store(false, Ordering::Relaxed);
+                    });
+                }
+                continue;
+            }
             Ok(Request::Command(command)) => player.command(&app, command),
             Ok(Request::Layout(rect)) => {
                 player.rect = rect;
@@ -49,6 +69,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
 
 #[derive(Default)]
 struct Player {
+    diagnostics_pending: Arc<AtomicBool>,
     state: PlayerState,
     rect: VideoRect,
 }

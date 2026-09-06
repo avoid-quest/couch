@@ -1,3 +1,4 @@
+mod diagnostics;
 mod player;
 mod protocol;
 
@@ -28,14 +29,16 @@ struct Host {
 
 impl Host {
     fn report(&self, state: &PlayerState) {
+        self.report_message(serde_json::json!({ "type": "player", "state": state }));
+    }
+
+    fn report_message(&self, message: serde_json::Value) {
         if self.shutting_down.load(Ordering::Relaxed) {
             return;
         }
         let mut child = self.child.lock().expect("sidecar lock poisoned");
         if let Some(child) = child.as_mut() {
-            let mut line =
-                serde_json::to_vec(&serde_json::json!({ "type": "player", "state": state }))
-                    .expect("serializable player state");
+            let mut line = serde_json::to_vec(&message).expect("serializable player state");
             line.push(b'\n');
             if let Err(error) = child.write(&line) {
                 log::error!("Cannot report playback: {error}");
@@ -244,6 +247,11 @@ pub fn run() {
                                 }
                                 Ok(SidecarMessage::Playback { command }) => {
                                     let _ = host.player.send(player::Request::Command(command));
+                                }
+                                Ok(SidecarMessage::Diagnostics { request_id }) => {
+                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                        let _ = host.player.send(player::Request::Diagnostics(request_id));
+                                    }
                                 }
                                 Err(error) => log::error!("Invalid media server protocol: {error}"),
                             }

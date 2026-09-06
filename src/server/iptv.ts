@@ -135,6 +135,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   }
 
   return {
+    sources,
     getPlayable(id: string) { return { source: channel(id).streamUrl }; },
     async getLivePlayable(id: string, signal: AbortSignal) {
       const item = channel(id);

@@ -71,6 +71,14 @@ impl<R: Runtime> DesktopVideo<R> {
         self.run_on_main(move |_| linux::stats(payload))
     }
 
+    // Private host diagnostics use a fixed property allowlist, never media URLs or headers.
+    pub fn diagnostic_properties(&self, payload: NativeSessionRequest) -> crate::Result<std::collections::BTreeMap<String, Option<String>>> {
+        #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+        { self.run_on_main(move |_| linux_mpv::diagnostic_properties(payload)) }
+        #[cfg(not(all(target_os = "linux", feature = "mpv-runtime")))]
+        { let _ = payload; Ok(std::collections::BTreeMap::new()) }
+    }
+
     #[cfg(target_os = "linux")]
     pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> {
         self.run_on_main(move |_| linux::close(payload))
@@ -1792,6 +1800,16 @@ mod linux_mpv {
             area.queue_render();
             gtk::glib::ControlFlow::Break
         });
+    }
+
+    pub fn diagnostic_properties(payload: NativeSessionRequest) -> Result<std::collections::BTreeMap<String, Option<String>>> {
+        PLAYER.with(|slot| {
+            let slot = slot.borrow();
+            let player = slot.as_ref().ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
+            ensure_session(&player.session_key, &payload.session_key)?;
+            Ok(["mpv-version", "hwdec-current", "current-vo", "current-ao", "audio-device", "video-codec", "gpu-dumb-mode"]
+                .into_iter().map(|name| (name.to_string(), property::<String>(&player.mpv, name).map(|value| value.chars().take(200).collect()))).collect())
+        })
     }
 
     pub fn stats(payload: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
