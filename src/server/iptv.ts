@@ -136,6 +136,13 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
 
   return {
     sources,
+    recordingChannel(id: string) { return publicChannel(channel(id)); },
+    recordingSelection(id: string) {
+      assertOpen();
+      const program = db.query<GuideProgram, [string]>(`${programSelect} WHERE id = ?`).get(id);
+      if (!program) throw new GuideError("This programme is no longer in the guide.", 404);
+      return { channel: publicChannel(channel(program.channelId)), program };
+    },
     getPlayable(id: string) { return { source: channel(id).streamUrl }; },
     async getLivePlayable(id: string, signal: AbortSignal) {
       const item = channel(id);

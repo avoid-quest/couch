@@ -36,7 +36,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const broadcast = () => publish(state);
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
-  const invalidate = (kind: "library" | "radio" | "iptv" | "provider" | "jellyfin" | "playlist" | "controller") => {
+  const invalidate = (kind: "library" | "radio" | "iptv" | "recordings" | "provider" | "jellyfin" | "playlist" | "controller") => {
     if (kind === "controller") {
       state.installationName = store.installationName();
       state.administratorClaimed = store.administratorExists();
