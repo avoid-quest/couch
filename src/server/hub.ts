@@ -118,10 +118,10 @@ export function createHub(options: HubOptions) {
   const recordings = createRecordings({ databasePath: options.databasePath, selection: guide.recordingSelection, channel: guide.recordingChannel,
     onChange: () => session.invalidate("recordings"),
     onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
-    enqueue: job => {
+    enqueue: (job, authorize) => {
       const existing = session.state.queue.find(entry => entry.source === `recording:${job.id}`);
-      if (existing) session.command({ type: "play", entryId: existing.id });
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true });
+      if (existing) session.command({ type: "play", entryId: existing.id }, authorize);
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize);
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });

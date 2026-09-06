@@ -21,7 +21,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   channel: (channelId: string) => GuideChannel;
   onChange?: () => void;
   onConnectionChanged?: () => void;
-  enqueue?: (job: Recording) => void;
+  enqueue?: (job: Recording, authorize: () => void) => void;
   fetch?: typeof fetch;
   pollMs?: number;
 }) {
@@ -200,7 +200,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         const jobPath = /^\/api\/recordings\/([a-f0-9-]{36})\/(cancel|play)$/.exec(path);
         if (jobPath) {
           if (req.method !== "POST") return method("POST");
-          if (jobPath[2] === "play") { guard(); const job = get(jobPath[1]!); if (job.status !== "completed") throw new RecordingError("Wait for this recording to complete.", 409); enqueue(publicJob(job)); return json({ ok: true }); }
+          if (jobPath[2] === "play") { guard(); const job = get(jobPath[1]!); if (job.status !== "completed") throw new RecordingError("Wait for this recording to complete.", 409); enqueue(publicJob(job), () => { caller(); }); return json({ ok: true }); }
           const value = await body(req);
           return await serial(async () => {
             guard(); await reconcile(); guard(); const job = get(jobPath[1]!);
