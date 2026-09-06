@@ -13,6 +13,7 @@ const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options:
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file(`${artifactDir}/driver.log`), stderr: Bun.file(`${artifactDir}/native.log`) });
 let sessionId = "";
 let httpRemote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
+let otherRemote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
 const all = (predicate: (state: SessionState) => boolean) => clients.length === 2 && clients.every(client => client.state && predicate(client.state));
 
 async function until(description: string, predicate: () => boolean | Promise<boolean>, timeout = 15_000) {
@@ -104,9 +105,56 @@ try {
     clients.push(new Remote((await response.json() as { token: string }).token));
   }
   await until("two independently paired controllers receive the stopped session", () => all(state => state.player.status === "idle"));
-  httpRemote = await startHttpRemote(origin, code, artifactDir, until);
+  httpRemote = await startHttpRemote(origin, code, artifactDir, until, 4446, 1.5);
+  await httpRemote.minimize();
+  otherRemote = await startHttpRemote(origin, code, artifactDir, until, 4447);
+  await otherRemote.minimize();
   const context = { origin, ui, until, clients, api, httpRemote, artifactDir, screenshot };
   const saved = await verifyCue(context);
+  await httpRemote.restore();
+  await httpRemote.ui.section("Library");
+  await httpRemote.ui.button("Albums", '[aria-label="Library view"]');
+  const panel = '.library-panel [data-slot="tabs-content"][data-state="active"] .music-panel';
+  if (!await httpRemote.ui.execute("return !!document.querySelector(arguments[0] + ' .music-tracks')", [panel])) await httpRemote.ui.click(`${panel} [data-music-album=${JSON.stringify(saved.album.id)}]`);
+  const widths = [];
+  for (const width of [320, 375, 390, 768, 1024, 1440, 1920]) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rect = await httpRemote.ui.request(`/session/${httpRemote.ui.session()}/window/rect`);
+      const actual = await httpRemote.ui.execute("return innerWidth");
+      if (actual === width) break;
+      await httpRemote.ui.request(`/session/${httpRemote.ui.session()}/window/rect`, { width: Math.round(rect.width * width / actual), height: 950 });
+    }
+    await until(`cue album viewport settles at ${width}`, () => httpRemote!.ui.execute("return innerWidth === arguments[0]", [width]));
+    const layout = await httpRemote.ui.execute("return { width: innerWidth, height: innerHeight, scale: devicePixelRatio, overflow: document.documentElement.scrollWidth > innerWidth + 1, titles: [...document.querySelectorAll(arguments[0] + ' .music-tracks li')].map(row => row.querySelector('h4, strong')?.textContent.trim()), clipped: [...document.querySelectorAll(arguments[0] + ' button')].filter(el => el.getClientRects().length && el.scrollWidth > el.clientWidth + 2).map(el => el.textContent) }", [panel]);
+    assert.equal(layout.overflow, false);
+    assert.deepEqual(layout.clipped, []);
+    assert.deepEqual(layout.titles, saved.tracks.map(track => track.title));
+    widths.push(layout);
+    await httpRemote.screenshot(`cue-album-${width}`);
+  }
+  await Bun.write(`${artifactDir}/cue-viewports.json`, JSON.stringify(widths, null, 2));
+  await httpRemote.restore();
+  await httpRemote.ui.button("Play First tone on TV", panel);
+  await until("first actual browser starts the first cue on the shared native player", () => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${saved.tracks[0]!.id}`));
+  await httpRemote.minimize();
+  await otherRemote.restore();
+  await otherRemote.ui.section("Queue");
+  await otherRemote.ui.button("Pause", ".player-controls");
+  await until("second actual browser pauses the cue on both controller snapshots", () => all(state => state.player.status === "paused"));
+  await otherRemote.screenshot("cue-second-phone-paused");
+  await otherRemote.minimize();
+  await httpRemote.restore();
+  await httpRemote.ui.section("Queue");
+  await httpRemote.ui.button("Resume", ".player-controls");
+  await until("first actual browser resumes the cue paused by the second browser", () => all(state => state.player.status === "playing"));
+  await httpRemote.ui.button("Pause", ".player-controls");
+  await until("first actual browser pauses before bounded stop evidence", () => all(state => state.player.status === "paused"));
+  await httpRemote.screenshot("cue-first-phone-controls");
+  await httpRemote.minimize();
+  await otherRemote.restore();
+  await otherRemote.ui.button("Stop playback", ".player-controls");
+  await until("second actual browser stops the shared cue and retires its playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
+  await otherRemote.minimize();
   const queueIds = clients[0]!.state!.queue.map(entry => entry.id);
   clients.forEach(client => client.socket.close());
   const exitStarted = performance.now();
@@ -117,7 +165,13 @@ try {
   await launch();
   clients.forEach(client => client.connect());
   await until("both persisted pairings reconnect with the same queue and no autoplay", () => all(state => state.player.status === "idle" && state.player.playbackId === null && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds)));
-  await until("real phone browser reconnects after desktop restart", () => httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  for (const [index, remote] of [httpRemote, otherRemote].entries()) {
+    await until(`actual HTTP browser ${index + 1} reconnects stopped after desktop restart`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.textContent === 'Ready'"));
+    await remote!.restore();
+    await remote!.ui.section("Queue");
+    await remote!.screenshot(`cue-phone-${index + 1}-reconnected`);
+    await remote!.minimize();
+  }
   // Dismiss the still-unclaimed installation's setup dialog after real restart.
   if (await ui.execute("return !!document.querySelector('[data-administrator-code]')")) await ui.key(keys.escape);
   await assertCueAfterRestart(context, saved);
@@ -129,6 +183,7 @@ try {
 } finally {
   await Bun.write(`${artifactDir}/cue-checks.json`, JSON.stringify(checks, null, 2));
   clients.forEach(client => client.socket.close());
+  await otherRemote?.close();
   await httpRemote?.close();
   if (sessionId) await webdriver(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});
   driver.kill();
