@@ -17,6 +17,9 @@ then starts LightDM. Package maintainer scripts cannot start services while APT
 is working. They do not run APT themselves. The runtime uses the locked,
 unprivileged `couch-tv` account. The existing administrator keeps SSH and sudo.
 The installer does not reboot the machine or change its network configuration.
+Running it selects Couch as the LightDM session and enables LightDM startup,
+including removing a previous LightDM mask. It refuses a different configured
+display manager and does not replace an administrator's custom systemd unit.
 
 For existing Couch data on the first appliance install, append
 `--data-dir /absolute/path/to/data`. Stop the previous Couch process first.
@@ -31,7 +34,12 @@ the machine's session.
 Re-run the same command to repair the session or install newer release packages.
 APT preserves the configured data path, and the session package does not delete
 settings, profiles, pairings, sources or media. An APT failure restores any
-preexisting service-start policy and leaves the GUI stopped for diagnosis. SSH
+preexisting service-start policy and leaves the GUI stopped for diagnosis. The
+installer keeps its interrupted policy backup and initial data choice under
+`/var/lib/couch-installer`. A retry restores the original policy and completes
+the chosen data adoption, even if power failed after APT wrote a default conffile.
+LightDM stays masked across an interrupted install and reboot until a successful
+retry unmasks it. No suspend or power target is masked. SSH
 remains available. Fix the reported APT error and rerun the installer.
 
 After installation the session starts without a network dependency. Offline boot

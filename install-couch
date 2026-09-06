@@ -9,42 +9,68 @@ fail() { echo "install-couch: $*" >&2; exit 1; }
 [[ -d /run/systemd/system ]] || fail 'Boot Ubuntu with systemd before running the installer.'
 exec 9>/run/couch-install.lock
 flock -n 9 || fail 'Another Couch installation is running.'
+state=/var/lib/couch-installer
+install -d -o root -g root -m 0700 "$state"
+policy=/usr/sbin/policy-rc.d
+restore_policy() {
+    [[ -e $state/policy-active ]] || return 0
+    rm -f "$policy"
+    if [[ -e $state/original-policy || -L $state/original-policy ]]; then cp -a "$state/original-policy" "$policy"; fi
+    sync -f /usr/sbin
+    rm -f "$state/policy-active"
+    sync -f "$state"
+    rm -f "$state/original-policy"
+}
+# A previous run may have lost power while its temporary deny policy was active.
+restore_policy
 app=$(realpath "$1")
 session=$(realpath "$2")
 [[ $(dpkg-deb -f "$app" Package) = couch && $(dpkg-deb -f "$session" Package) = couch-appliance ]] || fail 'Expected the Couch and Couch appliance release packages.'
 [[ ! -e /etc/X11/default-display-manager || $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'This machine already uses another display manager.'
 
 config=/etc/couch/appliance.env
+had_config=false
+[[ ! -e $config ]] || had_config=true
 data=${4:-}
+pending=false
+if [[ -f $state/data-path ]]; then
+    requested=$(cat "$state/data-path")
+    [[ -z $data || $data = "$requested" ]] || fail 'Complete the interrupted install with its original data path first.'
+    data=$requested
+    pending=true
+fi
 if [[ -n $data ]]; then
     [[ $data = /* && -d $data && ! -L $data ]] || fail '--data-dir must name an existing absolute directory.'
     data=$(realpath "$data")
     [[ $data != / && $data != /home && $data != /var && $data != /usr && $data != *$'\n'* && $data != *'"'* && $data != *\\* ]] || fail 'Choose a dedicated Couch data directory.'
-    if [[ -e $config ]]; then
+    if $had_config && ! $pending; then
         grep -Fxq "COUCH_DATA_DIR=\"$data\"" "$config" || grep -Fxq "COUCH_DATA_DIR=$data" "$config" || fail 'An appliance data location is already configured. Keep it on reinstall, or edit /etc/couch/appliance.env deliberately.'
     fi
 elif [[ ! -e $config && -n ${SUDO_USER:-} ]]; then
     administrator_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
     [[ ! -d $administrator_home/.local/share/quest.avoid.couch ]] || fail 'Existing administrator data found. Re-run with --data-dir pointing to that directory.'
 fi
+if [[ -n $data ]] && ! $had_config && ! $pending; then
+    printf '%s\n' "$data" > "$state/data-path"
+    sync -f "$state"
+    pending=true
+fi
 
 # Suppress maintainer-script service starts until both packages and dependencies
 # are configured. Preserve the administrator's existing policy on every exit.
-policy=/usr/sbin/policy-rc.d
-saved=$(mktemp -d /run/couch-install.XXXXXX)
-had_policy=false
-[[ ! -e $policy && ! -L $policy ]] || { mv "$policy" "$saved/policy-rc.d"; had_policy=true; }
-cleanup() {
-    rm -f "$policy"
-    if $had_policy; then mv "$saved/policy-rc.d" "$policy"; fi
-    rmdir "$saved"
-}
-trap cleanup EXIT
+rm -f "$state/original-policy"
+[[ ! -e $policy && ! -L $policy ]] || cp -a "$policy" "$state/original-policy"
+touch "$state/policy-active"
+sync -f "$state"
+trap restore_policy EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 printf '#!/bin/sh\nexit 101\n' > "$policy"
 chmod 0755 "$policy"
 if systemctl is-active --quiet lightdm; then systemctl stop lightdm; fi
+# Keep an interrupted transaction from booting into a half-configured session.
+systemctl mask lightdm.service
+sync -f /etc/systemd/system
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends -o Dpkg::Options::=--force-confold "$app" "$session"
 
@@ -54,10 +80,21 @@ if [[ -n $data ]]; then
     find "$data" -type d -exec setfacl -m d:u:couch-tv:rwx {} +
     parent=$(dirname "$data")
     while [[ $parent != / ]]; do setfacl -m u:couch-tv:x "$parent"; parent=$(dirname "$parent"); done
-    printf 'COUCH_DATA_DIR="%s"\n' "$data" > "$config"
+    if $pending; then
+        if [[ -f $config ]]; then
+            awk -v data="$data" '/^COUCH_DATA_DIR=/{next} {print} END {print "COUCH_DATA_DIR=\"" data "\""}' "$config" > "$state/config"
+        else
+            printf 'COUCH_DATA_DIR="%s"\n' "$data" > "$state/config"
+        fi
+        install -m 0644 "$state/config" "$config"
+        sync -f "$config"
+        rm -f "$state/config" "$state/data-path"
+        sync -f "$state"
+    fi
 fi
-cleanup
+restore_policy
 trap - EXIT
+systemctl unmask lightdm.service
 systemctl daemon-reload
 systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
 systemctl restart systemd-journald.service
