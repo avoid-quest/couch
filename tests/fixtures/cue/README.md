@@ -18,9 +18,10 @@ Audio file SHA-256: `9bef545bd3b3756376dd65db6b1b4118ed5782012dfd317ef0170096a39
 
 The other cue files exercise invalid frame numbers, a missing source, multiple FILE directives, and INDEX 00 pregaps. Tests create temporary copies before changing paths or content.
 
-`short.wav` checks the other supported container and a final boundary shorter than one second. The same FFmpeg binary generated it with:
+`short.wav` checks the other supported container and an EOF between cue frames. Its 9,001 samples last exactly `9001 / 44100` seconds, which cannot be expressed as a whole number of 75 Hz cue frames. The same FFmpeg binary generated it with:
 
 ```sh
 ffmpeg -hide_banner -loglevel error -f lavfi \
-  -i 'sine=frequency=440:sample_rate=44100:duration=0.2' -c:a pcm_s16le short.wav
+  -i 'sine=frequency=440:sample_rate=44100:duration=0.3' \
+  -af atrim=end_sample=9001 -c:a pcm_s16le short.wav
 ```

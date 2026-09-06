@@ -35,12 +35,13 @@ test("a real lossless album ends its final segment at measured EOF", async () =>
   expect(album.tracks.every(track => /^[a-f0-9]{64}$/.test(track.id))).toBe(true);
 });
 
-test("one PCM WAV track uses the measured fractional final boundary", async () => {
+test("one PCM WAV track retains EOF that falls between cue frames", async () => {
   await copyFile(join(fixtures, "short.wav"), join(root, "short.wav"));
   await writeFile(join(root, "short.cue"), 'FILE "short.wav" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n');
   const album = await readCueAlbum(root, "short.cue", "source-1");
   expect(album.tracks).toHaveLength(1);
-  expect(album.tracks[0]).toMatchObject({ title: "Track 01", start: 0, end: 0.2, duration: 0.2 });
+  expect(album.tracks[0]).toMatchObject({ title: "Track 01", start: 0, end: 9001 / 44100, duration: 9001 / 44100 });
+  expect(Number.isInteger(album.tracks[0]!.end * 75)).toBe(false);
 });
 
 test("cue identities survive metadata, reference and timestamp edits and source reappearance", async () => {
