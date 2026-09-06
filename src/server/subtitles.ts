@@ -10,7 +10,7 @@ export const subtitleSizeLimit = 2 * 1024 * 1024;
 function validPgs(bytes: Buffer) {
   let composition = false, object = false, last = 0;
   for (let position = 0; position < bytes.length;) {
-    if (position + 13 > bytes.length || bytes.toString("ascii", position, position + 2) !== "PG") return false;
+    if (position + 13 > bytes.length || bytes.readUInt16BE(position) !== 0x5047) return false;
     const type = bytes[position + 10]!, size = bytes.readUInt16BE(position + 11);
     if (![0x14, 0x15, 0x16, 0x17, 0x80].includes(type) || position + 13 + size > bytes.length) return false;
     if (type === 0x80 ? size !== 0 : size === 0) return false;

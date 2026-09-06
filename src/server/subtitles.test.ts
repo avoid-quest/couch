@@ -123,13 +123,14 @@ test("PGS downloads preserve all bytes privately and reject corrupt, missing, ov
     expect(request.headers.get("authorization")).toBe("private-token");
     const name = new URL(request.url).pathname;
     if (name === "/missing.pgssub") return new Response(null, { status: 404 });
+    if (name === "/wrong-magic.pgssub") { const bytes = Buffer.from(framedPgs); bytes[0] = 0xd0; return new Response(bytes); }
     if (name === "/oversize.pgssub") return new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(subtitleSizeLimit + 1)); controller.close(); } }));
     return new Response(name === "/truncated.pgssub" ? framedPgs.subarray(0, -1) : name === "/invalid.pgssub" ? Buffer.from("<html>unavailable</html>") : framedPgs);
   } });
   try {
     const { subtitles, replace } = fixture();
     const origin = `http://127.0.0.1:${upstream.port}`;
-    const result = await subtitles.prepare({ source: `${origin}/movie`, headers: { Authorization: "private-token" }, subtitleWarning: "Known timing limitation.", subtitles: ["valid.pgssub", "truncated.pgssub", "invalid.pgssub", "missing.pgssub", "oversize.pgssub", "direct.sup"].map(name => ({ source: `${origin}/${name}`, title: name })) }, "first", new AbortController().signal);
+    const result = await subtitles.prepare({ source: `${origin}/movie`, headers: { Authorization: "private-token" }, subtitleWarning: "Known timing limitation.", subtitles: ["valid.pgssub", "truncated.pgssub", "invalid.pgssub", "wrong-magic.pgssub", "missing.pgssub", "oversize.pgssub", "direct.sup"].map(name => ({ source: `${origin}/${name}`, title: name })) }, "first", new AbortController().signal);
     expect(result.subtitles).toHaveLength(1);
     const file = result.subtitles![0]!.source;
     expect(file).toEndWith(".sup");
