@@ -4,6 +4,12 @@
 the Cargo cache, and inline path filters. Unknown paths or failed detection
 select native validation. Bun commands live in [package.json](../package.json).
 
+Ordinary JavaScript dependency changes still run the full Bun checks and build.
+The inline package comparison keeps metadata, scripts, Bun and Tauri dependency
+changes native, including resolved lock-only updates. Unsupported lock structures
+also select native validation. Test Markdown under `tests/linux` and
+`tests/preview` follows the documentation path rules.
+
 Native validation runs locked Cargo tests on the Rust version in
 [rust-toolchain.toml](../rust-toolchain.toml). The default test command compiles
 the normal library and binary, library/binary unit-test targets, the Linux
@@ -29,6 +35,11 @@ edits reuse dependencies and rebuild the application; frontend and sidecar
 outputs are always regenerated. Cache misses build normally. Only Cargo cache
 directories are stored, without credentials or the full Cargo home. PR caches
 use GitHub's unprivileged PR scope and cannot populate the base branch's cache.
+JavaScript manifests do not invalidate Cargo dependency artifacts. Their changes
+regenerate the frontend, sidecar and build identity; native validation rebuilds
+the workspace crate that consumes those outputs. When changing this boundary,
+verify ordinary dependency timing and a relevant native edit that reuses a
+compatible cache after a JavaScript dependency change.
 
 Before adding checks, jobs, platforms, or repeated validation, compare complete
 before/after usage against the [CI gate's budgets and evidence rules](https://github.com/avoid-quest/couch/issues/43#budgets).
