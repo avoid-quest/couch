@@ -3,7 +3,7 @@
 Ticket: [Browse local movies and episodes with Kodi NFO and nearby artwork](https://github.com/avoid-quest/couch/issues/27).
 Initial base: `209c95741dca0dcf6e269687f0a66968826b54da`.
 
-Catalog implementation and local checks are in progress. Native and HTTP UI qualification has not run yet. This note is the acceptance record; passing parser tests does not complete the ticket.
+Catalog and browsing source reviews passed before integration onto `fec8e70341ec19260ce1616debcc89d61c08e291`. The native run and focused library replay below provide software evidence. Review of the chooser helper correction and representative in-app browser qualification remain pending; the ticket is not complete.
 
 ## Import contract
 
@@ -62,8 +62,8 @@ The selected current show description is applied to all retained episodes with t
 - Scanner/catalog tests cover movie/episode/show fields, numeric ordering, FTS search, pagination, protected path-free artwork, malformed/deep/oversized XML, invalid/dimension-limited images, symlink escapes, sidecar edits/removal, embedded fallback without repeated probing, source unavailability/recovery, UUID/progress persistence, restart, and exact private NFO retention.
 - Focused review regressions reproduce the original failures, then verify migration from a real legacy SQLite schema with absent/failing ffprobe, repeated scans, restart, successful reprobe and changed-file invalidation. A deleted-season episode plus `A show` → `Z show` NFO edit verifies stable identity, cached episode counts, current detail/search metadata and whole-source offline restart. Local frontend/sidecar build passes. Logs are under `.artifacts/catalog/review-{regressions-red,check,build}.log` in the assigned worktree.
 - The follow-up precedence regression forces both actual SQLite save orders for mixed NFO/fallback and conflicting episode NFO titles. Both cases chose the last saved title before correction; all four cases now select the documented winner and remove that precedence on a later sidecar-free rescan. The original migration/deleted-episode/offline regressions still pass. Evidence is under `.artifacts/catalog/show-precedence-{red,green,check,build}.log`.
-- Native/HTTP playable movie and multi-season fixture, decoded artwork, phone/tablet/desktop/TV screenshots, queue/play, source switching/cancellation, two-controller reconnect, and offline stopped restart: pending coordinated qualification.
-- Shared preview rebuild and artifact links/source/binary hashes: pending coordinated qualification.
+- Native/HTTP playable movie and multi-season fixture, decoded artwork, queue/play, source switching/cancellation, two-controller reconnect and offline stopped restart: passed in the focused private replay below. The original full-suite attempt remains a failure.
+- Representative in-app browser flows: pending a coordinated browser reservation. The private runs do not alter shared preview data.
 
 ### Browsing source checks
 
@@ -75,13 +75,57 @@ For the upper review corrections, above unchanged catalog `29a93a44f2b54b42d9157
 | `bun run build` | `.artifacts/browsing/review-build.log` |
 | `bun x tsc --ignoreConfig --noEmit --target ESNext --module Preserve --moduleResolution Bundler --types bun --skipLibCheck --strict tests/linux/video-library.ts tests/linux/video-library-fixture.ts` | `.artifacts/browsing/review-helper-typecheck.log` |
 
-The helper typecheck emits no output on success; its observed exit status is recorded here. The build produces the frontend and Darwin ARM Bun sidecar. The new native fixture and UI flows have not run, so these checks provide no native playback or visual acceptance evidence.
+The helper typecheck emits no output on success; its observed exit status is recorded here. The build produces the frontend and Darwin ARM Bun sidecar. These historical source checks provide no native evidence by themselves; the later execution record is below.
 
-Selected show details refresh by stable ID through the existing `GET /api/library/items?showId=...&limit=1` route on library invalidation or reconnect. Current navigation and matching Back history receive the new description while retaining season, query and pagination. No catalog API changed. The native helper edits the actual show NFO and fanart, rescans through Folders, and asserts updated native/phone headings, preserved independent seasons and phone query, then updated Back-view plot and newly decoded fanart. These assertions still await the coordinated native run.
+Selected show details refresh by stable ID through the existing `GET /api/library/items?showId=...&limit=1` route on library invalidation or reconnect. Current navigation and matching Back history receive the new description while retaining season, query and pagination. No catalog API changed. The native helper edits the actual show NFO and fanart, rescans through Folders, and asserts updated native/phone headings, preserved independent seasons and phone query, then updated Back-view plot and newly decoded fanart. These assertions passed in private replay4 below.
 
-After host restart with the source unavailable, the HTTP helper requests the expected movie artwork with authentication and `cache: no-store`, decodes it in a new `Image`, and checks HTTP 200, JPEG MIME type, SHA-256 matching the expected artwork ID, and 240×360 decoded dimensions. A 404, corrupt payload or different image fails this assertion even if an old movie card still has a decoded blob. The eventual result is saved as `freshArtwork` in `video-library-after-restart.json`; execution remains pending.
+After host restart with the source unavailable, the HTTP helper requests the expected movie artwork with authentication and `cache: no-store`, decodes it in a new `Image`, and checks HTTP 200, JPEG MIME type, SHA-256 matching the expected artwork ID, and 240×360 decoded dimensions. A 404, corrupt payload or different image fails this assertion even if an old movie card still has a decoded blob. The eventual result is saved as `freshArtwork` in `video-library-after-restart.json`; the result passed in private replay4 below.
 
 The video fixture retains its local five-case queue-entry-to-action conversion. Sharing it would also edit the music fixture helper, which is under concurrent harness ownership, without changing the queue restoration behavior needed by this ticket. The existing controller interactions and stopped-state assertions remain in their respective fixtures; no generic provider abstraction was added.
+
+## Native execution and helper correction
+
+The product binary source is upper `43dd58ae24d795a79a79992e30aa67740f55a503`, above catalog `69e43a06da000c836bff4fa36f17d8161d78e4fc` and landed base `fec8e70341ec19260ce1616debcc89d61c08e291`. Chooser-only helper correction `584d2802d0b3efdd4ec97171c5b2a877c2ef80ee` has parent `43dd58ae`; it changes only `tests/linux/video-library.ts` (+12/-3). Its focused peer review is pending. Production source and binaries are unchanged by this correction.
+
+Artifacts are retained in the assigned worktree under [the exact-head record](/Users/devit/Code/couch-media-library/.artifacts/media-library-27/43dd58ae24d795a79a79992e30aa67740f55a503). Each attempt has its own directory; failed attempts were not overwritten.
+
+| Attempt | Result and boundary | Evidence |
+| --- | --- | --- |
+| `attempt-1` | Authorized `bun run test:linux --jellyfin` exited **1** at the first new video-folder selection. It logged 491 passed checks before timing out with GTK still open. It is not a full-suite pass. | `run.log`, `exit-code.txt`, `partial-checks.json`, `linux/failure.txt`, `linux/native-failure.png` |
+| `private-replay` | Reproduced the same chooser failure with copied binaries. Verified the movie exists inside that container; an extra Return left it stuck. Leaving Recent with Alt+Home, then entering the absolute folder, closed the real picker and scanned six videos. | `fixture-files.txt`, `fixture-manifest.json`, `chooser-red.png`, `chooser-extra-return.png`, `chooser-home-location.png`, `run.log` |
+| `private-replay-2` | Corrected chooser and all pre-restart library assertions passed. The private runner connected its WebSockets before the restarted host was ready; runner failure retained. | `run.log`, `failure.txt`, `saved-library.json` |
+| `private-replay-3` | Fresh authenticated artwork retrieval/decoding passed after offline restart. The private runner then encountered the unclaimed setup dialog before rescan; runner failure retained. | `run.log`, `failure.txt`, `http-video-offline-restart.png` |
+| `private-replay-4` | Focused replay completed with **81 recorded checks** plus direct field, identity, artwork and pixel assertions, and both 390px HTTP sessions reconnecting. | `results.json`, `exit-code.txt`, `run.log`, `replay.ts`, `start.sh`, `video-library-before-restart.json`, `video-library-after-restart.json` |
+
+Attempt1 passed Linux `bun run check` (323 pass, 2 opt-in provider skips, 0 failures, 2,575 assertions), the native build, 10 app Rust tests, 2 ABI tests, and the explicit DASH (1), resume/reset (1), external-subtitle (1) and radio (2) regressions. Before its chooser failure it exercised real Jellyfin authentication/playback/reporting/resume/subtitle pixels, native DASH color checks, both HTTP quality/preference sessions, local progress and music. Those partial checks do not qualify the remaining full-suite restart/claim flows.
+
+Shared Cargo/cache access was released only after all Cargo commands finished and the process list showed private `/work/bin` executables without Cargo/rustc. Each replay uses an isolated container with read-only source/binary mounts, no shared cache volumes and no host browser access. The replay scripts are retained artifacts, not changes to the shared runner. The original native Xvfb display remains 1600×1000 and the two HTTP controllers remain 390 CSS pixels.
+
+| Executed input | SHA-256 |
+| --- | --- |
+| Native `couch` binary | `e71e1969983880f6d9015dd0b484c0fdda4b866e76e3ced67cd56e20dafe4313` |
+| Compiled Bun `couch-server` | `3b7b9a664bc220f0da8d717ea618f325d40177b16a090b241f3633bb19e01bee` |
+| Corrected `tests/linux/video-library.ts` | `578a40684f34ed60e01dbc103dc8b48dd077993f78c6d06750cbef5ca04074a7` |
+
+All 240 repository-source entries in the original binary source manifest match the worktree at `43dd58ae`; four additional entries are generated Tauri schemas. Replay4's `binaries.sha256` matches the original copies exactly. The corrected helper's strict TypeScript command above and `git diff --check` both exited **0**; the helper compiler emitted no output.
+
+The actual fixture has one NFO movie, a show with episodes 1.2, 1.10, 2.1 and 2.10, and one malformed-sidecar movie. Each video is a real 20-second H.264/AAC file with two audio tracks, subtitles and chapters. The malformed item remains playable through embedded-title fallback. JPEG/PNG posters, fanart and thumbnails were decoded by native and HTTP views. The real movie's 20-second probe duration wins over NFO runtime 99, and imported watched/resume values do not alter Couch progress. The per-run fixture manifest records original sidecar/artwork/media hashes.
+
+Replay4 verifies native folder selection, movie/show/season/episode browsing, numeric order, search, TV Queue/Play, phone Play from start, native pixels and two audio tracks, independent TV season2/phone season1, source replacement and late-load cancellation, stopped state, mounted VideoStage, fresh reconnect snapshots, rescan UUID/progress preservation, NFO title edits, current/back-stack show title/plot/fanart refresh, source unavailability, cached browsing and disabled playback. After real host shutdown/restart, a new authenticated artwork request returns HTTP200/JPEG with SHA-256 `28b09204fac86c78d605c22b52590908e2e0438ecc22c31208bed6ed3d6822ae` and decodes 240×360. Restoring the folder enables the same movie UUID and resumes its saved seven-second point on the native player.
+
+Native screenshots include `native-video-folder-location.png`, `native-video-movie-details.png`, `native-video-seasons.png`, `native-video-show-rescanned.png`, `native-video-offline.png` and `native-library-movie-playback.png`. HTTP screenshots include `http-video-movies.png`, `http-video-episodes.png`, `http-video-show-rescanned.png`, `http-video-offline.png` and `http-video-offline-restart.png`. These show generated samples using software rendering and silent audio; they do not establish hardware decoding, physical sound or HDMI behavior.
+
+## CI budget measurements
+
+These are existing GitHub job timestamps, with elapsed execution rounded up per Linux job. Queue delay is job start minus run creation, reported separately; it is not counted as execution. Raw run/jobs API responses and calculations are in `ci-<run>.json` and `ci-measurements.json` under the exact-head record.
+
+| Revision / run | Path and result | Elapsed | Rounded Linux minutes | Queue delay |
+| --- | --- | --- | --- | --- |
+| Catalog `69e43a0` / [33998623761](https://github.com/avoid-quest/couch/actions/runs/33998623761) | Native, Cargo dependencies reused; success | 180s | 3 | 2s |
+| Browsing `43dd58a` / [33998624758](https://github.com/avoid-quest/couch/actions/runs/33998624758) | Ordinary, Rust steps skipped; success | 52s | 1 | 3s |
+| Browsing `43dd58a` / [33998624327](https://github.com/avoid-quest/couch/actions/runs/33998624327) | Superseded/cancelled before steps | 1s | 1 | 1s |
+
+The successful jobs fit the agreed ordinary 2-minute/3-rounded and warm-native 3-minute/5-rounded budgets. No extra CI run was started to obtain these measurements. New helper/documentation revision CI remains to be recorded before merge.
 
 ## Official references
 
