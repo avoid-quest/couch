@@ -1,3 +1,4 @@
+import { MetadataEditor } from "./MetadataEditor";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Check, Play, Plus, RotateCcw, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -170,6 +171,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, version, 
           {detail.video?.originalTitle && detail.video.originalTitle !== detail.title && <p className="break-words text-sm text-muted-foreground">Original title: {detail.video.originalTitle}</p>}
           {detail.video?.premiered && <p className="text-sm text-muted-foreground">{detail.video.type === "episode" ? "Aired" : "Released"} {detail.video.premiered}</p>}
           <p className="video-plot text-sm leading-relaxed">{detail.video?.plot || "No description in this video's NFO."}</p>
+          <MetadataEditor key={detail.id} origin={origin} token={token} id={detail.id} connected={connected} onSaved={() => setRefresh(value => value + 1)} />
           {summary(detail)}{actions(detail)}{notice && <p className="text-sm text-primary" role="status">{notice}</p>}{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         </>}
       </DialogContent>

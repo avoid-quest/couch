@@ -1,0 +1,103 @@
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import type { MetadataPreview, MetadataView } from "../shared/metadata";
+
+let root: Root, window: Window, Editor: typeof import("./MetadataEditor").MetadataEditor;
+let request: ReturnType<typeof spyOn>;
+const originals = new Map<string, PropertyDescriptor | undefined>();
+const calls: Array<{ path: string; body: any; signal: AbortSignal }> = [];
+const values = { title: "Imported movie", originalTitle: null, showTitle: null, plot: "Original plot", year: 2020, premiered: "2020-01-01", genres: ["Drama, mystery"], season: null, episode: null, artworkId: null };
+const initial: MetadataView = { id: "item", type: "movie", revision: "revision-1", values, origins: Object.fromEntries(Object.keys(values).map(key => [key, "Imported/local"])) as MetadataView["origins"], match: null };
+const preview: MetadataPreview = { id: "preview", expiresAt: Date.now() + 300_000, values: { ...values, title: "Chosen movie" }, match: { kind: "movie", id: 12, title: "Chosen movie" }, artwork: null };
+const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.textContent === label)!;
+const click = (label: string) => act(async () => button(label).click());
+const input = async (selector: string, value: string) => act(async () => {
+  const field = document.querySelector<HTMLInputElement>(selector)!;
+  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(field, value);
+  field.dispatchEvent(new window.Event("input", { bubbles: true }) as unknown as Event);
+});
+const render = async (connected = true) => act(async () => root.render(<Editor origin="http://localhost" token="administrator-token" id="item" connected={connected} onSaved={() => {}} />));
+beforeEach(async () => {
+  window = new Window({ url: "http://localhost" }); calls.length = 0;
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "Element", "Node", "MutationObserver", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
+  }
+  request = spyOn(globalThis, "fetch").mockImplementation((async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ path, body, signal: init?.signal as AbortSignal });
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer administrator-token");
+    if (path.endsWith("/search")) return Response.json({ items: [{ id: 12, title: "Chosen movie", year: "2020", description: "Candidate" }] });
+    if (path.endsWith("/preview")) return Response.json(preview);
+    if (path.endsWith("/edit")) return Response.json({ ...initial, revision: "revision-2", values: { ...values, ...body.changes } });
+    if (path.endsWith("/match")) return Response.json({ ...initial, revision: "revision-2", values: preview.values, match: preview.match });
+    if (path.endsWith("/export")) return new Response("bounded generated archive");
+    return Response.json(initial);
+  }) as typeof fetch);
+  const { createRoot } = await import("react-dom/client");
+  Editor = (await import("./MetadataEditor")).MetadataEditor;
+  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+});
+afterEach(async () => {
+  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+});
+
+test("editor is local-only on the TV and saves only changed fields with the loaded revision", async () => {
+  await render(); expect(calls).toHaveLength(0);
+  expect(button("Edit metadata").closest("[data-tv-local-only]")).not.toBeNull();
+  await click("Edit metadata");
+  expect(document.body.textContent).toContain("Origin: Imported/local");
+  await input('[data-metadata-field="title"]', "Manual movie"); await click("Save corrections");
+  expect(calls.at(-1)?.body).toEqual({ revision: "revision-1", changes: { title: "Manual movie" } });
+  expect(document.body.textContent).toContain("Metadata saved.");
+});
+
+test("a rejected stale edit keeps the draft and tells the owner to reload", async () => {
+  await render(); await click("Edit metadata");
+  await input('[data-metadata-field="title"]', "Keep my draft");
+  request.mockResolvedValue(Response.json({ error: "This metadata changed on another device. Reload before saving." }, { status: 409 }));
+  await click("Save corrections");
+  expect(document.querySelector<HTMLInputElement>('[data-metadata-field="title"]')?.value).toBe("Keep my draft");
+  expect(document.body.textContent).toContain("Reload before saving.");
+  expect(button("Close and reopen to reload")).toBeDefined();
+});
+
+test("search and preview never apply a match until its explicit confirmation", async () => {
+  await render(); await click("Edit metadata"); await click("Search TMDB");
+  expect(calls.some(call => call.path.endsWith("/match"))).toBe(false);
+  await click("Preview Chosen movie 2020");
+  expect(document.body.textContent).toContain("Applying replaces all previewed fields");
+  expect(calls.some(call => call.path.endsWith("/match"))).toBe(false);
+  await click("Apply this match");
+  expect(calls.at(-1)?.body).toEqual({ revision: "revision-1", previewId: "preview" });
+  expect(document.querySelector<HTMLInputElement>('[data-metadata-field="title"]')?.value).toBe("Chosen movie");
+});
+
+test("browser export requires an explicit click and states its destination", async () => {
+  await render(); await click("Edit metadata");
+  expect(document.body.textContent).toContain("this browser's download destination");
+  const download = spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  try {
+    expect(calls.some(call => call.path.endsWith("/export"))).toBe(false);
+    await click("Download saved metadata");
+    expect(calls.at(-1)?.body).toEqual({ revision: "revision-1" }); expect(download).toHaveBeenCalledTimes(1);
+  } finally { download.mockRestore(); }
+});
+
+test("closing the editor aborts an export and ignores the late response", async () => {
+  await render(); await click("Edit metadata");
+  const gate = Promise.withResolvers<Response>(); let signal: AbortSignal | undefined;
+  request.mockImplementation((async (_url, init) => { signal = init?.signal as AbortSignal; return gate.promise; }) as typeof fetch);
+  const download = spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  try {
+    await click("Download saved metadata"); await click("Close metadata editor");
+    expect(signal?.aborted).toBe(true);
+    await act(async () => gate.resolve(new Response("late archive")));
+    expect(download).not.toHaveBeenCalled();
+  } finally { download.mockRestore(); }
+});

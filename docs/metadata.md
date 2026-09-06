@@ -1,6 +1,11 @@
 # Video metadata corrections and export
 
 The host API supports administrator corrections for local movies and episodes.
+Open a movie or episode in Library, then choose **Edit metadata**. On the TV,
+these controls accept local input; paired navigation cannot activate them.
+Administrator browsers use the same editor and download the export directly.
+The TV editor gives the exact browser navigation path for exporting.
+
 Existing libraries need one rescan to retain their import snapshot before the
 first correction. Corrections use each item's current revision; another edit or
 a changed scan makes an older edit fail with HTTP 409. Correction values, origin,
@@ -70,6 +75,11 @@ runtime remains imported. Original snapshots are included in addition to that
 preservation. Export rejects an oversized or invalid resulting NFO. Export uses
 fixed archive entry names, so media filenames never become extraction paths.
 No source media, provider key or absolute host path enters the archive.
+
+The bundled TMDB logo is the unmodified blue_short SVG referenced by the
+official developer documentation, downloaded from
+`https://files.readme.io/29c6fee-blue_short.svg`. The Sources section displays
+TMDB credits and the required attribution notice.
 
 References checked 2026-09-06: [TMDB authentication](https://developer.themoviedb.org/docs/authentication-application),
 [movie search](https://developer.themoviedb.org/reference/search-movie),
