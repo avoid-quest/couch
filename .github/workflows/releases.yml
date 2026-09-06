@@ -1,0 +1,22 @@
+name: Release feed
+
+on:
+  pull_request:
+    paths: ['scripts/*release*', 'install-couch', '.github/workflows/releases.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/*release*', 'install-couch', '.github/workflows/releases.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  signed-apt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify private artifact origin and attempt checks
+        run: python3 scripts/test-download-release.py
+      - name: Test disposable signed releases and installer trust enrollment
+        run: sudo python3 scripts/test-publish-release.py
