@@ -15,13 +15,13 @@ const button = (label: string) => [...document.querySelectorAll("button")].find(
 const click = (label: string) => act(async () => button(label).click());
 const input = async (selector: string, value: string) => act(async () => {
   const field = document.querySelector<HTMLInputElement>(selector)!;
-  Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(field, value);
+  Object.getOwnPropertyDescriptor((field.tagName === "TEXTAREA" ? window.HTMLTextAreaElement : window.HTMLInputElement).prototype, "value")!.set!.call(field, value);
   field.dispatchEvent(new window.Event("input", { bubbles: true }) as unknown as Event);
 });
 const render = async (connected = true) => act(async () => root.render(<Editor origin="http://localhost" token="administrator-token" id="item" connected={connected} onSaved={() => {}} />));
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" }); calls.length = 0;
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "Element", "Node", "MutationObserver", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "FileReader", "Element", "Node", "MutationObserver", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
   }
@@ -100,4 +100,40 @@ test("closing the editor aborts an export and ignores the late response", async 
     await act(async () => gate.resolve(new Response("late archive")));
     expect(download).not.toHaveBeenCalled();
   } finally { download.mockRestore(); }
+});
+
+
+test("disconnect retains title, plot, order and artwork, rejects a late lookup, and keeps the old revision for conflict detection", async () => {
+  const episode = { ...initial, type: "episode", values: { ...values, showTitle: "Series", season: 1, episode: 7 } };
+  request.mockResolvedValue(Response.json(episode));
+  await render(); await click("Edit metadata");
+  await input('[data-metadata-field="title"]', "Unsaved title");
+  await input('[data-metadata-field="plot"]', "Unsaved plot");
+  await input('[data-metadata-field="episode"]', "3");
+  const file = new window.File([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6aJcAAAAASUVORK5CYII=", "base64")], "image.png", { type: "image/png" });
+  await act(async () => {
+    const field = document.querySelector<HTMLInputElement>("[data-metadata-artwork]")!;
+    Object.defineProperty(field, "files", { value: [file], configurable: true });
+    field.dispatchEvent(new window.Event("change", { bubbles: true }) as unknown as Event);
+    await window.happyDOM.waitUntilComplete();
+  });
+  expect(document.body.textContent).toContain("Artwork selected");
+  const gate = Promise.withResolvers<Response>(); let signal: AbortSignal | undefined;
+  request.mockImplementation((async (_url, init) => { signal = init?.signal as AbortSignal; return gate.promise; }) as typeof fetch);
+  await click("Search TMDB"); await render(false);
+  expect(signal?.aborted).toBe(true); expect(button("Save corrections").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Your draft is kept here");
+  await render(true);
+  await act(async () => gate.resolve(Response.json({ items: [{ id: 99, title: "Stale lookup", year: "2020", description: "Old response" }] })));
+  expect(document.body.textContent).not.toContain("Stale lookup");
+  expect(document.querySelector<HTMLInputElement>('[data-metadata-field="title"]')?.value).toBe("Unsaved title");
+  expect(document.querySelector<HTMLTextAreaElement>('[data-metadata-field="plot"]')?.value).toBe("Unsaved plot");
+  expect(document.querySelector<HTMLInputElement>('[data-metadata-field="episode"]')?.value).toBe("3");
+  expect(document.body.textContent).toContain("Artwork selected");
+  let submitted: any;
+  request.mockImplementation((async (_url, init) => { submitted = JSON.parse(String(init?.body)); return Response.json({ error: "Reload before saving." }, { status: 409 }); }) as typeof fetch);
+  await click("Save corrections");
+  expect(submitted.revision).toBe("revision-1"); expect(submitted.changes).toEqual({ title: "Unsaved title", plot: "Unsaved plot", episode: 3 });
+  expect(submitted.artwork).toBe(Buffer.from(await file.arrayBuffer()).toString("base64"));
+  expect(document.body.textContent).toContain("Reload before saving.");
 });

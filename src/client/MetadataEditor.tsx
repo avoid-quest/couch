@@ -16,6 +16,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
   const [metadata, setMetadata] = useState<MetadataView | null>(null);
   const [draft, setDraft] = useState<Record<Field, string> | null>(null);
   const [pending, setPending] = useState(false);
+  const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [artwork, setArtwork] = useState<string | null>(null);
@@ -26,23 +27,31 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
   const [preview, setPreview] = useState<MetadataPreview | null>(null);
   const request = useRef<AbortController | null>(null);
   const fileRead = useRef<FileReader | null>(null);
+  const context = useRef("");
   const prefix = useId();
   const native = isTauri();
-  const busy = !connected || pending;
+  const busy = !connected || pending || reading;
   const reset = (value: MetadataView) => { setMetadata(value); setDraft(draftOf(value.values)); setArtwork(null); setClearArtwork(false); setClearMatch(false); setPreview(null); };
   const cancel = () => { request.current?.abort(); request.current = null; fileRead.current?.abort(); fileRead.current = null; };
 
   useEffect(() => {
-    cancel(); setMetadata(null); setDraft(null); setError(null); setNotice(null); setPending(false); setPreview(null); setResults(null);
-    if (!open || !connected) return;
+    const key = JSON.stringify([open, origin, token, id]);
+    const changed = context.current !== key;
+    request.current?.abort(); request.current = null; setPending(false);
+    if (changed) {
+      context.current = key; fileRead.current?.abort(); fileRead.current = null; setReading(false);
+      setMetadata(null); setDraft(null); setArtwork(null); setClearArtwork(false); setClearMatch(false); setError(null); setNotice(null); setPreview(null); setResults(null);
+    }
+    if (!open || !connected || !changed && metadata) return;
     const controller = new AbortController(); request.current = controller; setPending(true);
     void fetch(`${origin}/api/metadata/items/${id}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) })
       .then(async response => { const value = await response.json(); if (!response.ok) throw new Error(value.error || "Could not load metadata."); return value as MetadataView; })
       .then(value => { if (!controller.signal.aborted) { reset(value); setQuery(value.type === "episode" ? value.values.showTitle ?? "" : value.values.title); } })
       .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load metadata."); })
       .finally(() => { if (!controller.signal.aborted) setPending(false); });
-    return cancel;
+    return () => { request.current?.abort(); request.current = null; };
   }, [open, connected, origin, token, id]);
+  useEffect(() => cancel, []);
 
   async function update(action: "edit" | "search" | "preview" | "match" | "export", body: unknown) {
     if (busy || request.current && !request.current.signal.aborted && pending) return;
@@ -81,10 +90,10 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
     fileRead.current?.abort(); setArtwork(null); setError(null);
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { setError("Choose a PNG or JPEG up to 2 MiB."); return; }
-    const reader = new FileReader(); fileRead.current = reader; setPending(true);
-    reader.onload = () => { if (fileRead.current === reader && typeof reader.result === "string") { setArtwork(reader.result.split(",")[1]!); setClearArtwork(false); setPending(false); } };
-    reader.onerror = () => { if (fileRead.current === reader) { setError("Could not read the selected artwork."); setPending(false); } };
-    reader.onabort = () => { if (fileRead.current === reader) setPending(false); };
+    const reader = new FileReader(); fileRead.current = reader; setReading(true);
+    reader.onload = () => { if (fileRead.current === reader && typeof reader.result === "string") { setArtwork(reader.result.split(",")[1]!); setClearArtwork(false); setReading(false); } };
+    reader.onerror = () => { if (fileRead.current === reader) { setError("Could not read the selected artwork."); setReading(false); } };
+    reader.onabort = () => { if (fileRead.current === reader) setReading(false); };
     reader.readAsDataURL(file);
   }
   return <section className="metadata-editor min-w-0 space-y-3 border-t pt-3" data-tv-local-only aria-label="Video metadata corrections">
@@ -93,6 +102,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
       <p className="text-sm text-muted-foreground">Administrator corrections are saved on the TV and kept through rescans. Original files are preserved.</p>
       {error && <Alert variant="destructive"><AlertDescription>{error} <Button type="button" variant="link" onClick={() => { setOpen(false); }}>Close and reopen to reload</Button></AlertDescription></Alert>}
       {notice && <p role="status" className="text-sm">{notice}</p>}
+      {!connected && <p role="status" className="text-sm">Offline. Your draft is kept here. Reconnect to save, search or export.</p>}
       {pending && <p role="status" className="text-sm">Working…</p>}
       {metadata && draft && <>
         <form className="space-y-3" onSubmit={save}>
