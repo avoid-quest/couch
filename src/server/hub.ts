@@ -7,7 +7,9 @@ import { openStore } from "./store";
 import { parseCommand } from "./validation";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
+import { createRadioSettings } from "./radio-settings";
 import { createJellyfin } from "./jellyfin";
+import { createJellyfinSettings } from "./jellyfin-settings";
 import { createCatalog } from "./catalog";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
@@ -16,6 +18,7 @@ import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
+import { buildInfo } from "./build-info";
 
 type HubOptions = {
   hostname?: string;
@@ -77,12 +80,14 @@ export function createHub(options: HubOptions) {
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode) => { session.loadQueue(entries, mode); } });
   const library = createLibrary({ databasePath: options.databasePath, onChange: () => session.invalidate("library") });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
+  const radioSettings = createRadioSettings(radio);
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller") });
-  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => {
+  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
+  const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
     const state = session.state;
     if (state.queue.find(entry => entry.id === state.currentEntryId)?.source.startsWith("jellyfin:")) session.command({ type: "stop" });
-    session.invalidate(kind);
+    session.invalidate("jellyfin");
   } });
   let pairWindow = Date.now();
   let pairAttempts = 0;
@@ -145,8 +150,11 @@ export function createHub(options: HubOptions) {
       };
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (caller.controller) store.touchController(caller.controller.id);
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
+      if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
+      if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
       return server.upgrade(request, { data: { trusted, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     },

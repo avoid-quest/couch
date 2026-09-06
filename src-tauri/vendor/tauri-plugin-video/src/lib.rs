@@ -18,6 +18,8 @@ mod mpv_tracks;
 mod mpv_subtitles;
 #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
 mod mpv_radio;
+#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+mod mpv_replaygain;
 
 pub use error::{Error, Result};
 

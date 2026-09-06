@@ -60,13 +60,18 @@ The TV always fills its display. Home opens browsing over the mounted player;
 Back closes the current menu, browsing view or playback controls. Phones and
 laptops have a dedicated controller interface with no video surface.
 
-In Radio, **Add avoid radio** imports the station index from
+In Settings > Sources, an administrator can use **Add avoid radio** to import
+the station index from
 [`radio.avoid.quest/playlist.m3u`](https://radio.avoid.quest/playlist.m3u).
-You can also save another Kodi-compatible radio M3U URL. Playlists retain their
+The same page accepts another supported extended M3U radio URL and shows import
+errors. Radio's **Manage radio sources** button opens this page. Playlists retain their
 station order, IDs, groups and logos. Refresh updates the shared catalog and
 saved favorites; queued stations resolve their current URL when played.
-A failed refresh keeps the last usable list. Every paired
-remote can browse, refresh, queue or immediately play these stations.
+A failed refresh keeps the last usable list. Only administrators manage sources
+and see feed URLs. Every paired remote can browse, search, favorite, queue or
+immediately play stations. Removing a source removes its imported catalog and
+keeps all favorites. Queued stations may become unavailable unless saved as
+favorites; no media files are deleted.
 
 The TV and remotes show a station's current track when the stream supplies ICY
 or audio tags. The station name stays unchanged. Radio retries failed or ended
@@ -105,9 +110,15 @@ and the Jellyfin connection.
 Playback does not start automatically after a restart. Press Play or Resume to
 continue from the saved position, or choose Play from start to restart an item.
 Local progress belongs to the selected watching profile, initially Household.
-Use the profile button beside Playback settings to create or select a name;
-stop playback before switching. Paired phones and laptops are controllers,
-not watching profiles. Jellyfin progress belongs to its connected account.
+Use the profile button beside Playback settings to create, select, rename or
+remove a watching profile from the TV or a paired remote. Renaming keeps the
+profile's saved preferences, resume points, watched marks and local history.
+Removal asks you to confirm that those local records will be deleted; other
+viewers keep theirs. The shared default can be renamed but cannot be removed,
+and becomes selected when you remove the current viewer. Stop playback before
+switching or removing profiles; pausing keeps that guard. Renaming is available
+during playback. Paired phones and laptops remain controllers. These operations
+leave Jellyfin's connected account and history, and administrator access unchanged.
 
 For browser development without a native player:
 

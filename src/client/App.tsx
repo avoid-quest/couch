@@ -57,6 +57,7 @@ export function App() {
   const [pairing, setPairing] = useState(false);
   const videoQualityPreference = useVideoQualityPreference();
   const [section, setSection] = useState("Queue");
+  const [sourcesRequest, setSourcesRequest] = useState(0);
   const [remoteMode, setRemoteMode] = useState<"browse" | "control">("browse");
   const [pairingOpen, setPairingOpen] = useState(false);
   const [visited, setVisited] = useState(new Set(["Queue"]));
@@ -207,7 +208,7 @@ export function App() {
           {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
           {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span className={`connection-dot ${connected ? "online" : ""}`} /><span role="status">{statusLabel}</span>
-          {(!nativeHost || state) && <Settings videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
+          {(!nativeHost || state) && <Settings sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} host={host} name={state?.installationName ?? "Couch"} version={state?.controllerVersion ?? 0} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} initialOpen={nativeHost && state?.administratorClaimed === false} />}
         </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
           <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>
@@ -263,8 +264,8 @@ export function App() {
                   setError("Open this local file on the TV again to resume it.");
                   return Promise.resolve(false);
                 }} /></TabsContent>}
-                {visited.has("Radio") && <TabsContent value="Radio" forceMount hidden={section !== "Radio"}><RadioPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={(station, playNow) => run(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow })} /></TabsContent>}
-                {visited.has("Jellyfin") && <TabsContent value="Jellyfin" forceMount hidden={section !== "Jellyfin"}><JellyfinPanel origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></TabsContent>}
+                {visited.has("Radio") && <TabsContent value="Radio" forceMount hidden={section !== "Radio"}><RadioPanel host={nativeHost} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={(station, playNow) => run(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow })} /></TabsContent>}
+                {visited.has("Jellyfin") && <TabsContent value="Jellyfin" forceMount hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></TabsContent>}
               </Tabs>
             </div>
 

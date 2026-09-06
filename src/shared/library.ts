@@ -22,6 +22,7 @@ export type LibraryItem = {
   discNumber?: number | null;
   trackNumber?: number | null;
   artworkId?: string | null;
+  video?: VideoMetadata | null;
   available: boolean;
   progress?: ViewingProgress | null;
 };
@@ -32,6 +33,17 @@ export type MusicArtist = { id: string; name: string; albumCount: number; trackC
 export type MusicAlbum = { id: string; title: string; artist: string | null; artworkId: string | null; trackCount: number; duration: number | null };
 export type MusicArtists = { items: MusicArtist[]; total: number; offset: number; limit: number };
 export type MusicAlbums = { items: MusicAlbum[]; total: number; offset: number; limit: number };
+
+export type VideoDescription = {
+  originalTitle: string | null; plot: string | null; year: number | null; premiered: string | null; genres: string[];
+};
+export type VideoShow = VideoDescription & { id: string; title: string; artworkId: string | null; fanartId: string | null };
+export type VideoMetadata = VideoDescription & {
+  type: "movie" | "episode"; show: VideoShow | null; season: number | null; episode: number | null;
+  fanartId: string | null; seasonArtworkId: string | null;
+};
+export type VideoShows = { items: Array<VideoShow & { seasonCount: number; episodeCount: number }>; total: number; offset: number; limit: number };
+export type VideoSeason = { season: number | null; episodeCount: number; artworkId: string | null };
 
 export type WatchingProfile = { id: string; name: string };
 export type ViewingProgress = { position: number; duration: number | null; watched: boolean; lastPlayedAt: number | null };

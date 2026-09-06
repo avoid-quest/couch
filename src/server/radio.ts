@@ -103,7 +103,8 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     return playlist;
   };
 
-  function refreshPlaylist(id: string): Promise<RadioPlaylist> {
+  function refreshPlaylist(id: string, authorize = () => {}): Promise<RadioPlaylist> {
+    authorize();
     const playlist = requirePlaylist(id);
     id = playlist.id;
     const pending = refreshes.get(id);
@@ -113,6 +114,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     const promise = (async () => {
       try {
         const stations = await readRadioPlaylist(playlist.url, id, request, signal);
+        authorize();
         assertOpen();
         signal.throwIfAborted();
         db.transaction(() => {
@@ -129,6 +131,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
         onChange();
         return getPlaylist(id)!;
       } catch (error) {
+        authorize();
         if (closed) throw new RadioError("The radio catalog is closing.", 503);
         if (controller.signal.aborted) throw new RadioError("Radio playlist removed.", 404);
         const message = signal.aborted ? "The playlist server took too long to respond." : error instanceof Error ? error.message.slice(0, 300) : "The radio playlist could not be loaded.";
@@ -215,7 +218,8 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       assertOpen();
       return db.query<RadioPlaylist, []>(`${playlistSelect} ORDER BY p.rowid`).all();
     },
-    async addPlaylist({ name, url }: { name: string; url: string }): Promise<RadioPlaylist> {
+    async addPlaylist({ name, url }: { name: string; url: string }, authorize = () => {}): Promise<RadioPlaylist> {
+      authorize();
       assertOpen();
       if (typeof name !== "string" || !name.trim() || name.length > 200 || /[\u0000-\u001f\u007f]/.test(name)) throw new RadioError("Enter a playlist name of 1 to 200 characters.");
       const parsed = httpUrl(typeof url === "string" ? url.trim() : url);
@@ -226,7 +230,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       const id = radioId(`playlist:${url}`);
       if (!getPlaylist(id) && db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM radio_playlists").get()!.count >= 30) throw new RadioError("You can save up to 30 radio playlists.");
       db.query("INSERT INTO radio_playlists (id, name, url) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name").run(id, name.trim(), url);
-      return refreshPlaylist(id);
+      return refreshPlaylist(id, authorize);
     },
     refreshPlaylist,
     removePlaylist(id: string) {

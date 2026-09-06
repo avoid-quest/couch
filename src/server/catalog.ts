@@ -7,10 +7,9 @@ import type { Store } from "./store";
 import type { createSession } from "./session";
 
 type Services = {
-  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork">;
-  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "playlistStations">;
-  jellyfin: Pick<JellyfinSource, "status" | "connect" | "disconnect" | "items">;
-  invalidate: (kind: "jellyfin") => void;
+  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
+  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlistStations">;
+  jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
 };
 
@@ -54,7 +53,7 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
   return { ...view, error: source.error ? "This folder needs attention on the TV." : null };
 }
 
-export function createCatalog({ library, radio, jellyfin, invalidate, viewing }: Services) {
+export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
   function startScan(source: LibrarySource) {
     // The library publishes scan progress and owns job completion during shutdown.
     void library.scan(source.id).catch(() => {});
@@ -69,8 +68,18 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
           if (request.method === "GET") return Response.json({ profiles: viewing.store.profiles(), activeProfile: viewing.session.state.activeProfile });
           if (request.method !== "POST") return methodNotAllowed("GET, POST");
           const { name } = await body(request);
-          if (typeof name !== "string") throw new RequestError("Enter a watching profile name.");
           return Response.json({ profile: viewing.session.createProfile(name) }, { status: 201 });
+        }
+        const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove)$/.exec(pathname);
+        if (viewing && profileEdit) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          const allowed = profileEdit[2] === "rename" ? ["name", "expectedName"] : ["expectedName"];
+          if (Object.keys(changes).some(key => !allowed.includes(key))) throw new RequestError("Send only the watching profile change.");
+          if (typeof changes.expectedName !== "string" || !changes.expectedName || changes.expectedName.length > 60 || /[\u0000-\u001f\u007f]/.test(changes.expectedName)) throw new RequestError("Reload watching profiles before editing.");
+          return profileEdit[2] === "rename"
+            ? Response.json({ profile: viewing.session.renameProfile(profileEdit[1]!, changes.name, changes.expectedName) })
+            : Response.json({ activeProfile: viewing.session.removeProfile(profileEdit[1]!, changes.expectedName) });
         }
         const profileSelection = /^\/api\/profiles\/([\w-]{1,80})\/select$/.exec(pathname);
         if (viewing && profileSelection) {
@@ -126,7 +135,15 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
         }
         if (pathname === "/api/library/items") {
           if (request.method !== "GET") return methodNotAllowed("GET");
-          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined, offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
+          const videoType = queryText(searchParams, "videoType", 10);
+          if (videoType !== "" && videoType !== "movie" && videoType !== "episode") throw new RequestError("Invalid video type.");
+          const showId = queryText(searchParams, "showId", 64);
+          if (showId && !/^[a-f0-9]{64}$/.test(showId)) throw new RequestError("Invalid show identity.");
+          const season = !searchParams.has("season") ? undefined : searchParams.get("season") === "unknown" ? "unknown" : queryInteger(searchParams, "season", 0, 0, 999);
+          if (season !== undefined && !showId) throw new RequestError("Choose a show before a season.");
+          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined,
+            videoType: videoType || undefined, showId: showId || undefined, season,
+            offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
           if (viewing) {
             const profileId = viewing.session.state.activeProfile.id;
             result.items = result.items.map(item => {
@@ -136,6 +153,17 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
             });
           }
           return Response.json(result);
+        }
+        if (pathname === "/api/library/video/shows") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          return Response.json(library.videoShows({ query: queryText(searchParams, "q", 200), offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) }));
+        }
+        const seasons = /^\/api\/library\/video\/shows\/([a-f0-9]{64})\/seasons$/.exec(pathname);
+        if (seasons) {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const items = library.videoSeasons(seasons[1]!);
+          if (!items.length) throw new RequestError("Show not found.", 404);
+          return Response.json({ items });
         }
         if (pathname === "/api/library/music/artists" || pathname === "/api/library/music/albums") {
           if (request.method !== "GET") return methodNotAllowed("GET");
@@ -155,27 +183,10 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
           if (!image) throw new RequestError("Artwork not found.", 404);
           return new Response(Buffer.from(image.data), { headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" } });
         }
-        if (pathname === "/api/radio/playlists") {
-          if (request.method === "GET") return Response.json({ playlists: radio.playlists() });
-          if (request.method !== "POST") return methodNotAllowed("GET, POST");
-          const { name, url } = await body(request);
-          if (typeof name !== "string" || !name.trim() || name.length > 200 || /[\0\r\n]/.test(name)
-            || typeof url !== "string" || !url.trim() || url.length > 4096) throw new RequestError("Enter a playlist name and an HTTP or HTTPS M3U URL.");
-          return Response.json({ playlist: await radio.addPlaylist({ name, url }) }, { status: 201 });
-        }
-        const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})(?:\/(refresh|stations))?$/.exec(pathname);
+        const playlist = /^\/api\/radio\/playlists\/([\w-]{1,80})\/stations$/.exec(pathname);
         if (playlist) {
-          if (playlist[2] === "stations") {
-            if (request.method !== "GET") return methodNotAllowed("GET");
-            return Response.json({ stations: radio.playlistStations({ playlistId: playlist[1]!, q: queryText(searchParams, "q", 100) }) });
-          }
-          if (playlist[2] === "refresh") {
-            if (request.method !== "POST") return methodNotAllowed("POST");
-            return Response.json({ playlist: await radio.refreshPlaylist(playlist[1]!) });
-          }
-          if (request.method !== "DELETE") return methodNotAllowed("DELETE");
-          radio.removePlaylist(playlist[1]!);
-          return new Response(null, { status: 204 });
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          return Response.json({ stations: radio.playlistStations({ playlistId: playlist[1]!, q: queryText(searchParams, "q", 100) }) });
         }
         if (pathname === "/api/radio/stations") {
           if (request.method !== "GET") return methodNotAllowed("GET");
@@ -192,27 +203,11 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
           radio.removeFavorite(favorite[1]!);
           return new Response(null, { status: 204 });
         }
-        if (pathname === "/api/jellyfin") {
-          if (request.method === "GET") return Response.json(jellyfin.status());
-          if (!["POST", "DELETE"].includes(request.method)) return methodNotAllowed("GET, POST, DELETE");
-          requireHost(trusted);
-          if (request.method === "POST") {
-            const { url, username, password } = await body(request);
-            if (typeof url !== "string" || !url.trim() || url.length > 2048 || typeof username !== "string" || !username.trim() || username.length > 200 || typeof password !== "string" || password.length > 4096) throw new RequestError("Enter a server URL, username, and password.");
-            try { await jellyfin.connect({ url, username, password }); }
-            catch { throw new RequestError("Could not connect to Jellyfin. Check the server address, username, and password.", 502); }
-          } else {
-            try { await jellyfin.disconnect(); }
-            catch { throw new RequestError("Could not disconnect Jellyfin. Try again.", 502); }
-          }
-          invalidate("jellyfin");
-          return Response.json(jellyfin.status());
-        }
         if (pathname === "/api/jellyfin/items") {
           if (request.method !== "GET") return methodNotAllowed("GET");
           if (searchParams.has("resume") && !["true", "false"].includes(searchParams.get("resume")!)) throw new RequestError("Invalid resume query.");
           const options = { query: queryText(searchParams, "q", 200), startIndex: queryInteger(searchParams, "startIndex", 0, 0, 1_000_000), resume: searchParams.get("resume") === "true" };
-          if (!jellyfin.status().connected) throw new RequestError("Connect a Jellyfin server on the TV first.", 409);
+          if (!jellyfin.status().connected) throw new RequestError("Connect Jellyfin in Settings > Sources first.", 409);
           try { return Response.json(await jellyfin.items(options)); }
           catch { throw new RequestError("Could not load the Jellyfin library. Check the server connection.", 502); }
         }

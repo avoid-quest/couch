@@ -48,6 +48,9 @@ test.each(["stdin close", "shutdown message"])("the sidecar accepts native obser
   if (process.platform !== "win32") expect((await stat(dir)).mode & 0o777).toBe(0o700);
   const health = () => fetch(`${ready.origin}/api/health`).then(response => response.json());
   expect((await health()).player).toBe("unavailable");
+  expect((await fetch(`${ready.origin}/api/build`)).status).toBe(401);
+  const identity = await fetch(`${ready.origin}/api/build`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
+  expect(identity).toMatchObject({ version: "0.1.0", packaged: false });
 
   const observation: HostMessage = {
     type: "player",

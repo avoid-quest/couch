@@ -13,6 +13,8 @@ type Props = {
   origin: string;
   token: string;
   connected: boolean;
+  host: boolean;
+  onManage: () => void;
   canPlay: boolean;
   version: number;
   onEnqueue: (station: RadioStation, playNow: boolean) => Promise<boolean>;
@@ -32,7 +34,7 @@ function StationArtwork({ station }: { station: RadioStation }) {
     : <span className="radio-monogram grid size-12 shrink-0 place-items-center rounded-lg bg-muted text-base font-semibold text-primary" aria-hidden="true">{station.name.slice(0, 2).toUpperCase()}</span>;
 }
 
-export function RadioPanel({ origin, token, connected, canPlay, version, onEnqueue }: Props) {
+export function RadioPanel({ origin, token, connected, canPlay, version, onEnqueue, onManage, host }: Props) {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState("");
@@ -123,7 +125,7 @@ export function RadioPanel({ origin, token, connected, canPlay, version, onEnque
     {error && <Alert variant="destructive" className="radio-error"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p className="radio-notice text-sm text-primary" role="status">{notice}</p>}
     {favorites.length > 0 && <div className="radio-group space-y-3"><h3 className="flex items-center gap-2 text-base font-medium">Favorites <Badge variant="secondary">{favorites.length}</Badge></h3>{cards(favorites)}</div>}
-    <PlaylistRadioPanel connected={connected} version={version} request={request} renderStations={cards} />
+    <PlaylistRadioPanel host={host} onManage={onManage} connected={connected} version={version} request={request} renderStations={cards} />
     {!favorites.length && <p className="radio-empty text-sm text-muted-foreground">Star a station to keep it at the top of your radio.</p>}
     <div className="radio-directory space-y-4 border-t pt-5">
       <Button variant="outline" aria-expanded={directoryOpen} aria-controls="radio-directory-content" data-back={directoryOpen ? "" : undefined} onClick={() => setDirectoryOpen(value => !value)}>Discover more stations<ChevronDown aria-hidden="true" className={directoryOpen ? "rotate-180" : ""} /></Button>

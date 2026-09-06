@@ -3,7 +3,7 @@
 .music-artists > li,
 .music-albums > li { min-width: 0; }
 
-.library-views { display: grid; width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.library-views { display: grid; width: 100%; height: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .library-views [role="tab"] { min-width: 0; padding-inline: 8px; font-size: .875rem; }
 .library-folder-controls:empty { display: none; }
 .library-scan-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
@@ -33,7 +33,7 @@
 .library-search input { width: 100%; }
 
 @container catalog (min-width: 600px) {
-  .library-views { width: fit-content; min-width: 420px; }
+  .library-views { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .music-albums { grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
   .music-album-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .music-album-summary > p { grid-column: 1 / -1; }

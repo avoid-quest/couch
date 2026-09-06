@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import type { JellyfinItems, JellyfinStatus } from "../shared/jellyfin";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +16,7 @@ type Props = {
   connected: boolean;
   canPlay?: boolean;
   version: number;
+  onManage: () => void;
   onEnqueue: (itemId: string, options?: { playNow?: boolean; fromStart?: boolean }) => Promise<boolean>;
 };
 
@@ -24,21 +24,15 @@ const message = (error: unknown) => error instanceof Error ? error.message : "Th
 const duration = (seconds: number | null) => seconds === null ? "" : seconds >= 3600 ? `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m` : `${Math.max(1, Math.floor(seconds / 60))}m`;
 const position = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
-export function JellyfinPanel({ origin, token, host, connected, canPlay = true, version, onEnqueue }: Props) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+export function JellyfinPanel({ origin, token, host, connected, canPlay = true, version, onManage, onEnqueue }: Props) {
   const [status, setStatus] = useState<JellyfinStatus | null>(null);
-  const [url, setUrl] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState({ query: "", startIndex: 0, attempt: 0, resume: false });
   const [page, setPage] = useState<JellyfinItems | null>(null);
-  const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState<{ id: string; playNow: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const operation = useRef<AbortController | null>(null);
 
   async function request<T>(path = "", init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${origin}/api/jellyfin${path}`, {
@@ -73,39 +67,6 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
     return () => controller.abort();
   }, [origin, token, connected, version, status?.connected, status?.serverName, status?.username, search]);
 
-  useEffect(() => () => operation.current?.abort(), []);
-
-  async function connect(event: FormEvent) {
-    event.preventDefault();
-    const controller = new AbortController();
-    operation.current?.abort();
-    operation.current = controller;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await request<JellyfinStatus>("", { method: "POST", body: JSON.stringify({ url: url.trim(), username: username.trim(), password }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]) });
-      if (!controller.signal.aborted) { setStatus(next); setSearch({ query: "", startIndex: 0, attempt: 0, resume: false }); setNotice("Jellyfin connected."); setSettingsOpen(false); }
-    } catch (reason) {
-      if (!controller.signal.aborted) setError(message(reason));
-    } finally {
-      setPassword("");
-      if (!controller.signal.aborted) setBusy(false);
-    }
-  }
-
-  async function disconnect() {
-    setBusy(true);
-    setError(null);
-    try {
-      await request("", { method: "DELETE" });
-      setStatus({ connected: false, serverName: null, username: null });
-      setPage(null);
-      setNotice("Jellyfin disconnected.");
-      setSettingsOpen(false);
-    } catch (reason) { setError(message(reason)); }
-    finally { setBusy(false); }
-  }
-
   async function enqueue(id: string, title: string, options?: { playNow?: boolean; fromStart?: boolean }) {
     setAdding({ id, playNow: options?.playNow === true });
     setNotice("");
@@ -116,29 +77,12 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
 
   return <section className="jellyfin-panel catalog-panel min-w-0 space-y-5" aria-label="Jellyfin library">
     <div className="jellyfin-heading catalog-heading flex flex-wrap items-start justify-between gap-4">
-      <div><h2 className="break-words text-2xl font-semibold">{status?.serverName || "Jellyfin"}</h2>{status?.connected && <p className="mt-1 text-sm text-muted-foreground">Watching as <strong className="font-medium text-foreground">{status.username || "the connected Jellyfin account"}</strong></p>}</div>
-      {host && <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogTrigger asChild><Button variant="outline" data-action="jellyfin-settings" data-tv-local-only disabled={!connected || status === null}><Settings2 aria-hidden="true" />{status?.connected ? "Server settings" : "Connect Jellyfin"}</Button></DialogTrigger>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg" data-tv-local-only>
-          <DialogHeader><DialogTitle>{status?.connected ? "Jellyfin connection" : "Connect Jellyfin"}</DialogTitle><DialogDescription>{status?.connected ? `Watching history belongs to ${status.username || "the connected Jellyfin account"}. Every paired controller uses this account.` : "Connect once on the TV. Every paired controller can then browse your movies, episodes and music."}</DialogDescription></DialogHeader>
-          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-          {status?.connected ? <div className="space-y-4">
-            <Card className="gap-2 p-4"><strong className="break-words text-base">{status.serverName || "Jellyfin"}</strong><Badge variant="secondary" className="self-start">Connected</Badge></Card>
-            <p className="text-sm leading-relaxed text-muted-foreground">Disconnecting removes the saved server token and stops any Jellyfin item playing on the TV.</p>
-            <Button variant="destructive" data-action="jellyfin-disconnect" disabled={!connected || busy} onClick={() => void disconnect()}>{busy ? "Disconnecting…" : "Disconnect"}</Button>
-          </div> : <form onSubmit={connect} className="jellyfin-connect space-y-4">
-            <div className="space-y-2"><Label htmlFor="jellyfin-url">Jellyfin server URL</Label><Input id="jellyfin-url" type="url" placeholder="http://192.168.1.10:8096" value={url} onChange={event => setUrl(event.target.value)} required disabled={busy || !connected} autoComplete="url" /></div>
-            <div className="space-y-2"><Label htmlFor="jellyfin-user">Username</Label><Input id="jellyfin-user" value={username} onChange={event => setUsername(event.target.value)} required disabled={busy || !connected} autoComplete="username" /></div>
-            <div className="space-y-2"><Label htmlFor="jellyfin-password">Password</Label><Input id="jellyfin-password" type="password" value={password} onChange={event => setPassword(event.target.value)} disabled={busy || !connected} autoComplete="current-password" /></div>
-            <Button className="primary-button" disabled={busy || !connected}>{busy ? "Connecting…" : "Connect Jellyfin"}</Button>
-            <p className="text-sm leading-relaxed text-muted-foreground">The TV stores an access token. Your password is not saved.</p>
-          </form>}
-        </DialogContent>
-      </Dialog>}
+      <div><h2 className="break-words text-2xl font-semibold">{status?.serverName || "Jellyfin"}</h2>{status?.connected && <p className="mt-1 text-sm text-muted-foreground">Jellyfin account <strong className="font-medium text-foreground">{status.username || "the connected Jellyfin account"}</strong></p>}</div>
+      <Button variant="outline" data-action="jellyfin-settings" data-tv-local-only={host ? "" : undefined} disabled={!connected} onClick={onManage}><Settings2 aria-hidden="true" />Jellyfin settings</Button>
     </div>
-    {error && !settingsOpen && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p className="jellyfin-notice text-sm text-primary" role="status">{notice}</p>}
-    {status === null ? <p className="text-sm text-muted-foreground" role="status">{connected ? "Checking Jellyfin connection…" : "Connect to the player to use Jellyfin."}</p> : !status.connected ? <Card className="p-5 text-sm leading-relaxed text-muted-foreground">{host ? "Connect your Jellyfin server to browse movies, episodes and music on every paired screen." : "Connect Jellyfin on the TV to browse movies, episodes and music here."}</Card> : <>
+    {status === null ? <p className="text-sm text-muted-foreground" role="status">{connected ? "Checking Jellyfin connection…" : "Connect to the player to use Jellyfin."}</p> : !status.connected ? <Card className="p-5 text-sm leading-relaxed text-muted-foreground">An administrator can connect Jellyfin in Settings &gt; Sources. Every paired remote can then browse movies, episodes and music here.</Card> : <>
       <Tabs value={search.resume ? "resume" : "all"} onValueChange={value => setSearch({ ...search, resume: value === "resume", startIndex: 0 })}>
         <TabsList aria-label="Jellyfin library view" className="w-full"><TabsTrigger value="all">All</TabsTrigger><TabsTrigger value="resume">Continue watching</TabsTrigger></TabsList>
         <TabsContent value={search.resume ? "resume" : "all"} className="mt-3 space-y-5">
