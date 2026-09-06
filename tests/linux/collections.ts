@@ -130,13 +130,19 @@ try {
   await stop();
   remotes.push(await startHttpRemote(origin, code, artifactDir, until, 4446, 1.5));
   const phone = remotes[0]!;
+  const typePhone = async (selector: string, value: string) => {
+    await phone.ui.click(selector);
+    const actions = [{ type: "keyDown", value: "\uE009" }, { type: "keyDown", value: "a" }, { type: "keyUp", value: "a" }, { type: "keyUp", value: "\uE009" }, { type: "keyDown", value: "\uE003" }, { type: "keyUp", value: "\uE003" }, ...Array.from(value).flatMap(character => [{ type: "keyDown", value: character }, { type: "keyUp", value: character }])];
+    await phone.ui.request(`/session/${phone.ui.session()}/actions`, { actions: [{ type: "key", id: "collection-editor", actions }] });
+    await until(`phone keyboard fills ${selector}`, () => phone.ui.execute("return document.activeElement === document.querySelector(arguments[0]) && document.querySelector(arguments[0]).value === arguments[1]", [selector, value]));
+  };
   await open(phone.ui);
   await phone.ui.button("New collection", panel);
-  await phone.ui.type("#collection-name", "Album filter");
+  await typePhone("#collection-name", "Album filter");
   await phone.ui.select('[aria-label="Collection type"]', "Music filter");
   await phone.ui.select('[aria-label="Sort order"]', "Album, disc and track");
-  await phone.ui.type("#collection-artist", "Generated artist");
-  await phone.ui.type("#collection-album", "Generated album");
+  await typePhone("#collection-artist", "Generated artist");
+  await typePhone("#collection-album", "Generated album");
   await assertResponsive(phone.ui, "Music collection editor");
   await phone.screenshot("phone-collection-editor");
   await phone.ui.button("Save collection", panel);
@@ -220,6 +226,10 @@ try {
   await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "passed", checks, source: process.env.COUCH_QUALIFICATION_HEAD, manual: manual.id, music: music.id, previewWidths: [320, 375, 390, 768, 1024, 1440, 1920], editorWidths: [390], note: "Ubuntu software rendering and a null audio sink qualify software behavior only." }, null, 2));
 } catch (error) {
   await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "failed", checks, error: String(error) }, null, 2));
+  for (const [index, remote] of remotes.entries()) {
+    await Bun.write(`${artifactDir}/phone-${index}-failure-dom.txt`, String(await remote.ui.execute("return document.body.innerText").catch(() => "")));
+    await remote.screenshot(`phone-${index}-failure`).catch(() => {});
+  }
   if (sessionId) { await Bun.write(`${artifactDir}/failure-dom.txt`, String(await ui.execute("return document.body.innerText").catch(() => ""))); await capture("native-collections-failure").catch(() => {}); }
   throw error;
 } finally {

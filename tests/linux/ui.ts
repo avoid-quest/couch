@@ -254,7 +254,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
   const request: Request = async (path, body, method = body === undefined ? "GET" : "POST") => {
     const response = await fetch(`${endpoint}${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
     const result = await response.json() as { value: any };
-    if (!response.ok || result.value?.error) throw new Error(`HTTP browser WebDriver ${path}: ${result.value?.message ?? response.status}`);
+    if (!response.ok || result.value?.error) throw new Error(`HTTP browser WebDriver ${path}: ${result.value?.message || result.value?.error || response.status}`);
     return result.value;
   };
   const ui = new UiDriver(request, () => session);
