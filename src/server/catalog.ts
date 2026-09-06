@@ -7,7 +7,7 @@ import type { Store } from "./store";
 import type { createSession } from "./session";
 
 type Services = {
-  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork">;
+  library: Pick<Library, "listSources" | "addSource" | "scan" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
   radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "playlistStations">;
   jellyfin: Pick<JellyfinSource, "status" | "connect" | "disconnect" | "items">;
   invalidate: (kind: "jellyfin") => void;
@@ -126,7 +126,15 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
         }
         if (pathname === "/api/library/items") {
           if (request.method !== "GET") return methodNotAllowed("GET");
-          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined, offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
+          const videoType = queryText(searchParams, "videoType", 10);
+          if (videoType !== "" && videoType !== "movie" && videoType !== "episode") throw new RequestError("Invalid video type.");
+          const showId = queryText(searchParams, "showId", 64);
+          if (showId && !/^[a-f0-9]{64}$/.test(showId)) throw new RequestError("Invalid show identity.");
+          const season = !searchParams.has("season") ? undefined : searchParams.get("season") === "unknown" ? "unknown" : queryInteger(searchParams, "season", 0, 0, 999);
+          if (season !== undefined && !showId) throw new RequestError("Choose a show before a season.");
+          const result = library.search({ query: queryText(searchParams, "q", 200), artistId: queryText(searchParams, "artistId", 80) || undefined,
+            videoType: videoType || undefined, showId: showId || undefined, season,
+            offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
           if (viewing) {
             const profileId = viewing.session.state.activeProfile.id;
             result.items = result.items.map(item => {
@@ -136,6 +144,17 @@ export function createCatalog({ library, radio, jellyfin, invalidate, viewing }:
             });
           }
           return Response.json(result);
+        }
+        if (pathname === "/api/library/video/shows") {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          return Response.json(library.videoShows({ query: queryText(searchParams, "q", 200), offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) }));
+        }
+        const seasons = /^\/api\/library\/video\/shows\/([a-f0-9]{64})\/seasons$/.exec(pathname);
+        if (seasons) {
+          if (request.method !== "GET") return methodNotAllowed("GET");
+          const items = library.videoSeasons(seasons[1]!);
+          if (!items.length) throw new RequestError("Show not found.", 404);
+          return Response.json({ items });
         }
         if (pathname === "/api/library/music/artists" || pathname === "/api/library/music/albums") {
           if (request.method !== "GET") return methodNotAllowed("GET");
