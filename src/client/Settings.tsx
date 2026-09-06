@@ -35,9 +35,10 @@ type Props = {
   initialOpen?: boolean;
   sourcesRequest?: number;
   jellyfinVersion: number;
+  radioVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [section, setSection] = useState("general");
   useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
@@ -204,7 +205,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
         </TabsContent>
         <TabsContent value="sources" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`} data-tv-local-only={host ? "" : undefined}>
-          <SettingsSources credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} />
+          <SettingsSources credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} radioVersion={radioVersion} />
         </TabsContent>
         <TabsContent value="connection" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3">

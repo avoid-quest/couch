@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 type Props = {
   connected: boolean;
-  host?: boolean;
-  onManage?: () => void;
+  host: boolean;
+  onManage: () => void;
   version: number;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   renderStations: (stations: RadioStation[]) => ReactNode;
@@ -79,7 +79,7 @@ export function PlaylistRadioPanel({ connected, version, request, renderStations
   return <section className="radio-playlists space-y-4" aria-labelledby="radio-playlists-title">
     <div className="radio-playlist-heading flex flex-wrap items-center justify-between gap-3">
       <h3 id="radio-playlists-title" className="flex items-center gap-2 text-lg font-medium">Your playlists <Badge variant="secondary">{playlists.length}</Badge></h3>
-      <Button variant="outline" className="min-h-11" data-action="radio-settings" data-tv-local-only={host ? "" : undefined} disabled={!connected || !onManage} onClick={onManage}>Manage radio sources</Button>
+      <Button variant="outline" className="min-h-11" data-action="radio-settings" data-tv-local-only={host ? "" : undefined} disabled={!connected} onClick={onManage}>Manage radio sources</Button>
     </div>
     {!playlists.length && <p className="text-sm text-muted-foreground">An administrator can add a radio playlist in Settings &gt; Sources.</p>}
     {error && <Alert variant="destructive" className="radio-playlist-error"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p className="break-words">{error}</p><Button variant="outline" disabled={!connected} onClick={() => { setError(null); setAttempt(value => value + 1); }}>Try again</Button></AlertDescription></Alert>}

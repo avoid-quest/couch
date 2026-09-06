@@ -13,8 +13,8 @@ type Props = {
   origin: string;
   token: string;
   connected: boolean;
-  host?: boolean;
-  onManage?: () => void;
+  host: boolean;
+  onManage: () => void;
   canPlay: boolean;
   version: number;
   onEnqueue: (station: RadioStation, playNow: boolean) => Promise<boolean>;

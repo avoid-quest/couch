@@ -133,6 +133,22 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
   await navigate(ui, guest, until, "home");
   await until("paired Home dismisses the protected Jellyfin dialog and returns to TV browsing", () => ui.execute("return !document.querySelector('[role=dialog]') && !!document.querySelector('.tv-browser:not([hidden])')"));
 
+  await ui.section("Radio");
+  await focusProbe(ui, '[data-action="radio-settings"]');
+  try {
+    await navigate(ui, guest, until, "select");
+    assert.equal(await ui.execute("return !!document.querySelector('[role=dialog]')"), false, "Paired OK cannot open native radio source administration");
+  } finally { await stopProbe(ui); }
+  await ui.click('[data-action="radio-settings"]');
+  await until("physical TV input opens protected radio Sources", () => ui.execute("return !!document.querySelector('[role=dialog][data-tv-local-only] #radio-source-url:not(:disabled)')"));
+  await focusProbe(ui, "#radio-source-url");
+  try {
+    for (const key of ["select", "left", "down", "select"] as const) await navigate(ui, guest, until, key);
+    assert.equal(await ui.execute("return document.activeElement === window.__claimProbe.button && document.querySelector('#radio-source-url').value === ''"), true, "Paired navigation leaves the protected radio source form unchanged");
+  } finally { await stopProbe(ui); }
+  await navigate(ui, guest, until, "home");
+  await until("paired Home dismisses protected radio Sources", () => ui.execute("return !document.querySelector('[role=dialog]')"));
+
   await ui.section("Queue");
   const openFile = await ui.execute("const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Open file'); if (button) button.id = 'claim-open-file'; return !!button");
   assert.equal(openFile, true);
