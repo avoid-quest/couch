@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { chmod, mkdir, mkdtemp, realpath, rename, rm, stat, symlink, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createMediaFolders } from "./media-folders";
 import { createLibrary } from "./library";
 import { openStore } from "./store";
 import { parseVideoNfo, videoArtwork } from "./video-metadata";
@@ -160,8 +161,10 @@ for (const unavailableProbe of ["absent", "failing"]) for (const previouslyProbe
   const executable = join(root, "ffprobe-legacy");
   await Bun.write(executable, `#!${process.execPath}\nprocess.exit(1);`);
   await chmod(executable, 0o755);
-  const scanned = createLibrary({ databasePath, ffprobePath: unavailableProbe === "absent" ? null : executable });
+  const scanned = createLibrary({ databasePath, folders: createMediaFolders({ roots: [media], mountInfo: async () => null }), ffprobePath: unavailableProbe === "absent" ? null : executable });
   cleanups.push(() => scanned.close());
+  expect(() => scanned.scan(sourceId)).toThrow("Verify");
+  await scanned.testSource(sourceId, () => {}, true);
   for (let scan = 0; scan < 2; scan++) {
     expect((await scanned.scan(sourceId)).status).toBe("ready");
     expect(scanned.getItem(itemId)).toMatchObject({ title: "Embedded title", duration: 120 });

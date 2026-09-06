@@ -129,6 +129,7 @@ export function createMediaFolders(options: {
         return { path, parent: roots.includes(path) ? null : dirname(path), locations, offset, more };
       } catch (error) { throw folderError(error); }
     },
+    identify: identity,
     async inspect(path: string) { path = await permitted(path, true); return { path, identity: await identity(path) }; },
     async verify(path: string, expected: FolderIdentity) {
       const actual = await identity(path);

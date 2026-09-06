@@ -49,7 +49,7 @@ test("scan indexes nested media, skips symlinks and nonmedia, and preserves IDs 
   await symlink(join(root, "private.mp4"), join(media, "escape.mp4"));
   await symlink(root, join(media, "recursive"));
   const source = await sourceWithFiles(library, media, ["Two.MKV", "Three.mp3", "notes.txt", "streams.m3u"]);
-  expect((await library.addSource(media)).id).toBe(source.id);
+  await expect(library.addSource(media)).rejects.toThrow("already a source");
   const original = library.search();
   expect(original.items.map(item => item.title)).toEqual(["One", "Three", "Two"]);
   expect(original.items.map(item => item.kind)).toEqual(["audio", "audio", "video"]);

@@ -1,3 +1,5 @@
+import type { ManagedFolder } from "../shared/folders";
+import { createMediaFolders, FolderError, type FolderIdentity, type MediaFolders } from "./media-folders";
 import { audioExtensions } from "../shared/media";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
@@ -37,7 +39,7 @@ function textTag(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 500) : null;
 }
 
-export function createLibrary(options: { databasePath: string; onChange?: () => void; ffprobePath?: string | null }) {
+export function createLibrary(options: { databasePath: string; onChange?: () => void; ffprobePath?: string | null; folders?: MediaFolders }) {
   if (options.databasePath !== ":memory:") mkdirSync(dirname(options.databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(options.databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
@@ -46,6 +48,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT UNIQUE NOT NULL,
       status TEXT NOT NULL DEFAULT 'idle', lastScanned INTEGER, error TEXT, warning TEXT
     );
+    CREATE TABLE IF NOT EXISTS library_folder_identities (sourceId TEXT PRIMARY KEY, filesystem TEXT NOT NULL, directory TEXT NOT NULL, mountRoot TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS library_items (
       id TEXT PRIMARY KEY, sourceId TEXT NOT NULL, path TEXT NOT NULL,
       title TEXT NOT NULL, kind TEXT NOT NULL, duration REAL, artist TEXT, album TEXT,
@@ -74,11 +77,22 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
   let closing = false;
   let scanQueue: Promise<unknown> = Promise.resolve();
   const scans = new Map<string, Promise<LibrarySource>>();
+  const folders = options.folders ?? createMediaFolders();
+  const scannedItems = new Map<string, number>();
   const probes = new Set<{ kill(signal?: string | number): void }>();
   const sourceQuery = `SELECT s.*, (SELECT COUNT(*) FROM library_items i WHERE i.sourceId = s.id) AS itemCount FROM library_sources s`;
   const getSource = (id: string) => db.query<SourceRow, [string]>(`${sourceQuery} WHERE s.id = ?`).get(id);
   const notify = () => options.onChange?.();
   const assertOpen = () => { if (closing) throw new Error("The library is closing."); };
+
+  const savedIdentity = (id: string) => db.query<FolderIdentity, [string]>("SELECT filesystem, directory, mountRoot FROM library_folder_identities WHERE sourceId = ?").get(id);
+  const saveIdentity = (id: string, identity: FolderIdentity) => db.query("INSERT INTO library_folder_identities VALUES (?, ?, ?, ?)").run(id, identity.filesystem, identity.directory, identity.mountRoot);
+  async function verifySource(source: SourceRow) {
+    const identity = savedIdentity(source.id);
+    if (!identity) throw new FolderError("Verify that this is the original TV folder in Settings > Sources before scanning or playing it.", 409);
+    await folders.verify(source.path, identity);
+    assertOpen();
+  }
 
   async function probe(path: string, executable: string): Promise<Metadata | null> {
     const process = Bun.spawn({
@@ -165,7 +179,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     }
   });
 
-  async function runScan(source: SourceRow): Promise<LibrarySource> {
+  async function runScan(source: SourceRow, authorize: () => void): Promise<LibrarySource> {
     const scanId = crypto.randomUUID();
     const executable = options.ffprobePath === undefined ? Bun.which("ffprobe") : options.ffprobePath;
     let metadataFailures = 0;
@@ -177,14 +191,18 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       assertOpen();
       let root: string;
       try {
+        await verifySource(source);
+        authorize();
         root = await realpath(source.path);
         if (root !== source.path || !(await lstat(root)).isDirectory()) throw new Error();
-      } catch {
-        db.query("UPDATE library_sources SET status = 'unavailable', error = 'Folder is unavailable. Reconnect the drive or network mount, then scan again.' WHERE id = ?").run(source.id);
+      } catch (error) {
+        db.query("UPDATE library_sources SET status = 'unavailable', error = ? WHERE id = ?").run(error instanceof FolderError ? error.message : 'Folder is unavailable. Reconnect the drive or network mount, then scan again.', source.id);
         return getSource(source.id)!;
       }
       const inspect = async (path: string) => {
         assertOpen();
+        await verifySource(source);
+        authorize();
         const info = await lstat(path);
         if (!info.isFile() || info.isSymbolicLink() || !within(root, await realpath(path))) return;
         const localPath = relative(root, path);
@@ -194,6 +212,8 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const kind = videoExtensions.has(extname(path).slice(1).toLowerCase()) ? "video" : "audio";
         if (kind === "video" && !executable) videosWithoutProbe++;
         if (kind === "audio" && previous && unchanged && previous.metadataVersion === musicMetadataVersion && previous.probed) {
+          authorize();
+          scannedItems.set(source.id, (scannedItems.get(source.id) ?? 0) + 1);
           db.query("UPDATE library_items SET seenScan = ?, available = 1 WHERE id = ?").run(scanId, previous.id);
           return;
         }
@@ -218,6 +238,10 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const retained = !metadata && unchanged ? previous : null;
         assertOpen();
         if ((kind === "audio" || executable) && !probedMetadata) metadataFailures++;
+        await verifySource(source);
+        authorize();
+        scannedItems.set(source.id, (scannedItems.get(source.id) ?? 0) + 1);
+        if (scannedItems.get(source.id)! % 25 === 0) notify();
         saveItem({ id: previous?.id ?? crypto.randomUUID(), sourceId: source.id, path: localPath,
           title: localVideo?.title ?? metadata?.title ?? (kind === "audio" ? retained?.title : null) ?? basename(path, extname(path)), kind,
           duration: metadata?.duration ?? (kind === "video" ? localVideo?.runtime : retained?.duration) ?? null,
@@ -239,6 +263,8 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       }
       await Promise.all(pending);
       if (failure) throw failure;
+      await verifySource(source);
+      authorize();
       assertOpen();
       db.transaction(() => {
         db.query("UPDATE library_items SET available = 0 WHERE sourceId = ? AND seenScan <> ?").run(source.id, scanId);
@@ -254,8 +280,8 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       })();
     } catch (error) {
       await Promise.all(pending);
-      db.query("UPDATE library_sources SET status = 'error', error = ? WHERE id = ?")
-        .run(closing ? "Scan interrupted." : error instanceof Error ? `Scan failed: ${error.message}` : "Scan failed.", source.id);
+      db.query("UPDATE library_sources SET status = ?, error = ? WHERE id = ?")
+        .run(error instanceof FolderError ? "unavailable" : "error", closing ? "Scan interrupted." : error instanceof Error ? `Scan failed: ${error.message}` : "Scan failed.", source.id);
     } finally {
       notify();
     }
@@ -264,26 +290,82 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
 
   return {
     listSources(): LibrarySource[] { return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all(); },
-    async addSource(path: string): Promise<LibrarySource> {
-      assertOpen();
-      if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || /[\0\r\n]/.test(path)) throw new Error("Choose an absolute folder path on the player.");
-      let root: string;
-      try { root = await realpath(path); if (!(await lstat(root)).isDirectory()) throw new Error(); }
-      catch { throw new Error("The selected folder cannot be opened."); }
-      assertOpen();
-      const id = crypto.randomUUID();
-      db.query("INSERT OR IGNORE INTO library_sources (id, name, path) VALUES (?, ?, ?)").run(id, basename(root) || root, root);
-      notify();
-      return db.query<SourceRow, [string]>(`${sourceQuery} WHERE s.path = ?`).get(root)!;
+    managedSources(): ManagedFolder[] {
+      return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all().map(source => ({ ...source,
+        verified: !!savedIdentity(source.id), scannedItems: scannedItems.get(source.id) ?? 0 }));
     },
-    scan(sourceId: string): Promise<LibrarySource> {
+    async addSource(path: string, authorize: () => void = () => {}, selectedIdentity?: FolderIdentity): Promise<LibrarySource> {
       assertOpen();
+      authorize();
+      if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || /[\0\r\n]/.test(path)) throw new FolderError("Choose an absolute folder path on the player.");
+      const root = await realpath(path).catch(() => { throw new FolderError("The selected folder cannot be opened."); });
+      const identity = selectedIdentity ?? await folders.identify(root);
+      await folders.verify(root, identity);
+      assertOpen();
+      authorize();
+      if (db.query("SELECT id FROM library_sources WHERE path = ?").get(root)) throw new FolderError("This TV folder is already a source.", 409);
+      const id = crypto.randomUUID();
+      db.transaction(() => {
+        db.query("INSERT INTO library_sources (id, name, path) VALUES (?, ?, ?)").run(id, basename(root) || root, root);
+        saveIdentity(id, identity);
+      })();
+      notify();
+      return getSource(id)!;
+    },
+    async testSource(sourceId: string, authorize: () => void, confirm = false): Promise<LibrarySource> {
+      assertOpen();
+      authorize();
+      const source = getSource(sourceId);
+      if (!source) throw new FolderError("Library folder not found.", 404);
+      const assertIdle = () => {
+        assertOpen();
+        authorize();
+        if (!getSource(sourceId)) throw new FolderError("Library folder not found.", 404);
+        if (scans.has(sourceId)) throw new FolderError("Wait for the current scan to finish.", 409);
+      };
+      assertIdle();
+      try {
+        if (confirm && !savedIdentity(sourceId)) {
+          const selected = await folders.inspect(source.path);
+          assertIdle();
+          saveIdentity(sourceId, selected.identity);
+        } else await verifySource(source);
+        assertIdle();
+        db.query("UPDATE library_sources SET status = ?, error = NULL WHERE id = ?").run(source.lastScanned === null ? "idle" : "ready", sourceId);
+      } catch (error) {
+        assertIdle();
+        db.query("UPDATE library_sources SET status = 'unavailable', error = ? WHERE id = ?").run(error instanceof FolderError ? error.message : "Could not read this TV folder. The saved catalog has been kept.", sourceId);
+        throw error;
+      } finally { notify(); }
+      return getSource(sourceId)!;
+    },
+    removeSource(sourceId: string, authorize: () => void) {
+      assertOpen();
+      authorize();
+      if (!getSource(sourceId)) throw new FolderError("Library folder not found.", 404);
+      if (scans.has(sourceId)) throw new FolderError("Wait for the current scan to finish before removing this source.", 409);
+      db.transaction(() => {
+        db.query("DELETE FROM library_search WHERE id IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
+        db.query("DELETE FROM library_music_artists WHERE itemId IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
+        db.query("DELETE FROM library_items WHERE sourceId = ?").run(sourceId);
+        db.query("DELETE FROM library_video_nfo WHERE sourceId = ?").run(sourceId);
+        db.query("DELETE FROM library_folder_identities WHERE sourceId = ?").run(sourceId);
+        db.query("DELETE FROM library_sources WHERE id = ?").run(sourceId);
+      })();
+      scannedItems.delete(sourceId);
+      notify();
+    },
+    scan(sourceId: string, authorize: () => void = () => {}): Promise<LibrarySource> {
+      assertOpen();
+      authorize();
       const existing = scans.get(sourceId);
       if (existing) return existing;
       const source = getSource(sourceId);
-      if (!source) throw new Error("Library folder not found.");
+      if (!source) throw new FolderError("Library folder not found.", 404);
+      if (!savedIdentity(sourceId)) throw new FolderError("Verify the original TV folder in Settings > Sources before scanning.", 409);
       db.query("UPDATE library_sources SET status = 'scanning', error = NULL WHERE id = ?").run(sourceId);
-      const job = scanQueue.then(() => runScan(source)).finally(() => scans.delete(sourceId));
+      scannedItems.set(sourceId, 0);
+      const job = scanQueue.then(() => runScan(source, authorize)).finally(() => scans.delete(sourceId));
       scans.set(sourceId, job);
       scanQueue = job.catch(() => {});
       notify();
@@ -366,14 +448,16 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     },
     async getPlayable(id: string): Promise<{ source: string; title: string }> {
       assertOpen();
-      const item = db.query<{ title: string; path: string; root: string }, [string]>(`
-        SELECT i.title, i.path, s.path AS root FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
+      const item = db.query<{ title: string; path: string; root: string; sourceId: string }, [string]>(`
+        SELECT i.title, i.path, s.path AS root, s.id AS sourceId FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
       if (!item) throw new Error("Library item not found.");
       try {
+        await verifySource(getSource(item.sourceId)!);
         const root = await realpath(item.root);
         const path = join(root, item.path);
         const canonical = await realpath(path);
         if (root !== item.root || !within(root, canonical) || (await lstat(path)).isSymbolicLink() || !(await lstat(canonical)).isFile()) throw new Error();
+        if (!getSource(item.sourceId)) throw new Error();
         return { source: pathToFileURL(canonical).href, title: item.title };
       } catch {
         if (!closing) {
