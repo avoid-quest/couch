@@ -67,7 +67,8 @@ await run([
   "--mount", "type=volume,source=couch-linux-registry,target=/root/.cargo/registry",
   "--mount", "type=volume,source=couch-linux-bun,target=/root/.bun/install/cache",
   "--mount", "type=volume,source=couch-preview-data,target=/root/.local/share",
-  ...(media ? ["--mount", `type=bind,source=${media},target=/media,readonly`] : []),
+  ...(media ? ["--mount", `type=bind,source=${media},target=/media/host,readonly`, "--env", "COUCH_PREVIEW_MEDIA=1"] : []),
+  "--env", "COUCH_DATA_DIR=/root/.local/share/quest.avoid.couch",
   "--env", `COUCH_ADVERTISE_URLS=${remoteUrls.join(",")}`,
   image,
 ]);
@@ -90,6 +91,6 @@ try {
 
 console.log(`\nRemote control (real web UI): ${remote}`);
 console.log(`Linux TV screen (Docker preview): ${desktop}${remoteUrls.map(url => `\nPhone remote: ${url}`).join("")}`);
-console.log(`Use the pairing code shown on the Linux TV screen. Open /mnt/fixtures/multitrack.mkv there to try playback.${media ? " Your media folder is /media inside Linux." : " To use your files, restart with --media /path/to/folder."}`);
+console.log(`Use the pairing code shown on the Linux TV screen. Open /mnt/fixtures/multitrack.mkv there to try playback.${media ? " Your media folder is /media/host inside Linux; add it in Settings > Sources." : " To use your files, restart with --media /path/to/folder."}`);
 console.log("This Docker preview uses software video and silent audio. It keeps running until bun run preview:linux stop.");
 if (process.platform === "darwin") await Bun.spawn(["open", remote], { stdout: "ignore", stderr: "ignore" }).exited;

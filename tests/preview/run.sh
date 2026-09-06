@@ -9,6 +9,7 @@ bun run desktop:build --debug --no-bundle
 mkdir -p /work/bin
 cp /cache/target/debug/couch /cache/target/debug/couch-server /work/bin/
 bun tests/linux/fixtures.ts
+if [[ "${COUCH_PREVIEW_MEDIA:-}" == 1 ]]; then bun scripts/preview-media.ts; fi
 
 mkdir -p /root/.config
 pulseaudio --start --exit-idle-time=-1
