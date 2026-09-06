@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { assertLiveFrame, clockFrame, clockLag, decodeClock, guideClock, type ClockCapture } from "./iptv-clock";
 import { createGuideFixture } from "./iptv-fixture";
 
@@ -37,7 +37,7 @@ test.skipIf(!ffmpeg)("delayed-window readiness follows published HLS when elapse
 }, 20_000);
 
 test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps; a delayed reload fails the same freshness assertion", async () => {
-  const archive = await mkdtemp(join(tmpdir(), "couch-iptv-archive-test-"));
+  const archive = await mkdtemp(join(process.env.COUCH_IPTV_CLOCK_EVIDENCE ? dirname(process.env.COUCH_IPTV_CLOCK_EVIDENCE) : tmpdir(), "couch-iptv-archive-test-"));
   const fixture = await createGuideFixture(0, ffmpeg!, archive);
   const captured: unknown[] = [];
   let passed = false;
@@ -72,13 +72,18 @@ test.skipIf(!ffmpeg)("real H264 live fixture presents advancing pixel timestamps
     expect(() => assertLiveFrame(delayed)).toThrow("Presented IPTV frame exceeds");
     expect(clockLag(delayed).minimumLagMs).toBeGreaterThan(20_000);
     const served = fixture.requests().findLast(request => request.manifest)!;
+    expect(served.sequences).toHaveLength(6);
     const archived = await Bun.file(join(archive, "iptv-streams", served.manifest!)).text();
     expect(archived).toBe((captured.at(-1) as { manifest: string }).manifest);
     expect(Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/.exec(archived)![1])).toBe(served.sequences![0]!);
     const records = (await Bun.file(join(archive, "iptv-streams", "segments.jsonl")).text()).trim().split("\n").map(line => JSON.parse(line) as { name: string; sha256: string });
     for (const sequence of served.sequences!) {
       const name = `blue-${sequence}.ts`;
-      expect(createHash("sha256").update(await Bun.file(join(archive, "iptv-streams", name)).bytes()).digest("hex")).toBe(records.find(record => record.name === name)!.sha256);
+      const response = await fetch(`${fixture.origin}/blue/segments/${sequence}.ts`);
+      expect(response.status).toBe(200);
+      const sha256 = createHash("sha256").update(await response.bytes()).digest("hex");
+      expect(sha256).toBe(records.find(record => record.name === name)!.sha256);
+      expect(createHash("sha256").update(await Bun.file(join(archive, "iptv-streams", name)).bytes()).digest("hex")).toBe(sha256);
     }
     await Bun.sleep(2_500);
     const delayedNext = await sample(); expect(delayedNext.tick).toBeGreaterThan(delayed.tick);

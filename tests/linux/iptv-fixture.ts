@@ -66,7 +66,8 @@ export async function createGuideFixture(port = 4202, ffmpeg = "ffmpeg", artifac
             "-thread_queue_size", "8", "-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", "640x360", "-framerate", "25", "-i", "pipe:0",
             "-re", "-f", "lavfi", "-i", `sine=frequency=${frequency}:sample_rate=48000`,
             "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-g", "50", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "96k", "-shortest",
-            "-f", "hls", "-hls_time", "2", "-hls_list_size", "6", "-hls_delete_threshold", "16", "-hls_flags", "delete_segments+independent_segments+temp_file",
+            // Keep delayed-window bytes until bounded fixture cleanup; FFmpeg also deletes by playlist duration.
+            "-f", "hls", "-hls_time", "2", "-hls_list_size", "6", "-hls_flags", "independent_segments+temp_file",
             "-hls_segment_filename", join(directory, `${color}-%d.ts`), join(directory, `${color}.m3u8`),
           ], { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
           encoders.push(encoder);
