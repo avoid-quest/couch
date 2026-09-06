@@ -171,11 +171,13 @@ try {
     await ui.key(keys.down);
     await until(`physical Down traverses preview row ${index + 1}`, () => ui.execute("return document.activeElement === document.querySelectorAll('[aria-label=\"Collection preview\"] li')[arguments[0]]", [index]));
   }
-  assert.ok(await ui.execute("return document.querySelector('[aria-label=\"Collection preview\"]').scrollTop > 0"));
+  const physicalScroll = await ui.execute("return document.querySelector('[aria-label=\"Collection preview\"]').scrollTop");
+  assert.ok(physicalScroll > 0);
   for (let index = 13; index <= 24; index++) {
     await clients[1]!.command({ type: "navigate", key: "down" });
     await until(`paired Down traverses preview row ${index + 1}`, () => ui.execute("return document.activeElement === document.querySelectorAll('[aria-label=\"Collection preview\"] li')[arguments[0]]", [index]));
   }
+  assert.equal(await ui.execute("const list=document.querySelector('[aria-label=\"Collection preview\"]'), row=list.children[24], bounds=list.getBoundingClientRect(), rect=row.getBoundingClientRect(); return document.activeElement === row && list.scrollTop > arguments[0] && rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1", [physicalScroll]), true, "Paired navigation scrolls farther and reveals its final preview row");
   await capture("native-long-collection-navigation");
   await ui.button("All collections", panel); await ui.button("Film night2 movies", panel); await selected(ui, "Film night");
   await ui.button("Edit collection", panel);
@@ -210,12 +212,12 @@ try {
   assert.deepEqual((await detail(manual.id)).items.map(item => [item.title, item.available]), [["Red", false], ["Blue", false]]);
   assert.deepEqual((await detail(music.id)).items.map(item => [item.title, item.available]), [["Song one", false], ["Song two", false]]);
   await open(ui); await ui.button("Renamed by phone2 movies", panel); await selected(ui, "Renamed by phone");
-  await until("offline preview disables both native loading controls", () => ui.execute("return [...document.querySelectorAll('.collections-panel button')].filter(button => ['Play preview', 'Add preview to queue'].includes(button.textContent.trim())).every(button => button.disabled)"));
+  await until("offline preview disables both native loading controls", () => ui.execute("const buttons=[...document.querySelectorAll('.collections-panel button')].filter(button => ['Play preview', 'Add preview to queue'].includes(button.textContent.trim())); return buttons.length === 2 && buttons.every(button => button.disabled)"));
   await capture("native-collection-offline-restart");
   const latest = await detail(manual.id);
   assert.equal((await api(`/api/collections/${manual.id}`, { revision: latest.collection.revision }, 0, "DELETE")).status, 200);
   assert.equal((await api(`/api/collections/${manual.id}`)).status, 404);
-  await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "passed", checks, source: process.env.COUCH_QUALIFICATION_HEAD, manual: manual.id, music: music.id, note: "Ubuntu software rendering and a null audio sink qualify software behavior only." }, null, 2));
+  await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "passed", checks, source: process.env.COUCH_QUALIFICATION_HEAD, manual: manual.id, music: music.id, previewWidths: [320, 375, 390, 768, 1024, 1440, 1920], editorWidths: [390], note: "Ubuntu software rendering and a null audio sink qualify software behavior only." }, null, 2));
 } catch (error) {
   await Bun.write(`${artifactDir}/collections-results.json`, JSON.stringify({ status: "failed", checks, error: String(error) }, null, 2));
   if (sessionId) { await Bun.write(`${artifactDir}/failure-dom.txt`, String(await ui.execute("return document.body.innerText").catch(() => ""))); await capture("native-collections-failure").catch(() => {}); }
