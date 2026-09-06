@@ -46,10 +46,10 @@ async function metadataLayout(target: UiDriver, width: number) {
       dialogOverflow: dialog.scrollWidth > dialog.clientWidth + 1,
       clipped: controls.filter(element => element.tagName === 'BUTTON' && element.scrollWidth > element.clientWidth + 2).map(element => element.textContent),
       small: controls.map(element => { const rect = (element.type === 'checkbox' ? element.closest('label') : element).getBoundingClientRect(); return { name: element.getAttribute('data-metadata-field') || element.textContent || element.id, width: rect.width, height: rect.height }; }).filter(rect => rect.width < minimum - .5 || rect.height < minimum - .5),
-      fields: controls.filter(element => element.hasAttribute('data-metadata-field')).length };
+      fields: controls.filter(element => element.hasAttribute('data-metadata-field')).map(element => element.getAttribute('data-metadata-field')).sort() };
   `);
   assert.equal(layout.width, width, "Layout checks use the observed requested CSS width");
-  assert.ok(layout.fields >= 7, "Metadata fields are rendered during layout checks");
+  assert.deepEqual(layout.fields, ["genres", "originalTitle", "plot", "premiered", "title", "year"], "Every expected movie field is rendered and included in control geometry checks");
   assert.ok(layout.scrollWidth <= width + 1 && !layout.dialogOverflow, `No page or dialog horizontal overflow: ${JSON.stringify(layout)}`);
   assert.deepEqual(layout.clipped, [], "Metadata button text stays inside its controls");
   assert.deepEqual(layout.small, [], `Metadata controls meet the ${layout.minimum}px target for this viewport`);
