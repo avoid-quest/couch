@@ -9,6 +9,7 @@ StartLimitBurst=5
 Type=exec
 Environment=GDK_BACKEND=x11
 EnvironmentFile=/etc/couch/appliance.env
+EnvironmentFile=-/run/couch-appliance/recovery.env
 ExecStartPre=/usr/bin/pactl info
 ExecStart=/usr/bin/couch
 Restart=always

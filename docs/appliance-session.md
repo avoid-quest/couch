@@ -28,6 +28,16 @@ sudo couch-session restart
 ```
 
 `restart` clears the failed-start budget and restarts the complete application.
+For a lost administrator browser, run `sudo couch-session recover-admin` in a
+private administrator terminal. It generates a fresh 256-bit code and restarts
+the same supervised native owner, passing `COUCH_ADMIN_RECOVERY_CODE` to its
+coordinator. Pair the replacement browser and enter the printed code within ten
+minutes. Each code can be consumed once; ordinary application restarts do not
+renew its expiry or revive it. Do not paste the command output into logs or issue
+comments. The code stays in a root-owned file readable only by the runtime group
+under `/run/couch-appliance`, survives application crashes, and disappears on
+reboot. This command preserves profiles, pairings, settings and media state.
+
 `sudo couch-session stop` pauses it for diagnosis. For display-server trouble,
 inspect `sudo journalctl -b -u lightdm` and `/var/log/lightdm/`. To recover to a
 console on every boot, run `sudo systemctl disable --now lightdm` and
