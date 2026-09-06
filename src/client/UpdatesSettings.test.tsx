@@ -157,3 +157,46 @@ test("a refreshed administrator page reopens Updates for its durable pending req
   expect(document.body.textContent).toContain("Retry same request");
   expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
 });
+
+
+test("definitive pre-acceptance expiry clears the saved request so checks and downloads remain usable", async () => {
+  report.status = "ready"; report.installation = { enabled: true, transaction: null };
+  request.mockImplementation((async (input, init) => {
+    calls.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined, signal: init?.signal as AbortSignal });
+    if (String(input).endsWith("/install")) { report.status = "available"; return Response.json({ accepted: false, error: "Candidate expired" }, { status: 409 }); }
+    if (String(input).endsWith("/api/tools")) return Response.json({}, { status: 503 });
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Install update").click());
+  await act(async () => button("Install and restart").click());
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  expect(button("Check now").disabled).toBe(false);
+  expect(button("Download update").disabled).toBe(false);
+});
+
+test("request-specific completion clears a saved request superseded by another remote", async () => {
+  const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };
+  window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify(saved));
+  const own = { updateId: "c".repeat(32), requestId: saved.requestId, candidateId: saved.candidateId, version: saved.version, revision: saved.revision, phase: "failed" as const, error: null, createdAt: 1, updatedAt: 1 };
+  report.installation = { enabled: true, transaction: { ...own, requestId: "d".repeat(32), phase: "succeeded" }, requestedTransaction: own };
+  await render();
+  expect(calls.some(call => call.url.endsWith(`?requestId=${saved.requestId}`))).toBe(true);
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  expect(button("Check now").disabled).toBe(false);
+});
+
+test("a terminal install retry receipt clears its saved identity even when latest status is empty", async () => {
+  const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };
+  window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify(saved));
+  report.installation = { enabled: true, transaction: null };
+  request.mockImplementation((async input => {
+    if (String(input).endsWith("/install")) return Response.json({ transaction: { updateId: "c".repeat(32), requestId: saved.requestId, candidateId: saved.candidateId, version: saved.version, revision: saved.revision, phase: "failed", error: "Expired", createdAt: 1, updatedAt: 1 } }, { status: 202 });
+    if (String(input).endsWith("/api/tools")) return Response.json({}, { status: 503 });
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Retry same request").click());
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  expect(button("Check now").disabled).toBe(false);
+});

@@ -47,3 +47,19 @@ test("a durable retry reaches the worker with the same fields after download sta
   await restored.read(admin);
   expect(restored.busy()).toBe(false);
 });
+
+
+test("expired unaccepted candidates are distinguished from ambiguous worker failure", async () => {
+  const stale = createManualUpdate({ request: async () => ({ ok: true, transaction: null }) }, () => true, () => false);
+  expect(await (await stale.install(request(), admin)).json()).toMatchObject({ accepted: false });
+  const ambiguous = createManualUpdate({ request: async value => { if (value.op === "install") throw new Error("lost reply"); return { ok: true, transaction: null }; } }, () => true, () => true);
+  expect(await (await ambiguous.install(request(), admin)).json()).not.toHaveProperty("accepted");
+});
+
+test("request-specific status retains a completed receipt superseded by another remote", async () => {
+  const latest = { ...transaction, requestId: "e".repeat(32), phase: "succeeded" };
+  const previous = { ...transaction, phase: "failed" };
+  const manual = createManualUpdate({ request: async value => ({ ok: true, transaction: value.op === "status" && value.requestId === payload.requestId ? previous : latest }) }, () => true, () => true);
+  expect(await manual.read(admin, payload.requestId)).toMatchObject({ transaction: latest, requestedTransaction: previous });
+  expect(manual.busy()).toBe(false);
+});

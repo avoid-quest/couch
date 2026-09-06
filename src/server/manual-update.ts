@@ -22,13 +22,16 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   };
   return {
     busy: () => busy,
-    async read(identity: () => ControllerIdentity | null) {
+    async read(identity: () => ControllerIdentity | null, requestId?: string) {
       authorize(identity);
+      if (requestId !== undefined && !/^[a-f0-9]{32}$/.test(requestId)) throw new ControllerError("Use the saved update request identity.");
       const transaction = await status();
+      const requestedTransaction = requestId ? await status(requestId) : undefined;
       authorize(identity);
-      return { enabled: true, transaction };
+      return { enabled: true, transaction, ...(requestId ? { requestedTransaction } : {}) };
     },
     async install(request: Request, identity: () => ControllerIdentity | null) {
+      let unaccepted = false;
       try {
         authorize(identity);
         const body = await settingField(request, "install") as { candidateId: string; requestId: string; confirmInterrupt: boolean };
@@ -36,7 +39,10 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
         authorize(identity);
         const previous = await status(body.requestId);
         authorize(identity);
-        if (!previous && (!admitted() || busy || !candidateReady(body.candidateId))) throw new ControllerError("Use a current verified download after the active operation finishes.", 409);
+        if (!previous && (!admitted() || busy || !candidateReady(body.candidateId))) {
+          unaccepted = admitted() && !busy;
+          throw new ControllerError("Use a current verified download after the active operation finishes.", 409);
+        }
         // Retries still reach the worker, which checks every field against its
         // durable receipt. No browser path, command or release URL is accepted.
         busy = true;
@@ -46,7 +52,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
         busy = !finished.has(result.transaction.phase);
         return json({ transaction: result.transaction }, 202);
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying." }, error instanceof ControllerError ? error.status : 400);
+        return json({ error: error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying.", ...(unaccepted ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : 400);
       }
     },
   };

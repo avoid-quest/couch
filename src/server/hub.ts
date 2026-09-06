@@ -239,7 +239,7 @@ export function createHub(options: HubOptions) {
       }
       if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
       if (manual && url.pathname === "/api/updates" && request.method === "GET") {
-        try { return cors(request, json({ ...updates.state, installation: await manual.read(identity) })); }
+        try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));

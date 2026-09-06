@@ -27,12 +27,12 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
-        const response = await fetch(`${credentials.origin}/api/updates`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
+        const response = await fetch(`${credentials.origin}/api/updates${retry ? `?requestId=${retry.requestId}` : ""}`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
         if (!response.ok) throw new Error();
         const result = await response.json() as UpdateState;
         if (!controller.signal.aborted) {
           setState(result); setLoadError(null);
-          const transaction = result.installation?.transaction;
+          const transaction = result.installation?.requestedTransaction ?? result.installation?.transaction;
           if (transaction && retry?.requestId === transaction.requestId && ["succeeded", "failed", "restored"].includes(transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
         }
       } catch { if (!controller.signal.aborted) setLoadError("Could not load update status. Check the TV connection and try again."); }
@@ -49,8 +49,14 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       const response = await fetch(`${credentials.origin}/api/updates/${path}`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
       const result = await response.json();
       if (controller.signal.aborted) return;
-      if (!response.ok) { setError(result.error || "Could not start the update operation. Refresh its status and retry."); return; }
-      if (path === "install") setState(current => current ? { ...current, installation: { enabled: true, transaction: result.transaction } } : current);
+      if (!response.ok) {
+        if (path === "install" && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
+        setError(result.error || "Could not start the update operation. Refresh its status and retry."); return;
+      }
+      if (path === "install") {
+        if (result.transaction?.requestId === retry?.requestId && ["succeeded", "failed", "restored"].includes(result.transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
+        setState(current => current ? { ...current, installation: { enabled: true, transaction: result.transaction } } : current);
+      }
       else setState(result);
     } catch { if (!controller.signal.aborted) setError("The request did not finish. Reconnect to see whether the TV accepted it."); }
     finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } if (mutation.current === controller) mutation.current = null; }
