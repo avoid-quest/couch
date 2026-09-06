@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs/promises";
+import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,4 +138,49 @@ test("unknown duration and zero-length or out-of-file final segments fail the en
   await writeFile(join(root, "album.cue"), sheet);
   await writeFile(join(root, "album.flac"), "not audio");
   await expect(readCueAlbum(root, "album.cue", "source-1")).rejects.toThrow("lossless");
+});
+
+
+test("descriptor parsing rejects file, FIFO and ancestor replacement at open without blocking", async () => {
+  const originalOpen = fs.open;
+  const originalSheet = await Bun.file(join(root, "album.cue")).text();
+  for (const variant of ["symlink", "oversized", "fifo", "sheet-ancestor", "audio-ancestor"] as const) {
+    const folder = join(root, variant);
+    const outside = join(directory, `${variant}-outside`);
+    await mkdir(folder); await mkdir(outside);
+    await copyFile(join(fixtures, "album.flac"), join(folder, "album.flac"));
+    await copyFile(join(fixtures, "album.flac"), join(outside, "album.flac"));
+    await writeFile(join(folder, "album.cue"), originalSheet);
+    await writeFile(join(outside, "album.cue"), originalSheet);
+    const target = join(folder, variant === "sheet-ancestor" ? "album.cue" : "album.flac");
+    let replaced = false;
+    const opened: Awaited<ReturnType<typeof fs.open>>[] = [];
+    const intercept = spyOn(fs, "open").mockImplementation(async (path, flags, mode) => {
+      if (String(path) === target && !replaced) {
+        replaced = true;
+        expect(Number(flags) & constants.O_NOFOLLOW).toBe(constants.O_NOFOLLOW);
+        expect(Number(flags) & constants.O_NONBLOCK).toBe(constants.O_NONBLOCK);
+        if (variant.endsWith("ancestor")) {
+          await rename(folder, `${folder}-original`);
+          await symlink(outside, folder);
+        } else {
+          await rename(target, `${target}.original`);
+          if (variant === "symlink") await symlink(join(outside, "album.flac"), target);
+          if (variant === "oversized") {
+            const oversized = await originalOpen(target, "w");
+            await oversized.truncate(512 * 1024 * 1024 + 1); await oversized.close();
+          }
+          if (variant === "fifo") expect(Bun.spawnSync(["mkfifo", target]).exitCode).toBe(0);
+        }
+      }
+      const file = await originalOpen(path, flags, mode);
+      if (String(path) === target) opened.push(file);
+      return file;
+    });
+    try {
+      await expect(readCueAlbum(root, `${variant}/album.cue`, "source-1")).rejects.toThrow();
+      expect(replaced).toBe(true);
+      for (const file of opened) await expect(file.stat()).rejects.toThrow();
+    } finally { intercept.mockRestore(); }
+  }
 });

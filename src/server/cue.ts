@@ -1,8 +1,8 @@
 import { FileType, parse, TrackDataType } from "@gplane/cue";
-import { parseFile } from "music-metadata";
+import { parseStream } from "music-metadata";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { constants, type Stats } from "node:fs";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { normalizeMusicMetadata, type MusicMetadata } from "./music-metadata";
 
@@ -57,43 +57,66 @@ function within(root: string, path: string) {
   return local !== ".." && !local.startsWith(`..${sep}`) && !isAbsolute(local);
 }
 
-async function containedFile(root: string, path: string) {
-  if (!within(root, path)) throw new Error("Cue files must stay inside the library source.");
-  const canonical = await realpath(path);
-  const info = await lstat(path);
-  if (canonical !== path || !within(root, canonical) || !info.isFile() || info.isSymbolicLink()) throw new Error("Cue references must be ordinary files inside the library source, without symbolic links.");
-  return info;
+const sameFile = (left: Stats, right: Stats) => left.dev === right.dev && left.ino === right.ino;
+
+async function checkFile(root: string, rootInfo: Stats, path: string, info: Stats) {
+  if (!sameFile(rootInfo, await lstat(root)) || await realpath(root) !== root || !within(root, path) || await realpath(path) !== path) throw new Error("Cue source or file changed, is outside the source, or uses symbolic links.");
+  const current = await lstat(path);
+  if (!current.isFile() || !sameFile(current, info) || current.size !== info.size || current.mtimeMs !== info.mtimeMs || current.ctimeMs !== info.ctimeMs) throw new Error("Cue file changed while reading.");
 }
 
-async function readSheet(path: string) {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+async function openFile(root: string, rootInfo: Stats, path: string, maxBytes: number) {
+  if (!within(root, path)) throw new Error("Cue files must stay inside the library source.");
+  const before = await lstat(path);
+  await checkFile(root, rootInfo, path, before);
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    if ((await file.stat()).size > cueLimits.bytes) throw new Error("Cue sheet exceeds 256 KiB.");
-    const buffer = Buffer.alloc(cueLimits.bytes + 1);
-    let length = 0;
-    while (length < buffer.length) {
-      const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
-      if (!bytesRead) break;
-      length += bytesRead;
-    }
-    if (length > cueLimits.bytes) throw new Error("Cue sheet exceeds 256 KiB.");
-    try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length)); }
-    catch { throw new Error("Cue sheets must use UTF-8 text."); }
-  } finally { await file.close(); }
+    const info = await file.stat();
+    if (!info.isFile() || !sameFile(before, info)) throw new Error("Cue file changed while opening.");
+    await checkFile(root, rootInfo, path, info);
+    if (info.size > maxBytes) throw new Error(maxBytes === cueLimits.bytes ? "Cue sheet exceeds 256 KiB." : "Cue audio files must be nonempty and at most 512 MiB.");
+    return { file, info };
+  } catch (error) { await file.close(); throw error; }
+}
+
+async function readSheet(file: FileHandle) {
+  const buffer = Buffer.alloc(cueLimits.bytes + 1);
+  let length = 0;
+  while (length < buffer.length) {
+    const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+    if (!bytesRead) break;
+    length += bytesRead;
+  }
+  if (length > cueLimits.bytes) throw new Error("Cue sheet exceeds 256 KiB.");
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, length)); }
+  catch { throw new Error("Cue sheets must use UTF-8 text."); }
 }
 
 export async function readCueAlbum(root: string, cuePath: string, sourceId: string): Promise<CueAlbum> {
-  if (await realpath(root) !== root) throw new Error("The cue library source is unavailable.");
+  const rootInfo = await lstat(root);
+  if (!rootInfo.isDirectory() || await realpath(root) !== root) throw new Error("The cue library source is unavailable.");
   const path = resolve(root, cuePath);
-  await containedFile(root, path);
-  const sheet = parseCueSheet(await readSheet(path));
+  const openedSheet = await openFile(root, rootInfo, path, cueLimits.bytes);
+  let sheet: ReturnType<typeof parseCueSheet>;
+  try {
+    sheet = parseCueSheet(await readSheet(openedSheet.file));
+    await checkFile(root, rootInfo, path, openedSheet.info);
+  } finally { await openedSheet.file.close(); }
   if (!sheet.reference || /[\u0000-\u001f\u007f\\:]/.test(sheet.reference) || isAbsolute(sheet.reference)) throw new Error("Cue FILE must be a relative local filename.");
   const source = resolve(dirname(path), sheet.reference);
-  let size: number;
-  try { size = (await containedFile(root, source)).size; }
-  catch { throw new Error("The cue audio file is missing, outside the source, or uses a symbolic link."); }
-  if (size <= 0 || size > 512 * 1024 * 1024) throw new Error("Cue audio files must be nonempty and at most 512 MiB.");
-  const metadata = await parseFile(source, { duration: false, skipCovers: size > 64 * 1024 * 1024 }).catch(() => null);
+  const audio = await openFile(root, rootInfo, source, 512 * 1024 * 1024).catch(() => { throw new Error("The cue audio file is missing, changed, outside the source, oversized, or uses a symbolic link."); });
+  let metadata;
+  try {
+    if (audio.info.size <= 0) throw new Error("Cue audio files must be nonempty and at most 512 MiB.");
+    // The parser receives the validated descriptor, capped at its observed size.
+    // It never reopens a pathname that can be replaced between check and read.
+    const stream = audio.file.createReadStream({ autoClose: false, start: 0, end: audio.info.size - 1 });
+    try { metadata = await parseStream(stream, { size: audio.info.size, path: source }, { duration: false, skipCovers: audio.info.size > 64 * 1024 * 1024 }); }
+    catch { metadata = null; }
+    finally { stream.destroy(); }
+    await checkFile(root, rootInfo, source, audio.info);
+    await checkFile(root, rootInfo, path, openedSheet.info);
+  } finally { await audio.file.close(); }
   if (!metadata || !["FLAC", "WAVE"].includes(metadata.format.container ?? "") || metadata.format.lossless !== true) throw new Error("Cue audio must contain lossless FLAC or WAV data.");
   const music = normalizeMusicMetadata(metadata);
   if (music.duration === null || !Number.isFinite(music.duration) || music.duration <= 0) throw new Error("Could not read the cue audio duration.");

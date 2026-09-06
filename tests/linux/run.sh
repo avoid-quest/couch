@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The source mount is read-only. Linux outputs and application data never reach host targets.
 tar -C /source --exclude=target --exclude=binaries -cf - \
-  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/setup-media.test.ts tests/replaygain-audio.test.ts | tar -xf -
+  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/fixtures/cue tests/setup-media.test.ts tests/replaygain-audio.test.ts | tar -xf -
 bun install --frozen-lockfile
 { bun --version; rustc --version; cargo install --list; pkg-config --modversion webkit2gtk-4.1 mpv; yt-dlp --version; deno --version; } > /artifacts/versions.txt
 COUCH_IPTV_CLOCK_EVIDENCE=/artifacts/iptv-clock-preflight.json bun run check
