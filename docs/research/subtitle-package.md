@@ -55,6 +55,15 @@ survive restarting the packaged native application. Existing paired controllers
 reconnect, playback starts stopped, and the next load observes each profile's
 own choice.
 
+Specification review added two assertions. Automatic without a language must
+select the English styled ASS by both language and label. Replacement must
+restore the authored blue background, not merely remove track metadata. A
+focused 19-check native replay found zero unexpected pixels after replacing
+VobSub and again after the negative control. The control uploads and actually
+renders `STALE SUBTITLE` over the same blue video. Its 14,568 unexpected pixels
+make the same replacement assertion fail, as intended. The earlier results are
+preserved; they did not contain this stronger replacement assertion.
+
 These are exploratory results for the identified older package. They do not
 qualify the later source tree. A complete run against the current-source
 package remains required before issue 33 can close. No application defect has
@@ -91,11 +100,11 @@ SUBTITLE_EVIDENCE=/absolute/path/to/mounted/evidence \
 ```
 
 `SUBTITLE_CONTAINER` overrides the disposable container name.
-`SUBTITLE_PHASE=rendering`, `controls`, or `profiles` resumes a relevant subset
+`SUBTITLE_PHASE=rendering`, `controls`, `profiles`, or `replacement` resumes a relevant subset
 while keeping previous evidence; the default runs all phases. The full run
 also checks the real HTTP phone's reconnection and displayed Off selection
 after native restart. Each run records the actual package build identity,
-installed executable hashes, library versions, input hashes, screenshots and
+installed executable hashes, library versions, input and helper hashes, screenshots and
 pixel measurements. Test data and pairing credentials are private artifacts.
 
 The runner requires a 1600×1000 display. Its native capture reads that complete

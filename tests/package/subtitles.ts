@@ -11,7 +11,8 @@ const artifacts = resolve(process.env.SUBTITLE_EVIDENCE!);
 const origin = "http://127.0.0.1:45300";
 const checks: string[] = [];
 const phase = process.env.SUBTITLE_PHASE ?? "all";
-assert.ok(["all", "rendering", "controls", "profiles"].includes(phase), "Unknown subtitle qualification phase");
+const helperSha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(import.meta.path).arrayBuffer()).digest("hex");
+assert.ok(["all", "rendering", "controls", "profiles", "replacement"].includes(phase), "Unknown subtitle qualification phase");
 await mkdir(artifacts, { recursive: true });
 const manifest = await Bun.file(`${corpus}/manifest.json`).json();
 for (const name of ["text.mkv", "bitmap.mkv", "replacement.mkv"]) {
@@ -107,7 +108,9 @@ async function track(index: number) {
 }
 async function frame(name: string) {
   exec("ffmpeg", "-v", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", ":99", "-frames:v", "1", `/evidence/${name}.png`);
-  return exec("ffmpeg", "-v", "error", "-i", `/evidence/${name}.png`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-");
+  const image = exec("ffmpeg", "-v", "error", "-i", `/evidence/${name}.png`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-");
+  assert.equal(image.length, 1600 * 1000 * 3, "Native capture contains the complete RGB frame");
+  return image;
 }
 const measurements: unknown[] = [];
 async function pixels(name: string, index: number, position: number, expected: boolean) {
@@ -128,6 +131,42 @@ async function pixels(name: string, index: number, position: number, expected: b
   if (name === "PGS" || name === "VobSub") assert.ok(darkened < 30, `${name} has no opaque black subtitle rectangle`);
   measurements.push({ name, position, changed, darkened, expected });
   record(`${name} at ${position}s ${expected ? "renders" : "clears"} actual native subtitle pixels`);
+}
+function replacementDifferences(image: Buffer) {
+  let unexpected = 0;
+  for (let y = 500; y < 950; y++) for (let x = 50; x < 1550; x++) {
+    const offset = (y * 1600 + x) * 3;
+    if ([24, 56, 88].some((color, c) => Math.abs(image[offset + c]! - color) > 12)) unexpected++;
+  }
+  return unexpected;
+}
+function assertReplacementBackground(image: Buffer) {
+  assert.ok(replacementDifferences(image) < 30, "replacement shows its subtitle-free blue background");
+}
+async function replacementPixels(name: string) {
+  await tv.watching();
+  await seek(4);
+  const image = await frame(name);
+  assertReplacementBackground(image);
+  measurements.push({ name, unexpected: replacementDifferences(image), maximum: 29 });
+  record(`${name} has no stale subtitle pixels`);
+}
+async function replacementNegativeControl() {
+  const response = await fetch(`${origin}/api/subtitles?${new URLSearchParams({ playbackId: first().player.playbackId!, name: "stale-control.srt" })}`, {
+    method: "POST", headers: { origin, Authorization: `Bearer ${remotes[1]!.token}`, "Content-Type": "application/octet-stream" },
+    body: "1\n00:00:02,000 --> 00:00:06,000\nSTALE SUBTITLE\n",
+  });
+  assert.equal(response.status, 200);
+  await until("stale-cue negative control selects its native subtitle", () => all(s => s.player.tracks?.some(t => t.label === "stale-control.srt" && t.selected) === true));
+  await Bun.sleep(300);
+  const image = await frame("replacement-stale-negative");
+  const unexpected = replacementDifferences(image);
+  assert.ok(unexpected > 300, "The negative control has actual visible subtitle pixels");
+  assert.throws(() => assertReplacementBackground(image), /subtitle-free blue background/);
+  measurements.push({ name: "replacement-stale-negative", unexpected, rejected: true });
+  record("the same replacement assertion rejects a real stale cue over the blue video");
+  await load("replacement");
+  await replacementPixels("replacement-after-negative");
 }
 async function settings(ui: UiDriver) {
   await ui.button("Playback settings");
@@ -232,6 +271,7 @@ async function selectorsAndUploads(code: string) {
   }
   record("uploads enforce size/content/path bounds and private files/snapshots");
   await load("replacement");
+  await replacementPixels("replacement-after-uploads");
   await until("replacement cleans up both uploaded subtitle files", () => exec("sh", "-c", "find /tmp -path '/tmp/couch-subtitles-*/*' -type f").toString().trim() === "");
 }
 async function preferencesAndRestart(token: string) {
@@ -244,7 +284,8 @@ async function preferencesAndRestart(token: string) {
     await load("text");
     const selected = first().player.tracks?.find(t => t.kind === "subtitle" && t.selected);
     assert.ok(selected);
-    if (language) assert.equal(selected.language, language);
+    assert.equal(selected.language, language || "eng");
+    if (!language) assert.equal(selected.label, "ASS styled and mixed scripts");
     selections.push({ language, selected });
   }
   await command({ type: "preferences", profileId: household.id, preferences: { subtitleLanguage: "ita", subtitles: "off" } });
@@ -317,12 +358,22 @@ try {
   await load("replacement");
   assert.ok(!first().player.tracks?.some(t => t.kind === "subtitle"));
   record("replacement removes embedded subtitle tracks");
+  await replacementPixels("replacement-after-bitmap");
+  await replacementNegativeControl();
+  }
+  if (phase === "replacement") {
+    await load("bitmap");
+    await seek(4);
+    await track(first().player.tracks!.find(t => t.label === "VobSub images")!.index);
+    await load("replacement");
+    await replacementPixels("replacement-after-bitmap");
+    await replacementNegativeControl();
   }
   if (phase === "all" || phase === "controls") await selectorsAndUploads(connection.pairingCode);
   if (phase === "all" || phase === "profiles") await preferencesAndRestart(connection.token);
   await stop();
   await until("packaged playback stops", () => all(state => state.player.status === "idle"));
-  await Bun.write(`${artifacts}/result-${phase}.json`, JSON.stringify({ phase, checks, measurements, corpus: manifest.files }, null, 2));
+  await Bun.write(`${artifacts}/result-${phase}.json`, JSON.stringify({ phase, helperSha256, checks, measurements, corpus: manifest.files }, null, 2));
 } catch (error) {
   await Bun.write(`${artifacts}/failure.json`, JSON.stringify({ error: String(error), checks, measurements, state: remotes[0]?.state?.player }, null, 2));
   throw error;
