@@ -15,7 +15,7 @@ export function MetadataSettings({ credentials, connected, canManage, version }:
     return () => operation.current?.abort();
   }, [origin, credential, connected, canManage]);
   useEffect(() => {
-    setConfigured(false);
+    setConfigured(false); setError(null);
     if (!origin || !credential || !connected || !canManage) return;
     const controller = new AbortController();
     void fetch(`${origin}/api/metadata/provider`, { headers: { Authorization: `Bearer ${credential}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) })

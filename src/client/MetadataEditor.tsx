@@ -28,10 +28,12 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
   const request = useRef<AbortController | null>(null);
   const fileRead = useRef<FileReader | null>(null);
   const context = useRef("");
+  const artworkInput = useRef<HTMLInputElement | null>(null);
+  const clearSelectedArtwork = () => { setArtwork(null); if (artworkInput.current) artworkInput.current.value = ""; };
   const prefix = useId();
   const native = isTauri();
   const busy = !connected || pending || reading;
-  const reset = (value: MetadataView) => { setMetadata(value); setDraft(draftOf(value.values)); setArtwork(null); setClearArtwork(false); setClearMatch(false); setPreview(null); };
+  const reset = (value: MetadataView) => { setMetadata(value); setDraft(draftOf(value.values)); clearSelectedArtwork(); setClearArtwork(false); setClearMatch(false); setPreview(null); };
   const cancel = () => { request.current?.abort(); request.current = null; fileRead.current?.abort(); fileRead.current = null; };
 
   useEffect(() => {
@@ -111,8 +113,8 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
             {key === "plot" || key === "genres" ? <textarea id={`${prefix}-${key}`} data-metadata-field={key} className="flex min-h-22 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base" rows={key === "plot" ? 4 : 2} value={draft[key]} maxLength={key === "plot" ? 4000 : 1296} disabled={busy} aria-describedby={`${prefix}-${key}-origin`} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />
               : <Input id={`${prefix}-${key}`} data-metadata-field={key} className="min-h-11" type={["year", "season", "episode"].includes(key) ? "number" : key === "premiered" ? "date" : "text"} min={key === "year" ? 1000 : 0} max={key === "season" ? 999 : 9999} maxLength={300} required={key === "title" || key === "showTitle"} value={draft[key]} disabled={busy} aria-describedby={`${prefix}-${key}-origin`} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />}
           </div>)}
-          <div className="space-y-1"><Label htmlFor={`${prefix}-artwork`}>Replace artwork</Label><p className="text-xs text-muted-foreground">Origin: {metadata.origins.artworkId}. PNG or JPEG, up to 2 MiB.</p><Input id={`${prefix}-artwork`} data-metadata-artwork className="min-h-11" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={event => selectArtwork(event.target.files?.[0])} />{artwork && <p className="text-sm">Artwork selected. Save corrections to apply it.</p>}</div>
-          <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={clearArtwork} disabled={busy} onChange={event => { setClearArtwork(event.target.checked); setArtwork(null); }} />Remove the current artwork</label>
+          <div className="space-y-1"><Label htmlFor={`${prefix}-artwork`}>Replace artwork</Label><p className="text-xs text-muted-foreground">Origin: {metadata.origins.artworkId}. PNG or JPEG, up to 2 MiB.</p><Input ref={artworkInput} id={`${prefix}-artwork`} data-metadata-artwork className="min-h-11" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={event => selectArtwork(event.target.files?.[0])} />{artwork && <p className="text-sm">Artwork selected. Save corrections to apply it.</p>}</div>
+          <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={clearArtwork} disabled={busy} onChange={event => { setClearArtwork(event.target.checked); clearSelectedArtwork(); }} />Remove the current artwork</label>
           <p className="break-words text-sm">Saved match: {metadata.match ? `TMDB ${metadata.match.title} (${metadata.match.id})` : "No chosen TMDB match"}</p>
           <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={clearMatch} disabled={busy} onChange={event => setClearMatch(event.target.checked)} />Clear the TMDB match and its exported ID</label>
           <Button className="min-h-11" disabled={busy} type="submit">Save corrections</Button>

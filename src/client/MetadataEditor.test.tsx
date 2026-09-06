@@ -21,9 +21,10 @@ const input = async (selector: string, value: string) => act(async () => {
 const render = async (connected = true) => act(async () => root.render(<Editor origin="http://localhost" token="administrator-token" id="item" connected={connected} onSaved={() => {}} />));
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" }); calls.length = 0;
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "FileReader", "Element", "Node", "MutationObserver", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "FileReader", "Element", "Node", "MutationObserver", "NodeFilter", "DocumentFragment", "CustomEvent", "HTMLButtonElement", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
   request = spyOn(globalThis, "fetch").mockImplementation((async (url, init) => {
     const path = new URL(String(url)).pathname;
@@ -136,4 +137,48 @@ test("disconnect retains title, plot, order and artwork, rejects a late lookup, 
   expect(submitted.revision).toBe("revision-1"); expect(submitted.changes).toEqual({ title: "Unsaved title", plot: "Unsaved plot", episode: 3 });
   expect(submitted.artwork).toBe(Buffer.from(await file.arrayBuffer()).toString("base64"));
   expect(document.body.textContent).toContain("Reload before saving.");
+});
+
+
+test("removing a selected artwork clears the visible file and unchecking never silently restores it", async () => {
+  await render(); await click("Edit metadata");
+  const field = document.querySelector<HTMLInputElement>("[data-metadata-artwork]")!;
+  const transfer = new window.DataTransfer(); transfer.items.add(new window.File(["image bytes"], "replacement.png", { type: "image/png" }));
+  await act(async () => {
+    field.files = transfer.files as unknown as FileList;
+    field.dispatchEvent(new window.Event("change", { bubbles: true }) as unknown as Event);
+    await window.happyDOM.waitUntilComplete();
+  });
+  expect(field.value).toContain("replacement.png");
+  expect(document.body.textContent).toContain("Artwork selected");
+  const remove = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  await act(async () => remove.click());
+  expect(field.value).toBe(""); expect(document.body.textContent).not.toContain("Artwork selected");
+  await act(async () => remove.click());
+  await input('[data-metadata-field="title"]', "Other correction"); await click("Save corrections");
+  expect(calls.at(-1)?.body).toEqual({ revision: "revision-1", changes: { title: "Other correction" } });
+});
+
+test("a successful provider status retry clears the old load error", async () => {
+  const { MetadataSettings } = await import("./MetadataSettings");
+  request.mockResolvedValueOnce(Response.json({ error: "Temporary status failure" }, { status: 503 }));
+  const settings = async (version: number) => act(async () => root.render(<MetadataSettings credentials={{ origin: "http://localhost", token: "administrator-token" }} connected canManage version={version} />));
+  await settings(1);
+  expect(document.body.textContent).toContain("Temporary status failure");
+  request.mockResolvedValueOnce(Response.json({ configured: true }));
+  await settings(2);
+  expect(document.body.textContent).toContain("TMDB token configured");
+  expect(document.body.textContent).not.toContain("Temporary status failure");
+});
+
+test("video details show metadata controls only while the viewer can administer them", async () => {
+  const { VideoLibraryPanel } = await import("./VideoLibraryPanel");
+  request.mockResolvedValue(Response.json({ items: [{ id: "item", title: "Movie details", kind: "video", available: true, duration: null, artist: null, album: null, video: { ...values, type: "movie" } }], total: 1, offset: 0, limit: 30 }));
+  const panel = async (canManage: boolean) => act(async () => root.render(<VideoLibraryPanel origin="http://localhost" token="administrator-token" connected canPlay canManage={canManage} active version={1} view="movies" onEnqueue={async () => true} />));
+  await panel(false);
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Details for Movie details"]')!.click());
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(button("Edit metadata")).toBeUndefined();
+  await panel(true); expect(button("Edit metadata")).toBeDefined();
+  await panel(false); expect(button("Edit metadata")).toBeUndefined();
 });

@@ -20,8 +20,8 @@ type Browse = { kind: "movies" | "shows"; q: string; offset: number }
 const seasonTitle = (season: number | null) => season === null ? "Unnumbered" : season === 0 ? "Specials" : `Season ${season}`;
 const episodeLabel = (item: LibraryItem) => item.video?.episode === null ? "Unnumbered episode" : `Episode ${item.video?.episode}`;
 
-export function VideoLibraryPanel({ origin, token, connected, canPlay, version, view, active, onEnqueue }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean; version: number; view: "movies" | "shows"; active: boolean;
+export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage, version, view, active, onEnqueue }: {
+  origin: string; token: string; connected: boolean; canPlay: boolean; canManage: boolean; version: number; view: "movies" | "shows"; active: boolean;
   onEnqueue: (id: string, options?: { playNow?: boolean; fromStart?: boolean }) => Promise<boolean>;
 }) {
   const [browse, setBrowse] = useState<Browse>({ kind: view, q: "", offset: 0 });
@@ -171,7 +171,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, version, 
           {detail.video?.originalTitle && detail.video.originalTitle !== detail.title && <p className="break-words text-sm text-muted-foreground">Original title: {detail.video.originalTitle}</p>}
           {detail.video?.premiered && <p className="text-sm text-muted-foreground">{detail.video.type === "episode" ? "Aired" : "Released"} {detail.video.premiered}</p>}
           <p className="video-plot text-sm leading-relaxed">{detail.video?.plot || "No description in this video's NFO."}</p>
-          <MetadataEditor key={detail.id} origin={origin} token={token} id={detail.id} connected={connected} onSaved={() => setRefresh(value => value + 1)} />
+          {canManage && <MetadataEditor key={detail.id} origin={origin} token={token} id={detail.id} connected={connected} onSaved={() => setRefresh(value => value + 1)} />}
           {summary(detail)}{actions(detail)}{notice && <p className="text-sm text-primary" role="status">{notice}</p>}{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         </>}
       </DialogContent>
