@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { addTVFolder } from "./folder-settings";
 import { assertResponsive } from "./ui";
 import { musicControls, restoreQueue, type MusicContext, type SavedMusic } from "./music";
+import type { PlayerState } from "../../src/shared/protocol";
 import type { LibraryItem, MusicAlbum } from "../../src/shared/library";
 
 const panel = '.library-panel [data-slot="tabs-content"][data-state="active"] .music-panel';
@@ -105,7 +106,17 @@ export async function assertCueAfterRestart(context: MusicContext, saved: Awaite
     assert.ok(item.progress && Math.abs(item.progress.position - 2) < 0.08, "Restart retains the observed segment-relative checkpoint");
     await context.clients[1]!.command({ type: "enqueueLibrary", itemId: item.id, entryId });
     await context.clients[1]!.command({ type: "play", entryId });
-    await context.until("restarted native player resumes a fresh cue occurrence from stored track progress", () => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.position >= 1.9 && state.player.position < 3 && Math.abs(state.player.duration! - saved.tracks[1]!.duration!) < 0.01));
+    const firstPlaying = new Map<number, PlayerState>();
+    await context.until("both controllers receive the first playing observation of the restarted cue occurrence", () => {
+      context.clients.forEach((client, index) => {
+        if (!firstPlaying.has(index) && client.state?.currentEntryId === entryId && client.state.player.status === "playing") firstPlaying.set(index, structuredClone(client.state.player));
+      });
+      return firstPlaying.size === context.clients.length;
+    });
+    for (const player of firstPlaying.values()) {
+      assert.ok(player.playbackId && player.position >= 1.9 && player.position < 3, "The first native playing observation must already reflect saved cue progress");
+      assert.ok(Math.abs(player.duration! - saved.tracks[1]!.duration!) < 0.01);
+    }
     await Bun.write(`${context.artifactDir}/cue-after-restart.json`, JSON.stringify({ stoppedBeforeExplicitPlay: true, stableIds: true, playlistPreserved: true, savedProgress: item.progress, resumedPlayer: first().player, physicalOutputQualified: false }, null, 2));
   } finally {
     await stop();
