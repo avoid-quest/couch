@@ -9,7 +9,7 @@ export class FolderError extends Error {
 }
 
 export type FolderIdentity = { filesystem: string; directory: string; mountRoot: string };
-type Mount = { target: string; root: string; type: string; source: string };
+type Mount = { id: string; parent: string; device: string; target: string; root: string; type: string; source: string; options: string[] };
 const within = (root: string, path: string) => { const part = relative(root, path); return part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part); };
 const unescapeMount = (value: string) => value.replace(/\\(040|011|012|134)/g, (_, code: string) => String.fromCharCode(parseInt(code, 8)));
 
@@ -18,9 +18,28 @@ function mounts(text: string): Mount[] {
     const [before, after] = line.split(" - ");
     const fields = before?.split(" "), filesystem = after?.split(" ");
     if (!fields || fields.length < 6 || !filesystem || filesystem.length < 3) throw new FolderError("Could not inspect the TV's mounted filesystems.");
-    return { target: unescapeMount(fields[4]!), root: unescapeMount(fields[3]!), type: filesystem[0]!, source: unescapeMount(filesystem[1]!) };
+    return { id: fields[0]!, parent: fields[1]!, device: fields[2]!, target: unescapeMount(fields[4]!), root: unescapeMount(fields[3]!), type: filesystem[0]!, source: unescapeMount(filesystem[1]!), options: [...fields[5]!.split(","), ...filesystem[2]!.split(",")] };
   });
 }
+
+function visibleMounts(mounted: Mount[]) {
+  const byId = new Map(mounted.map(mount => [mount.id, mount]));
+  const covered = new Set(mounted.filter(mount => byId.get(mount.parent)?.target === mount.target && mount.parent !== mount.id).map(mount => mount.parent));
+  return mounted.filter(mount => {
+    if (covered.has(mount.id)) return false;
+    const visited = new Set<string>();
+    for (let current = mount; !visited.has(current.id);) {
+      visited.add(current.id);
+      const parent = byId.get(current.parent);
+      if (!parent) break;
+      if (parent.target !== current.target && covered.has(parent.id)) return false;
+      current = parent;
+    }
+    return true;
+  });
+}
+
+const linuxDevice = (device: bigint) => `${(device >> 8n & 0xfffn) | (device >> 32n & ~0xfffn)}:${(device & 0xffn) | (device >> 12n & ~0xffn)}`;
 
 function validPath(value: unknown): string {
   if (typeof value !== "string" || !isAbsolute(value) || value.length > 4096 || /[\u0000-\u001f\u007f]/.test(value) || value.split(sep).includes("..")) throw new FolderError("Choose a permitted folder on the TV.");
@@ -64,8 +83,8 @@ export function createMediaFolders(options: {
       await access(path, constants.R_OK | constants.X_OK);
       const table = await mountInfo();
       if (table === null) return { filesystem: `device:${info.dev}`, directory: String(info.ino), mountRoot: "" };
-      const mounted = mounts(table);
-      const mount = mounted.filter(candidate => within(candidate.target, path)).sort((a, b) => b.target.length - a.target.length)[0];
+      const mounted = visibleMounts(mounts(table));
+      const mount = mounted.filter(candidate => candidate.device === linuxDevice(info.dev) && within(candidate.target, path)).sort((a, b) => b.target.length - a.target.length)[0];
       if (!mount) throw new FolderError("Could not identify this folder's filesystem.");
       if (mounted.some(candidate => candidate.target !== path && within(path, candidate.target))) throw new FolderError("This folder contains another mounted filesystem. Add the mounted folder as its own source instead.");
       let filesystem: string;
@@ -79,7 +98,9 @@ export function createMediaFolders(options: {
         filesystem = `uuid:${uuid}`;
       } else if (["nfs", "nfs4", "cifs", "smb3"].includes(mount.type)) filesystem = `${mount.type}:${mount.source}`;
       else filesystem = `${mount.type}:${info.dev}`;
-      return { filesystem, directory: String(info.ino), mountRoot: join(mount.root, relative(mount.target, path)) };
+      // CIFS without serverino generates a new client inode after remounting the same export.
+      const clientInodes = ["cifs", "smb3"].includes(mount.type) && (!mount.options.includes("serverino") || mount.options.includes("noserverino"));
+      return { filesystem, directory: clientInodes ? "" : String(info.ino), mountRoot: join(mount.root, relative(mount.target, path)) };
     } catch (error) { throw folderError(error); }
   }
 

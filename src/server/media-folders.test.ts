@@ -1,11 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMediaFolders } from "./media-folders";
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { while (cleanups.length) await cleanups.pop()!(); });
+async function deviceFor(path: string) {
+  const { dev } = await lstat(path, { bigint: true });
+  return `${(dev >> 8n & 0xfffn) | (dev >> 32n & ~0xfffn)}:${(dev & 0xffn) | (dev >> 12n & ~0xffn)}`;
+}
 
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "couch-folders-")));
@@ -86,13 +90,14 @@ test("filesystem UUID survives changed Linux mount IDs and device names", async 
   const uuidDirectory = join(root, "by-uuid");
   await mkdir(uuidDirectory);
   await symlink("/dev/null", join(uuidDirectory, "same-filesystem"));
-  let mountInfo = `18 1 8:1 / ${media} rw - ext4 /dev/null rw`;
+  const device = await deviceFor(media);
+  let mountInfo = `18 1 ${device} / ${media} rw - ext4 /dev/null rw`;
   const folders = createMediaFolders({ roots: [media], uuidDirectory, mountInfo: async () => mountInfo });
   const original = await folders.inspect(media);
   expect(original.identity.filesystem).toBe("uuid:same-filesystem");
   await unlink(join(uuidDirectory, "same-filesystem"));
   await symlink("/dev/zero", join(uuidDirectory, "same-filesystem"));
-  mountInfo = `44 2 8:7 / ${media} rw shared:3 - ext4 /dev/zero rw`;
+  mountInfo = `44 2 ${device} / ${media} rw shared:3 - ext4 /dev/zero rw`;
   expect(await folders.verify(media, original.identity)).toEqual(original.identity);
   await rename(join(uuidDirectory, "same-filesystem"), join(uuidDirectory, "replacement-filesystem"));
   await expect(folders.verify(media, original.identity)).rejects.toThrow("original drive or folder");
@@ -100,12 +105,13 @@ test("filesystem UUID survives changed Linux mount IDs and device names", async 
 
 test("mounted shares recover with new mount IDs but a different export is rejected", async () => {
   const { media } = await fixture();
-  let mountInfo = `18 1 0:12 / ${media} rw - nfs4 nas:/movies rw`;
+  const device = await deviceFor(media);
+  let mountInfo = `18 1 ${device} / ${media} rw - nfs4 nas:/movies rw`;
   const folders = createMediaFolders({ roots: [media], mountInfo: async () => mountInfo });
   const original = await folders.inspect(media);
-  mountInfo = `66 4 0:33 / ${media} rw shared:9 - nfs4 nas:/movies rw`;
+  mountInfo = `66 4 ${device} / ${media} rw shared:9 - nfs4 nas:/movies rw`;
   expect(await folders.verify(media, original.identity)).toEqual(original.identity);
-  mountInfo = `67 4 0:34 / ${media} rw - nfs4 nas:/other rw`;
+  mountInfo = `67 4 ${device} / ${media} rw - nfs4 nas:/other rw`;
   await expect(folders.verify(media, original.identity)).rejects.toThrow("original drive or folder");
 });
 
@@ -113,10 +119,11 @@ test("nested mounts require separate sources, including mounts added after regis
   const { media } = await fixture();
   const nested = join(media, "share");
   await mkdir(nested);
-  let mountInfo = `18 1 0:12 / ${media} rw - nfs4 nas:/movies rw`;
+  const device = await deviceFor(media);
+  let mountInfo = `18 1 ${device} / ${media} rw - nfs4 nas:/movies rw`;
   const folders = createMediaFolders({ roots: [media], mountInfo: async () => mountInfo });
   const original = await folders.inspect(media);
-  mountInfo += `\n22 18 0:13 / ${nested} rw - cifs //nas/music rw`;
+  mountInfo += `\n22 18 ${device} / ${nested} rw - cifs //nas/music rw`;
   await expect(folders.verify(media, original.identity)).rejects.toThrow("own source");
   await expect(folders.inspect(media)).rejects.toThrow("own source");
   expect((await folders.inspect(nested)).identity.filesystem).toBe("cifs://nas/music");
@@ -126,6 +133,67 @@ test("Linux mountpoint escapes resolve to the chosen path", async () => {
   const { media } = await fixture();
   const folder = join(media, "Shared music");
   await mkdir(folder);
-  const folders = createMediaFolders({ roots: [media], mountInfo: async () => `18 1 0:12 / ${folder.replaceAll(" ", "\\040")} rw - nfs4 nas:/music rw` });
+  const device = await deviceFor(folder);
+  const folders = createMediaFolders({ roots: [media], mountInfo: async () => `18 1 ${device} / ${folder.replaceAll(" ", "\\040")} rw - nfs4 nas:/music rw` });
   expect((await folders.inspect(folder)).identity.mountRoot).toBe("/");
+});
+
+test("same-path overmount uses the visible filesystem even when directory inodes collide", async () => {
+  const { root, media } = await fixture();
+  const device = await deviceFor(media);
+  const uuidDirectory = join(root, "by-uuid");
+  await mkdir(uuidDirectory);
+  await symlink("/dev/null", join(uuidDirectory, "original"));
+  await symlink("/dev/zero", join(uuidDirectory, "replacement"));
+  const lower = `18 1 ${device} / ${media} rw - ext4 /dev/null rw`;
+  const upper = `22 18 ${device} / ${media} rw - ext4 /dev/zero rw`;
+  let mountInfo = lower;
+  const folders = createMediaFolders({ roots: [media], uuidDirectory, mountInfo: async () => mountInfo });
+  const original = await folders.inspect(media);
+  // The local directory deliberately stays unchanged, reproducing colliding root inodes.
+  for (const lines of [[lower, upper], [upper, lower]]) {
+    mountInfo = lines.join("\n");
+    await expect(folders.verify(media, original.identity)).rejects.toThrow("original drive or folder");
+    expect((await folders.inspect(media)).identity.filesystem).toBe("uuid:replacement");
+  }
+  mountInfo = lower;
+  expect(await folders.verify(media, original.identity)).toEqual(original.identity);
+});
+
+test("hidden descendants of an overmounted parent neither win selection nor block a scan", async () => {
+  const { media } = await fixture();
+  const nested = join(media, "share");
+  await mkdir(nested);
+  const device = await deviceFor(media);
+  const folders = createMediaFolders({ roots: [media], mountInfo: async () => [
+    `18 1 ${device} / ${media} rw - nfs4 nas:/old rw`,
+    `19 18 ${device} / ${nested} rw - nfs4 nas:/hidden rw`,
+    `22 18 ${device} / ${media} rw - nfs4 nas:/visible rw`,
+  ].join("\n") });
+  expect((await folders.inspect(media)).identity.filesystem).toBe("nfs4:nas:/visible");
+  expect((await folders.inspect(nested)).identity).toMatchObject({ filesystem: "nfs4:nas:/visible", mountRoot: "/share" });
+});
+
+test("mount topology must also agree with the directory's current device", async () => {
+  const { media } = await fixture();
+  const folders = createMediaFolders({ roots: [media], mountInfo: async () => `18 1 999999:999999 / ${media} rw - nfs4 nas:/old rw` });
+  await expect(folders.inspect(media)).rejects.toThrow("identify");
+});
+
+test("CIFS client inode changes recover only for the same mounted export and path", async () => {
+  const { root, media } = await fixture();
+  const device = await deviceFor(media);
+  let mountInfo = `18 1 ${device} / ${media} rw - cifs //nas/movies rw,noserverino`;
+  const folders = createMediaFolders({ roots: [media], mountInfo: async () => mountInfo });
+  const original = await folders.inspect(media);
+  const previousInode = (await lstat(media)).ino;
+  await rename(media, join(root, "old-client-inode"));
+  await mkdir(media);
+  expect((await lstat(media)).ino).not.toBe(previousInode);
+  mountInfo = `44 1 ${device} / ${media} rw - cifs //nas/movies rw`;
+  expect(await folders.verify(media, original.identity)).toEqual(original.identity);
+  mountInfo = `44 1 ${device} / ${media} rw - cifs //nas/replacement rw`;
+  await expect(folders.verify(media, original.identity)).rejects.toThrow("original drive or folder");
+  mountInfo = `44 1 ${device} /other ${media} rw - cifs //nas/movies rw`;
+  await expect(folders.verify(media, original.identity)).rejects.toThrow("original drive or folder");
 });
