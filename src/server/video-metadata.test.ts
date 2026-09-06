@@ -1,11 +1,15 @@
+import { realpathSync } from "node:fs";
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmod, mkdir, mkdtemp, realpath, rename, rm, stat, symlink, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createMediaFolders } from "./media-folders";
 import { createLibrary } from "./library";
 import { openStore } from "./store";
 import { parseVideoNfo, videoArtwork } from "./video-metadata";
+
+const folders = createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null });
 
 const cover = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOZkAAAAASUVORK5CYII=", "base64");
 const bytes = (xml: string) => new TextEncoder().encode(xml);
@@ -18,7 +22,7 @@ async function fixture() {
   const databasePath = join(root, "state.sqlite");
   await mkdir(media);
   cleanups.push(() => rm(root, { force: true, recursive: true }));
-  const library = createLibrary({ databasePath, ffprobePath: null });
+  const library = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => library.close());
   const write = async (path: string, value: string | Uint8Array) => { await mkdir(join(media, path, ".."), { recursive: true }); await Bun.write(join(media, path), value); };
   return { root, media, databasePath, library, write };
@@ -93,7 +97,7 @@ test("movie and multi-season scans import the documented fields, sort episodes, 
   expect(library.search().items.every(item => !item.available)).toBe(true);
   const catalog = library.search();
   await library.close();
-  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => reopened.close());
   expect(reopened.search()).toEqual(catalog);
   expect(reopened.videoShows()).toEqual(shows);
@@ -111,7 +115,7 @@ test("sidecar edits and removal preserve IDs and embedded tag precedence without
   const count = join(root, "count");
   await Bun.write(executable, `#!${process.execPath}\nimport {appendFileSync} from 'node:fs'; appendFileSync(${JSON.stringify(count)}, 'probe\\n');console.log(JSON.stringify({format:{duration:'20',tags:{title:'Embedded title'}}}));`);
   await chmod(executable, 0o755);
-  const scanned = createLibrary({ databasePath, ffprobePath: executable });
+  const scanned = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => scanned.close());
   await write("movie.mkv", "unit media");
   await write("movie.nfo", "<movie><title>NFO title</title><runtime>100</runtime></movie>");
@@ -160,15 +164,17 @@ for (const unavailableProbe of ["absent", "failing"]) for (const previouslyProbe
   const executable = join(root, "ffprobe-legacy");
   await Bun.write(executable, `#!${process.execPath}\nprocess.exit(1);`);
   await chmod(executable, 0o755);
-  const scanned = createLibrary({ databasePath, ffprobePath: unavailableProbe === "absent" ? null : executable });
+  const scanned = createLibrary({ folders, databasePath, ffprobePath: unavailableProbe === "absent" ? null : executable });
   cleanups.push(() => scanned.close());
+  expect(() => scanned.scan(sourceId)).toThrow("Verify");
+  await scanned.testSource(sourceId, () => {}, true);
   for (let scan = 0; scan < 2; scan++) {
     expect((await scanned.scan(sourceId)).status).toBe("ready");
     expect(scanned.getItem(itemId)).toMatchObject({ title: "Embedded title", duration: 120 });
   }
   await scanned.close();
   await Bun.write(executable, `#!${process.execPath}\nconsole.log(JSON.stringify({format:{duration:'125',tags:{title:'Reprobed title'}}}));`);
-  const reopened = createLibrary({ databasePath, ffprobePath: executable });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => reopened.close());
   expect(reopened.getItem(itemId)).toMatchObject({ title: "Embedded title", duration: 120 });
   await reopened.scan(sourceId);
@@ -205,7 +211,7 @@ test("current show metadata survives deleted episodes, search and whole-source o
   await rename(media, join(root, "offline"));
   expect((await library.scan(source.id)).status).toBe("unavailable");
   await library.close();
-  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => reopened.close());
   expect(reopened.videoShows()).toEqual(shows);
   expect(reopened.videoShows({ query: "Z show" })).toEqual(shows);
@@ -235,7 +241,7 @@ if (process.argv.at(-1).endsWith(${JSON.stringify(`${last}.mkv`)})) {
 }
 console.log(JSON.stringify({format:{duration:"20"}}));`);
   await chmod(executable, 0o755);
-  const scanned = createLibrary({ databasePath, ffprobePath: executable });
+  const scanned = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => scanned.close());
   const source = await scanned.addSource(media);
   expect((await scanned.scan(source.id)).status).toBe("ready");

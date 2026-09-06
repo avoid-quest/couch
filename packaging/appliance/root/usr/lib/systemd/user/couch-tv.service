@@ -1,0 +1,23 @@
+[Unit]
+Description=Couch TV native host and coordinator
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
+After=pipewire.service pipewire-pulse.service wireplumber.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Environment=GDK_BACKEND=x11
+EnvironmentFile=/etc/couch/appliance.env
+EnvironmentFile=-/run/couch-appliance/recovery.env
+ExecStartPre=/usr/bin/pactl info
+ExecStartPre=/usr/lib/couch-appliance/initialize-audio
+ExecStart=/usr/bin/couch
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=10
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=couch-tv

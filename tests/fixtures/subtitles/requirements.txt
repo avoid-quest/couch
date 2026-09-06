@@ -1,0 +1,4 @@
+av==16.1.0
+fonttools==4.61.1
+imageio-ffmpeg==0.6.0
+pillow==12.1.0

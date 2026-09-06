@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, type FormEvent } from "react";
 import type { LibrarySearch, LibrarySource, MusicArtist } from "../shared/library";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -26,10 +25,11 @@ function duration(seconds: number | null) {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-export function LibraryPanel({ origin, token, host, connected = true, canPlay = true, onEnqueue, onQueueAlbum, onPlayHistory, version }: {
+export function LibraryPanel({ origin, token, host, connected = true, canPlay = true, onEnqueue, onQueueAlbum, onPlayHistory, onManage, version }: {
   origin: string;
   token: string;
   host: boolean;
+  onManage: () => void;
   connected?: boolean;
   canPlay?: boolean;
   onEnqueue: (id: string, options?: { playNow?: boolean; fromStart?: boolean }) => Promise<boolean>;
@@ -45,7 +45,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [foldersOpen, setFoldersOpen] = useState(false);
   const [enqueuing, setEnqueuing] = useState<{ id: string; playNow: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState("all");
@@ -75,34 +75,6 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     return () => controller.abort();
   }, [origin, token, connected, query, artist?.id, offset, refresh, version]);
 
-  const post = async (path: string, body?: unknown) => {
-    const response = await fetch(`${origin}${path}`, {
-      method: "POST", signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body ?? {}),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Could not update the library.");
-    setRefresh(value => value + 1);
-  };
-
-  const addFolder = async () => {
-    setAdding(true);
-    setError(null);
-    try {
-      const path = await invoke<string | null>("choose_folder");
-      if (path) await post("/api/library/sources", { path });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally { setAdding(false); }
-  };
-
-  const scan = async (id: string) => {
-    setError(null);
-    try { await post(`/api/library/sources/${encodeURIComponent(id)}/scan`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not scan the folder."); }
-  };
-
   const search = (event: FormEvent) => { event.preventDefault(); setOffset(0); setQuery(draft.trim()); setRefresh(value => value + 1); };
   const enqueue = async (id: string, title: string, options?: { playNow?: boolean; fromStart?: boolean }) => {
     setEnqueuing({ id, playNow: !!options?.playNow });
@@ -117,11 +89,11 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <div className="library-heading flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0"><h2 className="text-2xl font-semibold">Your library</h2><p className="mt-1 text-sm text-muted-foreground">Music and video, ready to play.</p></div>
       <div className="library-folder-controls flex flex-wrap gap-2">
-        {host && <Button className="primary-button" data-tv-local-only onClick={() => void addFolder()} disabled={!connected || adding}><Plus aria-hidden="true" />{adding ? "Opening…" : "Add folder"}</Button>}
-        {sources.length > 0 && <Dialog>
+        <Button variant="outline" data-action="folder-settings" data-tv-local-only={host || undefined} onClick={onManage}>Manage folders in Sources</Button>
+        {sources.length > 0 && <Dialog open={foldersOpen} onOpenChange={setFoldersOpen}>
       <DialogTrigger asChild><Button variant="outline" data-action="library-folders" data-tv-local-only={host || undefined} aria-label={`${sources.length} library folder${sources.length === 1 ? "" : "s"}`}><FolderOpen aria-hidden="true" />Folders<Badge variant="secondary">{sources.length}</Badge>{sources.some(source => source.status === "scanning") && <span className="library-scan-indicator" aria-label="Scanning" />}</Button></DialogTrigger>
       <DialogContent className="library-folders max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
-        <DialogHeader><DialogTitle>Library folders</DialogTitle><DialogDescription>{host ? "Scan folders again after adding media. Network drives must be mounted on this player." : "These folders are managed on the TV."}</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Library folders</DialogTitle><DialogDescription>{"An administrator manages TV folders in Settings > Sources."}</DialogDescription></DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <ul className="space-y-3">{sources.map(source => <li key={source.id}>
           <Card className="gap-3 p-4">
@@ -130,9 +102,10 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
             {host && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
             {source.error && <Alert variant="destructive"><AlertDescription>{source.error}</AlertDescription></Alert>}
             {source.warning && <p className="library-warning text-sm text-muted-foreground">{source.warning.replace(" Media is still playable.", "")}</p>}
-            {host && <Button variant="outline" className="self-start" data-tv-local-only disabled={!connected || source.status === "scanning"} onClick={() => void scan(source.id)}>Scan again</Button>}
+
           </Card>
         </li>)}</ul>
+        <Button variant="outline" data-tv-local-only={host || undefined} onClick={() => { setFoldersOpen(false); onManage(); }}>Manage folders in Sources</Button>
       </DialogContent>
     </Dialog>}
       </div>
@@ -152,7 +125,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <div className="library-result-summary text-sm text-muted-foreground" aria-live="polite">{loading ? "Loading library…" : `${results.total} item${results.total === 1 ? "" : "s"}`}</div>
     {notice && <p className="library-added text-sm text-primary" role="status">{notice}</p>}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to browse and play your library.</p>}
-    {!loading && !error && results.items.length === 0 && <Card className="library-empty p-5 text-sm leading-relaxed text-muted-foreground">{query ? "No matching media. Try another title or artist." : sources.length ? "No media found yet. Scans include supported audio and video files." : host ? "Add a folder to start your collection." : "Add a library folder on the TV to browse its media here."}</Card>}
+    {!loading && !error && results.items.length === 0 && <Card className="library-empty p-5 text-sm leading-relaxed text-muted-foreground">{query ? "No matching media. Try another title or artist." : sources.length ? "No media found yet. Scans include supported audio and video files." : "An administrator can add TV folders in Settings > Sources to start your collection."}</Card>}
     <ul className="library-items space-y-2" aria-busy={loading}>{results.items.map(item => <li key={item.id}>
       <Card className="catalog-row gap-3 p-3">
         <div className="catalog-row-main flex min-w-0 items-center gap-3">

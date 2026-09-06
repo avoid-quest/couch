@@ -109,17 +109,17 @@ export async function verifyExternalSubtitles(context: Context & { origin: strin
   const playbackId = first().player.playbackId!;
   const original = first().player.tracks!.find(track => track.kind === "subtitle" && track.selected)?.index ?? -1;
   await settings(ui, until);
-  await uploadFile(ui, "/fixtures/external-tv.srt");
+  await uploadFile(ui, "/mnt/fixtures/external-tv.srt");
   await until("TV file input uploads real SRT bytes and both remotes observe its selected native track", () => all(state => state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && track.label.includes("external-tv.srt")) === true));
   const srt = first().player.tracks!.find(track => track.label.includes("external-tv.srt"))!;
-  await uploadFile(ui, "/fixtures/invalid-subtitle.srt");
+  await uploadFile(ui, "/mnt/fixtures/invalid-subtitle.srt");
   await until("invalid subtitle upload has a useful error without interrupting native playback", async () => await ui.execute("return [...document.querySelectorAll('[role=alert]')].some(element => element.textContent.includes('does not contain supported text subtitles'))") && all(state => state.player.playbackId === playbackId && state.player.status === "paused"));
   await closeSettings(ui, until);
   await assertSubtitlePixels(context, srt, "native-external-srt");
   await httpRemote.restore();
   await settings(httpRemote.ui, until);
   await assertResponsive(httpRemote.ui, "Phone subtitle upload");
-  await uploadFile(httpRemote.ui, "/fixtures/external-phone.ass");
+  await uploadFile(httpRemote.ui, "/mnt/fixtures/external-phone.ass");
   await until("HTTP phone file input uploads real ASS bytes to the selected native track", () => all(state => state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && track.label.includes("external-phone.ass")) === true));
   const ass = first().player.tracks!.find(track => track.label.includes("external-phone.ass"))!;
   await httpRemote.ui.select("#playback-subtitles", "Off");
@@ -134,7 +134,7 @@ export async function verifyExternalSubtitles(context: Context & { origin: strin
   for (const file of files) assert.equal((await stat(file)).mode & 0o777, 0o600, "Uploaded subtitles are readable only by the host user");
   for (const client of clients) {
     const snapshot = JSON.stringify(client.state);
-    for (const secret of [...files, "/fixtures/", client.token]) assert.ok(!snapshot.includes(secret), "Controller snapshots omit host subtitle paths and credentials");
+    for (const secret of [...files, "/mnt/fixtures/", client.token]) assert.ok(!snapshot.includes(secret), "Controller snapshots omit host subtitle paths and credentials");
   }
   for (const [name, body, status] of [["../../host-file.srt", "1\n00:00:00,000 --> 00:00:10,000\nunsafe path\n", 400], ["too-large.srt", "x".repeat(2 * 1024 * 1024 + 1), 413]] as const) {
     const response = await fetch(`${origin}/api/subtitles?${new URLSearchParams({ playbackId, name })}`, { method: "POST", headers: { origin, Authorization: `Bearer ${clients[1]!.token}`, "Content-Type": "application/octet-stream" }, body });

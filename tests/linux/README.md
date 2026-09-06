@@ -14,6 +14,14 @@ Radix menus, while phone browsing remains independent. The test phone shares the
 virtual X11 display, so focus/pixel checks foreground the TV and restore the phone
 before further input. Physical phones do not take focus from the TV window.
 
+`folder-settings.ts` registers the generated media under `/mnt` through the
+canonical Sources browser. The administrator HTTP phone adds and scans a folder,
+plays it on the native TV, rejects a duplicate, and recovers the original folder
+after an empty replacement is refused. After restart it tests the saved identity,
+plays again, and removes the source while preserving files, current playback,
+queue entries and watching history; a later Play must fail. The installed-T480
+phone demonstration remains a separate physical acceptance gate for issue #17.
+
 `claim.ts` opens the unclaimed TV's real Settings and verifies its address-only
 QR, ordinary pairing code and separate administrator code. The HTTP phone claims
 administration, saves the TV name, and retains its role and name after a desktop
@@ -43,7 +51,7 @@ desktop restart. Jellyfin's movie fixture has an external Italian SRT sidecar.
 The native `external_subtitles` regression additionally covers preload selection,
 missing files, reset and the blocking HTTP probe that requires Bun prefetch.
 
-Music fixtures live in `/music-fixtures`, separate from the existing video folder.
+Music fixtures live in `/mnt/music-fixtures`, separate from the existing video folder.
 Tagged MP3, FLAC and M4A files verify the maintained parser in the compiled Bun
 sidecar, compilation album artists, disc/track ordering and embedded artwork
 decoded in both native and HTTP views. A single without an album remains reachable

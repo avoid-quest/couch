@@ -3,12 +3,13 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
 import type { QueueEntry } from "../shared/protocol";
+import { ControllerError } from "./controllers";
 
 type Options = {
   databasePath: string;
   onChange: () => void;
   queue: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode) => void;
+  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void) => void;
 };
 type Row = Omit<SavedPlaylist, "entries"> & { entries: string };
 
@@ -104,7 +105,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
   };
 
   return {
-    async handle(request: Request): Promise<Response> {
+    async handle(request: Request, authorize = () => {}): Promise<Response> {
       const { pathname } = new URL(request.url);
       try {
         if (pathname === "/api/playlists") {
@@ -114,6 +115,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
           }
           if (request.method !== "POST") return methods("GET, POST");
           const input = await body(request);
+          authorize();
           fields(input, ["name"]);
           const name = playlistName(input.name);
           const row = db.transaction(() => {
@@ -132,6 +134,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
         if (match[2]) {
           if (request.method !== "POST") return methods("POST");
           const input = await body(request);
+          authorize();
           fields(input, ["revision", "mode"]);
           if (!["append", "replace", "play"].includes(String(input.mode))) throw new PlaylistError("Choose whether to add, replace or play the playlist.");
           const row = get(id);
@@ -139,12 +142,13 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
           if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError("The queue can contain up to 500 entries. Replace it or remove some entries first.");
-          loadQueue(entries, input.mode as PlaylistLoadMode);
+          loadQueue(entries, input.mode as PlaylistLoadMode, authorize);
           return Response.json({ ok: true });
         }
         if (request.method === "GET") return Response.json({ playlist: view(get(id)) });
         if (!["POST", "DELETE"].includes(request.method)) return methods("GET, POST, DELETE");
         const input = await body(request);
+        authorize();
         const result = db.transaction(() => {
           const row = get(id);
           requireRevision(row, input.revision);
@@ -191,7 +195,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
         if (result.changed) onChange();
         return Response.json(result.playlist ? { playlist: result.playlist } : { ok: true });
       } catch (error) {
-        return Response.json({ error: error instanceof PlaylistError ? error.message : "Could not update playlists or load the queue. Check the TV's storage and current playback." }, { status: error instanceof PlaylistError ? error.status : 500 });
+        return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError ? error.message : "Could not update playlists or load the queue. Check the TV's storage and current playback." }, { status: error instanceof PlaylistError || error instanceof ControllerError ? error.status : 500 });
       }
     },
     close() { db.close(); },

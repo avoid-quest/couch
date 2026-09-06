@@ -95,7 +95,7 @@ export async function verifyMusicTransition(context: MusicContext, tracks: Libra
   const manifest = await Bun.file("/transition-reference/manifest.json").json();
   const referenceBytes = await Bun.file("/transition-reference/continuous.s16le").arrayBuffer();
   const reference = new Int16Array(referenceBytes);
-  const paths = ["/music-fixtures/transitions/part-1.flac", "/music-fixtures/transitions/part-2.flac"];
+  const paths = ["/mnt/music-fixtures/transitions/part-1.flac", "/mnt/music-fixtures/transitions/part-2.flac"];
   const decodedParts = await Promise.all(paths.map(path => run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "s16le", "-ar", String(manifest.sampleRate), "-ac", "1", "-"])));
   assert.deepEqual(Buffer.concat(decodedParts.map(part => Buffer.from(part))), Buffer.from(referenceBytes), "Concatenated decoded lossless fixtures equal the unsplit reference byte for byte");
   await Bun.write(`${artifactDir}/music-fixtures.json`, JSON.stringify(manifest, null, 2));

@@ -1,3 +1,4 @@
+import { addTVFolder } from "./folder-settings";
 import { strict as assert } from "node:assert";
 import type { Action, QueueEntry, SessionState } from "../../src/shared/protocol";
 import type { LibraryItem, MusicAlbum } from "../../src/shared/library";
@@ -30,35 +31,10 @@ export function musicControls({ clients, until }: MusicContext) {
   return { first, all, stop };
 }
 
-async function xdotool(...args: string[]) {
-  const process = Bun.spawn(["xdotool", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [code, output] = await Promise.all([process.exited, new Response(process.stdout).text()]);
-  return { code, output: output.trim() };
-}
-
 async function addMusicFolder({ ui, until, api, artifactDir }: MusicContext) {
-  await ui.section("Library");
-  await ui.click(".library-heading button");
-  let window = "";
-  await until("native music folder picker opens", async () => {
-    window = (await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output.split("\n")[0] ?? "";
-    return !!window;
-  });
-  assert.equal((await xdotool("windowactivate", "--sync", window)).code, 0);
-  assert.equal((await xdotool("key", "--clearmodifiers", "alt+Home")).code, 0);
-  await Bun.sleep(250);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+l")).code, 0);
-  await Bun.sleep(150);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+a")).code, 0);
-  assert.equal((await xdotool("type", "--clearmodifiers", "--delay", "25", "/music-fixtures/")).code, 0);
-  await Bun.sleep(150);
-  // GTK selects an autocompleted "t" from tagged/transitions. Remove that
-  // suggestion before accepting the intended parent folder.
-  assert.equal((await xdotool("key", "--clearmodifiers", "BackSpace", "Return")).code, 0);
-  await Bun.sleep(300);
-  if ((await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output) await xdotool("key", "Return");
+  await addTVFolder(ui, until, "music-fixtures");
   try {
-    await until("native folder selection scans all six tagged and transition songs", async () =>
+    await until("Sources folder selection scans all six tagged and transition songs", async () =>
       (await api("/api/library/sources", undefined, 1)).sources.some((source: any) => source.status === "ready" && source.itemCount === 6), 30_000);
   } finally { await Bun.write(`${artifactDir}/music-library-sources.json`, JSON.stringify(await api("/api/library/sources"), null, 2)); }
 }

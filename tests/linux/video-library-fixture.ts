@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 export const videoFixtureTitles = ["Arrival at the observatory", "The tenth signal", "Return to the observatory", "Winter observation"];
 export const videoFixtureMovie = "A night at the observatory";
 
-export async function createVideoLibraryFixture(root = "/video-fixtures") {
+export async function createVideoLibraryFixture(root = "/mnt/video-fixtures") {
   const run = async (args: string[]) => {
     const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", ...args], { stdout: "inherit", stderr: "inherit" });
     if (await child.exited !== 0) throw new Error("Could not generate local video library fixture.");
@@ -17,7 +17,7 @@ export async function createVideoLibraryFixture(root = "/video-fixtures") {
   };
   const movie = "Movie/Observatory.mkv";
   await mkdir(join(root, "Movie"), { recursive: true });
-  await run(["-i", "/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", "title=Embedded observatory title", join(root, movie)]);
+  await run(["-i", "/mnt/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", "title=Embedded observatory title", join(root, movie)]);
   await write("Movie/Observatory.nfo", `<?xml version="1.0" encoding="UTF-8"?>
 <movie><title>${videoFixtureMovie}</title><originaltitle>Notte all'osservatorio</originaltitle><plot>A local film about a night under the stars. This NFO description wins over embedded media tags.</plot><premiered>2020-09-05</premiered><year>1999</year><runtime>99</runtime><genre>Documentary</genre><genre>Science</genre><unknown keep="yes">Original sidecar data stays private.</unknown><playcount>9</playcount><resume><position>17</position></resume></movie>`);
   await image("Movie/Observatory-poster.jpg", "240x360", "0x285b81");
@@ -30,7 +30,7 @@ export async function createVideoLibraryFixture(root = "/video-fixtures") {
   for (const [index, [season, episode]] of [[1, 2], [1, 10], [2, 1], [2, 10]].entries()) {
     const stem = `Observatory/Season ${season}/Observatory.S0${season}E${String(episode).padStart(2, "0")}`;
     await mkdir(dirname(join(root, `${stem}.mkv`)), { recursive: true });
-    await run(["-i", "/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", `title=Embedded episode ${index + 1}`, join(root, `${stem}.mkv`)]);
+    await run(["-i", "/mnt/fixtures/multitrack.mkv", "-map", "0", "-c", "copy", "-metadata", `title=Embedded episode ${index + 1}`, join(root, `${stem}.mkv`)]);
     await write(`${stem}.nfo`, `<episodedetails><title>${videoFixtureTitles[index]}</title><showtitle>Episode fallback title</showtitle><season>${season}</season><episode>${episode}</episode><aired>202${season}-02-${String(episode).padStart(2, "0")}</aired><plot>Local episode ${season}.${episode}, with native audio, subtitles and chapters from the playable fixture.</plot><runtime>45</runtime></episodedetails>`);
     await image(`${stem}-thumb.png`, "320x180", index % 2 ? "0x88502d" : "0x2d647d");
     files.push(`${stem}.mkv`);
