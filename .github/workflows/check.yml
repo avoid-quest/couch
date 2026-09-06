@@ -122,17 +122,19 @@ jobs:
       - name: Check application code
         if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false' && (steps.paths.outputs.packages != 'true' || steps.packages.outputs.native == 'false')
         run: |
-          bun run typecheck
-          # Isolate the real clock and its process-wide mocks from the remaining tests.
+          # Track every command group so cancellation also stops its children.
           set -m
           pids=()
           trap 'for pid in "${pids[@]}"; do kill -KILL -- -"$pid" 2>/dev/null || true; done' EXIT
           trap 'exit 130' INT
           trap 'exit 143' TERM
+          bun run typecheck & pids+=("$!")
+          wait "${pids[0]}"
+          # Isolate the real clock and its process-wide mocks from the remaining tests.
           bun test ./tests/linux/iptv-clock.test.ts & pids+=("$!")
           bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts' & pids+=("$!")
           status=0
-          for pid in "${pids[@]}"; do
+          for pid in "${pids[@]:1}"; do
             child_status=0
             wait "$pid" || child_status=$?
             echo "Check process $pid exit: $child_status"
@@ -144,18 +146,20 @@ jobs:
       - name: Check native and application code
         if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' || (steps.paths.outputs.packages == 'true' && steps.packages.outputs.native != 'false')
         run: |
-          bun run typecheck
-          # Isolate the real clock and its process-wide mocks from the remaining tests.
+          # Track every command group so cancellation also stops its children.
           set -m
           pids=()
           trap 'for pid in "${pids[@]}"; do kill -KILL -- -"$pid" 2>/dev/null || true; done' EXIT
           trap 'exit 130' INT
           trap 'exit 143' TERM
+          bun run typecheck & pids+=("$!")
+          wait "${pids[0]}"
+          # Isolate the real clock and its process-wide mocks from the remaining tests.
           bun test ./tests/linux/iptv-clock.test.ts & pids+=("$!")
           bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts' & pids+=("$!")
           cargo test --manifest-path src-tauri/Cargo.toml --locked --verbose & pids+=("$!")
           status=0
-          for pid in "${pids[@]}"; do
+          for pid in "${pids[@]:1}"; do
             child_status=0
             wait "$pid" || child_status=$?
             echo "Check process $pid exit: $child_status"
