@@ -178,15 +178,14 @@ async function closeSettings(ui: UiDriver) {
 }
 async function portal(selector: string, name: string) {
   await until(`${name} opening animation settles`, () => tv.execute("return ![...document.querySelectorAll('[role=dialog], [role=listbox]')].some(e => e.getAnimations().some(a => a.playState === 'running'))"));
-  const sample = await tv.execute(`const element = document.querySelector(arguments[0]), r = element.getBoundingClientRect();
+  await until(`${name} paints above native video`, async () => {
+    const sample = await tv.execute(`const element = document.querySelector(arguments[0]), r = element.getBoundingClientRect();
     const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d'); ctx.fillStyle = getComputedStyle(element).backgroundColor; ctx.fillRect(0,0,1,1);
     return { x: Math.ceil(r.x+4), y: Math.ceil(r.y+30), width: 6, height: Math.floor(r.height-60), color: [...ctx.getImageData(0,0,1,1).data] };`, [selector]);
-  assert.equal(sample.color[3], 255);
-  assert.ok(sample.height > 0);
-  let matches = 0;
-  await until(`${name} paints above native video`, async () => {
+    assert.equal(sample.color[3], 255);
+    assert.ok(sample.height > 0);
     const image = await frame(name);
-    matches = 0;
+    let matches = 0;
     for (let y = sample.y; y < sample.y + sample.height; y++) for (let x = sample.x; x < sample.x + sample.width; x++) {
       const offset = (y * 1600 + x) * 3;
       if (sample.color.slice(0, 3).every((v: number, c: number) => Math.abs(image[offset + c]! - v) <= 2)) matches++;
@@ -194,7 +193,6 @@ async function portal(selector: string, name: string) {
     await Bun.write(`${artifacts}/${name}.json`, JSON.stringify({ sample, matches }, null, 2));
     return matches >= sample.width * sample.height * 0.75;
   });
-  await Bun.write(`${artifacts}/${name}.json`, JSON.stringify({ sample, matches }, null, 2));
 }
 async function startPhone(code: string) {
   browser = (await driver(45345, "/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", "webkitgtk:browserOptions": { args: ["--automation", "--class=SubtitlePhone"] } } } })).sessionId;
@@ -318,6 +316,7 @@ async function preferencesAndRestart(token: string) {
   assert.ok(!first().player.tracks?.some(t => t.kind === "subtitle" && t.selected));
   if (browser) {
     await until("paired phone reconnects after native restart", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+    await driver(45345, `/session/${browser}/window/maximize`, {});
     await settings(phone);
     await until("phone shows the restarted Household subtitle Off selection", () => phone.execute("return document.querySelector('#playback-subtitles')?.textContent.trim() === 'Off'"));
     await Bun.write(`${artifacts}/phone-restarted-off.png`, Buffer.from(await driver(45345, `/session/${browser}/screenshot`), "base64"));
