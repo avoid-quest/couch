@@ -332,11 +332,13 @@ mod tests {
             0o700
         );
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(path.join("existing-data"), b"preserved").unwrap();
         prepare_data_dir(&path).unwrap();
+        assert_eq!(std::fs::read(path.join("existing-data")).unwrap(), b"preserved");
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o700
         );
-        std::fs::remove_dir(path).unwrap();
+        std::fs::remove_dir_all(path).unwrap();
     }
 }
