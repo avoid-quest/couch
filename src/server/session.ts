@@ -11,6 +11,7 @@ type SessionOptions = {
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
   deactivate?: () => void;
   observe?: (player: PlayerState) => void;
+  stopped?: (pendingPlaybackId: string | null) => void;
   now?: () => number;
 };
 
@@ -370,6 +371,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       }
     },
     observe(player: PlayerState) {
+      // Native Stop can acknowledge the retired source while another source is still resolving.
+      if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
       const ended = player.status === "ended" && state.player.status !== "ended";

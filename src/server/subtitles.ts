@@ -7,20 +7,37 @@ import { ControllerError } from "./controllers";
 
 export const subtitleSizeLimit = 2 * 1024 * 1024;
 
+function validPgs(bytes: Buffer) {
+  let composition = false, object = false, last = 0;
+  for (let position = 0; position < bytes.length;) {
+    if (position + 13 > bytes.length || bytes.readUInt16BE(position) !== 0x5047) return false;
+    const type = bytes[position + 10]!, size = bytes.readUInt16BE(position + 11);
+    if (![0x14, 0x15, 0x16, 0x17, 0x80].includes(type) || position + 13 + size > bytes.length) return false;
+    if (type === 0x80 ? size !== 0 : size === 0) return false;
+    composition ||= type === 0x16 && size >= 11;
+    object ||= type === 0x15 && size >= 4;
+    last = type;
+    position += 13 + size;
+  }
+  return composition && object && last === 0x80;
+}
+
 /** Browser uploads contain bytes from that controller, never a path on the TV. */
 export function createSubtitles(player: () => PlayerState, attach: (playbackId: string, subtitle: ExternalSubtitle) => void) {
   const directory = mkdtempSync(join(tmpdir(), "couch-subtitles-"));
   const files = new Map<string, string>();
   let pending = 0;
   let closed = false;
+  const shutdown = new AbortController();
   const current = (id: string) => !closed && player().playbackId === id && ["playing", "paused"].includes(player().status);
   const remove = (path: string) => { rmSync(path, { force: true }); files.delete(path); };
+  const retain = (playbackId: string | null) => { for (const [path, owner] of files) if (owner !== playbackId) remove(path); };
   return {
     async prepare(media: MediaSource, playbackId: string, signal: AbortSignal): Promise<MediaSource> {
       if (!media.subtitles?.length) return media;
       const downloaded: Array<ExternalSubtitle | undefined> = [];
       const paths: string[] = [];
-      const timeout = AbortSignal.any([signal, AbortSignal.timeout(8_000)]);
+      const timeout = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(8_000)]);
       let failed = media.subtitles.length > 20;
       let index = 0;
       try {
@@ -48,10 +65,13 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
               } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
               if (!size || closed) throw new Error();
               signal.throwIfAborted();
-              const extension = extname(url.pathname).toLowerCase();
-              if (![".srt", ".ass", ".ssa", ".vtt"].includes(extension)) throw new Error();
+              const upstreamExtension = extname(url.pathname).toLowerCase();
+              if (![".srt", ".ass", ".ssa", ".vtt", ".pgssub"].includes(upstreamExtension)) throw new Error();
+              const extension = upstreamExtension === ".pgssub" ? ".sup" : upstreamExtension;
+              const bytes = Buffer.concat(chunks);
+              if (extension === ".sup" && !validPgs(bytes)) throw new Error();
               const path = join(directory, `${crypto.randomUUID()}${extension}`);
-              writeFileSync(path, Buffer.concat(chunks), { mode: 0o600, flag: "wx" });
+              writeFileSync(path, bytes, { mode: 0o600, flag: "wx" });
               paths.push(path);
               files.set(path, playbackId);
               downloaded[currentIndex] = { ...subtitle, source: path };
@@ -60,7 +80,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
         }));
         signal.throwIfAborted();
         if (closed) throw new Error("The player is shutting down.");
-        return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: "Some external subtitles could not be loaded. Try again or add a subtitle file." } : {}) };
+        return { ...media, subtitles: downloaded.filter((subtitle): subtitle is ExternalSubtitle => !!subtitle), ...(failed ? { subtitleWarning: [media.subtitleWarning, "Some external subtitles could not be loaded. Try again or add a text subtitle file."].filter(Boolean).join(" ") } : {}) };
       } catch (error) { paths.forEach(remove); throw error; }
     },
     async handle(request: Request, authorize = () => {}) {
@@ -98,8 +118,9 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
     observe(state: PlayerState) {
       // Keep files until native playback acknowledges the replacement or Stop.
       if (state.status === "loading") return;
-      for (const [path, playbackId] of files) if (state.playbackId !== playbackId) remove(path);
+      retain(state.playbackId);
     },
-    close() { closed = true; rmSync(directory, { recursive: true, force: true }); files.clear(); },
+    stopped: retain,
+    close() { closed = true; shutdown.abort(); rmSync(directory, { recursive: true, force: true }); files.clear(); },
   };
 }

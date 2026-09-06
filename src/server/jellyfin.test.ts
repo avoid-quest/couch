@@ -192,16 +192,34 @@ describe("Jellyfin source", () => {
     expect(descriptor.subtitles).toEqual([{ source: `${upstream.url}/Videos/${itemId}/fixture-media/Subtitles/2/Stream.srt?copyTimestamps=true`, title: "eng subtitles 2", language: "eng" }]);
   });
 
-  test("reports unsupported external image subtitles while preserving direct video playback", async () => {
+  test("reports unsupported direct SUP and unidentified image sidecars while preserving direct video playback", async () => {
     const warnings: string[] = [];
-    const upstream = fixture({ mediaStreams: [{ Type: "Subtitle", Index: 2, Codec: "pgssub", IsExternal: true, IsTextSubtitleStream: false, Path: "/private/server/movie.sup" }] });
+    const upstream = fixture({ mediaStreams: [
+      { Type: "Subtitle", Index: 2, Codec: "pgssub", IsExternal: true, IsTextSubtitleStream: false, Path: "/private/server/movie.sup" },
+      { Type: "Subtitle", Index: 3, Codec: "pgssub", IsExternal: true, IsTextSubtitleStream: false },
+      { Type: "Subtitle", Index: 4, Codec: "dvdsub", IsExternal: true, IsTextSubtitleStream: false, Path: "/private/server/movie.mks" },
+    ] });
     const jellyfin = source(":memory:", undefined, { onWarning: warning => warnings.push(warning) });
     await jellyfin.connect(credentials(upstream.url));
     const descriptor = await jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "playback-1");
     expect(descriptor.source).toContain(`/Videos/${itemId}/stream`);
     expect(descriptor.subtitles).toBeUndefined();
-    expect(warnings[0]).toContain("external image subtitles need another delivery path");
+    expect(warnings[0]).toContain("sidecars are unavailable");
     expect(JSON.stringify(warnings)).not.toContain("private/server");
+  });
+
+  test("delivers only identified PGS Matroska sidecars through the supported API and discloses its timing limit", async () => {
+    const upstream = fixture({ mediaStreams: [{ Type: "Subtitle", Index: 2, Codec: "PGSSUB", IsExternal: true, IsTextSubtitleStream: false, Path: "/private/server/movie.eng.mks", Language: "eng", DisplayTitle: "English PGS", DeliveryMethod: "External" }] });
+    const jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const descriptor = await jellyfin.resolve((await jellyfin.entry(itemId, "queue-1")).source.slice(9), "playback-1");
+    expect(descriptor.subtitles).toEqual([{ source: `${upstream.url}/Videos/${itemId}/fixture-media/Subtitles/2/Stream.pgssub?copyTimestamps=true`, title: "English PGS", language: "eng" }]);
+    expect(descriptor.subtitleWarning).toContain("start after zero");
+    expect(descriptor.subtitleWarning).toContain("subtitle timing");
+    expect(JSON.stringify(descriptor.subtitles)).not.toMatch(/private\/server|fixture-private-token/);
+    const profile = upstream.requests.find(request => request.path.endsWith("/PlaybackInfo"))!.body!.DeviceProfile as { SubtitleProfiles: { Format: string; Method: string }[] };
+    expect(profile.SubtitleProfiles).toContainEqual({ Format: "pgssub", Method: "External" });
+    expect(profile.SubtitleProfiles).not.toContainEqual({ Format: "dvdsub", Method: "External" });
   });
 
   test("invalidates a pending resolution before it can start a replaced playback session", async () => {

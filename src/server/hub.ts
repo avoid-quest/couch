@@ -91,6 +91,7 @@ export function createHub(options: HubOptions) {
     },
     deactivate: () => { void jellyfin.deactivate(); },
     observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
+    stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });

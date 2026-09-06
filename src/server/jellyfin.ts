@@ -26,10 +26,10 @@ const profile: DeviceProfile = {
     { Type: "Audio", Container: "mp3,flac,ogg,oga,opus,m4a,mp4,aac,wav,aiff,webm", AudioCodec: "aac,mp3,flac,opus,vorbis,alac,pcm_s16le,pcm_s24le" },
   ],
   TranscodingProfiles: [],
-  // Embedded tracks stay in the original file; text sidecars use Jellyfin's subtitle API.
+  // External PGS is accepted only from Matroska sidecars below.
   SubtitleProfiles: [
     ...[...subtitleFormats, "pgssub", "dvdsub"].map(Format => ({ Format, Method: "Embed" as const })),
-    ...subtitleFormats.map(Format => ({ Format, Method: "External" as const })),
+    ...[...subtitleFormats, "pgssub"].map(Format => ({ Format, Method: "External" as const })),
   ],
 };
 
@@ -139,8 +139,9 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     for (const stream of media.MediaStreams ?? []) {
       if (stream.Type !== "Subtitle" || !stream.IsExternal) continue;
       const codec = stream.Codec?.toLowerCase() ?? "";
-      if (!subtitleFormats.includes(codec)) {
-        warnings.add("Some Jellyfin external subtitles use an unsupported format. SRT, ASS, SSA and WebVTT are supported; external image subtitles need another delivery path.");
+      const pgs = codec === "pgssub" && stream.IsTextSubtitleStream === false && stream.Path?.toLowerCase().endsWith(".mks");
+      if (!subtitleFormats.includes(codec) && !pgs) {
+        warnings.add("Some Jellyfin sidecars are unavailable. Use an embedded image track, a PGS Matroska (.mks) sidecar, or SRT, ASS, SSA or WebVTT subtitles.");
         continue;
       }
       try {
@@ -154,6 +155,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       const format = codec === "subrip" ? "srt" : codec === "webvtt" ? "vtt" : codec;
       const language = /^[a-z]{2,3}(?:-[a-z\d]{2,8})*$/i.test(stream.Language ?? "") ? stream.Language!.toLowerCase() : undefined;
       const title = (stream.DisplayTitle || stream.Title || "").trim();
+      if (pgs) warnings.add("Jellyfin may shift PGS Matroska sidecars that start after zero. Use subtitle timing to adjust early cues.");
       subtitles.push({
         // Rebuild the supported API route so upstream paths and URL tokens never reach track labels.
         source: current.getUri(`/Videos/${itemId}/${encodeURIComponent(media.Id!)}/Subtitles/${stream.Index}/Stream.${format}`, { copyTimestamps: true }),
