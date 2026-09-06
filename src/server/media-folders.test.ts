@@ -180,6 +180,16 @@ test("mount topology must also agree with the directory's current device", async
   await expect(folders.inspect(media)).rejects.toThrow("identify");
 });
 
+test("a changed source mount cannot fall back to an ancestor matching an earlier stat", async () => {
+  const { root, media } = await fixture();
+  const device = await deviceFor(media);
+  const folders = createMediaFolders({ roots: [media], mountInfo: async () => [
+    `18 1 ${device} / ${root} rw - nfs4 nas:/parent rw`,
+    `22 18 999999:999999 / ${media} rw - nfs4 nas:/new-mount rw`,
+  ].join("\n") });
+  await expect(folders.inspect(media)).rejects.toThrow("identify");
+});
+
 test("CIFS client inode changes recover only for the same mounted export and path", async () => {
   const { root, media } = await fixture();
   const device = await deviceFor(media);

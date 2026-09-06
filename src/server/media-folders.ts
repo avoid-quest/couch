@@ -84,8 +84,8 @@ export function createMediaFolders(options: {
       const table = await mountInfo();
       if (table === null) return { filesystem: `device:${info.dev}`, directory: String(info.ino), mountRoot: "" };
       const mounted = visibleMounts(mounts(table));
-      const mount = mounted.filter(candidate => candidate.device === linuxDevice(info.dev) && within(candidate.target, path)).sort((a, b) => b.target.length - a.target.length)[0];
-      if (!mount) throw new FolderError("Could not identify this folder's filesystem.");
+      const mount = mounted.filter(candidate => within(candidate.target, path)).sort((a, b) => b.target.length - a.target.length)[0];
+      if (!mount || mount.device !== linuxDevice(info.dev)) throw new FolderError("Could not identify this folder's filesystem.");
       if (mounted.some(candidate => candidate.target !== path && within(path, candidate.target))) throw new FolderError("This folder contains another mounted filesystem. Add the mounted folder as its own source instead.");
       let filesystem: string;
       if (mount.source.startsWith("/dev/")) {
