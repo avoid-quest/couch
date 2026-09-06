@@ -13,7 +13,7 @@ pub fn collect(app: &AppHandle, playback_id: Option<String>) -> Value {
     facts.push(json!({"name":"Selected display", "value":monitor.as_ref().and_then(|monitor| monitor.name()).map(|name| name.chars().take(100).collect::<String>()), "source":"Monitor containing the native window; unknown if unavailable"}));
     facts.push(json!({"name":"Display pixels", "value":monitor.map(|monitor| format!("{} × {}", monitor.size().width, monitor.size().height)), "source":"Native window monitor"}));
     facts.push(json!({"name":"Data directory override", "value":std::env::var_os("COUCH_DATA_DIR").is_some().to_string(), "source":"COUCH_DATA_DIR environment when set, otherwise application data directory; path omitted"}));
-    facts.push(json!({"name":"Basic rendering requested", "value":matches!(std::env::var("COUCH_BASIC_RENDERING").as_deref(), Ok("1")).to_string(), "source":"COUCH_BASIC_RENDERING environment; this is configuration, not observed renderer state"}));
+    facts.push(json!({"name":"GPU compatibility requested", "value":matches!(std::env::var("COUCH_BASIC_RENDERING").as_deref(), Ok("1")).to_string(), "source":"COUCH_BASIC_RENDERING environment; this is configuration, not observed renderer state"}));
     let properties = playback_id
         .and_then(|session_key| {
             app.video()
@@ -38,7 +38,7 @@ pub fn collect(app: &AppHandle, playback_id: Option<String>) -> Value {
         ),
         ("Video decoder", "video-codec", "mpv current video decoder"),
         (
-            "Basic GPU rendering",
+            "GPU compatibility mode",
             "gpu-dumb-mode",
             "mpv effective renderer property; unknown if unsupported",
         ),
