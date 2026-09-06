@@ -60,7 +60,7 @@ store.consumeControllerClaim(store.controllerForToken(previousToken)!.id, "fixtu
 store.close();
 await createLibrary({ databasePath }).close();
 const db = new Database(databasePath);
-db.query("INSERT INTO library_sources (id, name, path) VALUES (?, ?, ?)").run("existing-source", "Existing media", "/qualification/media");
+db.query("INSERT INTO library_sources (id, name, path) VALUES (?, ?, ?)").run("existing-source", "Existing media", "/home/qualifier/Videos");
 db.close();
 await mkdir(`${fixtures}/media`, { recursive: true });
 run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "12", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-metadata", "title=Package video", `${fixtures}/media/sample.mp4`]);
@@ -99,6 +99,9 @@ try {
   assert.ok((await api("/api/profiles")).profiles.some((p: any) => p.id === profile.id));
   assert.equal((await api("/api/profiles")).activeProfile.id, profile.id);
   record("Prior remote authorization and watching profile survive adoption");
+  const verified = await api("/api/library/sources/existing-source/verify", previousToken, { confirmed: true });
+  assert.equal(verified.sources.find((source: any) => source.id === "existing-source")?.verified, true);
+  record("Existing administrator verifies the original legacy TV folder");
   await api("/api/library/sources/existing-source/scan", connection.token, {});
   await until("Packaged ffprobe populates the existing video library", async () => {
     const items = (await api("/api/library/items")).items;
