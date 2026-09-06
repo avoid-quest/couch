@@ -28,7 +28,7 @@ const navigationTrace: unknown[] = [];
 async function traceNavigation(phase: string) {
   const state = await ui.execute(`
     const list = document.querySelector('[aria-label="Collection preview"]');
-    const identify = element => element instanceof HTMLElement ? { tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element), connected: element.isConnected, rect: element.getBoundingClientRect().toJSON() } : null;
+    const identify = element => element instanceof HTMLElement ? { node: window.collectionNavigationId(element), tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element), connected: element.isConnected, rect: element.getBoundingClientRect().toJSON() } : null;
     return { focused: document.hasFocus(), visibility: document.visibilityState, active: identify(document.activeElement), list: list && { scroll: list.scrollTop, rect: list.getBoundingClientRect().toJSON(), rows: [...list.children].map(identify) }, events: window.collectionNavigationEvents ?? [] };
   `);
   navigationTrace.push({ phase, state });
@@ -183,9 +183,11 @@ try {
   await open(ui); await ui.button("All collections", panel);
   await ui.execute(`
     window.collectionNavigationEvents = [];
+    const nodes = new WeakMap(); let nextNode = 0;
+    window.collectionNavigationId = element => { if (!nodes.has(element)) nodes.set(element, ++nextNode); return nodes.get(element); };
     for (const type of ['keydown', 'keyup', 'focusin', 'focusout', 'focus', 'blur']) window.addEventListener(type, event => {
       const element = event.target, list = document.querySelector('[aria-label="Collection preview"]');
-      window.collectionNavigationEvents.push({ type, key: event.key, prevented: event.defaultPrevented, time: performance.now(), focused: document.hasFocus(), target: element instanceof HTMLElement ? { tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element) } : 'window' });
+      window.collectionNavigationEvents.push({ type, key: event.key, prevented: event.defaultPrevented, time: performance.now(), focused: document.hasFocus(), target: element instanceof HTMLElement ? { node: window.collectionNavigationId(element), tag: element.tagName, id: element.id, label: element.getAttribute('aria-label'), row: [...(list?.children ?? [])].indexOf(element) } : 'window' });
       if (window.collectionNavigationEvents.length > 100) window.collectionNavigationEvents.shift();
     });
   `);
