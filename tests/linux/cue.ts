@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { addTVFolder } from "./folder-settings";
+import { addTVFolder, openFolderSources, closeFolderSources, folderCard } from "./folder-settings";
 import { assertResponsive } from "./ui";
 import { musicControls, restoreQueue, type MusicContext, type SavedMusic } from "./music";
 import type { PlayerState } from "../../src/shared/protocol";
@@ -82,7 +82,11 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("cue checkpoint is stored relative to the track before restart", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.08));
   await stop();
   const source = (await api("/api/library/sources")).sources.find((source: any) => source.name === "cue-fixtures");
-  await api(`/api/library/sources/${source.id}/scan`, {});
+  await httpRemote.minimize();
+  await openFolderSources(ui, until);
+  await ui.button("Scan again", folderCard(source.id));
+  await closeFolderSources(ui, until);
+  await until("cue rescan completes before comparing identities", async () => (await api("/api/library/sources")).sources.some((current: any) => current.id === source.id && current.status === "ready" && current.lastScanned > source.lastScanned));
   await until("cue rescan preserves album and track IDs", async () => JSON.stringify((await api(`/api/library/music/albums/${album.id}`)).items.map((item: LibraryItem) => item.id)) === JSON.stringify(tracks.map(track => track.id)));
   const result = { album, tracks, playlist, profileId };
   await Bun.write(`${artifactDir}/cue-before-restart.json`, JSON.stringify(result, null, 2));
