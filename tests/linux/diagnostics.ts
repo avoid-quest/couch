@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { Diagnostics } from "../../src/shared/diagnostics";
 import type { SessionState } from "../../src/shared/protocol";
+import { assertPlaybackDiagnosticFacts } from "./diagnostics-facts";
 import { UiDriver, assertResponsive, keys, startHttpRemote, type Wait } from "./ui";
 
 // Focused qualification, run under the same disposable Xvfb/PulseAudio setup
@@ -69,7 +70,7 @@ try {
   assert.ok(Buffer.byteLength(body) <= report.limits.exportBytes);
   for (const secret of [code, claim, token, guest, "http://127.0.0.1:4200/fixture.mkv"]) assert.ok(!body.includes(secret));
   const facts = report.native!.facts;
-  for (const name of ["mpv version", "Video output", "Audio output", "Audio device selection", "Hardware decoder"]) assert.notEqual(facts.find(fact => fact.name === name)?.value, null, `${name} is observed during playback`);
+  assertPlaybackDiagnosticFacts(facts);
   assert.equal(facts.find(fact => fact.name === "Hardware decoder")?.value, "no", "Xvfb fixture truthfully reports software decoding");
   await until("diagnostic collection leaves the same playback advancing", () => state?.player.playbackId === before.playbackId && state.player.position > before.position && state.player.status === "playing");
   for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) assert.equal((await api(path, guest)).status, 403);
