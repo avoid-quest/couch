@@ -55,21 +55,33 @@ export function configurationFacts(env: NodeJS.ProcessEnv, runtime: { hostname: 
   return facts;
 }
 
+const helperCommands = {
+  "yt-dlp": { args: ["--ignore-config", "--no-plugin-dirs", "--version"], pattern: /^(\d{4}\.\d{2}\.\d{2}(?:[\w.+-]*))$/ },
+  Deno: { args: ["--version"], pattern: /^deno ([\d]+\.[\d]+\.[\d]+[\w.+-]*)\b/ },
+  ffprobe: { args: ["-version"], pattern: /^ffprobe version ([\w.+:~-]+)/ },
+};
+
+export async function probeMediaHelper(name: keyof typeof helperCommands, executable: string, env: NodeJS.ProcessEnv, command = runDiagnosticCommand): Promise<string> {
+  const helper = helperCommands[name];
+  const output = await command(executable, helper.args, { PATH: env.PATH ?? "/usr/bin:/bin", LANG: "C", LC_ALL: "C" });
+  const version = helper.pattern.exec(output.split("\n")[0] ?? "")?.[1];
+  if (!version || version.length > 100) throw new Error("The version output was not recognized.");
+  return version;
+}
+
 export async function helperFacts(env: NodeJS.ProcessEnv, command = runDiagnosticCommand): Promise<DiagnosticHelper[]> {
   const safeEnv = { PATH: env.PATH ?? "/usr/bin:/bin", LANG: "C", LC_ALL: "C" };
   return Promise.all([
-    { name: "yt-dlp", variable: "COUCH_YT_DLP", args: ["--ignore-config", "--no-plugin-dirs", "--version"], pattern: /^(\d{4}\.\d{2}\.\d{2}(?:[\w.+-]*))$/ },
-    { name: "Deno", variable: "COUCH_DENO", args: ["--version"], pattern: /^deno ([\d]+\.[\d]+\.[\d]+[\w.+-]*)\b/ },
-    { name: "ffprobe", variable: "", args: ["-version"], pattern: /^ffprobe version ([\w.+:~-]+)/ },
+    { name: "yt-dlp" as const, variable: "COUCH_YT_DLP" },
+    { name: "Deno" as const, variable: "COUCH_DENO" },
+    { name: "ffprobe" as const, variable: "" },
   ].map(async helper => {
     const executable = helper.variable && env[helper.variable] || Bun.which(helper.name.toLowerCase(), { PATH: safeEnv.PATH });
     const source = helper.variable && env[helper.variable] ? `${helper.variable} effective environment` : "Executable search path";
     const checkedAt = new Date().toISOString();
     if (!executable) return { name: helper.name, version: null, status: "unavailable" as const, source, error: "Executable was not found.", checkedAt };
     try {
-      const output = await command(executable, helper.args, safeEnv);
-      const version = helper.pattern.exec(output.split("\n")[0] ?? "")?.[1];
-      if (!version) throw new Error("The version output was not recognized.");
+      const version = await probeMediaHelper(helper.name, executable, safeEnv, command);
       return { name: helper.name, version, status: "ready" as const, source, error: null, checkedAt };
     } catch (error) {
       return { name: helper.name, version: null, status: "error" as const, source, error: redactDiagnosticText(error instanceof Error ? error.message : "Could not query the helper."), checkedAt };
