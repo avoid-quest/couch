@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { UpdateState } from "../shared/updates";
+import { ToolsSettings } from "./ToolsSettings";
 
 type Props = { credentials: { origin: string; token: string }; connected: boolean };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
@@ -85,5 +86,6 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     </div>
     <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
     {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
+    <ToolsSettings credentials={credentials} connected={connected} />
   </div>;
 }
