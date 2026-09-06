@@ -1,0 +1,14 @@
+REM GENRE Test
+REM DATE 2026
+PERFORMER "Couch fixture"
+TITLE "Three tones"
+FILE "album.flac" WAVE
+  TRACK 01 AUDIO
+    TITLE "First tone"
+    INDEX 01 00:00:00
+  TRACK 02 AUDIO
+    TITLE "Second tone"
+    INDEX 01 00:05:25
+  TRACK 03 AUDIO
+    TITLE "Final tone"
+    INDEX 01 00:11:50

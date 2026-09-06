@@ -1,0 +1,7 @@
+TITLE "Unsupported pregap"
+FILE "album.flac" WAVE
+  TRACK 01 AUDIO
+    INDEX 01 00:00:00
+  TRACK 02 AUDIO
+    INDEX 00 00:05:00
+    INDEX 01 00:05:25
