@@ -3,7 +3,29 @@
 set -euo pipefail
 fail() { echo "install-couch: $*" >&2; exit 1; }
 [[ $EUID = 0 ]] || fail 'Run with sudo from your SSH administrator account.'
-[[ $# = 2 || $# = 4 && $3 = --data-dir ]] || fail 'Usage: sudo bash install-couch /absolute/couch.deb /absolute/couch-appliance.deb [--data-dir /existing/data]'
+[[ $# -ge 2 ]] || fail 'Usage: sudo bash install-couch /absolute/couch.deb /absolute/couch-appliance.deb [--data-dir /existing/data] [--release-key FILE --release-key-sha256 SHA256 --release-feed URL --release-channel preview|stable]'
+app=$(realpath "$1")
+session=$(realpath "$2")
+shift 2
+data= release_key= release_key_sha256= release_feed= release_channel=
+while [[ $# -gt 0 ]]; do
+    [[ $# -ge 2 ]] || fail "Missing value for $1"
+    case $1 in
+        --data-dir) data=$2 ;;
+        --release-key) release_key=$2 ;;
+        --release-key-sha256) release_key_sha256=$2 ;;
+        --release-feed) release_feed=$2 ;;
+        --release-channel) release_channel=$2 ;;
+        *) fail "Unknown option: $1" ;;
+    esac
+    shift 2
+done
+if [[ -n $release_key$release_key_sha256$release_feed$release_channel ]]; then
+    [[ $release_key = /* && -f $release_key && $release_key_sha256 =~ ^[a-f0-9]{64}$ ]] || fail 'Supply the authenticated absolute public-key file and its SHA256 from the trusted Mac.'
+    [[ $(sha256sum "$release_key" | cut -d ' ' -f1) = "$release_key_sha256" ]] || fail 'Release key SHA256 mismatch.'
+    [[ $release_feed =~ ^https?://[A-Za-z0-9.:_-]+(/[A-Za-z0-9._~/-]*)?$ && $release_channel =~ ^(preview|stable)$ ]] || fail 'Supply the LAN/HTTPS feed URL and preview or stable channel.'
+    [[ ! -e /etc/apt/keyrings/couch.asc ]] || cmp -s "$release_key" /etc/apt/keyrings/couch.asc || fail 'Existing Couch signing key differs. Rotate it through the trusted update path.'
+fi
 . /etc/os-release
 [[ $ID = ubuntu && $VERSION_ID = 24.04 && $(dpkg --print-architecture) = amd64 ]] || fail 'Ubuntu 24.04 amd64 is required.'
 [[ -d /run/systemd/system ]] || fail 'Boot Ubuntu with systemd before running the installer.'
@@ -23,15 +45,12 @@ restore_policy() {
 }
 # A previous run may have lost power while its temporary deny policy was active.
 restore_policy
-app=$(realpath "$1")
-session=$(realpath "$2")
 [[ $(dpkg-deb -f "$app" Package) = couch && $(dpkg-deb -f "$session" Package) = couch-appliance ]] || fail 'Expected the Couch and Couch appliance release packages.'
 [[ ! -e /etc/X11/default-display-manager || $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'This machine already uses another display manager.'
 
 config=/etc/couch/appliance.env
 had_config=false
 [[ ! -e $config ]] || had_config=true
-data=${4:-}
 pending=false
 if [[ -f $state/data-path ]]; then
     requested=$(cat "$state/data-path")
@@ -54,6 +73,17 @@ if [[ -n $data ]] && ! $had_config && ! $pending; then
     printf '%s\n' "$data" > "$state/data-path"
     sync -f "$state"
     pending=true
+fi
+
+# Enroll only a key supplied through the authenticated installation channel.
+if [[ -n $release_key ]]; then
+    printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/couch.asc\n' "$release_feed" "$release_channel" > "$state/couch.sources"
+    [[ ! -e /etc/apt/sources.list.d/couch.sources ]] || cmp -s "$state/couch.sources" /etc/apt/sources.list.d/couch.sources || fail 'Existing Couch channel differs. Change the channel deliberately before reinstalling.'
+    install -d -m 0755 /etc/apt/keyrings /etc/apt/sources.list.d
+    install -m 0644 "$release_key" /etc/apt/keyrings/.couch.asc
+    mv /etc/apt/keyrings/.couch.asc /etc/apt/keyrings/couch.asc
+    install -m 0644 "$state/couch.sources" /etc/apt/sources.list.d/.couch.sources
+    mv /etc/apt/sources.list.d/.couch.sources /etc/apt/sources.list.d/couch.sources
 fi
 
 # Suppress maintainer-script service starts until both packages and dependencies
