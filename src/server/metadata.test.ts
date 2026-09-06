@@ -15,7 +15,8 @@ const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { while (cleanup.length) await cleanup.pop()!(); });
 const administrator: ControllerIdentity = { authority: "administrator", controller: { id: "admin", name: "Phone", role: "administrator", createdAt: null, lastSeenAt: null }, claimAvailable: false };
 const cover = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6aJcAAAAASUVORK5CYII=", "base64");
-async function fixture(episode = false) {
+async function fixture(episode = false, numbered = false) {
+  const filename = numbered ? "sample.S01E01" : "sample";
   const root = await mkdtemp(join(tmpdir(), "couch-metadata-"));
   cleanup.push(() => rm(root, { force: true, recursive: true }));
   const media = join(root, "media"); await mkdir(media);
@@ -24,13 +25,13 @@ async function fixture(episode = false) {
   const library = createLibrary({ databasePath, folders, ffprobePath: null });
   cleanup.push(() => library.close());
   const xml = `<${episode ? "episodedetails" : "movie"} custom="keep"><title>Wrong title</title><plot>Original plot</plot><rating name="custom">8.7</rating><!-- keep this --><unknown attr="a&amp;b"><child>one</child><child>two</child></unknown>${episode ? "<season>1</season><episode>7</episode><showtitle>Local show</showtitle>" : ""}</${episode ? "episodedetails" : "movie"}>`;
-  await Bun.write(join(media, "sample.mkv"), "original media bytes");
-  await Bun.write(join(media, "sample.nfo"), xml);
+  await Bun.write(join(media, `${filename}.mkv`), "original media bytes");
+  await Bun.write(join(media, `${filename}.nfo`), xml);
   const source = await library.addSource(media); await library.scan(source.id);
   const id = library.search().items[0]!.id;
   const request = (path: string, value?: unknown, identity = () => administrator) => library.metadata.handle(new Request(`http://localhost/api/metadata/${path}`, value === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }), identity);
   const view = async (): Promise<MetadataView> => (await request(`items/${id}`)).json();
-  return { root, media, databasePath, folders, library, source, id, request, view, xml };
+  return { root, media, databasePath, folders, library, source, id, request, view, xml, filename };
 }
 
 test("manual corrections and artwork survive rescan, offline restart and export/reimport without changing source files", async () => {
@@ -221,4 +222,30 @@ test("clearing a chosen match suppresses an imported TMDB ID in export and reimp
   await Bun.write(join(f.media, "sample.nfo"), xml); await f.library.scan(f.source.id);
   const reexport = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: (await f.view()).revision })).arrayBuffer()).files();
   expect(await reexport.get("metadata.nfo")!.text()).not.toContain('type="tmdb"');
+});
+
+
+test("a failed episode NFO never promotes its manual series title into a sibling's imported metadata", async () => {
+  const f = await fixture(true, true);
+  await Bun.write(join(f.media, "tvshow.nfo"), '<tvshow><title>Imported series</title><unknown>Keep show field</unknown></tvshow>');
+  await Bun.write(join(f.media, "z-sibling.mkv"), "other episode fixture");
+  await Bun.write(join(f.media, "z-sibling.nfo"), '<episodedetails><title>Sibling</title><season>1</season><episode>8</episode></episodedetails>');
+  await f.library.scan(f.source.id);
+  const sibling = f.library.search({ videoType: "episode" }).items.find(item => item.id !== f.id)!;
+  const readSibling = async (): Promise<MetadataView> => (await f.request(`items/${sibling.id}`)).json();
+  const before = await readSibling();
+  const current = await f.view();
+  expect((await f.request(`items/${f.id}/edit`, { revision: current.revision, changes: { showTitle: "Manual episode series" } })).status).toBe(200);
+  await Bun.write(join(f.media, `${f.filename}.nfo`), "<episodedetails><broken>");
+  expect((await f.library.scan(f.source.id)).status).toBe("ready");
+  expect((await f.view()).values.showTitle).toBe("Manual episode series");
+  expect((await f.view()).origins.showTitle).toBe("Manual");
+  const after = await readSibling();
+  expect(after.values.showTitle).toBe("Imported series");
+  expect(after.origins.showTitle).toBe(before.origins.showTitle);
+  expect(after.revision).toBe(before.revision);
+  const files = await new Bun.Archive(await (await f.request(`items/${sibling.id}/export`, { revision: after.revision })).arrayBuffer()).files();
+  expect(await files.get("show.nfo")!.text()).toContain("<title>Imported series</title>");
+  expect(await files.get("show.nfo")!.text()).not.toContain("Manual episode series");
+  expect(await files.get("metadata.nfo")!.text()).toContain("<showtitle>Imported series</showtitle>");
 });

@@ -105,6 +105,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
   }
   return {
     capture, apply,
+    importedValues(id: string): MetadataValues | null { const state = saved(id); return state ? JSON.parse(state.base) : null; },
     removeSource(sourceId: string) { db.query("DELETE FROM library_metadata WHERE itemId IN (SELECT id FROM library_items WHERE sourceId=?)").run(sourceId); },
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const authorize = () => {

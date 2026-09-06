@@ -152,7 +152,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       [item.artist, ...(item.artists ?? []), item.albumArtist, ...(item.video?.genres ?? []), ...(item.video?.show?.genres ?? [])].filter(Boolean).join(" "), item.album);
   }
 
-  const metadata = createMetadata(db, notify, id => {
+  const corrections = createMetadata(db, notify, id => {
     const row = db.query<PublicItemRow & { rowid: number }, [string]>("SELECT rowid, * FROM library_items WHERE id=?").get(id);
     if (row) indexItem(row.rowid, publicItem(row));
   });
@@ -172,7 +172,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
         item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null, item.cuePath ?? null, item.cueTrack ?? null, item.cueSource ?? 0)!;
     indexItem(row.rowid, item);
-    metadata.capture(item, originals, importFailed);
+    corrections.capture(item, originals, importFailed);
     const show = item.video?.show;
     if (show) {
       const description = JSON.stringify(show);
@@ -181,7 +181,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         SET video = json_set(video, '$.show', json(?))
         WHERE json_extract(video, '$.show.id') = ? AND json_extract(video, '$.show') <> ? RETURNING rowid, *`)
         .all(description, show.id, description);
-      for (const episode of updated) { indexItem(episode.rowid, publicItem(episode)); metadata.apply(episode.id); }
+      for (const episode of updated) { indexItem(episode.rowid, publicItem(episode)); corrections.apply(episode.id); }
     }
     db.query("DELETE FROM library_music_artists WHERE itemId = ?").run(item.id);
     if (item.kind === "audio") for (const name of [...(item.artists ?? []), ...(item.albumArtist ? [item.albumArtist] : [])]) {
@@ -265,7 +265,10 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const metadata = probedMetadata ?? fileMetadata;
         const localVideo = kind === "video" ? await readVideoMetadata(root, source.id, path) : null;
         if (localVideo?.nfoFailures && previous?.video) {
-          localVideo.title = previous.title; localVideo.video = previous.video; localVideo.artworkId = previous.artworkId ?? null;
+          const imported = corrections.importedValues(previous.id);
+          localVideo.title = imported?.title ?? previous.title;
+          localVideo.video = { ...previous.video, show: previous.video.show ? { ...previous.video.show, title: imported?.showTitle ?? previous.video.show.title } : null };
+          localVideo.artworkId = imported?.artworkId ?? previous.artworkId ?? null;
         }
         if (localVideo?.video.show) {
           const show = localVideo.video.show;
@@ -332,7 +335,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
   }
 
   return {
-    metadata,
+    metadata: corrections,
     listSources(): LibrarySource[] { return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all(); },
     managedSources(): ManagedFolder[] {
       return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all().map(source => ({ ...source,
@@ -391,7 +394,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       db.transaction(() => {
         db.query("DELETE FROM library_search WHERE id IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
         db.query("DELETE FROM library_music_artists WHERE itemId IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
-        metadata.removeSource(sourceId);
+        corrections.removeSource(sourceId);
         db.query("DELETE FROM library_items WHERE sourceId = ?").run(sourceId);
         db.query("DELETE FROM library_video_nfo WHERE sourceId = ?").run(sourceId);
         db.query("DELETE FROM library_folder_identities WHERE sourceId = ?").run(sourceId);
@@ -545,7 +548,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     },
     async close() {
       closing = true;
-      metadata.close();
+      corrections.close();
       for (const process of probes) process.kill("SIGKILL");
       await scanQueue;
       db.close();
