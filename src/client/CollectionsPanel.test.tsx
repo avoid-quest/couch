@@ -17,7 +17,7 @@ async function render(version = 1, active = true) {
   await flush();
 }
 async function type(value: string) {
-  await act(async () => { const input = document.querySelector<HTMLInputElement>("#collection-name")!; Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new window.Event("input", { bubbles: true })); });
+  await act(async () => { const input = document.querySelector<HTMLInputElement>("#collection-name")!; Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value); input.dispatchEvent(new Event("input", { bubbles: true })); });
 }
 beforeEach(async () => {
   writes.length = 0;
@@ -67,4 +67,16 @@ test("load sends the displayed digest and revision then requires review of a rej
   expect(button("Play preview").disabled).toBeTrue();
   expect(button("Add preview to queue").disabled).toBeTrue();
   expect(document.body.textContent).toContain("0 available · 1 missing");
+});
+
+
+test("preview rows follow directional keys in order, including rows beyond a scrolling viewport", async () => {
+  preview = { ...preview, items: Array.from({ length: 40 }, (_, index) => ({ ...preview.items[0]!, id: `film-${index}`, title: `Film ${index}` })), total: 40 };
+  await click("Film night1 movies");
+  const rows = [...document.querySelectorAll<HTMLElement>('[aria-label="Collection preview"] li')];
+  expect(rows.every(row => row.tabIndex === 0)).toBeTrue();
+  rows[0]!.focus();
+  for (let i = 1; i < rows.length; i++) { await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))); expect(document.activeElement).toBe(rows[i]); }
+  await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
+  expect(document.activeElement).toBe(rows.at(-2)!);
 });
