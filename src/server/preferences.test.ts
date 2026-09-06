@@ -8,8 +8,8 @@ import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
-const defaults: ProfilePlaybackPreferences = { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 };
-const italian: ProfilePlaybackPreferences = { audioLanguage: "ita", subtitleLanguage: "eng", subtitles: "auto", speed: 1.25 };
+const defaults: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 };
+const italian: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "ita", subtitleLanguage: "eng", subtitles: "auto", speed: 1.25 };
 const temporary: string[] = [];
 afterEach(() => { for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true }); });
 const databasePath = () => { const path = mkdtempSync(join(tmpdir(), "couch-preferences-")); temporary.push(path); return join(path, "session.sqlite"); };
@@ -174,14 +174,14 @@ test("explicit defaults save observed choices without changing this item or unre
   expect(store.playbackPreferences("household").profile).toEqual({ ...italian, speed: 1.5 });
   session.command({ type: "preferences", profileId: "household", preferences: { subtitleLanguage: "fra" } });
   save("audio");
-  expect(store.playbackPreferences("household").profile).toEqual({ audioLanguage: "eng", subtitleLanguage: "fra", subtitles: "auto", speed: 1.5 });
+  expect(store.playbackPreferences("household").profile).toEqual({ replayGain: "off", audioLanguage: "eng", subtitleLanguage: "fra", subtitles: "auto", speed: 1.5 });
   save("subtitles");
-  expect(store.playbackPreferences("household").profile).toEqual({ audioLanguage: "eng", subtitleLanguage: "ita", subtitles: "auto", speed: 1.5 });
+  expect(store.playbackPreferences("household").profile).toEqual({ replayGain: "off", audioLanguage: "eng", subtitleLanguage: "ita", subtitles: "auto", speed: 1.5 });
   expect(session.state.player).toEqual(before);
   expect(commands).toHaveLength(sent);
   session.observe({ ...before, tracks: [] });
   save("subtitles");
-  expect(store.playbackPreferences("household").profile).toEqual({ audioLanguage: "eng", subtitleLanguage: "ita", subtitles: "off", speed: 1.5 });
+  expect(store.playbackPreferences("household").profile).toEqual({ replayGain: "off", audioLanguage: "eng", subtitleLanguage: "ita", subtitles: "off", speed: 1.5 });
   session.command({ type: "play", entryId: "one", fromStart: true });
   expect(commands.at(-1)).toMatchObject({ type: "load", preferences: { audioLanguage: "eng", subtitleLanguage: "ita", subtitles: "off", speed: 1.5, audioDelay: 0 } });
   store.close();
@@ -192,7 +192,7 @@ test("independent saved-field commands preserve each remote's other changes", ()
   session.command({ type: "preferences", profileId: "household", preferences: { audioLanguage: "ita" } });
   session.command({ type: "preferences", profileId: "household", preferences: { speed: 1.75 } });
   session.command({ type: "preferences", profileId: "household", preferences: { subtitles: "off" } });
-  expect(store.playbackPreferences("household").profile).toEqual({ audioLanguage: "ita", subtitleLanguage: "", subtitles: "off", speed: 1.75 });
+  expect(store.playbackPreferences("household").profile).toEqual({ replayGain: "off", audioLanguage: "ita", subtitleLanguage: "", subtitles: "off", speed: 1.75 });
   store.close();
 });
 
@@ -245,14 +245,16 @@ test("opening an existing preferences database preserves every profile's exact s
   const guest = previous.createProfile("Guest");
   const legacy = { audioLanguage: "en", subtitleLanguage: "fre", subtitles: "off" as const, speed: 1.75 };
   previous.saveProfilePreferences("household", italian);
-  previous.saveProfilePreferences(guest.id, legacy);
+  const legacyDatabase = new Database(path);
+  legacyDatabase.query("INSERT INTO watching_preferences VALUES (?, ?)").run(guest.id, JSON.stringify(legacy));
+  legacyDatabase.close();
   previous.selectProfile(guest.id);
   previous.saveAudioDelay(0.7);
   previous.close();
   const reopened = openStore(path);
   expect(reopened.activeProfile()).toEqual(guest);
   expect(reopened.profiles()).toHaveLength(2);
-  expect(reopened.playbackPreferences(guest.id)).toEqual({ profile: legacy, device: { audioDelay: 0.7 } });
+  expect(reopened.playbackPreferences(guest.id)).toEqual({ profile: { ...legacy, replayGain: "off" }, device: { audioDelay: 0.7 } });
   expect(reopened.playbackPreferences("household")).toEqual({ profile: italian, device: { audioDelay: 0.7 } });
   reopened.close();
 });

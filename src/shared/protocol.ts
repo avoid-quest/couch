@@ -6,7 +6,8 @@ export type { VideoQuality } from "./providers";
 export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio" };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
-export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number };
+export type ReplayGainMode = "off" | "track" | "album";
+export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLanguage: string; subtitles: "auto" | "off"; speed: number; replayGain: ReplayGainMode };
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
@@ -26,6 +27,7 @@ export type PlayerState = {
   speed?: number;
   audioDelay?: number;
   subtitleDelay?: number;
+  replayGain?: ReplayGainMode;
   subtitleError?: string | null;
   nowPlaying?: NowPlaying | null;
 };
@@ -65,9 +67,10 @@ export type Action =
   | { type: "seek"; playbackId: string; position: number }
   | { type: "volume"; volume: number }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
-  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" }
+  | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" | "replayGain" }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
+  | { type: "replayGain"; playbackId: string; mode: ReplayGainMode }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "next"; playbackId: string }
@@ -87,6 +90,7 @@ export type PlaybackCommand =
   | { type: "volume"; volume: number }
   | { type: "track"; playbackId: string; kind: "audio" | "subtitle"; index: number }
   | { type: "speed"; playbackId: string; speed: number }
+  | { type: "replayGain"; playbackId: string; mode: ReplayGainMode }
   | { type: "audioDelay"; playbackId: string; delay: number }
   | { type: "subtitleDelay"; playbackId: string; delay: number }
   | { type: "stop" };

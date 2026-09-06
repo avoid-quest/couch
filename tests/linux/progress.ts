@@ -131,7 +131,7 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   await pause();
   await seek(5);
   await ui.click(".watching-profile");
-  await until("paused playback disables native watching-profile selection", async () => await ui.execute("return [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button')].length >= 2 && [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button')].every(button => button.disabled)"));
+  await until("paused playback disables native watching-profile selection", async () => await ui.execute("return [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button[aria-pressed]')].length >= 2 && [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button[aria-pressed]')].every(button => button.disabled)"));
   const select = () => fetch(`${origin}/api/profiles/${household.id}/select`, { method: "POST", headers: { origin, Authorization: `Bearer ${clients[1]!.token}`, "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10_000) });
   let rejected = await select();
   assert.equal(rejected.status, 409, "A paired remote cannot change the watching profile while paused");

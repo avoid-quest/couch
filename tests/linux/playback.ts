@@ -7,12 +7,17 @@ import { UiDriver, assertNativePortal, assertResponsive, assertTheme, keys, qual
 import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinResume } from "./progress";
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
+import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
+import { verifyReplayGain } from "./replaygain";
 import { createRadioFixture } from "./radio-fixture";
 import { verifyRadio } from "./radio";
+import { verifyRadioSettings } from "./radio-settings";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
+import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 import { verifyAppearance } from "./appearance";
+import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -20,7 +25,6 @@ const artifactDir = "/artifacts";
 const checks: string[] = [];
 const radioFixture = await createRadioFixture();
 const plainMediaAuth: boolean[] = [];
-let playlistRevision = 1;
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
 const driver = Bun.spawn(["tauri-driver"], {
   stdout: Bun.file(`${artifactDir}/driver.log`), stderr: Bun.file(`${artifactDir}/native.log`),
@@ -37,9 +41,7 @@ const media = Bun.serve({
     "/dash/:file": request => new Response(Bun.file(`/web-fixtures/${request.params.file}`)),
     "/quality.html": () => new Response('<!doctype html><title>DASH quality fixture</title><video src="/quality/manifest.mpd"></video>', { headers: { "Content-Type": "text/html" } }),
     "/quality/:file": request => new Response(Bun.file(`/quality-fixtures/${request.params.file}`)),
-    "/radio.m3u": () => new Response(`#EXTM3U\n${Array.from({ length: playlistRevision + 1 }, (_, index) =>
-      `#EXTINF:-1 tvg-id="fixture-${index}" tvg-logo="http://127.0.0.1:4200/logo.svg" group-title="Fixture stations",Imported station ${index + 1}\nhttp://127.0.0.1:4200/radio.mp3?station=${index}`,
-    ).join("\n")}\n`, { headers: { "content-type": "audio/x-mpegurl" } }),
+    "/replaygain/:file": request => new Response(Bun.file(`/replaygain-fixtures/${request.params.file}`)),
     "/logo.svg": () => new Response('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#baf3dd"/></svg>', { headers: { "content-type": "image/svg+xml" } }),
   },
   fetch: () => new Response("Not found", { status: 404 }),
@@ -371,40 +373,6 @@ try {
   await clients[0]!.command({ type: "stop" });
   await httpRemote!.minimize();
 
-  await click('[data-action="add-radio-playlist"]');
-  await type("#radio-playlist-name", "Fixture radio playlist");
-  await type("#radio-playlist-url", "http://127.0.0.1:4200/radio.m3u");
-  await click(".radio-playlist-add .secondary-button");
-  await until("native radio UI imports an M3U playlist for both remotes", async () =>
-    (await api("/api/radio/playlists", undefined, 1)).playlists.some((playlist: any) => playlist.name === "Fixture radio playlist" && playlist.stationCount === 2),
-  );
-  const importedPlaylist = (await api("/api/radio/playlists")).playlists.find((playlist: any) => playlist.name === "Fixture radio playlist");
-  const importedStations = (await api(`/api/radio/playlists/${importedPlaylist.id}/stations`, undefined, 1)).stations;
-  assert.equal(importedStations.length, 2);
-  assert.ok(importedStations.every((station: any) => station.logoUrl === "http://127.0.0.1:4200/logo.svg" && station.groupTitle === "Fixture stations"));
-  await until("imported station cards appear", async () => await execute("return document.querySelectorAll('.radio-playlists .radio-station').length") === 2);
-  await execute("document.querySelector('.radio-playlists .radio-station').scrollIntoView({ block: 'center' })");
-  await until("native playlist cards show imported station logos and groups", async () => await execute(`
-    const cards = [...document.querySelectorAll('.radio-playlists .radio-station')];
-    return cards.length === 2 && cards.every(card => card.querySelector('img')?.naturalWidth > 0 && card.textContent.includes('Fixture stations'));
-  `));
-  await click(".radio-playlists .radio-station .secondary-button");
-  await until("native playlist UI queues a stable radio station ID", () => all(state => state.queue.some(entry => entry.source === `radio:${importedStations[0].id}`)));
-  const importedEntry = clients[0]!.state!.queue.find(entry => entry.source === `radio:${importedStations[0].id}`)!;
-  await clients[1]!.command({ type: "play", entryId: importedEntry.id });
-  await until("an imported radio station resolves to native audio playback", () => all(state => state.currentEntryId === importedEntry.id && state.player.status === "playing" && state.player.position > 0.5));
-  await clients[0]!.command({ type: "stop" });
-  await click('[aria-label="Save Imported station 1 to favorites"]');
-  await until("an imported favorite reaches the other remote with its metadata", async () =>
-    (await api("/api/radio/favorites", undefined, 1)).favorites.some((station: any) => station.id === importedStations[0].id && station.groupTitle === "Fixture stations"),
-  );
-  playlistRevision = 2;
-  await click(".radio-playlist-tools button:first-of-type");
-  await until("refreshing the imported playlist updates native UI and remote catalog", async () =>
-    (await api(`/api/radio/playlists/${importedPlaylist.id}/stations`, undefined, 1)).stations.length === 3 &&
-    await execute("return document.querySelectorAll('.radio-playlists .radio-station').length") === 3,
-  );
-
   if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
     const catalog = await api("/api/radio/stations?q=Radio%20Paradise&countrycode=");
     const liveStation = catalog.stations.find((station: any) => station.name.toLowerCase().includes("paradise"));
@@ -417,24 +385,7 @@ try {
     ), 30_000);
     await Bun.write(`${artifactDir}/live-radio.json`, JSON.stringify({ name: liveStation.name, streamHost: new URL(liveStation.url).host, nowPlaying: clients[0]!.state!.player.nowPlaying ?? null, testedAt: new Date().toISOString(), result: "Native playback and advancing position observed by both remotes" }, null, 2));
     await clients[0]!.command({ type: "stop" });
-    await click(".radio-avoid button");
-    await until("native avoid radio preset imports the actual ten-station collection", async () =>
-      (await api("/api/radio/playlists", undefined, 1)).playlists.some((playlist: any) => playlist.url === "https://radio.avoid.quest/playlist.m3u" && playlist.stationCount === 10),
-    );
-    const avoid = (await api("/api/radio/playlists")).playlists.find((playlist: any) => playlist.url === "https://radio.avoid.quest/playlist.m3u");
-    const { stations } = await api(`/api/radio/playlists/${avoid.id}/stations`, undefined, 1);
-    const sygma = stations.find((station: any) => station.url === "https://radio.syg.ma/audio.mp3");
-    assert.ok(sygma, "avoid radio includes its Sygma station");
-    await until("native avoid radio UI shows every imported station", async () => await execute("return document.querySelectorAll('.radio-playlists .radio-station').length") === 10);
-    await click(`.radio-playlists .radio-station:nth-child(${stations.indexOf(sygma) + 1}) .radio-play`);
-    await until("native avoid radio card queues its stable station ID", () => all(state => state.queue.some(entry => entry.source === `radio:${sygma.id}`)));
-    const avoidEntry = clients[0]!.state!.queue.find(entry => entry.source === `radio:${sygma.id}`)!;
-    await until("a station imported from avoid radio plays natively for both remotes", () => all(state =>
-      state.currentEntryId === avoidEntry.id && state.player.status === "playing" && state.player.position > 2,
-    ), 30_000);
-    await screenshot("native-avoid-radio");
-    await Bun.write(`${artifactDir}/avoid-radio-playback.json`, JSON.stringify({ feed: "https://radio.avoid.quest/playlist.m3u", stationId: sygma.id, name: sygma.name, nowPlaying: clients[0]!.state!.player.nowPlaying ?? null, testedAt: new Date().toISOString(), result: "Native playback and advancing position observed by both remotes" }, null, 2));
-    await clients[0]!.command({ type: "stop" });
+
   }
 
   const radioAcceptance = await verifyRadio({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
@@ -452,6 +403,8 @@ try {
       await type("#jellyfin-password", config.password);
       await click(".jellyfin-connect button.primary-button");
       await until("native UI authenticates with real Jellyfin server", async () => (await api("/api/jellyfin")).connected === true, 30_000);
+      await ui.key(keys.escape);
+      await until("native Jellyfin Sources form closes before library playback", () => execute("return !document.querySelector('[role=dialog]')"));
     }
     await connectJellyfin();
     const catalog = await api("/api/jellyfin/items?q=Linux&startIndex=0", undefined, 1);
@@ -483,9 +436,12 @@ try {
     await until("Jellyfin playback can restart before disconnect", () => all(state => state.player.status === "playing" && state.currentEntryId === entryId));
     await click('[data-action="jellyfin-settings"]');
     await click('[data-action="jellyfin-disconnect"]');
+    await ui.button("Disconnect and stop Jellyfin", '[aria-label="Jellyfin settings"]');
     await until("disconnecting Jellyfin stops its active media for every remote", async () =>
       all(state => state.player.status === "idle") && (await api("/api/jellyfin")).connected === false,
     );
+    await ui.key(keys.escape);
+    await until("native disconnect confirmation closes before reconnect", () => execute("return !document.querySelector('[role=dialog]')"));
     await connectJellyfin();
     startShutdownPlayback = async () => {
       await clients[1]!.command({ type: "play", entryId });
@@ -632,7 +588,13 @@ try {
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
+  const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
+  const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
+  const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
+  const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
+  const persistedProfiles = await verifyProfileManagement(profileContext);
   const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
@@ -660,15 +622,18 @@ try {
   ));
   await until("real HTTP browser reconnects after desktop restart without stale actions", async () => await httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.textContent === 'Ready' && document.querySelectorAll('.queue-entry').length === arguments[0]", [queueBeforeRestart.length]));
   await httpRemote.ui.key(keys.escape);
+  await assertProfilesAfterRestart(profileContext, persistedProfiles);
   await assertLocalProgressAfterRestart(progressContext, persistedProgress);
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
+  await assertVideoLibraryAfterRestart(musicContext, persistedVideoLibrary);
+  await persistedReplayGain.verifyAfterRestart();
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
   await persistedAppearance.verifyAfterRestart();
+  await persistedJellyfinSettings?.verifyAfterRestart();
+  await persistedRadioSettings.verifyAfterRestart();
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
-  assert.ok(persistentFavorites.some((favorite: any) => favorite.id === importedStations[0].id));
-  assert.equal((await api(`/api/radio/playlists/${importedPlaylist.id}/stations`)).stations.length, 3);
   assert.equal((await api("/api/library/items?q=Linux&offset=0&limit=30")).items[0].id, library.items[0].id);
   checks.push("radio playlists, favorites and scanned library survive desktop restart");
   console.log("PASS radio playlists, favorites and scanned library survive desktop restart");

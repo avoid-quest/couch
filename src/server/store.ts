@@ -11,6 +11,13 @@ import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 type ProgressRow = Omit<HistoryItem, "watched"> & { watched: number };
 const progressView = (row: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched });
 
+function profileName(value: unknown) {
+  if (typeof value !== "string") throw new ViewingError("Enter a watching profile name.");
+  const name = value.trim();
+  if (!name || name.length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new ViewingError("Use a profile name with 1 to 60 characters.");
+  return name;
+}
+
 export function openStore(path: string) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true, strict: true });
@@ -67,6 +74,18 @@ export function openStore(path: string) {
   const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
+  const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
+  const availableProfileName = (value: unknown, id = "") => {
+    const name = profileName(value);
+    if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("A watching profile already has that name.");
+    return name;
+  };
+  const unchangedProfile = (id: string, expectedName: string) => {
+    const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);
+    if (!profile) throw new ViewingError("Watching profile not found. It may have been removed on another remote.", 404);
+    if (profile.name !== expectedName) throw new ViewingError("This watching profile was renamed on another remote. Review its current name and try again.", 409);
+    return profile;
+  };
 
   return {
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
@@ -77,11 +96,11 @@ export function openStore(path: string) {
     queue: JSON.parse(stored.queue) as QueueEntry[],
     volume: stored.volume,
     profiles() { return db.query<WatchingProfile, []>("SELECT id, name FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all(); },
-    activeProfile() { return db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!; },
+    activeProfile,
     playbackPreferences(profileId: string): PlaybackPreferences {
       const row = db.query<{ preferences: string }, [string]>("SELECT preferences FROM watching_preferences WHERE profileId = ?").get(profileId);
       const device = db.query<{ audioDelay: number }, []>("SELECT audioDelay FROM playback_device WHERE id = 1").get()!;
-      return { profile: row ? JSON.parse(row.preferences) : { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }, device };
+      return { profile: { replayGain: "off", ...(row ? JSON.parse(row.preferences) : { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }) }, device };
     },
     saveProfilePreferences(profileId: string, preferences: ProfilePlaybackPreferences) {
       db.query("INSERT INTO watching_preferences VALUES (?, ?) ON CONFLICT(profileId) DO UPDATE SET preferences=excluded.preferences").run(profileId, JSON.stringify(preferences));
@@ -89,14 +108,33 @@ export function openStore(path: string) {
     saveAudioDelay(delay: number) {
       db.query("UPDATE playback_device SET audioDelay = ? WHERE id = 1").run(delay);
     },
-    createProfile(name: string) {
-      name = name.trim();
-      if (!name || name.length > 60 || /[\u0000-\u001f\u007f]/.test(name)) throw new ViewingError("Use a profile name with 1 to 60 characters.");
-      if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM watching_profiles").get()!.count >= 20) throw new ViewingError("You can create up to 20 watching profiles.");
-      if (db.query("SELECT 1 FROM watching_profiles WHERE name = ?").get(name)) throw new ViewingError("A watching profile already has that name.");
-      const profile = { id: crypto.randomUUID(), name };
-      db.query("INSERT INTO watching_profiles VALUES (?, ?)").run(profile.id, profile.name);
-      return profile;
+    createProfile(value: unknown) {
+      return db.transaction(() => {
+        const name = availableProfileName(value);
+        if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM watching_profiles").get()!.count >= 20) throw new ViewingError("You can create up to 20 watching profiles.");
+        const profile = { id: crypto.randomUUID(), name };
+        db.query("INSERT INTO watching_profiles VALUES (?, ?)").run(profile.id, profile.name);
+        return profile;
+      }).immediate();
+    },
+    renameProfile(id: string, value: unknown, expectedName: string) {
+      return db.transaction(() => {
+        unchangedProfile(id, expectedName);
+        const name = availableProfileName(value, id);
+        db.query("UPDATE watching_profiles SET name = ? WHERE id = ?").run(name, id);
+        return { id, name };
+      }).immediate();
+    },
+    removeProfile(id: string, expectedName: string) {
+      return db.transaction(() => {
+        unchangedProfile(id, expectedName);
+        if (id === "household") throw new ViewingError("The shared default watching profile cannot be removed.", 409);
+        db.query("UPDATE watching_state SET profileId = 'household' WHERE profileId = ?").run(id);
+        db.query("DELETE FROM viewing_progress WHERE profileId = ?").run(id);
+        db.query("DELETE FROM watching_preferences WHERE profileId = ?").run(id);
+        db.query("DELETE FROM watching_profiles WHERE id = ?").run(id);
+        return activeProfile();
+      }).immediate();
     },
     selectProfile(id: string) {
       const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);

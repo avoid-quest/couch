@@ -123,6 +123,7 @@ pub struct NativePlaybackPreferences {
     pub subtitles: NativeSubtitlePreference,
     pub speed: f64,
     pub audio_delay: f64,
+    pub replay_gain: NativeReplayGain,
 }
 
 impl Default for NativePlaybackPreferences {
@@ -133,8 +134,18 @@ impl Default for NativePlaybackPreferences {
             subtitles: NativeSubtitlePreference::Auto,
             speed: 1.0,
             audio_delay: 0.0,
+            replay_gain: NativeReplayGain::Off,
         }
     }
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum NativeReplayGain {
+    #[default]
+    Off,
+    Track,
+    Album,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
@@ -179,6 +190,8 @@ pub struct NativeControlRequest {
     pub index: i32,
     #[serde(default)]
     pub subtitle: Option<NativeSubtitle>,
+    #[serde(default)]
+    pub replay_gain: Option<NativeReplayGain>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -242,6 +255,8 @@ pub struct MpvPlaybackState {
     pub speed: f64,
     pub audio_delay: f64,
     pub subtitle_delay: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_gain: Option<NativeReplayGain>,
     #[serde(default)]
     pub subtitle_error: Option<String>,
     #[serde(default)]

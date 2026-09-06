@@ -1,9 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { JellyfinItems } from "../shared/jellyfin";
 import { createCatalog } from "./catalog";
+import { createJellyfinSettings } from "./jellyfin-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
 import { openStore } from "./store";
@@ -21,13 +22,16 @@ function fixture() {
   const invalidations: string[] = [];
   const jellyfin = {
     status: () => ({ connected, serverName: connected ? "Living room" : null, username: connected ? "viewer" : null }),
-    connect: async (input: { url: string; username: string; password: string }) => {
+    connection: () => ({ ...jellyfin.status(), url: connected ? "http://private-jellyfin:8096" : null }),
+    test: async () => jellyfin.status(),
+    connect: async (input: { url: string; username: string; password: string }, _authorize?: () => void, changed?: () => void) => {
       connectCalls++;
       if (input.password === "private-password") throw new Error(`Upstream request failed: ${input.url}; password=${input.password}`);
       connected = true;
+      changed?.();
       return jellyfin.status();
     },
-    disconnect: async () => { connected = false; },
+    disconnect: async (_authorize?: () => void, changed?: () => void) => { connected = false; changed?.(); },
     items: async (options: { query?: string; startIndex?: number } = {}): Promise<JellyfinItems> => {
       if (options.query === "fail") throw new Error("Authorization: secret-token");
       return { items: [], total: 0, startIndex: options.startIndex ?? 0 };
@@ -35,12 +39,18 @@ function fixture() {
   };
   const store = openStore(":memory:");
   const session = createSession(store, () => {}, () => {});
-  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => invalidations.push(kind) });
+  const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
+  const settings = createJellyfinSettings({ jellyfin, invalidate: () => invalidations.push("jellyfin") });
   cleanup.push(async () => { session.close(); store.close(); await library.close(); radio.close(); rmSync(directory, { recursive: true, force: true }); });
-  const request = (path: string, method = "GET", value?: unknown, trusted = false) => catalog.handle(new Request(`http://localhost:4100${path}`, {
-    method, ...(value === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }),
-  }), trusted);
-  return { directory, library, radio, jellyfin, catalog, request, invalidations, session, store, connectCalls: () => connectCalls };
+  const request = (path: string, method = "GET", value?: unknown, trusted = false) => {
+    const input = new Request(`http://localhost:4100${path}`, {
+      method, ...(value === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }),
+    });
+    return path === "/api/jellyfin"
+      ? settings.handle(input, () => ({ controller: null, authority: trusted ? "host" : "controller", claimAvailable: false }))
+      : catalog.handle(input, trusted);
+  };
+  return { directory, library, radio, jellyfin, catalog, settings, request, invalidations, session, store, connectCalls: () => connectCalls };
 }
 
 test("only the host can add or scan folders; remotes browse indexed media without paths", async () => {
@@ -71,7 +81,6 @@ test("folder errors cannot disclose filesystem paths to remotes", async () => {
   const catalog = createCatalog({
     ...context,
     library: { ...context.library, listSources: () => [{ ...source, status: "error", error: `EACCES: ${context.directory}/private` }] },
-    invalidate: () => {},
   });
   const response = await catalog.handle(new Request("http://localhost/api/library/sources"), false);
   const text = await response.text();
@@ -80,7 +89,7 @@ test("folder errors cannot disclose filesystem paths to remotes", async () => {
 });
 
 test("rejects malformed requests before changing a provider and hides upstream credentials", async () => {
-  const { catalog, request, connectCalls, invalidations } = fixture();
+  const { settings, request, connectCalls, invalidations } = fixture();
   const credentials = { url: "http://private-jellyfin:8096", username: "viewer", password: "private-password" };
   expect((await request("/api/jellyfin", "POST", credentials)).status).toBe(403);
   expect((await request("/api/jellyfin", "DELETE")).status).toBe(403);
@@ -88,7 +97,7 @@ test("rejects malformed requests before changing a provider and hides upstream c
     expect((await request("/api/jellyfin", "POST", value, true)).status).toBe(400);
   }
   const malformed = new Request("http://localhost/api/jellyfin", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
-  expect((await catalog.handle(malformed, true)).status).toBe(400);
+  expect((await settings.handle(malformed, () => ({ authority: "host", controller: null, claimAvailable: false }))).status).toBe(400);
   expect(connectCalls()).toBe(0);
   const failed = await request("/api/jellyfin", "POST", credentials, true);
   expect(failed.status).toBe(502);
@@ -131,6 +140,37 @@ test("rejects invalid pagination and reports supported methods without running m
   expect((await request("/api/missing")).status).toBe(404);
 });
 
+test("video catalog routes paginate ordered episodes with progress and cached artwork without host paths", async () => {
+  const { directory, library, request, store } = fixture();
+  mkdirSync(join(directory, "Show", "Season 1"), { recursive: true });
+  writeFileSync(join(directory, "Show", "tvshow.nfo"), '<tvshow><title>Catalog show</title><unknown path="/private/secret">host-only original</unknown></tvshow>');
+  const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOZkAAAAASUVORK5CYII=", "base64");
+  writeFileSync(join(directory, "Show", "poster.png"), image);
+  for (const number of [10, 2]) writeFileSync(join(directory, "Show", "Season 1", `Show.S01E${number}.mkv`), "unit media");
+  const source = await library.addSource(directory);
+  await library.scan(source.id);
+  const shows = await (await request("/api/library/video/shows?q=Catalog&limit=1")).json();
+  const show = shows.items[0];
+  expect(shows).toMatchObject({ total: 1, offset: 0, limit: 1, items: [{ title: "Catalog show", episodeCount: 2, seasonCount: 1 }] });
+  expect(await (await request(`/api/library/video/shows/${show.id}/seasons`)).json()).toMatchObject({ items: [{ season: 1, episodeCount: 2 }] });
+  const item = library.search({ showId: show.id }).items[0]!;
+  store.saveProgress("household", { mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title, position: 25, duration: 120, watched: false, lastPlayedAt: 100 });
+  const response = await request(`/api/library/items?videoType=episode&showId=${show.id}&season=1&limit=1`);
+  const body = await response.text();
+  expect(JSON.parse(body)).toMatchObject({ total: 2, items: [{ id: item.id, video: { episode: 2 }, progress: { position: 25 } }] });
+  for (const secret of [directory, "/private/secret", "host-only original", '"fileMetadata"', '"path"']) expect(body + JSON.stringify(shows)).not.toContain(secret);
+  const artwork = await request(`/api/library/artwork/${show.artworkId}`);
+  expect(artwork.status).toBe(200);
+  expect(artwork.headers.get("Content-Type")).toBe("image/png");
+  expect(artwork.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect(new Uint8Array(await artwork.arrayBuffer())).toEqual(image);
+  for (const path of ["/api/library/items?videoType=audio", "/api/library/items?showId=../../private", "/api/library/items?season=1", `/api/library/items?showId=${show.id}&season=-1`,
+    `/api/library/items?showId=${show.id}&season=1000`, "/api/library/video/shows?limit=101"]) expect((await request(path)).status).toBe(400);
+  expect((await request(`/api/library/video/shows/${"0".repeat(64)}/seasons`)).status).toBe(404);
+  expect((await request("/api/library/video/shows", "POST", {})).status).toBe(405);
+  expect((await request(`/api/library/video/shows/${show.id}/seasons`, "POST", {})).status).toBe(405);
+});
+
 test("watching profiles and progress APIs validate edits and expose path-free catalog/history views", async () => {
   const { directory, library, request, session, store } = fixture();
   writeFileSync(join(directory, "Local movie.mkv"), "video fixture");
@@ -165,4 +205,33 @@ test("watching profiles and progress APIs validate edits and expose path-free ca
   session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
   session.command({ type: "play", entryId: "queued" });
   expect((await request("/api/profiles/household/select", "POST")).status).toBe(409);
+});
+
+test("profile edits validate HTTP bodies consistently and leave the Jellyfin account alone", async () => {
+  const { request, catalog, connectCalls, invalidations, session } = fixture();
+  await request("/api/jellyfin", "POST", { url: "http://jellyfin.example", username: "viewer", password: "valid" }, true);
+  const account = await (await request("/api/jellyfin")).json();
+  const { profile } = await (await request("/api/profiles", "POST", { name: "Viewer" })).json();
+  const rename = `/api/profiles/${profile.id}/rename`, remove = `/api/profiles/${profile.id}/remove`;
+  for (const name of [null, 42, {}, "", " ", "x".repeat(61), "bad\nname", "hOuSeHoLd"]) {
+    const create = await request("/api/profiles", "POST", { name });
+    const edit = await request(rename, "POST", { name, expectedName: profile.name });
+    expect(edit.status).toBe(400);
+    expect(await edit.json()).toEqual(await create.json());
+  }
+  for (const path of [rename, remove]) {
+    expect((await request(path)).status).toBe(405);
+    for (const value of [[], null, {}, { expectedName: null }, { expectedName: "" }, { expectedName: "x".repeat(61) }, { expectedName: "Viewer", role: "administrator" }]) expect((await request(path, "POST", value)).status).toBe(400);
+    const malformed = new Request(`http://localhost${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{" });
+    expect((await catalog.handle(malformed, false)).status).toBe(400);
+  }
+  expect(await (await request(rename, "POST", { name: "Renamed", expectedName: profile.name })).json()).toEqual({ profile: { ...profile, name: "Renamed" } });
+  expect((await request(remove, "POST", { expectedName: profile.name })).status).toBe(409);
+  await request(`/api/profiles/${profile.id}/select`, "POST");
+  expect(await (await request(remove, "POST", { expectedName: "Renamed" })).json()).toEqual({ activeProfile: { id: "household", name: "Household" } });
+  expect((await request(remove, "POST", { expectedName: "Renamed" })).status).toBe(404);
+  expect(session.state.activeProfile.id).toBe("household");
+  expect(await (await request("/api/jellyfin")).json()).toEqual(account);
+  expect(connectCalls()).toBe(1);
+  expect(invalidations).toEqual(["jellyfin"]);
 });

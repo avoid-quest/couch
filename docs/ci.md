@@ -4,6 +4,12 @@
 the Cargo cache, and inline path filters. Unknown paths or failed detection
 select native validation. Bun commands live in [package.json](../package.json).
 
+Ordinary JavaScript dependency changes still run the full Bun checks and build.
+The inline package comparison keeps metadata, scripts, Bun and Tauri dependency
+changes native, including resolved lock-only updates. Unsupported lock structures
+also select native validation. Test Markdown under `tests/linux` and
+`tests/preview` follows the documentation path rules.
+
 Native validation runs locked Cargo tests on the Rust version in
 [rust-toolchain.toml](../rust-toolchain.toml). The default test command compiles
 the normal library and binary, library/binary unit-test targets, the Linux
@@ -29,6 +35,11 @@ edits reuse dependencies and rebuild the application; frontend and sidecar
 outputs are always regenerated. Cache misses build normally. Only Cargo cache
 directories are stored, without credentials or the full Cargo home. PR caches
 use GitHub's unprivileged PR scope and cannot populate the base branch's cache.
+JavaScript manifests do not invalidate Cargo dependency artifacts. Their changes
+regenerate the frontend, sidecar and build identity; native validation rebuilds
+the workspace crate that consumes those outputs. When changing this boundary,
+verify ordinary dependency timing and a relevant native edit that reuses a
+compatible cache after a JavaScript dependency change.
 
 Before adding checks, jobs, platforms, or repeated validation, compare complete
 before/after usage against the [CI gate's budgets and evidence rules](https://github.com/avoid-quest/couch/issues/43#budgets).
@@ -47,3 +58,16 @@ A cold native measurement needs no usable Cargo dependency/build cache. Warm
 proof needs two consecutive relevant native source edits that reuse an earlier
 compatible cache; rerunning one SHA does not prove incremental performance.
 Reuse existing documentation/ordinary evidence when their behavior is unchanged.
+
+The opt-in [Package workflow](../.github/workflows/package.yml) adds no work to
+ordinary Check revisions or metadata events. One requested qualification has one
+Ubuntu job that builds one release and installs that exact artifact into a clean
+runtime container. It retains compiled Cargo dependencies if a later runtime
+smoke fails, so a fixture correction can reuse that build work. Its build,
+helper downloads, license generation, official
+driver setup and smoke are additional release-qualification usage. Record every
+attempt with the timing/rounding method above, including failures, cancellations
+and a separately requested post-merge build. Compare the unchanged ordinary
+Check usage and added qualification usage separately. A new PR head requires
+fresh qualification even if an older Package check passed; see
+[package verification](packaging.md#build-and-qualify).

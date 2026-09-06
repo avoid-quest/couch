@@ -1,4 +1,5 @@
 export type JellyfinStatus = { connected: boolean; serverName: string | null; username: string | null };
+export type JellyfinConnection = JellyfinStatus & { url: string | null };
 
 export type JellyfinItem = {
   id: string;

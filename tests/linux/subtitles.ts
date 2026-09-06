@@ -234,8 +234,8 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   const { ui, until, clients, api, httpRemote, otherRemote, otherProfile } = context;
   const { first, all, stop } = controls(context);
   const household = first().activeProfile;
-  const householdPreferences: ProfilePlaybackPreferences = { audioLanguage: "it", subtitleLanguage: "en", subtitles: "off", speed: 1.25 };
-  const otherPreferences: ProfilePlaybackPreferences = { audioLanguage: "en", subtitleLanguage: "en", subtitles: "auto", speed: 0.75 };
+  const householdPreferences: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "it", subtitleLanguage: "en", subtitles: "off", speed: 1.25 };
+  const otherPreferences: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "en", subtitleLanguage: "en", subtitles: "auto", speed: 0.75 };
   const audioDelay = 0.4;
   await stop();
   await httpRemote.minimize();
@@ -287,7 +287,7 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   await httpRemote.ui.button("Save audio language as default", "[role=dialog]");
   await until("explicit audio default records the current track's language", () => all(state => state.preferences?.profile.audioLanguage === "eng"));
   await httpRemote.ui.button("Save subtitles as default", "[role=dialog]");
-  const explicitPreferences: ProfilePlaybackPreferences = { audioLanguage: "eng", subtitleLanguage: "eng", subtitles: "auto", speed: 1.5 };
+  const explicitPreferences: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "eng", subtitleLanguage: "eng", subtitles: "auto", speed: 1.5 };
   await until("explicit defaults save observed languages without changing the current item", () => all(state => state.player.playbackId === previousPlayback && state.player.status === "paused" && JSON.stringify(state.preferences?.profile) === JSON.stringify(explicitPreferences)));
   await assertResponsive(httpRemote.ui, "Phone current playback and explicit defaults");
   await httpRemote.screenshot("preferences-current-http");
