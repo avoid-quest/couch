@@ -17,6 +17,7 @@ import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
 import { buildInfo } from "./build-info";
+import { createGuide } from "./iptv";
 
 type HubOptions = {
   hostname?: string;
@@ -65,6 +66,7 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
+      if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5));
       if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.
@@ -78,6 +80,18 @@ export function createHub(options: HubOptions) {
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode) => { session.loadQueue(entries, mode); } });
   const library = createLibrary({ databasePath: options.databasePath, onChange: () => session.invalidate("library") });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
+  const guide = createGuide({ databasePath: options.databasePath, onChange: () => session.invalidate("iptv"),
+    onSourcesChanged: channelIds => {
+      const state = session.state;
+      const current = state.queue.find(entry => entry.id === state.currentEntryId);
+      if (current && channelIds.some(id => current.source === `iptv:${id}`)) session.command({ type: "stop" });
+    },
+    enqueue: (channel, playNow) => {
+      const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
+      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }); }
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
+    },
+  });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller") });
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session }, invalidate: kind => {
@@ -148,6 +162,7 @@ export function createHub(options: HubOptions) {
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket) return cors(request, await (url.pathname === "/api/subtitles" ? subtitles.handle(request) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request) : url.pathname.startsWith("/api/providers/") ? providers.handle(request) : catalog.handle(request, trusted)));
       return server.upgrade(request, { data: { trusted, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
@@ -246,6 +261,7 @@ export function createHub(options: HubOptions) {
       if (closed) return;
       closed = true;
       shutdown.abort();
+      guide.close();
       for (const controller of inspections.values()) controller.abort();
       session.close();
       providers.close();

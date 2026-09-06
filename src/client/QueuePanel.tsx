@@ -37,7 +37,7 @@ function duration(seconds: number) {
 function sourceLabel(source: string) {
   try {
     const url = new URL(source.startsWith("web:") ? source.slice(4) : source);
-    return { "file:": "Local file", "library:": "Your library", "jellyfin:": "Jellyfin", "radio:": "Radio playlist" }[url.protocol] ?? (url.host || "Media");
+    return { "file:": "Local file", "library:": "Your library", "jellyfin:": "Jellyfin", "radio:": "Radio playlist", "iptv:": "TV guide" }[url.protocol] ?? (url.host || "Media");
   } catch {
     return "Media";
   }

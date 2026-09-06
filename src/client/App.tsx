@@ -9,6 +9,7 @@ import { PlaybackControls } from "./PlaybackControls";
 import { RemotePad } from "./RemotePad";
 import { useTvPresentation } from "./useTvPresentation";
 import { RadioPanel } from "./RadioPanel";
+import { GuidePanel } from "./GuidePanel";
 import { MediaArtwork, ProviderPanel } from "./ProviderPanel";
 import { Icon } from "./Icon";
 import { VideoStage } from "./VideoStage";
@@ -247,11 +248,12 @@ export function App() {
 
               <Tabs value={section} onValueChange={changeSection} className="media-browser">
                 <TabsList className="source-nav" aria-label="Media sources">
-                  {["Queue", "Online", "Library", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
+                  {["Queue", "Online", "Library", "Guide", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
                 </TabsList>
                 <TabsContent value="Queue" forceMount hidden={section !== "Queue"}>
                   <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </TabsContent>
+                {visited.has("Guide") && <TabsContent value="Guide" forceMount hidden={section !== "Guide"}><GuidePanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} host={nativeHost} version={state?.iptvVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} currentSource={state?.queue.find(entry => entry.id === state.currentEntryId)?.source} active={section === "Guide"} /></TabsContent>}
                 {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={(item, playNow, quality) =>
                   run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(quality ? { quality } : {}), playNow })
                 } onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></TabsContent>}

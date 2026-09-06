@@ -12,12 +12,15 @@ import { verifyRadio } from "./radio";
 import { assertTvFullscreen, verifyTvRemote } from "./tv-remote";
 import { verifyClaim } from "./claim";
 import { verifyVideoQuality } from "./video-quality";
+import { createGuideFixture } from "./iptv-fixture";
+import { verifyGuide } from "./iptv";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const artifactDir = "/artifacts";
 const checks: string[] = [];
 const radioFixture = await createRadioFixture();
+const guideFixture = await createGuideFixture();
 const plainMediaAuth: boolean[] = [];
 let playlistRevision = 1;
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
@@ -632,6 +635,7 @@ try {
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
   const persistedMusic = await verifyMusic(musicContext);
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedGuide = await verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }, guideFixture);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -662,6 +666,7 @@ try {
   await assertPlaybackPreferencesAfterRestart(preferenceContext, persistedPreferences);
   await assertMusicAfterRestart(musicContext, persistedMusic);
   await persistedClaim.verifyAfterRestart(clients, httpRemote);
+  await persistedGuide.verifyAfterRestart(clients, httpRemote);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === importedStations[0].id));
@@ -719,4 +724,5 @@ try {
   driver.kill();
   await media.stop(true);
   await radioFixture.close();
+  await guideFixture.close();
 }
