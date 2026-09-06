@@ -384,7 +384,7 @@ async function delayedCatalog(kind: "library" | "jellyfin") {
     const createLibrary = libraryModule.createLibrary;
     let library!: ReturnType<typeof createLibrary>;
     const spy = spyOn(libraryModule, "createLibrary").mockImplementation(options => {
-      library = createLibrary({ ...options, ffprobePath: null });
+      library = createLibrary({ ...options, folders: foldersModule.createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null }), ffprobePath: null });
       const getPlayable = library.getPlayable;
       library.getPlayable = async id => {
         if (id === itemId) { entered.resolve(); await gate.promise; }

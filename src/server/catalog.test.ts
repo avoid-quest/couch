@@ -1,3 +1,4 @@
+import { createMediaFolders } from "./media-folders";
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,12 +11,14 @@ import { createRadio } from "./radio";
 import { openStore } from "./store";
 import { createSession } from "./session";
 
+const folders = createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null });
+
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
 
 function fixture() {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "couch-catalog-")));
-  const library = createLibrary({ databasePath: ":memory:", ffprobePath: null });
+  const library = createLibrary({ folders, databasePath: ":memory:", ffprobePath: null });
   const radio = createRadio({ databasePath: ":memory:", discover: async () => { throw new Error("private upstream details"); } });
   let connected = false;
   let connectCalls = 0;
