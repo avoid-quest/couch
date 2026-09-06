@@ -1,0 +1,103 @@
+import { readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { ControllerIdentity } from "../shared/controllers";
+import type { UpdateState } from "../shared/updates";
+import { ControllerError, settingField } from "./controllers";
+import { UpdateError, type UpdateFeed, type VerifiedRelease } from "./update-feed";
+
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000) {
+  const state: UpdateState = { running, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
+  try {
+    const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
+    if (!["stable", "preview"].includes(saved.channel) || saved.policy !== "manual") throw new Error();
+    state.channel = saved.channel;
+    state.lastSuccessfulCheck = typeof saved.lastSuccessfulCheck === "number" ? saved.lastSuccessfulCheck : null;
+    const c = saved.candidate;
+    if (c && /^[a-f0-9]{64}$/.test(c.id) && typeof c.notes === "string" && typeof c.version === "string" && typeof c.revision === "string" && typeof c.releaseId === "string" && [c.bytes, c.publishedAt, c.expiresAt].every(Number.isSafeInteger)) state.candidate = c;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Saved update settings could not be read. Select your channel again to save it."; }
+  }
+  let candidate: VerifiedRelease | null = null;
+  let job: Promise<void> | undefined;
+  let changing = false, closed = false;
+  let saving: Promise<void> | undefined;
+  const shutdown = new AbortController();
+  const persist = async () => {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFile(join(directory, "settings.json.tmp"), JSON.stringify({ channel: state.channel, policy: state.policy, candidate: state.candidate, lastSuccessfulCheck: state.lastSuccessfulCheck }), { mode: 0o600 });
+    await rename(join(directory, "settings.json.tmp"), join(directory, "settings.json"));
+  };
+  const busy = () => !!job || changing || closed;
+  const start = (kind: "checking" | "downloading") => {
+    if (!feed || busy()) return;
+    const wasReady = state.status === "ready", previousId = candidate?.summary.id;
+    state.status = kind; state.error = null;
+    if (kind === "checking") state.currentCheck = false;
+    job = (async () => {
+      const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(kind === "checking" ? 120_000 : 30 * 60_000)]);
+      if (kind === "checking") {
+        candidate = await feed.check(state.channel, signal);
+        state.candidate = candidate?.summary ?? null;
+        state.lastSuccessfulCheck = Date.now();
+        await persist();
+        state.currentCheck = true;
+        state.status = candidate ? wasReady && previousId === candidate.summary.id ? "ready" : "available" : "idle";
+      } else {
+        await feed.stage(candidate!, signal);
+        state.status = "ready";
+      }
+    })().catch(error => {
+      if (!closed) {
+        state.status = "failed";
+        state.error = error instanceof UpdateError ? error.message : "Could not complete the update operation. Check the TV's storage and feed enrollment, then retry.";
+      }
+    }).finally(() => { job = undefined; });
+  };
+  const startup = feed ? setTimeout(() => start("checking"), 1_000) : undefined;
+  const timer = feed ? setInterval(() => start("checking"), interval) : undefined;
+  return {
+    async handle(request: Request, identity: () => ControllerIdentity | null) {
+      const authorize = () => {
+        const caller = identity();
+        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
+        if (caller.authority !== "administrator") throw new ControllerError("An administrator remote is required to manage updates.", 403);
+      };
+      try {
+        authorize();
+        const path = new URL(request.url).pathname;
+        if (path === "/api/updates" && request.method === "GET") return json(state);
+        if (!["/api/updates/channel", "/api/updates/check", "/api/updates/stage"].includes(path)) return json({ error: "Not found." }, 404);
+        if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
+        if (!feed) throw new ControllerError("Updates require the packaged Ubuntu TV installation.", 409);
+        const field = path.endsWith("/channel") ? "channel" : path.endsWith("/check") ? "check" : "candidateId";
+        const value = await settingField(request, field);
+        authorize();
+        if (busy()) throw new ControllerError("An update operation is already running. Wait for it to finish.", 409);
+        if (field === "channel") {
+          if (value !== "stable" && value !== "preview") throw new ControllerError("Choose Stable or Preview.");
+          const previous = { ...state };
+          changing = true;
+          try {
+            state.channel = value; state.candidate = null; state.currentCheck = false; state.lastSuccessfulCheck = null; state.status = "idle"; state.error = null;
+            saving = persist();
+            await saving; candidate = null;
+          } catch (error) { Object.assign(state, previous); throw error; }
+          finally { changing = false; saving = undefined; }
+          start("checking");
+        } else if (field === "check") {
+          if (value !== true) throw new ControllerError("Confirm Check now.");
+          start("checking");
+        } else {
+          if (!candidate || !state.currentCheck || value !== candidate.summary.id || candidate.summary.expiresAt <= Date.now()) throw new ControllerError("This candidate is no longer current. Use Check now before downloading.", 409);
+          start("downloading");
+        }
+        return json(state, 202);
+      } catch (error) {
+        return json({ error: error instanceof ControllerError ? error.message : "Could not save update settings. Check the TV's storage and retry." }, error instanceof ControllerError ? error.status : 500);
+      }
+    },
+    async close() { closed = true; clearTimeout(startup); clearInterval(timer); shutdown.abort(); await Promise.allSettled([job, saving]); },
+  };
+}

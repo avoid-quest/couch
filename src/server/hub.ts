@@ -1,5 +1,8 @@
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
+import { dirname, join } from "node:path";
+import { createUpdates } from "./updates";
+import { createUpdateFeed } from "./update-feed";
 import { networkInterfaces } from "node:os";
 import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
 import { createSession } from "./session";
@@ -113,6 +116,8 @@ export function createHub(options: HubOptions) {
       socket.close(4001, "This remote's access was revoked. Pair again.");
     }
   } });
+  const updateDirectory = join(dirname(options.databasePath), "updates");
+  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined);
   const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
@@ -198,6 +203,7 @@ export function createHub(options: HubOptions) {
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       const authorize = () => { if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401); };
       if (caller.controller) store.touchController(caller.controller.id);
+      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, identity));
       if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, identity));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
@@ -318,6 +324,7 @@ export function createHub(options: HubOptions) {
       for (const controller of inspections.values()) controller.abort();
       session.close();
       appearance.close();
+      await updates.close();
       providers.close();
       await server.stop(true);
       subtitles.close();
