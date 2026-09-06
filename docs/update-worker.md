@@ -32,6 +32,12 @@ while a transaction is active. Do not delete this storage to clear a failed
 operation; it will carry the packages and transaction evidence needed for SSH
 recovery.
 
+Before copying, the worker checks the destination filesystem for the signed
+archive sizes, metadata and a 256 MiB reserve. It verifies retained archives
+in place through pinned descriptors, without another package copy. This is a
+preflight check, not a reservation against other disk users; a later write
+failure removes the partial receipt and leaves the accepted identity intact.
+
 Expired channel metadata may authenticate the exact installed release for
 retention. This does not permit installing an expired candidate. A new
 candidate requires fresh signed metadata. Subsequent transaction integration

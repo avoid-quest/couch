@@ -39,7 +39,7 @@ def fixture(directory, number=1):
     return manifest
 
 
-def fake_control(*args):
+def fake_control(*args, **kwargs):
     value = json.loads(Path(args[-1]).read_bytes())
     return "\n".join(f"{key}: {value}" for key, value in value.items()).encode()
 
@@ -105,7 +105,7 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(manifest["build"]["version"], "0.1.0+build.1.1")
 
     def test_archive_control_identity_must_match(self):
-        receipt.run.side_effect = lambda *args: b"Package: another\nVersion: 1\nArchitecture: all"
+        receipt.run.side_effect = lambda *args, **kwargs: b"Package: another\nVersion: 1\nArchitecture: all"
         with self.assertRaisesRegex(receipt.Rejected, "unexpected package identity"):
             self.copy()
 
@@ -147,6 +147,15 @@ class ReceiptTests(unittest.TestCase):
         os.mkfifo(path)
         with self.assertRaisesRegex(receipt.Rejected, "unsupported type"):
             self.copy()
+
+    def test_space_refusal_precedes_receipt_writes(self):
+        needed = sum(p["size"] for p in self.manifest["packages"]) + sum((self.source / name).stat().st_size for name in ("InRelease", "release.json", "Packages")) + receipt.RESERVE
+        with patch.object(receipt.shutil, "disk_usage", return_value=shutil._ntuple_diskusage(needed, 1, needed - 1)) as capacity:
+            with self.assertRaisesRegex(receipt.Rejected, "more update storage"):
+                self.copy()
+            capacity.assert_called_once_with(self.destination)
+        self.assertEqual(list(self.destination.iterdir()), [])
+        receipt.run.assert_not_called()
 
 
 class RetentionTests(unittest.TestCase):
@@ -214,6 +223,20 @@ class RetentionTests(unittest.TestCase):
             query.return_value = records.replace(b"installed", b"unpacked", 1)
             with self.assertRaisesRegex(receipt.Rejected, "completely configured"):
                 retention.installed()
+
+    def test_current_verification_needs_no_extra_archive_copy(self):
+        current = self.storage.enroll(self.source, b"fixture", self.manifest["build"])
+        with patch.object(retention.tempfile, "mkdtemp", side_effect=AssertionError("No package copy needed")), patch.object(receipt.shutil, "disk_usage", side_effect=AssertionError("No new package allocation")):
+            self.assertEqual(self.storage.current(b"fixture"), current)
+
+    def test_capacity_failure_cleans_partial_directory_and_keeps_current(self):
+        current = self.storage.enroll(self.source, b"fixture", self.manifest["build"])
+        second = self.root / "second"
+        fixture(second, 2)
+        with patch.object(receipt.shutil, "disk_usage", return_value=shutil._ntuple_diskusage(100, 100, 0)), self.assertRaises(receipt.Rejected):
+            self.storage.retain(second, b"fixture")
+        self.assertFalse(list(self.storage.receipts.glob(".receipt-*")))
+        self.assertEqual(self.storage.current(b"fixture"), current)
 
 
 if __name__ == "__main__":

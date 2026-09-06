@@ -1,5 +1,6 @@
 """Authenticate a signed receipt independently of Couch's unprivileged stager."""
 import base64
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
@@ -7,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -15,15 +17,16 @@ LIMIT = 2 * 1024 * 1024
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+\+build\.[1-9][0-9]*\.[1-9][0-9]*\Z")
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
+RESERVE = 256 * 1024 * 1024
 
 
 class Rejected(Exception):
     """A safe error that may be shown to an administrator remote."""
 
 
-def run(*args):
+def run(*args, pass_fds=()):
     try:
-        return subprocess.check_output(args, env=ENV, stderr=subprocess.DEVNULL, timeout=30)
+        return subprocess.check_output(args, env=ENV, stderr=subprocess.DEVNULL, timeout=30, pass_fds=pass_fds)
     except (OSError, subprocess.SubprocessError) as error:
         raise Rejected("Release verification could not complete.") from error
 
@@ -162,7 +165,7 @@ def validate(manifest, index):
 
 
 def copy_receipt(source, destination, key, fresh=True, expected=None):
-    """Destination must be a new, private root-owned directory, never a served path."""
+    """Copy into a new private directory, or verify pinned files when destination is None."""
     try:
         descriptor = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
@@ -172,14 +175,18 @@ def copy_receipt(source, destination, key, fresh=True, expected=None):
                 raise Rejected("The staged candidate identity changed.")
             authenticate(signed_fields(signed, key), raw, index, fresh)
             manifest = validate(load_json(raw), index)
-            for name, data in (("InRelease", signed), ("release.json", raw), ("Packages", index)):
-                with (destination / name).open("xb") as output:
-                    output.write(data)
-                    output.flush()
-                    os.fsync(output.fileno())
+            if destination is not None:
+                needed = sum(package["size"] for package in manifest["packages"]) + len(signed) + len(raw) + len(index) + RESERVE
+                if shutil.disk_usage(destination).free < needed:
+                    raise Rejected("The TV needs more update storage before retaining this release.")
+                for name, data in (("InRelease", signed), ("release.json", raw), ("Packages", index)):
+                    with (destination / name).open("xb") as output:
+                        output.write(data)
+                        output.flush()
+                        os.fsync(output.fileno())
             for package in manifest["packages"]:
                 source_fd = os.open(package["filename"], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
-                with os.fdopen(source_fd, "rb") as stream, (destination / package["filename"]).open("xb") as output:
+                with os.fdopen(source_fd, "rb") as stream, ((destination / package["filename"]).open("xb") if destination is not None else nullcontext()) as output:
                     info = os.fstat(stream.fileno())
                     if not stat.S_ISREG(info.st_mode) or info.st_size != package["size"]:
                         raise Rejected("A staged Debian archive has the wrong type or size.")
@@ -189,14 +196,18 @@ def copy_receipt(source, destination, key, fresh=True, expected=None):
                         if size > package["size"]:
                             raise Rejected("A staged Debian archive changed during verification.")
                         digest.update(block)
-                        output.write(block)
+                        if output is not None:
+                            output.write(block)
                     if size != package["size"] or digest.hexdigest() != package["sha256"]:
                         raise Rejected("A staged Debian archive failed authentication.")
-                    output.flush()
-                    os.fsync(output.fileno())
-                control = fields(run("/usr/bin/dpkg-deb", "--field", str(destination / package["filename"])).decode())
-                if any(control.get(key) != package[field] for key, field in (("Package", "name"), ("Version", "version"), ("Architecture", "architecture"))):
-                    raise Rejected("A Debian archive has an unexpected package identity.")
+                    if output is not None:
+                        output.flush()
+                        os.fsync(output.fileno())
+                    stream.seek(0)
+                    control_path = str(destination / package["filename"]) if destination is not None else f"/dev/fd/{source_fd}"
+                    control = fields(run("/usr/bin/dpkg-deb", "--field", control_path, pass_fds=() if output is not None else (source_fd,)).decode())
+                    if any(control.get(key) != package[field] for key, field in (("Package", "name"), ("Version", "version"), ("Architecture", "architecture"))):
+                        raise Rejected("A Debian archive has an unexpected package identity.")
             return identity, manifest
         finally:
             os.close(descriptor)

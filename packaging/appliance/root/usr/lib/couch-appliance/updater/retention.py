@@ -94,11 +94,7 @@ class Retention:
             if destination.exists():
                 # Reverify retained bytes too. Receipt expiry does not invalidate
                 # an already accepted release's recovery evidence.
-                check = Path(tempfile.mkdtemp(prefix=".check-", dir=self.receipts))
-                try:
-                    copy_receipt(destination, check, key, False, candidate_id)
-                finally:
-                    shutil.rmtree(check)
+                copy_receipt(destination, None, key, False, candidate_id)
                 if fresh:
                     # Manifest and archives stay immutable, but a publisher may
                     # renew this release's signed channel expiry.
@@ -129,7 +125,7 @@ class Retention:
         current = self.read("current.json")
         if not isinstance(current, dict) or not isinstance(current.get("candidateId"), str) or not SHA.fullmatch(current["candidateId"]):
             raise Rejected("Enroll the exact installed release before requesting updates.")
-        candidate_id, manifest = self.retain(self.receipts / current["candidateId"], key, False, current["candidateId"])
+        candidate_id, manifest = copy_receipt(self.receipts / current["candidateId"], None, key, False, current["candidateId"])
         if current != {"candidateId": candidate_id, **identity(manifest)}:
             raise Rejected("The retained current-release identity is inconsistent.")
         return current
