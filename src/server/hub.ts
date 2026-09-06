@@ -22,6 +22,7 @@ import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
 import { buildInfo } from "./build-info";
+import { createGuide } from "./iptv";
 
 type HubOptions = {
   hostname?: string;
@@ -68,10 +69,11 @@ export function createHub(options: HubOptions) {
   const session = createSession(store, options.sendPlayer, state => {
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
-    resolveSource: (entry, playbackId, signal, fromStart) => {
+    resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
+      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
       if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.
@@ -88,6 +90,18 @@ export function createHub(options: HubOptions) {
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
+  const guide = createGuide({ databasePath: options.databasePath, onChange: () => session.invalidate("iptv"),
+    onSourcesChanged: channelIds => {
+      const state = session.state;
+      const current = state.queue.find(entry => entry.id === state.currentEntryId);
+      if (current && channelIds.some(id => current.source === `iptv:${id}`)) session.command({ type: "stop" });
+    },
+    enqueue: (channel, playNow) => {
+      const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
+      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }); }
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
+    },
+  });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller"), onRevoke: id => {
     for (const socket of sockets) if (socket.data.controllerId === id) {
@@ -169,6 +183,7 @@ export function createHub(options: HubOptions) {
       const authorize = () => { if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401); };
       if (caller.controller) store.touchController(caller.controller.id);
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
+      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
       if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, identity));
@@ -281,6 +296,7 @@ export function createHub(options: HubOptions) {
       if (closed) return;
       closed = true;
       shutdown.abort();
+      guide.close();
       for (const controller of inspections.values()) controller.abort();
       session.close();
       appearance.close();

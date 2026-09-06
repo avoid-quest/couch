@@ -48,6 +48,8 @@ pub enum PlaybackCommand {
         subtitles: Vec<ExternalSubtitle>,
         #[serde(default)]
         radio: bool,
+        #[serde(default)]
+        go_live: bool,
     },
     AddSubtitle {
         playback_id: String,
@@ -366,6 +368,18 @@ mod tests {
             let command = format!(
                 r#"{{"type":"load","playbackId":"invalid","source":"https://example.test/video.mpd","maxVideoHeight":{index}}}"#
             );
+            assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
+        }
+    }
+
+    #[test]
+    fn live_return_policy_is_private_optional_and_boolean() {
+        for (extra, expected) in [("", false), (",\"goLive\":true", true)] {
+            let command = format!(r#"{{"type":"load","playbackId":"live","source":"https://private.test/live"{extra}}}"#);
+            assert!(matches!(serde_json::from_str::<PlaybackCommand>(&command).unwrap(), PlaybackCommand::Load { go_live, .. } if go_live == expected));
+        }
+        for value in ["-1", "\"true\"", "null"] {
+            let command = format!(r#"{{"type":"load","playbackId":"live","source":"https://private.test/live","goLive":{value}}}"#);
             assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
         }
     }

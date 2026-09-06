@@ -66,6 +66,7 @@ impl Player {
                 preferences,
                 subtitles,
                 radio,
+                go_live,
             } => {
                 self.state = PlayerState {
                     playback_id: Some(playback_id),
@@ -83,6 +84,7 @@ impl Player {
                     &preferences,
                     &subtitles,
                     radio,
+                    go_live,
                 )
             }
             PlaybackCommand::AddSubtitle {
@@ -210,6 +212,7 @@ impl Player {
         preferences: &PlaybackPreferences,
         subtitles: &[ExternalSubtitle],
         radio: bool,
+        go_live: bool,
     ) -> Result<(), String> {
         use tauri_plugin_video::{NativeOpenRequest, VideoExt};
         // The plugin's own defaulted request fields retain its engine defaults.
@@ -225,6 +228,7 @@ impl Player {
             "preferences": preferences,
             "subtitles": subtitles,
             "radio": radio,
+            "goLive": go_live,
             "backend": "mpv",
             "x": self.rect.x,
             "y": self.rect.y,
@@ -450,6 +454,7 @@ impl Player {
         _: Option<f64>,
         _: &PlaybackPreferences,
         _: &[ExternalSubtitle],
+        _: bool,
         _: bool,
     ) -> Result<(), String> {
         self.state.status = "unavailable";

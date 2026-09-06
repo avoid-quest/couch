@@ -1217,6 +1217,7 @@ mod linux_mpv {
         tracks_dirty: bool,
         default_buffer: MpvBufferDefaults,
         default_network: crate::mpv_radio::NetworkDefaults,
+        default_live_start: crate::mpv_iptv::LiveStartDefaults,
         error: Rc<RefCell<Option<String>>>,
     }
 
@@ -1347,6 +1348,7 @@ mod linux_mpv {
         mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
         let default_buffer = MpvBufferDefaults::read(&mpv);
         let default_network = crate::mpv_radio::NetworkDefaults::read(&mpv)?;
+        let default_live_start = crate::mpv_iptv::LiveStartDefaults::read(&mpv)?;
 
         let mut context = RenderContext::new(
             unsafe { mpv.ctx.as_mut() },
@@ -1462,6 +1464,7 @@ mod linux_mpv {
             tracks_dirty: true,
             default_buffer,
             default_network,
+            default_live_start,
             error: render_error,
         };
         if trace {
@@ -1488,6 +1491,7 @@ mod linux_mpv {
         player.subtitle_error = None;
         player.max_video_height = payload.max_video_height;
         configure_network(player, payload)?;
+        player.default_live_start.configure(&player.mpv, payload.go_live)?;
         // Append takes one unescaped item, preserving URL colons and commas.
         // Clear on every load so an ordinary source cannot inherit split audio.
         player

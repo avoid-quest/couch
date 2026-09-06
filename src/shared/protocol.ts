@@ -41,6 +41,7 @@ export type SessionState = {
   progressError?: string | null;
   libraryVersion?: number;
   radioVersion?: number;
+  iptvVersion?: number;
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;
@@ -63,6 +64,7 @@ export type Action =
   | { type: "remove"; entryId: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
+  | { type: "goLive"; playbackId: string }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
   | { type: "volume"; volume: number }
@@ -83,7 +85,7 @@ export type ServerMessage =
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 export type PlaybackCommand =
-  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean }
+  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
