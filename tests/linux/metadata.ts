@@ -38,9 +38,9 @@ async function keyboard(target: UiDriver, selector: string, value: string) {
   await target.request(`/session/${target.session()}/actions`, { actions: [{ type: "key", id: "metadata-editor", actions }] });
   await until(`real keyboard fills ${selector}`, () => target.execute("return document.activeElement === document.querySelector(arguments[0]) && document.querySelector(arguments[0]).value === arguments[1]", [selector, value]));
 }
-async function movieEditor(target: UiDriver, title: string) {
+async function movieEditor(target: UiDriver, title: string, itemId: string) {
   await target.section("Library"); await target.button("Movies", '[aria-label="Library view"]');
-  await target.button(`Details for ${title}`); await target.button("Edit metadata");
+  await target.button(`Details for ${title}`, `[data-video-item="${itemId}"]`); await target.button("Edit metadata");
   await until("metadata editor loads the current title", () => target.execute("return document.querySelector('[data-metadata-field=title]')?.value === arguments[0]", [title]));
 }
 async function capture(name: string) {
@@ -121,7 +121,7 @@ try {
   const movie = (await data("/api/library/items?videoType=movie")).items[0];
   const episode = (await data("/api/library/items?videoType=episode")).items[0];
   const view = (): Promise<MetadataView> => data(`/api/metadata/items/${movie.id}`);
-  await movieEditor(ui, "Wrong movie");
+  await movieEditor(ui, "Wrong movie", movie.id);
   await keyboard(ui, '[data-metadata-field="title"]', "Correct movie");
   await ui.execute("document.documentElement.removeAttribute('data-keyboard'); [...document.querySelectorAll('.metadata-editor button')].find(button => button.textContent === 'Save corrections').focus()");
   const before = await view(), beforeVersion = clients[0]!.state!.libraryVersion;
@@ -137,8 +137,8 @@ try {
   await until("metadata correction preserves native playback", () => all(state => state.player.status === "playing" && state.player.position > 1));
   await assertNativeVideoPixels(ui.execute, artifacts, "metadata-playing", [253, 0, 0]); await assertNativeUiPixels(ui.execute, artifacts);
   await clients[0]!.command({ type: "stop" }); await until("Stop is current on both controllers", () => all(state => state.player.status === "idle"));
-  await movieEditor(ui, "Correct movie");
-  await phone.restore(); await movieEditor(phone.ui, "Correct movie");
+  await movieEditor(ui, "Correct movie", movie.id);
+  await phone.restore(); await movieEditor(phone.ui, "Correct movie", movie.id);
   await keyboard(phone.ui, '[data-metadata-field="title"]', "Phone correction");
   const upload = await phone.ui.element("[data-metadata-artwork]");
   await phone.ui.request(`/session/${phone.ui.session()}/element/${upload}/value`, { text: "/mnt/invalid-metadata-artwork.png" });
@@ -192,7 +192,9 @@ try {
   await until("offline restart reconnects both controllers without autoplay", () => all(state => state.player.status === "idle"));
   assert.equal((await view()).values.title, "Phone correction"); assert.equal((await view()).origins.title, "Manual");
   await phone.restore(); await phone.refresh(); await until("administrator phone reconnects after restart", () => phone!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
-  await movieEditor(phone.ui, "Phone correction"); await phone.screenshot("phone-metadata-offline-restart");
+  await movieEditor(phone.ui, "Phone correction", movie.id);
+  assert.equal(await phone.ui.execute("return document.querySelector('[data-metadata-field=title]')?.previousElementSibling?.textContent"), "Origin: Manual");
+  await phone.screenshot("phone-metadata-offline-restart");
   await Bun.write(`${artifacts}/metadata-results.json`, JSON.stringify({ status: "passed", source: process.env.COUCH_QUALIFICATION_HEAD, checks, widths: [320,375,390,768,1024,1440,1920], liveTmdb: "blocked: owner has no authorized API access", scope: "Ubuntu software rendering and null audio; no physical hardware claim" }, null, 2));
 } catch (error) {
   await Bun.write(`${artifacts}/metadata-results.json`, JSON.stringify({ status: "failed", checks, error: String(error) }, null, 2));
