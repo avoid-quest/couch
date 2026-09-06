@@ -157,4 +157,8 @@ acquisition and the frozen hook, disconnects the initiating client and checks
 readiness failure. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
-watchdog; never run it on the TV or a development host.
+watchdog, or on the dedicated disposable Ubuntu runner in
+[Update worker CI](../.github/workflows/update-worker.yml). Never run it on the
+TV or a development host. That workflow runs both focused suites and both real
+Ubuntu fixtures for companion package, worker, test and workflow changes with
+read-only repository permissions and a five-minute job deadline.

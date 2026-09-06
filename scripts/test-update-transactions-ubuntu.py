@@ -285,5 +285,5 @@ class RealTransactions(unittest.TestCase):
 
 if __name__ == "__main__":
     if os.geteuid() != 0:
-        raise SystemExit("Run only in a disposable root Ubuntu container.")
+        raise SystemExit("Run only in a disposable root Ubuntu container or dedicated CI runner.")
     unittest.main()
