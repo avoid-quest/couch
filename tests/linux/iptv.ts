@@ -77,7 +77,9 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     await until("program dialog restores focus to its real Programs button", () => httpRemote.ui.execute("return !document.querySelector('.guide-program-dialog') && document.activeElement?.textContent==='Programs'"));
     await httpRemote.ui.type("#guide-search", "Blue");
     await until("phone channel search remains device-local", async () => await httpRemote.ui.execute("return document.querySelectorAll('.guide-channel').length===1") && await ui.execute("return document.querySelectorAll('.guide-channel').length===4"));
-    await httpRemote.ui.type("#guide-search", "");
+    // WebKit Clear empties the DOM value without updating React's controlled search.
+    await httpRemote.ui.key(keys.home); await httpRemote.ui.key(keys.end, true); await httpRemote.ui.key("\uE003");
+    await until("cleared phone search restores all four guide channels", () => httpRemote.ui.execute("return document.querySelectorAll('.guide-channel').length===4"));
     await httpRemote.minimize(); await ui.section("Guide"); await screenshot("native-iptv-guide");
     await ui.execute("window.__iptvStage=document.querySelector('.video-stage')");
     await ui.button(`Play ${red.name}`);
