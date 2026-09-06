@@ -110,3 +110,55 @@ test("Stop cancels a stalled provider subtitle without waiting for its response"
     await expect(pending).rejects.toThrow();
   } finally { release.resolve(); await upstream.stop(true); }
 });
+
+function pgsPacket(type: number, size = 0) {
+  const bytes = Buffer.alloc(13 + size);
+  bytes.write("PG"); bytes[10] = type; bytes.writeUInt16BE(size, 11);
+  return bytes;
+}
+const framedPgs = Buffer.concat([pgsPacket(0x16, 11), pgsPacket(0x15, 4), pgsPacket(0x80)]);
+
+test("PGS downloads preserve all bytes privately and reject corrupt, missing, oversized and direct SUP responses", async () => {
+  const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+    expect(request.headers.get("authorization")).toBe("private-token");
+    const name = new URL(request.url).pathname;
+    if (name === "/missing.pgssub") return new Response(null, { status: 404 });
+    if (name === "/oversize.pgssub") return new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(subtitleSizeLimit + 1)); controller.close(); } }));
+    return new Response(name === "/truncated.pgssub" ? framedPgs.subarray(0, -1) : name === "/invalid.pgssub" ? Buffer.from("<html>unavailable</html>") : framedPgs);
+  } });
+  try {
+    const { subtitles, replace } = fixture();
+    const origin = `http://127.0.0.1:${upstream.port}`;
+    const result = await subtitles.prepare({ source: `${origin}/movie`, headers: { Authorization: "private-token" }, subtitleWarning: "Known timing limitation.", subtitles: ["valid.pgssub", "truncated.pgssub", "invalid.pgssub", "missing.pgssub", "oversize.pgssub", "direct.sup"].map(name => ({ source: `${origin}/${name}`, title: name })) }, "first", new AbortController().signal);
+    expect(result.subtitles).toHaveLength(1);
+    const file = result.subtitles![0]!.source;
+    expect(file).toEndWith(".sup");
+    expect(Buffer.from(await Bun.file(file).arrayBuffer())).toEqual(framedPgs);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(result.subtitleWarning).toContain("Known timing limitation.");
+    expect(result.subtitleWarning).toContain("could not be loaded");
+    subtitles.observe(replace("second", "loading"));
+    expect(existsSync(file)).toBe(true);
+    subtitles.observe(replace("second"));
+    expect(existsSync(file)).toBe(false);
+  } finally { await upstream.stop(true); }
+});
+
+test("shutdown aborts an in-flight PGS download and removes accepted files immediately", async () => {
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const upstream = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    if (new URL(request.url).pathname === "/late.pgssub") { entered.resolve(); await release.promise; }
+    return new Response(framedPgs);
+  } });
+  try {
+    const { subtitles } = fixture();
+    const origin = `http://127.0.0.1:${upstream.port}`;
+    const media = (name: string) => ({ source: `${origin}/movie`, subtitles: [{ source: `${origin}/${name}.pgssub`, title: name }] });
+    const accepted = await subtitles.prepare(media("valid"), "first", new AbortController().signal);
+    const pending = subtitles.prepare(media("late"), "first", new AbortController().signal);
+    await entered.promise;
+    subtitles.close();
+    await expect(Promise.race([pending, Bun.sleep(500).then(() => "download did not abort")])).rejects.toThrow("shutting down");
+    expect(existsSync(accepted.subtitles![0]!.source)).toBe(false);
+  } finally { release.resolve(); await upstream.stop(true); }
+});
