@@ -19,12 +19,21 @@ feature. This covers the former default Cargo check as well as native tests.
 Frontend and sidecar generation still precede Cargo. Release packaging and
 other platforms remain separate product qualification work.
 
-Native jobs generate the frontend and sidecar before running the full Bun checks
-and Cargo tests concurrently. Each command keeps its own process group; the step
-waits for both exit statuses and stops both groups on cancellation. This overlaps
-the media tests' real-time waits with compilation. Keep their freshness limits
-unchanged and measure contention as part of the [native timing follow-up](https://github.com/avoid-quest/couch/issues/105).
-Ordinary jobs keep their existing check-then-build order.
+After typechecking, Check runs the whole `tests/linux/iptv-clock.test.ts` file
+in one Bun process and discovers all remaining tests in another with
+`--path-ignore-patterns 'tests/linux/iptv-clock.test.ts'`. Each process keeps
+sequential test execution, so the real clock's waits overlap other tests without
+sharing clock or process mocks. Keep every test in exactly one partition and
+preserve the fixture's real freshness and deadline assertions.
+
+Native jobs generate the frontend and sidecar before checking, then run the
+unchanged Cargo tests alongside both Bun processes. Each command has its own
+process group. The step waits for every exit status and stops all groups and
+their descendants on cancellation. Ordinary jobs keep their check-then-build
+order. Measure CPU contention and complete job timing in the
+[clock scheduling follow-up](https://github.com/avoid-quest/couch/issues/141).
+The workflow edit changes the existing Cargo cache key; report its first run's
+actual cache state and use subsequent relevant source edits for warm evidence.
 
 CI omits debug symbols from dev/test artifacts to reduce compilation and cache
 transfer. Debug assertions, overflow checks, and the default optimization level
