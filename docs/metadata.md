@@ -7,6 +7,8 @@ a changed scan makes an older edit fail with HTTP 409. Correction values, origin
 artwork and the searchable catalog commit in one SQLite transaction. Source
 media and sidecars are never written. Rescans reapply saved per-field corrections.
 Cached metadata remains available when the source folder or provider is offline.
+Malformed, oversized or unreadable NFO reads keep the last valid import snapshot
+and video classification; they do not discard unknown fields before export.
 
 The supported editable fields are title, original title, plot, release year/date,
 genres, artwork, and episode season/number and series title. A release year and
@@ -28,7 +30,8 @@ A detail preview expires after five minutes and includes the exact fields and
 artwork that a later explicit match operation will apply. Applying a match
 replaces the previewed fields, including existing manual values. Inspect it first.
 A later manual edit changes only its submitted fields; clearing the saved match
-keeps the current values. No lookup automatically applies a match.
+keeps the current values and suppresses any older imported TMDB ID on export.
+No lookup automatically applies a match.
 
 At most two provider operations run together. Each has a ten-second deadline,
 a 1 MiB JSON bound and a 2 MiB image bound. Redirects and arbitrary artwork hosts

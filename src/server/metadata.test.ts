@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -171,4 +171,53 @@ test("match preview applies only after confirmation, fences stale edits and surv
   const now = await f.view();
   expect((await f.request(`items/${f.id}/edit`, { revision: now.revision, changes: {}, clearMatch: true })).status).toBe(200);
   expect((await f.view()).match).toBeNull();
+});
+
+
+test("failed NFO imports retain unknown XML, episode classification and manual order through restart/export", async () => {
+  const f = await fixture(true);
+  const before = await f.view();
+  await f.request(`items/${f.id}/edit`, { revision: before.revision, changes: { season: 2, episode: 4, title: "Correct episode" } });
+  for (const broken of ["<episodedetails><broken>", "x".repeat(256 * 1024 + 1), null]) {
+    await rm(join(f.media, "sample.nfo"));
+    if (broken === null) await symlink(join(f.root, "unreadable.nfo"), join(f.media, "sample.nfo"));
+    else await Bun.write(join(f.media, "sample.nfo"), broken);
+    expect((await f.library.scan(f.source.id)).warning).toContain("invalid or oversized");
+    const view = await f.view();
+    expect(view.type).toBe("episode"); expect(view.values).toMatchObject({ season: 2, episode: 4, title: "Correct episode" });
+    const response = await f.request(`items/${f.id}/export`, { revision: view.revision });
+    expect(response.status).toBe(200);
+    const files = await new Bun.Archive(await response.arrayBuffer()).files();
+    const xml = await files.get("metadata.nfo")!.text();
+    expect(parseVideoNfo(new TextEncoder().encode(xml))).toMatchObject({ type: "episodedetails", fields: { season: "2", episode: "4" } });
+    expect(xml).toContain('<unknown attr="a&amp;b">');
+    expect(await files.get("original-0.nfo")!.text()).toBe(f.xml);
+  }
+  await f.library.close();
+  const reopened = createLibrary({ databasePath: f.databasePath, folders: f.folders, ffprobePath: null }); cleanup.push(() => reopened.close());
+  expect(reopened.getItem(f.id)?.video).toMatchObject({ type: "episode", season: 2, episode: 4 });
+});
+
+test("clearing a chosen match suppresses an imported TMDB ID in export and reimport", async () => {
+  const mock = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ id: 456, title: "New match", release_date: "2020-01-01", genres: [] })) as unknown as typeof fetch);
+  cleanup.push(async () => mock.mockRestore());
+  const f = await fixture();
+  await Bun.write(join(f.media, "sample.nfo"), f.xml.replace("</movie>", '<uniqueid type="tmdb" default="true">123</uniqueid><uniqueid type="imdb">tt123</uniqueid></movie>'));
+  await f.library.scan(f.source.id);
+  await f.request("provider", { token: "generated-test-token" });
+  const before = await f.view();
+  const preview = await (await f.request(`items/${f.id}/preview`, { revision: before.revision, id: 456 })).json();
+  await f.request(`items/${f.id}/match`, { revision: before.revision, previewId: preview.id });
+  const matched = await f.view();
+  expect(matched.match?.id).toBe(456);
+  expect((await f.request(`items/${f.id}/edit`, { revision: matched.revision, changes: {}, clearMatch: true })).status).toBe(200);
+  await f.library.scan(f.source.id);
+  const cleared = await f.view();
+  expect(cleared.match).toBeNull();
+  const files = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: cleared.revision })).arrayBuffer()).files();
+  const xml = await files.get("metadata.nfo")!.text();
+  expect(xml).not.toContain('type="tmdb"'); expect(xml).toContain('type="imdb"');
+  await Bun.write(join(f.media, "sample.nfo"), xml); await f.library.scan(f.source.id);
+  const reexport = await new Bun.Archive(await (await f.request(`items/${f.id}/export`, { revision: (await f.view()).revision })).arrayBuffer()).files();
+  expect(await reexport.get("metadata.nfo")!.text()).not.toContain('type="tmdb"');
 });

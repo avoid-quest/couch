@@ -34,7 +34,7 @@ export function metadataChanges(value: unknown, episode: boolean): Partial<Metad
 }
 
 // Only direct supported fields change. Ordered unknown elements, attributes and comments survive.
-export function correctedNfo(original: Uint8Array | null, item: LibraryItem, match: MetadataMatch | null): string {
+export function correctedNfo(original: Uint8Array | null, item: LibraryItem, match: MetadataMatch | null, matchChanged = match !== null): string {
   const type = item.video?.type === "episode" ? "episodedetails" : "movie";
   const options = { preserveOrder: true, ignoreAttributes: false, parseTagValue: false, commentPropName: "#comment", trimValues: false };
   type Node = { [key: string]: Node[] | string | Record<string, string> };
@@ -52,9 +52,9 @@ export function correctedNfo(original: Uint8Array | null, item: LibraryItem, mat
     for (let index = root.length - 1; index >= 0; index--) if (name in root[index]!) root.splice(index, 1);
     for (const part of Array.isArray(value) ? value : value === null ? [] : [value]) root.push({ [name]: [{ "#text": String(part) }] });
   }
-  if (match) {
+  if (matchChanged) {
     for (let index = root.length - 1; index >= 0; index--) if (root[index]?.uniqueid && (root[index]?.[":@"] as Record<string, string> | undefined)?.["@_type"] === "tmdb") root.splice(index, 1);
-    root.push({ uniqueid: [{ "#text": String(match.id) }], ":@": { "@_type": "tmdb", "@_default": "true" } });
+    if (match) root.push({ uniqueid: [{ "#text": String(match.id) }], ":@": { "@_type": "tmdb", "@_default": "true" } });
   }
   const xml = new XMLBuilder(options).build(document) as string;
   parseVideoNfo(new TextEncoder().encode(xml));

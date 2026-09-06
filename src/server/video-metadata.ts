@@ -84,6 +84,7 @@ export function videoArtwork(data: Uint8Array): VideoArtwork | null {
 
 export async function readVideoMetadata(root: string, sourceId: string, path: string) {
   let failures = 0;
+  let nfoFailures = 0;
   const artworks: VideoArtwork[] = [];
   const originals: OriginalVideoNfo[] = [];
   const nfo = async (candidate: string): Promise<Nfo | null> => {
@@ -94,7 +95,7 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
       originals.push({ path: relative(root, candidate), data: bytes });
       return parsed;
     }
-    catch { failures++; return null; }
+    catch { failures++; nfoFailures++; return null; }
   };
   const art = async (directory: string, names: string[]): Promise<string | null> => {
     for (const name of names) for (const extension of ["jpg", "png", "jpeg"]) {
@@ -121,7 +122,7 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
     }
     if (videos === 1) item = await nfo(join(folder, "movie.nfo"));
   }
-  if (item?.type === "tvshow") { failures++; item = null; }
+  if (item?.type === "tvshow") { failures++; nfoFailures++; item = null; }
   const numbered = /(?:^|[ ._-])s(\d{1,3})e(\d{1,4})(?!\d)/i.exec(stem);
   const episode = item?.type === "episodedetails" || !item && !!numbered;
   const fields = item?.fields ?? {};
@@ -129,7 +130,7 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
   const episodeNumber = episode ? integer(fields.episode, 0, 9999) ?? (numbered ? Number(numbered[2]) : null) : null;
   const showFolder = episode && /^(?:season[ ._-]*\d+|specials)$/i.test(basename(folder)) && within(root, dirname(folder)) ? dirname(folder) : folder;
   const showNfo = episode ? await nfo(join(showFolder, "tvshow.nfo")) : null;
-  if (showNfo && showNfo.type !== "tvshow") failures++;
+  if (showNfo && showNfo.type !== "tvshow") { failures++; nfoFailures++; }
   const showFields = showNfo?.type === "tvshow" ? showNfo.fields : {};
   const showTitle = text(showFields.title), episodeShowTitle = text(fields.showtitle);
   const show = episode ? {
@@ -144,5 +145,5 @@ export async function readVideoMetadata(root: string, sourceId: string, path: st
   const runtime = text(fields.runtime);
   return { title: text(fields.title), runtime: runtime && /^\d{1,5}(?:\.\d{1,2})?$/.test(runtime) && Number(runtime) > 0 && Number(runtime) <= 10_000 ? Number(runtime) * 60 : null,
     video, showTitlePriority: showTitle ? 2 : episodeShowTitle ? 1 : 0,
-    artworkId: artworkId ?? show?.artworkId ?? null, artworks, originals, failures };
+    artworkId: artworkId ?? show?.artworkId ?? null, artworks, originals, failures, nfoFailures };
 }

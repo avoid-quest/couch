@@ -29,7 +29,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     const state = saved(id);
     const origins = Object.fromEntries(Object.keys(values).map(key => [key, "Imported/local"])) as MetadataView["origins"];
     Object.assign(origins, state ? JSON.parse(state.origins) : {});
-    return { id, type: item(current).video!.type, values, origins, match: match(state), revision: metadataHash([values, origins, match(state), state?.base, state?.original && metadataHash([...state.original])]) };
+    return { id, type: item(current).video!.type, values, origins, match: match(state), revision: metadataHash([values, origins, state?.match ?? null, state?.base, state?.original && metadataHash([...state.original])]) };
   };
   function apply(id: string) {
     const current = row(id), state = saved(id);
@@ -42,8 +42,9 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     db.query("UPDATE library_items SET title=?, artworkId=?, video=? WHERE id=?").run(title, artworkId, JSON.stringify(video), id);
     reindex(id);
   }
-  function capture(current: LibraryItem, originals: OriginalVideoNfo[]) {
+  function capture(current: LibraryItem, originals: OriginalVideoNfo[], importFailed: boolean) {
     if (!current.video) return;
+    if (importFailed && saved(current.id)) { apply(current.id); return; }
     const original = originals.find(nfo => { try { return parseVideoNfo(nfo.data).type === (current.video!.type === "episode" ? "episodedetails" : "movie"); } catch { return false; } })?.data ?? null;
     db.query(`INSERT INTO library_metadata (itemId, base, original, originals) VALUES (?, ?, ?, ?)
       ON CONFLICT(itemId) DO UPDATE SET base=excluded.base, original=excluded.original, originals=excluded.originals`).run(current.id, JSON.stringify(metadataValues(current)), original,
@@ -62,7 +63,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
       const merged = { ...current.values, ...changes };
       if (merged.premiered && merged.year !== Number(merged.premiered.slice(0, 4))) throw new MetadataError("Release year must match the release date. Correct or clear the date too.");
       const origins = { ...JSON.parse(state.origins), ...Object.fromEntries(Object.keys(changes).map(key => [key, origin])) };
-      db.query("UPDATE library_metadata SET changes=?, origins=?, match=? WHERE itemId=?").run(JSON.stringify({ ...JSON.parse(state.changes), ...changes }), JSON.stringify(origins), selected === undefined ? state.match : selected ? JSON.stringify(selected) : null, id);
+      db.query("UPDATE library_metadata SET changes=?, origins=?, match=? WHERE itemId=?").run(JSON.stringify({ ...JSON.parse(state.changes), ...changes }), JSON.stringify(origins), selected === undefined ? state.match : JSON.stringify(selected), id);
       apply(id);
     })();
     notify();
@@ -75,7 +76,7 @@ export function createMetadata(db: Database, notify: () => void, reindex: (id: s
     const state = saved(id);
     if (!state) throw new MetadataError("Rescan once before exporting this item.", 409);
     // Archive names are fixed; source names are instructions, never extraction paths.
-    const files: Record<string, string | Uint8Array> = { "metadata.nfo": correctedNfo(state.original, item(current), match(state)) };
+    const files: Record<string, string | Uint8Array> = { "metadata.nfo": correctedNfo(state.original, item(current), match(state), state.match !== null) };
     const stem = basename(current.path, extname(current.path));
     const placements: Record<string, string> = { "metadata.nfo": `${stem}.nfo` };
     const video = item(current).video!;

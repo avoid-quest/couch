@@ -157,7 +157,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     if (row) indexItem(row.rowid, publicItem(row));
   });
 
-  const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[]) => {
+  const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[], importFailed: boolean) => {
     for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
     for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
       ON CONFLICT(sourceId, path) DO UPDATE SET data=excluded.data, seenScan=excluded.seenScan, available=1`).run(item.sourceId, nfo.path, nfo.data, scanId);
@@ -172,7 +172,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
         item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null, item.cuePath ?? null, item.cueTrack ?? null, item.cueSource ?? 0)!;
     indexItem(row.rowid, item);
-    metadata.capture(item, originals);
+    metadata.capture(item, originals, importFailed);
     const show = item.video?.show;
     if (show) {
       const description = JSON.stringify(show);
@@ -264,6 +264,9 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const probedMetadata = kind === "audio" ? music : fileMetadata && previous?.probed && previous.fileMetadata ? fileMetadata : (executable ? await probe(path, executable) : null);
         const metadata = probedMetadata ?? fileMetadata;
         const localVideo = kind === "video" ? await readVideoMetadata(root, source.id, path) : null;
+        if (localVideo?.nfoFailures && previous?.video) {
+          localVideo.title = previous.title; localVideo.video = previous.video; localVideo.artworkId = previous.artworkId ?? null;
+        }
         if (localVideo?.video.show) {
           const show = localVideo.video.show;
           const selected = shows.get(show.id);
@@ -290,7 +293,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
           artworkId: kind === "video" ? localVideo?.artworkId ?? null : music?.artwork?.id ?? retained?.artworkId ?? null,
           video: localVideo?.video ?? null, fileMetadata: kind === "video" && metadata ? JSON.stringify(metadata) : null,
           metadataVersion: kind === "audio" ? musicMetadataVersion : videoMetadataVersion,
-          probed: probedMetadata ? 1 : 0, available: true }, scanId, localVideo?.artworks ?? (music?.artwork ? [music.artwork] : []), localVideo?.originals ?? []);
+          probed: probedMetadata ? 1 : 0, available: true }, scanId, localVideo?.artworks ?? (music?.artwork ? [music.artwork] : []), localVideo?.originals ?? [], !!localVideo?.nfoFailures);
       };
       let failure: unknown;
       for await (const path of files(root)) {
