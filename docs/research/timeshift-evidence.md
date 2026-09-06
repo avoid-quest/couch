@@ -308,3 +308,50 @@ This manifest identifies private evidence for [Qualify a stable live/growing-tim
   ]
 }
 ```
+
+## AMD64 preflight and generator discovery
+
+The original ARM64 bundle above remains unchanged. This separate bundle records the stopped AMD64 attempt and the available replacement candidate; it contains no AMD64 playback or generator runtime result.
+
+```json
+{
+  "schema": 1,
+  "issue": "https://github.com/avoid-quest/couch/issues/67",
+  "base": "b7031b9258b385371e1f09df0f325a19c3e2c093",
+  "artifact_root": "/Users/devit/Code/couch-media-timeshift/.artifacts",
+  "scope": "AMD64 startup failure and read-only current generator discovery. Prepared scripts are not runtime qualification. No containers/network/credentials/media were created. timeshift-amd64/evidence/probe-image.json is the prior generator snapshot copied as input; current lookup failed in ordered events. Current available image inspection is in timeshift-generator-discovery/image-inspect.json.",
+  "archive_path": "/Users/devit/Code/couch-media-timeshift/.artifacts/timeshift-amd64/evidence.tar.gz",
+  "archive_bytes": 26089,
+  "archive_sha256": "f0ca4656388d389fba8165594109e0c5ef04785afef28a39e63028aa8274030c",
+  "manifest_sha256": "4c57ec05e8f38e658792e466218768bed79bf5bbe6251dc08ceb108938bf9f5d",
+  "files": [
+    {"path":"timeshift-amd64/accounts.txt","bytes":18,"sha256":"82e32bf86bfbeb853be7cf0dcec922bafab47ef55a792b29e94d396778d3a706"},
+    {"path":"timeshift-amd64/common.py","bytes":5181,"sha256":"fa2663ec471c1fd3a283e12e1815212bf8cdf3ff240e057bf47a02a07bd8965b"},
+    {"path":"timeshift-amd64/evidence/cleanup-verification.json","bytes":3,"sha256":"37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"},
+    {"path":"timeshift-amd64/evidence/docker-version.txt","bytes":755,"sha256":"b4d59e757c1ef003d918e33c9f93628ae99b529cbe796fe3ac2450d2fbd6e9fe"},
+    {"path":"timeshift-amd64/evidence/driver-checks.json","bytes":494,"sha256":"1873a254e49e666045f71f3d8679af376a5313f52ca8fd3b28ce38004bfc8618"},
+    {"path":"timeshift-amd64/evidence/driver-console.log","bytes":748,"sha256":"18f2086be430b6ac8c46e337c0bcf19465c93ab801a725c992c7e84d44016612"},
+    {"path":"timeshift-amd64/evidence/events.jsonl","bytes":9785,"sha256":"4859819c04eb00b6a1667a16e2c290af8d2732f189f1158c30bce2d6e06b4167"},
+    {"path":"timeshift-amd64/evidence/preflight-scripts.json","bytes":1109,"sha256":"b5e7db870a1705c58cca586593f4f6398596a198eeb55c6b867cc5bd40f3f662"},
+    {"path":"timeshift-amd64/evidence/probe-image.json","bytes":1856,"sha256":"625efa1a8c0657ae21e5c4936e3ad0169d3d39229315820c5225cbb629590143"},
+    {"path":"timeshift-amd64/evidence/server-image.json","bytes":2574,"sha256":"ce0ba6389548a312a25c9a2fef581e189f130e70a46cd285baef8b714d9f58c3"},
+    {"path":"timeshift-amd64/evidence/window.json","bytes":289,"sha256":"7692dc60524673ab95f763fd935db440849e10db6362687e44992b52ad44c4f8"},
+    {"path":"timeshift-amd64/fixture.py","bytes":1943,"sha256":"3f13da5884895d88fce3843d058edbdc8c42a8b48e36ded87c40bca564a4c538"},
+    {"path":"timeshift-amd64/growing.py","bytes":5208,"sha256":"df33c14b76557c29371f8940a40e5e0007faddc1078473bdecc02106ab4167db"},
+    {"path":"timeshift-amd64/input/generator.py","bytes":2831,"sha256":"a1d1d2a134f13663fda84146249c5fa67d6420b47eaa36149200bbd2163d9fbf"},
+    {"path":"timeshift-amd64/live.py","bytes":3102,"sha256":"56177b02da314a72c07fb5c9f40d3f43845113daa6bf9f31018e0a13b65e994c"},
+    {"path":"timeshift-amd64/prior/runtime-source/lib/py/tvh/__init__.py","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"path":"timeshift-amd64/prior/runtime-source/lib/py/tvh/htsmsg.py","bytes":7098,"sha256":"79c7413b3e4abed0ce93e0d85b9bf427dedc495f23157fc8104c964792465c24"},
+    {"path":"timeshift-amd64/run.py","bytes":12761,"sha256":"45db9f6b8b14b9dab63ba59a0c096e5c22c84f1cffe356bc69a7029eefe77087"},
+    {"path":"timeshift-amd64/setup.py","bytes":892,"sha256":"578ff2acb4eeaf635743987e6bd8e086fad9eb7ffe2437a23cc8f81834f5e486"},
+    {"path":"timeshift-amd64/sources/official-debian-amd64-config.json","bytes":4172,"sha256":"5aae4495d0c10a965dcb2e1e3082b9703d3d72ba9fd415a1ec09de5f0638dfaf"},
+    {"path":"timeshift-amd64/sources/official-debian-amd64-manifest.json","bytes":1244,"sha256":"2f4e3a493f01d91c4f59a1d18aeee98ba7afcef85822583e4a072d25da1d174b"},
+    {"path":"timeshift-amd64/sources/official-debian-index.json","bytes":3912,"sha256":"a5c639542fa4c9b5222e903b2f564cc5a07b0220be4c57b0a66f43e23c5ce23b"},
+    {"path":"timeshift-generator-discovery/image-inspect.json","bytes":2757,"sha256":"6609869c598157e0cba5a8dc336d5641eb378c6c137211866e51e1e871aede3d"},
+    {"path":"timeshift-generator-discovery/proposal.json","bytes":2194,"sha256":"5c98755046938d79d9350482b4b94bb4508a413cb327d0956e9824f662dc3ba1"},
+    {"path":"timeshift-generator-discovery/scripts/linux-test.ts","bytes":3098,"sha256":"574954664253ecdc02cea2754d571fd3d37112cb3b2824c6fd57a4e05281dbf8"},
+    {"path":"timeshift-generator-discovery/tests/linux/Dockerfile","bytes":1921,"sha256":"e470adcaa56ae92e8359c739a6e108b35de97291865bbcb29c58a8c4b590fb21"},
+    {"path":"timeshift-generator-discovery/tests/linux/run.sh","bytes":1996,"sha256":"5f4f96fffd7b6decefaf10e24158054aa7b8f80e550a8a694f4594f92c7603cb"}
+  ]
+}
+```
