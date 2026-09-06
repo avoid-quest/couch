@@ -25,7 +25,7 @@ export async function boundedMetadataBody(response: Response, maximum: number): 
 export function createTmdb(fetcher: typeof fetch = fetch) {
   const closing = new AbortController();
   let pending = 0;
-  async function operation<T>(token: string, signal: AbortSignal, run: (read: (path: string) => Promise<Json>, image: (path: string) => Promise<VideoArtwork>) => Promise<T>) {
+  async function operation<T>(token: string, signal: AbortSignal, run: (read: (path: string) => Promise<Json>, image: (path: string, still: boolean) => Promise<VideoArtwork>) => Promise<T>) {
     if (!token) throw new MetadataError("Add an authorized TMDB API Read Access Token in Settings > Sources first.", 409);
     if (pending >= 2) throw new MetadataError("Two metadata requests are already running. Try again shortly.", 429);
     pending++;
@@ -33,11 +33,12 @@ export function createTmdb(fetcher: typeof fetch = fetch) {
     const read = async (path: string) => record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await boundedMetadataBody(await fetcher(`https://api.themoviedb.org/3/${path}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, redirect: "error", signal: bounded,
     }), 1024 * 1024))));
-    const image = async (path: string) => {
+    const image = async (path: string, still: boolean) => {
       if (!/^\/[a-zA-Z0-9]+\.(?:jpg|png)$/.test(path)) throw new MetadataError("TMDB returned an unsupported artwork path.", 502);
       const configuration = record((await read("configuration")).images);
-      if (configuration.secure_base_url !== "https://image.tmdb.org/t/p/" || !Array.isArray(configuration.poster_sizes) || !configuration.poster_sizes.includes("w500")) throw new MetadataError("TMDB artwork configuration is unsupported.", 502);
-      const result = videoArtwork(await boundedMetadataBody(await fetcher(`https://image.tmdb.org/t/p/w500${path}`, { redirect: "error", signal: bounded }), 2 * 1024 * 1024));
+      const size = still ? "w300" : "w500", sizes = configuration[still ? "still_sizes" : "poster_sizes"];
+      if (configuration.secure_base_url !== "https://image.tmdb.org/t/p/" || !Array.isArray(sizes) || !sizes.includes(size)) throw new MetadataError("TMDB artwork configuration is unsupported.", 502);
+      const result = videoArtwork(await boundedMetadataBody(await fetcher(`https://image.tmdb.org/t/p/${size}${path}`, { redirect: "error", signal: bounded }), 2 * 1024 * 1024));
       if (!result) throw new MetadataError("TMDB artwork is invalid or too large.", 502);
       return result;
     };
@@ -64,7 +65,7 @@ export function createTmdb(fetcher: typeof fetch = fetch) {
         const premiered = text(details.release_date ?? details.air_date, 10) || null;
         const genres = (Array.isArray((series ?? details).genres) ? (series ?? details).genres as unknown[] : []).slice(0, 16).map(v => text(record(v).name, 80)).filter(Boolean);
         const path = details.poster_path ?? details.still_path;
-        const artwork = typeof path === "string" && path ? await image(path) : null;
+        const artwork = typeof path === "string" && path ? await image(path, kind === "episode") : null;
         const values: MetadataValues = { title, showTitle: series ? text(series.name) : null, originalTitle: text(details.original_title) || null, plot: text(details.overview, 4000) || null,
           year: premiered ? Number(premiered.slice(0, 4)) : null, premiered, genres: [...new Set(genres)], season: kind === "episode" ? season : null,
           episode: kind === "episode" ? episode : null, artworkId: artwork?.id ?? null };

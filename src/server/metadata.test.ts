@@ -121,7 +121,7 @@ test("TMDB contract uses fixed origins, bearer auth, explicit movie/episode deta
   const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input); seen.push({ url, auth: new Headers(init?.headers).get("Authorization"), redirect: init?.redirect });
     if (url.includes("image.tmdb.org")) return new Response(failImage ? "bad image" : cover);
-    if (url.endsWith("configuration")) return Response.json({ images: { secure_base_url: "https://image.tmdb.org/t/p/", poster_sizes: ["w500"] } });
+    if (url.endsWith("configuration")) return Response.json({ images: { secure_base_url: "https://image.tmdb.org/t/p/", poster_sizes: ["w500"], still_sizes: ["w300"] } });
     if (url.includes("search/")) return Response.json({ results: [{ id: 12, title: "Search movie", release_date: "2020-01-01" }] });
     if (url.includes("/season/")) return Response.json({ id: 123, name: "Episode", season_number: 1, episode_number: 2, air_date: "2020-01-01", still_path: "/abc.jpg" });
     if (url.includes("/tv/")) return Response.json({ id: 12, name: "Series", genres: [{ name: "Drama" }] });
@@ -134,6 +134,7 @@ test("TMDB contract uses fixed origins, bearer auth, explicit movie/episode deta
   const episode = await tmdb.preview("secret", "episode", 12, 1, 2, new AbortController().signal);
   expect(episode.match).toMatchObject({ id: 123, seriesId: 12, season: 1, episode: 2 });
   expect(episode.values).toMatchObject({ title: "Episode", showTitle: "Series", genres: ["Drama"] });
+  expect(seen.some(call => call.url === "https://image.tmdb.org/t/p/w300/abc.jpg")).toBe(true);
   expect(seen.every(call => call.redirect === "error")).toBe(true);
   expect(seen.filter(call => call.url.includes("api.themoviedb")).every(call => call.auth === "Bearer secret")).toBe(true);
   expect(seen.filter(call => call.url.includes("image.tmdb")).every(call => call.auth === null)).toBe(true);
