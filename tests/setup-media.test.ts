@@ -60,6 +60,12 @@ test("a bad second download preserves both installed tools", async () => {
   await expectUnchanged(directory);
 });
 
+test("a changed upstream manifest cannot replace a reviewed package input", async () => {
+  const directory = await existingTools();
+  await expect(installMediaTools(directory, fetchFiles(releaseFiles()), { [mediaReleases()[0]!.file]: "0".repeat(64) })).rejects.toThrow("differs from the pinned input");
+  await expectUnchanged(directory);
+});
+
 test("requires a checksum for the exact release filename", async () => {
   const directory = await existingTools();
   const files = releaseFiles();

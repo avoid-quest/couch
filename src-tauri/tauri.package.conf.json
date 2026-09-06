@@ -1,0 +1,20 @@
+{
+  "bundle": {
+    "targets": ["deb"],
+    "resources": {
+      "resources/tools/": "tools/",
+      "resources/tools.json": "tools.json",
+      "resources/build-inputs.json": "build-inputs.json",
+      "resources/build-packages.tsv": "build-packages.tsv"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libmpv2", "libgl1", "ffmpeg", "ca-certificates", "fonts-dejavu-core", "libxdo3"],
+        "files": {
+          "/usr/share/doc/couch": "resources/notices/",
+          "/usr/share/doc/couch/build-info.json": "build-info.json"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+Couch is distributed privately by avoid-quest. This package does not grant a
+new license to Couch's application source. Third-party components retain their
+own licenses in this directory. Ubuntu supplies its libraries independently;
+their copyright notices are installed under /usr/share/doc/<package>/copyright.
+
+The exact Couch source, including modified libmpv2, tauri-plugin-video and
+tauri-runtime-wry, is supplied alongside each private CI package as
+couch-source.tar.gz. Build instructions and locked dependencies are in that
+archive. Recipients can rebuild the native host and compiled coordinator with
+modified libraries. Keep the source artifact available to package recipients.
+
+yt-dlp's standalone executable includes Python and other third-party code.
+Its combined executable is GPLv3+; see yt-dlp-NOTICES.txt for full notices and
+component source links. Its release source and build recipes are at
+https://github.com/yt-dlp/yt-dlp/tree/2026.08.19 and its pinned build dependencies
+are in that revision's uv.lock and bundle directory.
+
+Deno's upstream license is in deno-LICENSE.md. Its corresponding source is
+https://github.com/denoland/deno/tree/v2.9.6 .
+Bun's upstream license, component list and relinking instructions are in
+bun-LICENSE.md. The coordinator embeds Bun 1.4.2. Its corresponding source is
+https://github.com/oven-sh/bun/tree/bun-v1.4.2 .
