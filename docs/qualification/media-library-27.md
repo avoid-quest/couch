@@ -3,7 +3,7 @@
 Ticket: [Browse local movies and episodes with Kodi NFO and nearby artwork](https://github.com/avoid-quest/couch/issues/27).
 Initial base: `209c95741dca0dcf6e269687f0a66968826b54da`.
 
-Catalog and browsing source reviews passed before integration onto `fec8e70341ec19260ce1616debcc89d61c08e291`. The native run and focused library replay below provide software evidence. The chooser helper correction is accepted; representative in-app browser qualification remains pending; the ticket is not complete.
+Catalog and browsing source reviews passed before integration onto `fec8e70341ec19260ce1616debcc89d61c08e291`. The native run and focused library replay below provide software evidence. The chooser helper correction is accepted; representative in-app browser qualification passed in the recovery window below; final integration, corrected native build/full official run and preview remain pending. The ticket is not complete.
 
 ## Import contract
 
@@ -63,7 +63,7 @@ The selected current show description is applied to all retained episodes with t
 - Focused review regressions reproduce the original failures, then verify migration from a real legacy SQLite schema with absent/failing ffprobe, repeated scans, restart, successful reprobe and changed-file invalidation. A deleted-season episode plus `A show` → `Z show` NFO edit verifies stable identity, cached episode counts, current detail/search metadata and whole-source offline restart. Local frontend/sidecar build passes. Logs are under `.artifacts/catalog/review-{regressions-red,check,build}.log` in the assigned worktree.
 - The follow-up precedence regression forces both actual SQLite save orders for mixed NFO/fallback and conflicting episode NFO titles. Both cases chose the last saved title before correction; all four cases now select the documented winner and remove that precedence on a later sidecar-free rescan. The original migration/deleted-episode/offline regressions still pass. Evidence is under `.artifacts/catalog/show-precedence-{red,green,check,build}.log`.
 - Native/HTTP playable movie and multi-season fixture, decoded artwork, queue/play, source switching/cancellation, two-controller reconnect and offline stopped restart: passed in the focused private replay below. The original full-suite attempt remains a failure.
-- Representative in-app browser flows: pending a coordinated browser reservation. The private runs do not alter shared preview data.
+- Representative in-app browser flows: passed in the coordinated recovery window below. The private runs do not alter shared preview data.
 
 ### Browsing source checks
 
@@ -136,7 +136,19 @@ These are existing GitHub job timestamps, with elapsed execution rounded up per 
 | Browsing `43dd58a` / [33998624758](https://github.com/avoid-quest/couch/actions/runs/33998624758) | Ordinary, Rust steps skipped; success | 52s | 1 | 3s |
 | Browsing `43dd58a` / [33998624327](https://github.com/avoid-quest/couch/actions/runs/33998624327) | Superseded/cancelled before steps | 1s | 1 | 1s |
 
-The successful jobs fit the agreed ordinary 2-minute/3-rounded and warm-native 3-minute/5-rounded budgets. No extra CI run was started to obtain these measurements. The subsequent warning-copy revision CI remains to be recorded before merge.
+The successful jobs fit the agreed ordinary 2-minute/3-rounded and warm-native 3-minute/5-rounded budgets. No extra CI run was started to obtain these measurements. Warning-copy/documentation head `6a70f8f` passed [Check 34001368139](https://github.com/avoid-quest/couch/actions/runs/34001368139) in 44 seconds, one rounded Linux runner minute.
+
+## In-app recovery qualification
+
+On 2026-09-06, the actual Codex in-app browser paired through its form with the retained native TV's displayed code. The subagent's browser was hidden because visible IAB is unsupported there; it was not a visible app panel or a container WebKit replacement. The accepted 7fec HTTP sidecar served the page through a disposable loopback-only raw TCP relay.
+
+At 390×844, the movie detail showed imported fields and decoded 240×360 poster and 640×360 fanart without document overflow. Explicit From start produced Playing then Finished on the real host, and the movie became Watched. Show navigation displayed two seasons and numeric episode 2 before 10. Searching `tenth` narrowed to one episode, and Queue increased the shared queue count. A 768×1024 screenshot showed the filtered result/queue feedback. At 1440×1000, season 2 displayed episode 1 before 10 with two decoded 320×180 thumbnails and no document overflow.
+
+The existing native fixture helper made only the private source unavailable and clicked the actual native rescan. In-app Folders showed six items, the source error and the retained skipped-sidecar count without the inaccurate playable sentence. Offline movie artwork remained available while Play/Queue were disabled. Restoring the folder and rescanning returned Up to date and enabled playback. Screenshots are retained in the library_completion subagent CUA transcript only; the tool supplied no documented screenshot file export. Detailed outcomes and runtime disposition are in `.artifacts/media-library-27/cua-recovery-20260906/record.md`.
+
+The existing success notice for the earlier Play request persisted after playback finished; the separate current player correctly showed Finished. At 11:32:35 UTC the worker reset the viewport, closed its tab and removed only the relay. Host 4100 was free. Existing replay 4 runtime/data remained, with source restored and playback finished. Shared preview/cache/T480 were untouched.
+
+Independent final source/evidence review accepted `e90c24c → 7fec38b → 6a70f8f` without findings. The native executable still embeds 43dd. The original full attempt remains failed, and replay 4 omits administrator claim plus the complete runner's later shared restart checks. Final integration, corrected native build and full official `bun run test:linux --jellyfin`, reviewed delivery and preserved-data preview remain required.
 
 ## Official references
 
