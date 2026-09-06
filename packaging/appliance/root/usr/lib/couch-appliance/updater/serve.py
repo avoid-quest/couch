@@ -7,23 +7,28 @@ import socketserver
 import struct
 import sys
 import threading
+import time
 
 sys.path.insert(0, "/usr/lib/couch-appliance/updater")
 from receipt import Rejected, load_json
 from retention import Retention
 from transactions import Transactions
 from ubuntu import Ubuntu
+from maintenance import remaining
 
 
 class Handler(socketserver.BaseRequestHandler):
+    request_timeout = 10
+
     def handle(self):
-        self.request.settimeout(10)
+        deadline = time.monotonic() + self.request_timeout
         try:
             pid, uid, _ = struct.unpack("3i", self.request.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
             if uid not in (0, self.server.app_uid):
                 raise Rejected("This socket is restricted to the Couch runtime account.")
             data = bytearray()
             while b"\n" not in data and len(data) <= 4096:
+                self.request.settimeout(remaining(deadline))
                 block = self.request.recv(4096)
                 if not block:
                     break
@@ -31,6 +36,7 @@ class Handler(socketserver.BaseRequestHandler):
             if len(data) > 4096 or not data.endswith(b"\n"):
                 raise Rejected("Send one bounded update request.")
             request = load_json(data)
+            remaining(deadline)
             if not isinstance(request, dict):
                 raise Rejected("Send one update operation.")
             operation = request.pop("op", None)
@@ -51,8 +57,11 @@ class Handler(socketserver.BaseRequestHandler):
         except Exception as error:
             response = {"ok": False, "error": str(error) if isinstance(error, Rejected) else "The update worker could not complete this operation."}
         try:
+            # Quiescing may take longer than request ingestion. sendall has
+            # its own total timeout; incoming clients still get ten seconds.
+            self.request.settimeout(10)
             self.request.sendall(json.dumps(response).encode() + b"\n")
-        except OSError:
+        except (OSError, Rejected):
             pass
 
 
@@ -60,6 +69,27 @@ class Server(socketserver.ThreadingUnixStreamServer):
     daemon_threads = True
     request_queue_size = 8
     worker = None
+    max_handlers = 8
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(self.max_handlers)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
 
 
 def main():

@@ -123,7 +123,13 @@ class Transactions:
                 return {"ok": True}
             if self.record["phase"] == "quiescing":
                 raise Rejected("This maintenance hook is already running.")
+            self.platform.verify_current(self.record)
+            record = self.record
             self.transition("quiescing", disrupted=True)
-        self.platform.quiesce(self.record)
-        self.transition("installing", hookComplete=True)
+        self.platform.quiesce(record)
+        with self.mutex:
+            if self.record is not record or self.record["phase"] != "quiescing":
+                raise Rejected("This maintenance transaction ended while the app was stopping.")
+            self.platform.authorize_hook(peer_pid)
+            self.transition("installing", hookComplete=True)
         return {"ok": True}

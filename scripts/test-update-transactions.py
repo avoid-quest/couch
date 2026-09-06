@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 import shutil
 import sqlite3
+import socket
+import socketserver
+import struct
 import tempfile
+import threading
 import time
 from types import SimpleNamespace
 import unittest
@@ -21,6 +25,7 @@ from retention import Retention, save
 from transactions import Transactions
 from ubuntu import Ubuntu
 import ubuntu
+import serve
 
 
 class Platform:
@@ -55,6 +60,10 @@ class Platform:
 
     def authorize_hook(self, peer_pid):
         pass
+
+    def verify_current(self, record):
+        if self.failure == "current-changed":
+            raise receipt.Rejected("Installed release changed after preflight")
 
     def start_trial(self, record):
         self.calls.append("start-trial")
@@ -191,6 +200,58 @@ class TransactionTests(unittest.TestCase):
             self.engine.hook("b" * 32)
         self.assertEqual(self.platform.calls, [])
 
+    def test_changed_installation_inside_apt_lock_fails_before_quiesce(self):
+        self.platform.failure = "current-changed"
+        self.engine.submit(self.request)
+        self.engine.execute()
+        self.assertEqual(self.platform.calls, ["preflight", "apt-lock"])
+        self.assertFalse(self.engine.record["disrupted"])
+        self.assertEqual(self.engine.status()["phase"], "failed")
+        self.assertEqual(self.storage.current(b"fixture"), self.previous)
+
+    def test_late_quiesce_cannot_overwrite_apt_failure(self):
+        entered, release = threading.Event(), threading.Event()
+        failures = []
+        def hook():
+            try:
+                self.engine.hook(self.engine.record["updateId"])
+            except receipt.Rejected as error:
+                failures.append(error)
+        worker = threading.Thread(target=hook)
+        def install(record, packages):
+            worker.start()
+            self.assertTrue(entered.wait(2))
+            raise receipt.Rejected("APT process exited during quiesce")
+        def quiesce(record):
+            entered.set()
+            release.wait(2)
+        self.platform.install, self.platform.quiesce = install, quiesce
+        self.engine.submit(self.request)
+        try:
+            self.engine.execute()
+            self.assertEqual(self.engine.status()["phase"], "operator-required")
+        finally:
+            release.set()
+            worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(self.engine.status()["phase"], "operator-required")
+        self.assertFalse(self.engine.record["hookComplete"])
+
+    def test_quiesce_completion_rechecks_live_apt_ancestry(self):
+        authorizations = []
+        def authorize(peer_pid):
+            authorizations.append(peer_pid)
+            if len(authorizations) == 2:
+                raise receipt.Rejected("APT exited while stopping the app")
+        self.platform.authorize_hook = authorize
+        self.engine.submit(self.request)
+        self.engine.execute()
+        self.assertEqual(len(authorizations), 2)
+        self.assertEqual(self.engine.status()["phase"], "operator-required")
+        self.assertFalse(self.engine.record["hookComplete"])
+        self.assertNotIn("dpkg", self.platform.calls)
+
     def test_browser_cannot_supply_a_path_command_package_or_url(self):
         for field in ("path", "command", "package", "url"):
             with self.subTest(field=field), self.assertRaises(receipt.Rejected):
@@ -204,12 +265,138 @@ class ReadinessTests(unittest.TestCase):
         platform = Ubuntu.__new__(Ubuntu)
         platform.coordinator = lambda *args: {"build": {"version": "old"}}
         record = {"version": "new", "revision": "a" * 40, "dataFormat": 1}
-        ticks = iter([0, 0, 91])
+        clock = SimpleNamespace(now=0)
+        clock.monotonic = lambda: clock.now
+        clock.sleep = lambda _: setattr(clock, "now", 91)
         original_clock = time.monotonic
-        with patch.object(ubuntu, "time", SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _: None)):
+        with patch.object(ubuntu, "time", clock):
             with self.assertRaisesRegex(receipt.Rejected, "bounded startup trial"):
                 platform.ready(record)
             self.assertIs(time.monotonic, original_clock)
+
+    def test_readiness_request_uses_remaining_trial_budget(self):
+        platform = Ubuntu.__new__(Ubuntu)
+        timeouts = []
+        def coordinator(operation, record, timeout):
+            timeouts.append(timeout)
+            raise receipt.Rejected("Not ready")
+        platform.coordinator = coordinator
+        clock = SimpleNamespace(now=0)
+        clock.monotonic = lambda: clock.now
+        clock.sleep = lambda _: setattr(clock, "now", 91)
+        def monotonic():
+            value = clock.now
+            clock.now = 89
+            return value
+        clock.monotonic = monotonic
+        record = {"version": "new", "revision": "a" * 40, "dataFormat": 1}
+        with patch.object(ubuntu, "time", clock), self.assertRaises(receipt.Rejected):
+            platform.ready(record)
+        self.assertEqual(timeouts, [1])
+
+
+class SocketTests(unittest.TestCase):
+    def test_slow_coordinator_cannot_extend_total_request_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = str(Path(temporary) / "maintenance.sock")
+            stop = threading.Event()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                listener.bind(path)
+                listener.listen(1)
+                def drip():
+                    with listener.accept()[0] as peer:
+                        peer.recv(4096)
+                        for _ in range(20):
+                            if stop.wait(0.025):
+                                return
+                            try:
+                                peer.sendall(b" ")
+                            except OSError:
+                                return
+                thread = threading.Thread(target=drip)
+                thread.start()
+                start = time.monotonic()
+                try:
+                    with self.assertRaises(receipt.Rejected):
+                        maintenance.request({"nonce": "fixture"}, path, timeout=0.1)
+                    self.assertLess(time.monotonic() - start, 0.4)
+                finally:
+                    stop.set()
+                    thread.join(2)
+
+    def test_slow_client_cannot_extend_worker_ingestion_deadline(self):
+        finished = threading.Event()
+        client, worker = socket.socketpair()
+        class Peer:
+            def getsockopt(self, *args):
+                return struct.pack("3i", 1, 0, 0)
+            def __getattr__(self, name):
+                return getattr(worker, name)
+        def handle():
+            try:
+                serve.Handler(Peer(), "fixture", SimpleNamespace(app_uid=0))
+            finally:
+                worker.close()
+                finished.set()
+        with client, patch.object(serve.Handler, "request_timeout", 0.1), patch.object(serve.socket, "SO_PEERCRED", 17, create=True):
+            thread = threading.Thread(target=handle)
+            thread.start()
+            start = time.monotonic()
+            try:
+                while not finished.wait(0.025) and time.monotonic() - start < 0.5:
+                    try:
+                        client.sendall(b" ")
+                    except OSError:
+                        break
+                self.assertTrue(finished.wait(0.1))
+                self.assertLess(time.monotonic() - start, 0.4)
+            finally:
+                client.close()
+                thread.join(2)
+
+    def test_live_handlers_are_bounded_and_slots_are_released(self):
+        release, changed = threading.Event(), threading.Condition()
+        entered = []
+        class BlockingHandler(socketserver.BaseRequestHandler):
+            def handle(self):
+                with changed:
+                    entered.append(True)
+                    changed.notify_all()
+                release.wait(2)
+        class TwoHandlers(serve.Server):
+            max_handlers = 2
+        with tempfile.TemporaryDirectory() as temporary, TwoHandlers(str(Path(temporary) / "worker.sock"), BlockingHandler) as server:
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            clients = []
+            try:
+                for _ in range(2):
+                    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    client.connect(server.server_address)
+                    clients.append(client)
+                with changed:
+                    self.assertTrue(changed.wait_for(lambda: len(entered) == 2, 1))
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as extra:
+                    extra.settimeout(0.5)
+                    extra.connect(server.server_address)
+                    self.assertEqual(extra.recv(1), b"")
+                self.assertEqual(len(entered), 2)
+                release.set()
+                for client in clients:
+                    client.settimeout(0.5)
+                    self.assertEqual(client.recv(1), b"")
+                self.assertTrue(server.slots.acquire(timeout=1))
+                server.slots.release()
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as next_client:
+                    next_client.connect(server.server_address)
+                    with changed:
+                        self.assertTrue(changed.wait_for(lambda: len(entered) == 3, 1))
+            finally:
+                release.set()
+                for client in clients:
+                    client.close()
+                server.shutdown()
+                thread.join(2)
 
 
 class SnapshotTests(unittest.TestCase):

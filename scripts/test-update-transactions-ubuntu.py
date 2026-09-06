@@ -95,8 +95,10 @@ class CoordinatorFixture(Ubuntu):
         if self.bad_readiness:
             # Keep this fault bounded without waiting the production 90 seconds.
             from unittest.mock import patch
-            ticks = iter([0, 0, 91])
-            with patch("ubuntu.time", SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _: None)):
+            clock = SimpleNamespace(now=0)
+            clock.monotonic = lambda: clock.now
+            clock.sleep = lambda _: setattr(clock, "now", 91)
+            with patch("ubuntu.time", clock):
                 return super().ready(record)
         return super().ready(record)
 

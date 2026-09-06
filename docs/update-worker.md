@@ -91,6 +91,12 @@ The hook is a frozen root-owned script unique to this transaction. It is passed
 only to this worker's APT command; no global APT hook is installed. The worker
 checks the hook's root peer, exact transaction and ancestry from its live APT
 child. Unrelated APT operations cannot initiate Couch maintenance through it.
+Inside that authenticated hook, while APT owns the package lock, the worker
+rechecks both installed package/build identities against the retained previous
+release before closing admission. A package change since preflight fails
+without interrupting the app. After quiesce finishes, the worker rechecks the
+active phase and live APT ancestry before accepting hook completion. A late
+response cannot replace a recorded failure.
 
 The hook closes application admission, saves progress, stops the supervised
 app and checks its process group before taking a backup. It copies application
@@ -126,6 +132,11 @@ The worker verifies installed package identities again, starts the app in
 trial mode and waits up to 90 seconds for matching readiness. It durably marks
 `committed` before changing the accepted receipt and asking the app to admit
 normal writes. A failure after this point must not restore an older database.
+Each coordinator exchange uses one absolute deadline across connection, send and
+receive. Trial requests receive only the remaining trial budget. The root
+socket permits at most eight live request handlers and ten seconds to ingest
+one complete request, so clients cannot hold unlimited threads by dripping
+bytes. Quiescing and backup retain their separate hook execution deadline.
 
 The app implementation, paired phone controls, asset reconnect behavior,
 automatic recovery and idle scheduling are later joins. This layer does not

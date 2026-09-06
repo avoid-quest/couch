@@ -34,13 +34,17 @@ class Ubuntu:
     def systemctl(self, *arguments):
         return run("/usr/sbin/runuser", "-u", "couch-tv", "--", "/usr/bin/env", f"XDG_RUNTIME_DIR={self.runtime}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={self.runtime}/bus", "/usr/bin/systemctl", "--user", *arguments).decode().strip()
 
+    def verify_current(self, record):
+        current = installed()
+        if any(current.get(key) != record["previous"].get(key) for key in ("version", "revision", "dataFormat")):
+            raise Rejected("The installed release changed after its receipt was enrolled.")
+        return current
+
     def preflight(self, record, manifest, packages):
         os_release = trusted_file("/usr/lib/os-release").decode()
         if 'ID=ubuntu\n' not in os_release or 'VERSION_ID="24.04"' not in os_release or run("/usr/bin/dpkg", "--print-architecture").strip() != b"amd64":
             raise Rejected("This worker requires Ubuntu 24.04 amd64.")
-        current = installed()
-        if any(current.get(key) != record["previous"].get(key) for key in ("version", "revision", "dataFormat")):
-            raise Rejected("The installed release changed after its receipt was enrolled.")
+        current = self.verify_current(record)
         result = self.coordinator("capabilities", record)
         if result.get("nativeReadiness") != "libmpv-v1" or result.get("build") != {key: current[key] for key in ("version", "revision", "dataFormat")}:
             raise Rejected("This app cannot provide the required native startup trial.")
@@ -141,14 +145,14 @@ class Ubuntu:
     def ready(self, record):
         expected = {key: record[key] for key in ("version", "revision", "dataFormat")}
         deadline = time.monotonic() + 90
-        while time.monotonic() < deadline:
+        while (remaining := deadline - time.monotonic()) > 0:
             try:
-                result = self.coordinator("readiness", record)
+                result = self.coordinator("readiness", record, min(5, remaining))
                 if all(result.get(key) == expected for key in ("build", "nativeBuild", "frontendBuild")) and result.get("database") == "ok" and result.get("nativeReadiness") == "libmpv-v1" and result.get("frontendReady") is True:
                     return
             except Rejected:
                 pass
-            time.sleep(0.25)
+            time.sleep(min(0.25, max(0, deadline - time.monotonic())))
         raise Rejected("The requested build did not pass its bounded startup trial.")
 
     def commit(self, record):

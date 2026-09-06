@@ -9,6 +9,7 @@ import socket
 import sqlite3
 import stat
 import struct
+import time
 
 from receipt import Rejected, load_json
 from retention import save, sync_directory
@@ -16,16 +17,26 @@ from retention import save, sync_directory
 SOCKET = "/run/couch-appliance/maintenance.sock"
 
 
+def remaining(deadline):
+    duration = deadline - time.monotonic()
+    if duration <= 0:
+        raise Rejected("The local update request exceeded its deadline.")
+    return duration
+
+
 def request(payload, path=SOCKET, timeout=5, uid=None):
+    deadline = time.monotonic() + timeout
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(timeout)
+            connection.settimeout(remaining(deadline))
             connection.connect(path)
             if uid is not None and struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1] != uid:
                 raise Rejected("The maintenance socket belongs to another account.")
+            connection.settimeout(remaining(deadline))
             connection.sendall(json.dumps(payload).encode() + b"\n")
             data = bytearray()
             while b"\n" not in data and len(data) <= 65536:
+                connection.settimeout(remaining(deadline))
                 block = connection.recv(4096)
                 if not block:
                     break
@@ -33,6 +44,7 @@ def request(payload, path=SOCKET, timeout=5, uid=None):
             if len(data) > 65536 or not data.endswith(b"\n"):
                 raise Rejected("The coordinator returned an invalid maintenance response.")
             result = load_json(data)
+            remaining(deadline)
             if not isinstance(result, dict) or result.get("protocol") != "maintenance-v1" or result.get("nonce") != payload["nonce"] or result.get("ok") is not True:
                 raise Rejected("The coordinator did not confirm this maintenance request.")
             return result
