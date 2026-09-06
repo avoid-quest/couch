@@ -129,7 +129,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
             <p className="text-sm text-muted-foreground">{source.itemCount} items</p>
             {host && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
             {source.error && <Alert variant="destructive"><AlertDescription>{source.error}</AlertDescription></Alert>}
-            {source.warning && <p className="library-warning text-sm text-muted-foreground">{source.warning}</p>}
+            {source.warning && <p className="library-warning text-sm text-muted-foreground">{source.warning.replace(" Media is still playable.", "")}</p>}
             {host && <Button variant="outline" className="self-start" data-tv-local-only disabled={!connected || source.status === "scanning"} onClick={() => void scan(source.id)}>Scan again</Button>}
           </Card>
         </li>)}</ul>
