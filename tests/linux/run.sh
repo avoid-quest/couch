@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The source mount is read-only. Linux outputs and application data never reach host targets.
 tar -C /source --exclude=target --exclude=binaries -cf - \
-  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/setup-media.test.ts | tar -xf -
+  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging tests/linux tests/setup-media.test.ts tests/replaygain-audio.test.ts | tar -xf -
 bun install --frozen-lockfile
 { bun --version; rustc --version; cargo install --list; pkg-config --modversion webkit2gtk-4.1 mpv; yt-dlp --version; deno --version; } > /artifacts/versions.txt
 bun run check
@@ -20,7 +20,9 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video d
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video resume_start
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video external_subtitles
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video radio_metadata
+cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video replaygain_native_policy -- --nocapture
 bun tests/linux/fixtures.ts
+bun tests/linux/replaygain-fixtures.ts /replaygain-fixtures
 mkdir -p /root/.config /artifacts
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/artifacts/pulseaudio.log
 pactl load-module module-null-sink sink_name=couch > /artifacts/pulseaudio-module.txt
