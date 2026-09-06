@@ -109,7 +109,7 @@ jobs:
           workspaces: src-tauri
           cache-bin: false
           # The action also keys compiler/host, Cargo env, manifests, and lockfiles.
-          key: ubuntu-24.04-default-test-${{ hashFiles('.github/workflows/check.yml', 'src-tauri/vendor/**', 'src-tauri/build.rs', 'src-tauri/tauri.conf.json', 'src-tauri/capabilities/**', 'src-tauri/icons/**', 'scripts/build.ts', 'package.json', 'bun.lock') }}
+          key: ubuntu-24.04-default-test-${{ hashFiles('.github/workflows/check.yml', 'src-tauri/vendor/**', 'src-tauri/build.rs', 'src-tauri/tauri.conf.json', 'src-tauri/capabilities/**', 'src-tauri/icons/**', 'scripts/build.ts') }}
       - name: Install media test dependency
         if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false' && (steps.paths.outputs.packages != 'true' || steps.packages.outputs.native == 'false')
         run: |
