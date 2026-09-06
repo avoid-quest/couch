@@ -181,7 +181,6 @@ try {
   const traversal = (await api("/api/collections", { definition: { name: "Long preview", sort: "title", descending: false, filter: { kind: "audio", artist: "Traversal" }, members: [] } })).data as CollectionPreview;
   assert.equal(traversal.items.length, 40);
   await open(ui); await ui.button("All collections", panel);
-  await ui.button("Long previewSaved filter", panel); await selected(ui, "Long preview");
   await ui.execute(`
     window.collectionNavigationEvents = [];
     for (const type of ['keydown', 'keyup', 'focusin', 'focusout', 'focus', 'blur']) window.addEventListener(type, event => {
@@ -190,6 +189,7 @@ try {
       if (window.collectionNavigationEvents.length > 100) window.collectionNavigationEvents.shift();
     });
   `);
+  await ui.button("Long previewSaved filter", panel); await selected(ui, "Long preview");
   await ui.execute("const list = document.querySelector('[aria-label=\"Collection preview\"]'); list.scrollTop = 0; list.querySelector('li').focus();");
   for (let index = 1; index <= 12; index++) {
     await traceNavigation(`before physical Down ${index}`);
