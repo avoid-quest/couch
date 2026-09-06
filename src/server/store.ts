@@ -92,7 +92,7 @@ export function openStore(path: string) {
     playbackPreferences(profileId: string): PlaybackPreferences {
       const row = db.query<{ preferences: string }, [string]>("SELECT preferences FROM watching_preferences WHERE profileId = ?").get(profileId);
       const device = db.query<{ audioDelay: number }, []>("SELECT audioDelay FROM playback_device WHERE id = 1").get()!;
-      return { profile: row ? JSON.parse(row.preferences) : { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }, device };
+      return { profile: { replayGain: "off", ...(row ? JSON.parse(row.preferences) : { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1 }) }, device };
     },
     saveProfilePreferences(profileId: string, preferences: ProfilePlaybackPreferences) {
       db.query("INSERT INTO watching_preferences VALUES (?, ?) ON CONFLICT(profileId) DO UPDATE SET preferences=excluded.preferences").run(profileId, JSON.stringify(preferences));

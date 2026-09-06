@@ -127,7 +127,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const profileId = state.activeProfile.id;
     const preferences = { ...state.preferences!.profile };
     state.currentEntryId = entry.id;
-    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
+    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
     broadcast();
     const failed = (error: unknown) => {
       if (state.player.playbackId !== playbackId) return;
@@ -166,7 +166,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     options.deactivate?.();
     state.currentEntryId = null;
     subtitleWarning = null;
-    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
+    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
@@ -317,6 +317,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "pause": case "speed": case "subtitleDelay":
           currentPlayback(action.playbackId);
+          send(action);
+          break;
+        case "replayGain":
+          currentPlayback(action.playbackId);
+          if (!["playing", "paused"].includes(state.player.status) || state.player.replayGain === undefined) throw new Error("ReplayGain is available after supported music finishes loading. Radio and video keep their normal level.");
           send(action);
           break;
         case "track":

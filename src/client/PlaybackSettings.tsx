@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import type { WatchingProfile } from "../shared/library";
-import type { Action, PlaybackPreferences as Preferences, PlayerState } from "../shared/protocol";
+import type { Action, PlaybackPreferences as Preferences, PlayerState, ReplayGainMode } from "../shared/protocol";
 import type { Credentials } from "./session";
 import { playbackDefault, type PlaybackDefaultSetting } from "../shared/playback-default";
 import { languageName } from "./playback-languages";
@@ -168,7 +168,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
         setDefaultError(null);
         if (player.playbackId && !await run({ type: "savePlaybackDefault", profileId: profile.id, playbackId: player.playbackId, setting })) setDefaultError("Could not save this default. Check the connection and watching profile, then try again.");
       }}>Save as default</Button>
-      {!patch && ready && setting !== "speed" && <p className="text-sm text-muted-foreground">This track has no saved language choice. Choose a default in Settings, Playback.</p>}
+      {!patch && ready && (setting === "audio" || setting === "subtitles") && <p className="text-sm text-muted-foreground">This track has no saved language choice. Choose a default in Settings, Playback.</p>}
     </div>;
   };
 
@@ -179,7 +179,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
-            <DialogDescription>Track, speed and subtitle changes last for this item. Save as default uses that choice for {profile.name} on the next item. All remotes see the TV's current choices.</DialogDescription>
+            <DialogDescription>Track, speed, ReplayGain and subtitle changes last for this item. Save as default uses that choice for {profile.name} on the next item. All remotes see the TV's current choices.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 pt-2">
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -222,6 +222,18 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                     </Select>
                     {saveDefault("speed", "speed", preferences.profile.speed === 1 ? "Normal" : `${preferences.profile.speed}×`)}
                   </div>
+                  <div className="grid gap-2 sm:col-span-2">
+                    <Label htmlFor="playback-replaygain">Music ReplayGain</Label>
+                    <Select value={player.replayGain ?? "off"} disabled={disabled || player.replayGain === undefined} onValueChange={mode => {
+                      if (player.playbackId) void run({ type: "replayGain", playbackId: player.playbackId, mode: mode as ReplayGainMode });
+                    }}>
+                      <SelectTrigger id="playback-replaygain" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>{["off", "track", "album"].map(mode => <SelectItem key={mode} value={mode} className="min-h-11">{mode[0]!.toUpperCase() + mode.slice(1)}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">Music only. Album falls back to Track; untagged music stays unchanged. Tagged peaks limit gain, but missing R128 peaks or inaccurate tags can still clip.</p>
+                    {player.replayGain === undefined ? <p className="text-sm text-muted-foreground">Available after supported music loads. Radio, video and unsafe gain tags keep their normal level.</p>
+                      : saveDefault("replayGain", "ReplayGain", preferences.profile.replayGain[0]!.toUpperCase() + preferences.profile.replayGain.slice(1))}
+                  </div>
                 </div>
                 {defaultError && <Alert variant="destructive"><AlertDescription>{defaultError}</AlertDescription></Alert>}
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
@@ -231,7 +243,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
                   <DelayControl id="playback-audio-delay" label="TV audio delay · all profiles" value={player.audioDelay ?? 0} disabled={disabled || !audio.length} onApply={(delay) => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />
                   <DelayControl id="playback-subtitle-delay" label="Subtitle delay" value={player.subtitleDelay ?? 0} disabled={disabled || !subtitles.length} onApply={(delay) => player.playbackId ? run({ type: "subtitleDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />
                 </div>
-                <p className="text-muted-foreground text-sm">Positive delay plays audio or shows subtitles later. TV audio delay is saved for every profile and item. Subtitle delay ends with this item. Edit saved languages, subtitle mode and speed in Settings, Playback.</p>
+                <p className="text-muted-foreground text-sm">Positive delay plays audio or shows subtitles later. TV audio delay is saved for every profile and item. Subtitle delay ends with this item. Edit saved languages, subtitle mode, speed and ReplayGain in Settings, Playback.</p>
           </div>
           <DialogFooter><DialogClose asChild><Button className="min-h-11">Done</Button></DialogClose></DialogFooter>
         </DialogContent>
