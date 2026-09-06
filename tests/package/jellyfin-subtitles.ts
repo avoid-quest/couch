@@ -124,18 +124,26 @@ try {
   browser = (await driver(phonePort, "/session", { capabilities: { alwaysMatch: { browserName: "MiniBrowser", "webkitgtk:browserOptions": { args: ["--automation", "--class=JellyfinSubtitlePhone"] } } } })).sessionId;
   await driver(phonePort, `/session/${browser}/url`, { url: `http://127.0.0.1:45300` });
   await until("phone shows pairing form", () => phone.execute("return !!document.querySelector('#pairing-code')"));
+  await driver(phonePort, `/session/${browser}/window/rect`, { x: 1000, y: 0, width: 488, height: 950 });
+  const phoneRect = await driver(phonePort, `/session/${browser}/window/rect`), phoneWidth = await phone.execute("return innerWidth");
+  await driver(phonePort, `/session/${browser}/window/rect`, { width: Math.round(phoneRect.width * 390 / phoneWidth), height: 950 });
+  await until("pairing viewport is phone sized", async () => await phone.execute("return innerWidth") === 390);
   // The retained WebKitGTK fixture uses fractional scale; use its tested native click coordinates.
   phone.clickElement = async id => {
+    const window = exec("xdotool", "search", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
+    exec("xdotool", "windowmap", "--sync", window, "windowactivate", "--sync", window);
     await phone.revealElement(id);
+    const target = { "element-6066-11e4-a52e-4f735466cecf": id };
     let previous = "";
     await phone.waitFor("HTTP click target is stable and unobstructed", async () => {
-      const point = await phone.execute("const e=arguments[0]; e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(), x=r.x+r.width/2,y=r.y+r.height/2; return !e.matches(':disabled') && r.width>0 && r.height>0 && e.contains(document.elementFromPoint(x,y)) ? JSON.stringify({x:x*devicePixelRatio,y:outerHeight-innerHeight*devicePixelRatio+y*devicePixelRatio}) : '';", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
+      await phone.execute("const e=arguments[0], r=e.getBoundingClientRect(); if(!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))) e.scrollIntoView({block:'center',inline:'nearest'});", [target]);
+      await driver(phonePort, `/session/${browser}/execute/async`, { script: "const done=arguments[arguments.length-1]; requestAnimationFrame(()=>requestAnimationFrame(()=>done(null)));", args: [] });
+      const point = await phone.execute("const e=arguments[0], r=e.getBoundingClientRect(), x=r.x+r.width/2,y=r.y+r.height/2; return !e.matches(':disabled') && r.width>0 && r.height>0 && e.contains(document.elementFromPoint(x,y)) ? JSON.stringify({x:x*devicePixelRatio,y:outerHeight-innerHeight*devicePixelRatio+y*devicePixelRatio}) : '';", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
       const stable = !!point && point === previous; previous = point; return stable;
     });
     const point = JSON.parse(previous);
     await phone.execute("const target=arguments[0]; window.__httpPointer=null; document.addEventListener('pointerdown', event => { window.__httpPointer={hit:target.contains(event.target)}; }, {once:true,capture:true});", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
-    const window = exec("xdotool", "search", "--onlyvisible", "--class", "^JellyfinSubtitlePhone$").toString().trim().split("\n")[0]!;
-    exec("xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
+    exec("xdotool", "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1");
     assert.ok((await phone.execute("return window.__httpPointer"))?.hit, "HTTP pointer reaches its intended control after X11 translation");
   };
   await phone.type("#pairing-code", connection.pairingCode); await phone.button("Connect");
@@ -187,7 +195,13 @@ try {
   await until("native shutdown removes subtitle files", () => files().length === 0);
   await until("upstream playback session ends at native shutdown", async () => !(await fixture.request("/Sessions")).some((session: any) => session.Client === "Couch" && session.NowPlayingItem));
   await Bun.write(`${artifacts}/result.json`, JSON.stringify({ checks, measurements, api: fixture.summary, limits: "Only zero-origin PGS-in-MKS sample. Direct SUP remains unavailable; unanchored MKS timing is not qualified. No physical TV/audio claim." }, null, 2));
-} catch (error) { await Bun.write(`${artifacts}/failure.json`, JSON.stringify({ error: String(error), checks, measurements, player: remotes[0]?.state?.player }, null, 2)); throw error; }
+} catch (error) {
+  if (browser) {
+    await Bun.write(`${artifacts}/phone-failure.json`, JSON.stringify(await phone.execute("const e=document.querySelector('#pairing-code'),r=e?.getBoundingClientRect(); return {width:innerWidth,height:innerHeight,outerWidth,outerHeight,visibility:document.visibilityState,focused:document.hasFocus(),scale:devicePixelRatio,rect:r?.toJSON(),hit:r&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML,alerts:[...document.querySelectorAll('[role=alert]')].map(e=>e.textContent)}").catch(() => null), null, 2));
+    const png = await driver(phonePort, `/session/${browser}/screenshot`).catch(() => null);
+    if (png) await Bun.write(`${artifacts}/phone-failure.png`, Buffer.from(png, "base64"));
+  }
+  await Bun.write(`${artifacts}/failure.json`, JSON.stringify({ error: String(error), checks, measurements, player: remotes[0]?.state?.player }, null, 2)); throw error; }
 finally {
   remotes.forEach(remote => remote.socket.close());
   if (browser) await driver(phonePort, `/session/${browser}`, undefined, "DELETE").catch(() => {});
