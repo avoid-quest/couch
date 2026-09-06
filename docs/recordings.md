@@ -1,0 +1,31 @@
+# Completed recordings
+
+Couch records a selected future guide programme through Tvheadend's HTTP DVR API. Guide imports remain the source of channel and airing identity. An administrator maps the exact source, channel and tvg-id to an enabled backend channel with an assigned service. Scheduling uses the selected programme's UTC times, not an unverified backend event match.
+
+Use Tvheadend API 20 or newer with HTTP Basic authentication enabled over HTTPS, or HTTP on loopback. The recorder account needs WebUI and basic DVR access, the selected DVR profile, and the mapped channels. The separate playback account needs WebUI, streaming and DVR basic/view-all access. It must not own these recordings, have administrator access, or have manage-all DVR access. Keep these account identities and rights stable while Couch uses the backend. Couch verifies resolved usernames and DVR access during setup and scheduling.
+
+Playback uses the existing native player. Before resolving the private recording URL, Couch checks completed state and requires a UUID-only save permission probe to fail with HTTP 403. This request supplies no mutable recording properties. Its write check covers the same permission used by Tvheadend's [HTTP final-segment reporter](https://github.com/tvheadend/tvheadend/blob/f7f114e9b7d80e4b32b2f708c8520e2a414a2533/src/webui/webui.c#L2547) and [recording ownership check](https://github.com/tvheadend/tvheadend/blob/f7f114e9b7d80e4b32b2f708c8520e2a414a2533/src/dvr/dvr_db.c#L184). Couch keeps profile progress from native observations and does not write backend watched fields. Changing backend permissions during a transfer can invalidate this policy.
+
+The local job UUID and selected airing snapshot commit before submission and broadcast. The private backend comment carries that UUID for later reconciliation. It is not a backend idempotency key. Couch never automatically repeats an ambiguous create request. A job remains Checking until the backend confirms its identity; refreshing or restarting Couch reconciles it without another create. Overlapping schedule requests for the same Couch channel return the existing job, including when a later guide import changes its start identity.
+
+Cancellation records intent and then checks a complete successful backend listing for absence. A lost HTTP response alone does not confirm cancellation. Backend status updates preserve the first observed recording failure cause. An unavailable or incomplete backend keeps the last confirmed state with an error. Completed recording playback and backend recording activity have separate lifetimes.
+
+The current bounded store supports one backend identity, 256 channel mappings and 500 retained jobs. Credentials can be replaced with an expected setup revision. Once jobs exist, backend/account/profile identity changes are rejected so existing jobs cannot be silently rebound to another service. Mapping edits use revisions; existing job snapshots stay intact.
+
+## Initial backend qualification
+
+The isolated source revision was `abe77287ab71acb803c76b3d5db51d1f0d91715c`. The successful run lasted about 77 seconds on 2026-09-06, from 20:51:35 to 20:52:52 UTC. The preceding preflight stopped before resource creation because a retained generator image was absent. That failure remains in `attempt1`.
+
+The run used the official Tvheadend ARM64 image `ghcr.io/tvheadend/tvheadend@sha256:df54bdaa39de5311f127c538403894fcec7bc7b251fdefb7f40cbec013faea8c`, runtime `4.3-2768~gf7f114e9b`, API 20. Server binary SHA-256 was `1cf1bb5e942e5e1514372cfbfcb498c8a9c24a9feae851f948d7712e8d405f3f`. The already available generator image was pinned to `sha256:979fbf19f90e61d22a6c37704755a8a5f9cc53d3cca3261a88d23ed106a1829e` after the missing-image preflight. Python 3.12.3 and FFmpeg/ffprobe `6.1.1-3ubuntu5` versions and binary hashes were recorded. Successful generation exercised testsrc2/sine, MPEG-2 video, MP2 audio and MPEG-TS output.
+
+Before-start inspection verified two containers with one CPU, 768 MiB memory and no extra swap allowance, and 128 PIDs each. All mounts were private binds. Only loopback ports 26981/26982 were published. No native cache, browser, preview or target was used.
+
+The actual Couch guide and recording modules imported generated XMLTV, stored private dual-account setup, mapped a discovered service/channel, scheduled a future job, verified its pending cancellation, and kept one ID on duplicate submission. A second generated programme transitioned through pending and running to completed with real MPEG-TS output.
+
+After setting the backend baseline to `playposition=17`, `playcount=0`, `watched=0`, Couch resolved the private read-only URL. Partial reads, a range through the final segment, and a full-file read each preserved all three fields at `17,0,0`. The write-permission probe returned 403. This supports the configured HTTP policy; it does not measure native viewing completion.
+
+Both containers exited 0 without OOM. Server stop took about 587 ms and generator stop 265 ms. Exact-name inspection confirmed both containers and their network absent. Generated account files, backend password records and the private credential-bearing product database were removed. Unrelated images and artifacts were preserved.
+
+The private evidence root is `/tmp/couch-media-fresh-recording/.artifacts/recording-qualification`. Its `evidence.tar.gz` contains 48 hashed files plus `manifest.json`, 72,613 bytes, SHA-256 `43edbe5281483c2f94be3edfb6455f147efc026645fc3fd0b1a650a558213dc3`. It retains scripts, request/status traces, source and image identities, applied limits, failed preflight and verified cleanup. It excludes credentials and the product database.
+
+This run does not qualify backend restart mapping, real two-controller UI behavior, native libmpv video/seeking/Stop/replacement, screenshots, physical sound or tuner reception. Those remain acceptance work in [Schedule one guide programme and play its completed recording](https://github.com/avoid-quest/couch/issues/66). The earlier [unexplained second backend exit and HTTP watched side effect](research/dvr-timeshift.md) remain preserved. Live/growing playback and its crash evidence stay in the separate [backend/client investigation](research/timeshift-integration.md).
