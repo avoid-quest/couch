@@ -191,6 +191,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
             if (!mapping) throw new RecordingError("An administrator must map this exact guide channel before recording.", 409);
             if (!(await backend().verify(req.signal)).some(row => row.uuid === mapping.backendChannel)) throw new RecordingError("The mapped backend channel is unavailable.", 409);
             guard();
+            if (program.start <= Date.now()) throw new RecordingError("This programme started while checking the backend. Reload the guide before recording.", 409);
             const current = selection(program.id);
             if (JSON.stringify(current) !== JSON.stringify({ channel: item, program })) throw new RecordingError("The guide changed. Select this programme again.", 409);
             if (jobs().length >= 500) throw new RecordingError("This installation has reached its 500 recording job limit.", 409);

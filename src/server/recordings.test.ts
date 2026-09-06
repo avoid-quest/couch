@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -251,4 +251,19 @@ test("revocation at the last setup prerequisite prevents creating a permission-c
     const database = new Database(app.databasePath);
     expect(database.query("SELECT * FROM recording_qualification").all()).toHaveLength(0); database.close();
   }
+});
+
+
+test("a programme that starts during backend verification is rejected before durable submission", async () => {
+  const app = fixture(); await app.setup();
+  const gate = Promise.withResolvers<void>(); app.blockChannels = gate.promise;
+  const before = app.calls.length, pending = app.schedule();
+  for (let i = 0; i < 100 && !app.calls.slice(before).some(call => call.path === "/api/channel/grid"); i++) await Bun.sleep(1);
+  expect(app.calls.slice(before).some(call => call.path === "/api/channel/grid")).toBe(true);
+  const clock = spyOn(Date, "now").mockReturnValue(program.start + 1);
+  try {
+    gate.resolve(); const response = await pending;
+    expect(response.status).toBe(409); expect((await response.json()).error).toContain("started while checking");
+    expect(app.createCount).toBe(0); expect(app.recordings.snapshot().jobs).toHaveLength(0);
+  } finally { gate.resolve(); clock.mockRestore(); }
 });
