@@ -1,6 +1,7 @@
 import type { CollectionFilter, CollectionSort } from "../shared/collections";
 import { readCueAlbum, type CueAlbum } from "./cue";
 import type { MediaSource } from "./session";
+import { createMetadata } from "./metadata";
 import type { ManagedFolder } from "../shared/folders";
 import { createMediaFolders, FolderError, type FolderIdentity, type MediaFolders } from "./media-folders";
 import { audioExtensions } from "../shared/media";
@@ -151,6 +152,11 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       [item.artist, ...(item.artists ?? []), item.albumArtist, ...(item.video?.genres ?? []), ...(item.video?.show?.genres ?? [])].filter(Boolean).join(" "), item.album);
   }
 
+  const metadata = createMetadata(db, notify, id => {
+    const row = db.query<PublicItemRow & { rowid: number }, [string]>("SELECT rowid, * FROM library_items WHERE id=?").get(id);
+    if (row) indexItem(row.rowid, publicItem(row));
+  });
+
   const saveItem = db.transaction((item: ItemRow, scanId: string, artworks: VideoArtwork[], originals: OriginalVideoNfo[]) => {
     for (const artwork of artworks) db.query("INSERT OR IGNORE INTO library_artwork (id, data, mimeType) VALUES (?, ?, ?)").run(artwork.id, artwork.data, artwork.mimeType);
     for (const nfo of originals) db.query(`INSERT INTO library_video_nfo (sourceId, path, data, seenScan) VALUES (?, ?, ?, ?)
@@ -166,6 +172,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         JSON.stringify(item.artists ?? []), item.albumArtist ?? null, item.albumId ?? null, item.discNumber ?? null, item.trackNumber ?? null, item.artworkId ?? null, item.metadataVersion,
         item.video ? JSON.stringify(item.video) : null, item.fileMetadata ?? null, item.cuePath ?? null, item.cueTrack ?? null, item.cueSource ?? 0)!;
     indexItem(row.rowid, item);
+    metadata.capture(item, originals);
     const show = item.video?.show;
     if (show) {
       const description = JSON.stringify(show);
@@ -174,7 +181,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         SET video = json_set(video, '$.show', json(?))
         WHERE json_extract(video, '$.show.id') = ? AND json_extract(video, '$.show') <> ? RETURNING rowid, *`)
         .all(description, show.id, description);
-      for (const episode of updated) indexItem(episode.rowid, publicItem(episode));
+      for (const episode of updated) { indexItem(episode.rowid, publicItem(episode)); metadata.apply(episode.id); }
     }
     db.query("DELETE FROM library_music_artists WHERE itemId = ?").run(item.id);
     if (item.kind === "audio") for (const name of [...(item.artists ?? []), ...(item.albumArtist ? [item.albumArtist] : [])]) {
@@ -322,6 +329,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
   }
 
   return {
+    metadata,
     listSources(): LibrarySource[] { return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all(); },
     managedSources(): ManagedFolder[] {
       return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all().map(source => ({ ...source,
@@ -380,6 +388,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       db.transaction(() => {
         db.query("DELETE FROM library_search WHERE id IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
         db.query("DELETE FROM library_music_artists WHERE itemId IN (SELECT id FROM library_items WHERE sourceId = ?)").run(sourceId);
+        metadata.removeSource(sourceId);
         db.query("DELETE FROM library_items WHERE sourceId = ?").run(sourceId);
         db.query("DELETE FROM library_video_nfo WHERE sourceId = ?").run(sourceId);
         db.query("DELETE FROM library_folder_identities WHERE sourceId = ?").run(sourceId);
@@ -533,6 +542,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     },
     async close() {
       closing = true;
+      metadata.close();
       for (const process of probes) process.kill("SIGKILL");
       await scanQueue;
       db.close();
