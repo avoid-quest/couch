@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Pencil, Play, Plus, Save, Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -67,11 +67,6 @@ export function CollectionsPanel({ origin, token, connected, canPlay, version, a
     if (!preview) return;
     if (await update(`/${preview.collection.id}/load`, { revision: preview.collection.revision, digest: preview.digest, mode })) setNotice(mode === "play" ? "Starting the available preview items on the TV." : "Added the available preview items to the queue.");
   };
-  const traversePreview = (event: KeyboardEvent<HTMLOListElement>) => {
-    const row = event.target instanceof HTMLElement ? event.target.closest("li") : null;
-    const next = event.key === "ArrowDown" ? row?.nextElementSibling : event.key === "ArrowUp" ? row?.previousElementSibling : null;
-    if (next instanceof HTMLElement) { event.preventDefault(); next.focus(); next.scrollIntoView({ block: "nearest" }); }
-  };
   const disabled = !connected || pending;
   const available = preview?.items.filter(item => item.available).length ?? 0;
   return <section className="collections-panel grid min-w-0 gap-4" aria-label="Library collections">
@@ -88,7 +83,7 @@ export function CollectionsPanel({ origin, token, connected, canPlay, version, a
       {preview && <>
         <div className="flex flex-wrap gap-2"><Button disabled={disabled || loading || !canPlay || !available} onClick={() => void load("play")}><Play />Play preview</Button><Button variant="outline" disabled={disabled || loading || !available} onClick={() => void load("append")}><Plus />Add preview to queue</Button><Button variant="outline" disabled={disabled || loading} onClick={startEdit}><Pencil />Edit collection</Button></div>
         <p className="text-sm text-muted-foreground">{available} available · {preview.items.length - available} missing. {preview.total > 500 ? `Showing the first 500 of ${preview.total} matches. ` : ""}Play replaces the queue. Missing items are skipped. Order: {preview.collection.sort === "manual" ? "my order" : preview.collection.sort === "album" ? "album, disc and track" : preview.collection.sort}, {preview.collection.descending ? "descending" : "ascending"}.</p>
-        <ol className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1" aria-label="Collection preview" onKeyDown={traversePreview}>{preview.items.map((item, index) => <li key={item.id} tabIndex={0} aria-label={`${index + 1}. ${item.title}, ${item.available ? "available" : "missing"}`} className="flex min-w-0 items-center gap-3 rounded-lg border p-3 focus-visible:outline-2 focus-visible:outline-primary"><span className="shrink-0 text-sm text-muted-foreground">{index + 1}</span><div className="min-w-0 flex-1"><strong className="break-words text-sm">{item.title}</strong><p className="break-words text-sm text-muted-foreground">{[item.artist, item.album, item.video?.show?.title, item.video?.year].filter(Boolean).join(" · ")}</p></div><span className="shrink-0 text-sm">{item.available ? "Available" : "Missing"}</span></li>)}</ol>
+        <ol className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1" aria-label="Collection preview">{preview.items.map((item, index) => <li key={item.id} tabIndex={0} aria-label={`${index + 1}. ${item.title}, ${item.available ? "available" : "missing"}`} className="flex min-w-0 items-center gap-3 rounded-lg border p-3 focus-visible:outline-2 focus-visible:outline-primary"><span className="shrink-0 text-sm text-muted-foreground">{index + 1}</span><div className="min-w-0 flex-1"><strong className="break-words text-sm">{item.title}</strong><p className="break-words text-sm text-muted-foreground">{[item.artist, item.album, item.video?.show?.title, item.video?.year].filter(Boolean).join(" · ")}</p></div><span className="shrink-0 text-sm">{item.available ? "Available" : "Missing"}</span></li>)}</ol>
         {!preview.items.length && <p>No matching items. Edit the definition or scan your folders again.</p>}
         <Button className="justify-self-start" variant="destructive" disabled={disabled} onClick={() => setConfirm(true)}><Trash2 />Delete collection</Button>
         {confirm && <Card className="gap-3 p-3"><p>Delete {preview.collection.name}?</p><div className="flex flex-wrap gap-2"><Button variant="destructive" disabled={disabled} onClick={() => void update(`/${selected}`, { revision: preview.collection.revision }, "DELETE").then(result => { if (result) select(null); })}>Confirm delete</Button><Button variant="outline" disabled={pending} onClick={() => setConfirm(false)}>Cancel</Button></div></Card>}
