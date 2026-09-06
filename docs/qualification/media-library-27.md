@@ -3,7 +3,7 @@
 Ticket: [Browse local movies and episodes with Kodi NFO and nearby artwork](https://github.com/avoid-quest/couch/issues/27).
 Initial base: `209c95741dca0dcf6e269687f0a66968826b54da`.
 
-Catalog and browsing source reviews passed before integration onto `fec8e70341ec19260ce1616debcc89d61c08e291`. The native run and focused library replay below provide software evidence. Review of the chooser helper correction and representative in-app browser qualification remain pending; the ticket is not complete.
+Catalog and browsing source reviews passed before integration onto `fec8e70341ec19260ce1616debcc89d61c08e291`. The native run and focused library replay below provide software evidence. The chooser helper correction is accepted; representative in-app browser qualification remains pending; the ticket is not complete.
 
 ## Import contract
 
@@ -85,7 +85,7 @@ The video fixture retains its local five-case queue-entry-to-action conversion. 
 
 ## Native execution and helper correction
 
-The product binary source is upper `43dd58ae24d795a79a79992e30aa67740f55a503`, above catalog `69e43a06da000c836bff4fa36f17d8161d78e4fc` and landed base `fec8e70341ec19260ce1616debcc89d61c08e291`. Chooser-only helper correction `584d2802d0b3efdd4ec97171c5b2a877c2ef80ee` has parent `43dd58ae`; it changes only `tests/linux/video-library.ts` (+12/-3). Its focused peer review is pending. Production source and binaries are unchanged by this correction.
+The product binary source is upper `43dd58ae24d795a79a79992e30aa67740f55a503`, above catalog `69e43a06da000c836bff4fa36f17d8161d78e4fc` and landed base `fec8e70341ec19260ce1616debcc89d61c08e291`. Chooser-only helper correction `584d2802d0b3efdd4ec97171c5b2a877c2ef80ee` has parent `43dd58ae`; it changes only `tests/linux/video-library.ts` (+12/-3). Its focused peer review accepted the correction and the documentation/source distinction. Production source and binaries are unchanged by this correction.
 
 Artifacts are retained in the assigned worktree under [the exact-head record](/Users/devit/Code/couch-media-library/.artifacts/media-library-27/43dd58ae24d795a79a79992e30aa67740f55a503). Each attempt has its own directory; failed attempts were not overwritten.
 
@@ -115,6 +115,16 @@ Replay4 verifies native folder selection, movie/show/season/episode browsing, nu
 
 Native screenshots include `native-video-folder-location.png`, `native-video-movie-details.png`, `native-video-seasons.png`, `native-video-show-rescanned.png`, `native-video-offline.png` and `native-library-movie-playback.png`. HTTP screenshots include `http-video-movies.png`, `http-video-episodes.png`, `http-video-show-rescanned.png`, `http-video-offline.png` and `http-video-offline-restart.png`. These show generated samples using software rendering and silent audio; they do not establish hardware decoding, physical sound or HDMI behavior.
 
+### Wide viewport and warning-copy follow-up
+
+The private WebKit extension passed actual CSS widths **320, 375, 390, 768, 1024, 1440 and 1920** on a separate Xvfb display. Each width exercised movie search/detail, decoded poster/fanart, show/season browsing, numeric episode order, episode search and a Queue action observed in the native TV. A native rescan after unplugging the fixture verified cached artwork, disabled Resume and the Unavailable source dialog at every width; the source was restored afterward. Original native 1600×1000 and both390px HTTP sessions were preserved. Logs, layout measurements, source-error captures and settled artwork screenshots are in `private-replay-4/matrix-*`; `image-manifest.json` records paths/hashes. The disposable matrix's initial desktop44px assertion failure and its initial320px pre-paint screenshot are retained separately; corrected captures wait for paint and visibly show the decoded fanart. Parent inspection covered representative images at every required width and native movie playback. Container WebKit does not count as in-app browser qualification.
+
+The parent found an inaccurate cached warning in the unavailable-folder screenshot: “Media is still playable.” UI-only commit `7fec38b340b73cbe866ed00e6e24cccac92319c9` (parent `e90c24c5c485e539cf1bc2c6246ac2303d232327`) removes this unconditional sentence when displaying a folder warning, keeping its skipped-sidecar count. Removing it at display time also corrects already-cached warnings while the drive remains unavailable. No scanner, data model, layout, playback or native code changed.
+
+The frontend and Linux Bun sidecar were rebuilt using the existing script in the private container, without Cargo or shared cache mounts. New sidecar SHA-256: `ed5754c12abf2ee49f01028aa424a3e36e9de2bb8b26417fc78112b10639c3cf`. Native executable remains `e71e1969983880f6d9015dd0b484c0fdda4b866e76e3ced67cd56e20dafe4313`; its embedded native frontend is the prior43dd build. The corrected frontend was verified through the **actual reloaded390px HTTP browser** served by the new sidecar, not claimed as a rebuilt native frontend.
+
+With the same cached source data, the corrected dialog shows **Unavailable**, six items and “Skipped 3 invalid or oversized NFO/artwork sidecar reads.” It does not claim playback availability; the offline movie still has disabled Resume. The browser test also reads the old cached API warning containing the removed sentence, proving the frontend handles retained data without re-importing sidecars. Source recovery was rescanned afterward. Typecheck, build and actual-dialog verification all exited0. Evidence: `private-replay-4/copy-correction-7fec38b/{build-identities.sha256,frontend.sha256,build.log,build-exit.txt,verify.log,process-exit.txt,verified-dialog.json,http-390-unavailable-corrected.png}`. Earlier images and binaries remain intact.
+
 ## CI budget measurements
 
 These are existing GitHub job timestamps, with elapsed execution rounded up per Linux job. Queue delay is job start minus run creation, reported separately; it is not counted as execution. Raw run/jobs API responses and calculations are in `ci-<run>.json` and `ci-measurements.json` under the exact-head record.
@@ -122,10 +132,11 @@ These are existing GitHub job timestamps, with elapsed execution rounded up per 
 | Revision / run | Path and result | Elapsed | Rounded Linux minutes | Queue delay |
 | --- | --- | --- | --- | --- |
 | Catalog `69e43a0` / [33998623761](https://github.com/avoid-quest/couch/actions/runs/33998623761) | Native, Cargo dependencies reused; success | 180s | 3 | 2s |
+| Browsing `e90c24c` / [34000625295](https://github.com/avoid-quest/couch/actions/runs/34000625295) | Ordinary helper/documentation revision; success | 80s | 2 | 3s |
 | Browsing `43dd58a` / [33998624758](https://github.com/avoid-quest/couch/actions/runs/33998624758) | Ordinary, Rust steps skipped; success | 52s | 1 | 3s |
 | Browsing `43dd58a` / [33998624327](https://github.com/avoid-quest/couch/actions/runs/33998624327) | Superseded/cancelled before steps | 1s | 1 | 1s |
 
-The successful jobs fit the agreed ordinary 2-minute/3-rounded and warm-native 3-minute/5-rounded budgets. No extra CI run was started to obtain these measurements. New helper/documentation revision CI remains to be recorded before merge.
+The successful jobs fit the agreed ordinary 2-minute/3-rounded and warm-native 3-minute/5-rounded budgets. No extra CI run was started to obtain these measurements. The subsequent warning-copy revision CI remains to be recorded before merge.
 
 ## Official references
 
