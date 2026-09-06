@@ -3,6 +3,8 @@ set -eu
 cd "$(dirname "$0")/.."
 revision=$(git rev-parse HEAD)
 version="$(sed -n 's/^  "version": "\([^"]*\)",/\1/p' package.json)+appliance.$(git rev-parse --short=12 HEAD)"
+version=${2:-$version}
+dpkg --validate-version "$version"
 destination=${1:-.artifacts/appliance}
 mkdir -p "$destination"
 destination=$(cd "$destination" && pwd)

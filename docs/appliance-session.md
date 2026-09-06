@@ -74,6 +74,11 @@ needs `git` and `dpkg-deb` only and records its Git revision in
 `/usr/share/doc/couch-appliance/build-info.json`. It does not rebuild the native
 application. The session does not wait for network access, so local home and
 stored media remain usable during offline boot.
+Release callers pass a monotonic Debian version as the second builder argument,
+such as `sh scripts/build-appliance.sh /output 0.1.0+build.RUN.ATTEMPT`, substituting
+the release's numeric run and attempt. The builder validates the version and
+still records its actual Git source. The optional hash-based default is for
+standalone builds and does not guarantee upgrade ordering.
 
 The contracts above require separate qualification of a real LightDM boot,
 coordinator/native failures, and physical picture/audio. Xvfb and a software
