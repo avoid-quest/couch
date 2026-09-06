@@ -31,6 +31,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
   const shutdown = new AbortController();
   const current = (id: string) => !closed && player().playbackId === id && ["playing", "paused"].includes(player().status);
   const remove = (path: string) => { rmSync(path, { force: true }); files.delete(path); };
+  const retain = (playbackId: string | null) => { for (const [path, owner] of files) if (owner !== playbackId) remove(path); };
   return {
     async prepare(media: MediaSource, playbackId: string, signal: AbortSignal): Promise<MediaSource> {
       if (!media.subtitles?.length) return media;
@@ -117,8 +118,9 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
     observe(state: PlayerState) {
       // Keep files until native playback acknowledges the replacement or Stop.
       if (state.status === "loading") return;
-      for (const [path, playbackId] of files) if (state.playbackId !== playbackId) remove(path);
+      retain(state.playbackId);
     },
+    stopped: retain,
     close() { closed = true; shutdown.abort(); rmSync(directory, { recursive: true, force: true }); files.clear(); },
   };
 }
