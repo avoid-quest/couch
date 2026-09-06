@@ -87,3 +87,20 @@ References checked 2026-09-06: [TMDB authentication](https://developer.themovied
 [episode details](https://developer.themoviedb.org/reference/tv-episode-details),
 [image configuration](https://developer.themoviedb.org/docs/image-basics), and
 [Bun Archive](https://bun.sh/docs/runtime/archive).
+
+## Native and browser qualification driver
+
+`tests/linux/metadata-run.sh` builds the exact source in the existing Linux test
+image, records source and executable hashes, and runs `metadata.ts` with Xvfb,
+basic rendering and a null audio sink. It requires a separately approved bounded
+container/cache window. It has no live TMDB credential or service fixture.
+
+The driver uses actual native and HTTP browser inputs for corrections, artwork
+upload, metadata search without configured access, and archive download. It checks
+native video pixels, two controller invalidations, guest navigation denial, stale
+TV edits, invalid artwork with no partial update, export/reimport, episode order,
+320/375/390/768/1024/1440/1920-pixel editor widths, offline rescan and restart.
+The browser's isolated download destination is `/artifacts/downloads`; the driver
+reads the archive that the browser actually wrote. Results and screenshots remain
+under `/artifacts`, including failed phases. Passing this software fixture would
+still leave live TMDB and physical-device qualification unclaimed.
