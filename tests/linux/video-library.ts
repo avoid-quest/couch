@@ -113,13 +113,22 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await ui.button("Add folder", ".library-heading");
   let picker = "";
   await until("native folder picker opens for the playable video catalog", async () => { picker = (await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output.split("\n")[0] ?? ""; return !!picker; });
-  assert.equal((await xdotool("windowactivate", "--sync", picker, "key", "--clearmodifiers", "ctrl+l")).code, 0);
+  assert.ok(await Bun.file("/video-fixtures/Movie/Observatory.mkv").exists(), "The playable movie exists in this native test container");
+  assert.equal((await xdotool("windowactivate", "--sync", picker)).code, 0);
+  assert.equal((await xdotool("getwindowfocus")).output, picker, "Physical input targets the native folder picker");
+  // Leave GTK's Recent/search view before entering an absolute folder location.
+  assert.equal((await xdotool("key", "--clearmodifiers", "alt+Home")).code, 0);
+  await Bun.sleep(250);
+  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+l")).code, 0);
   await Bun.sleep(150);
   assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+a")).code, 0);
-  assert.equal((await xdotool("type", "--clearmodifiers", "--delay", "25", "/video-fixtures")).code, 0);
-  await xdotool("key", "Return");
+  assert.equal((await xdotool("type", "--clearmodifiers", "--delay", "25", "/video-fixtures/")).code, 0);
+  await Bun.sleep(150);
+  await nativeScreenshot(context, "native-video-folder-location");
+  assert.equal((await xdotool("key", "--clearmodifiers", "Return")).code, 0);
   await Bun.sleep(300);
   if ((await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output) await xdotool("key", "Return");
+  await until("native folder location is accepted and the chooser closes", async () => !(await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output);
   let source!: LibrarySource;
   await until("actual native folder selection scans two movies and four multi-season episodes", async () => {
     source = (await api("/api/library/sources")).sources.find((item: LibrarySource) => item.name === "video-fixtures");
