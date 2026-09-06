@@ -134,7 +134,7 @@ try {
   }
   await Bun.write(`${artifactDir}/cue-viewports.json`, JSON.stringify(widths, null, 2));
   await httpRemote.restore();
-  await httpRemote.ui.button("Play First tone on TV", panel);
+  await httpRemote.ui.button("Play First tone", panel);
   await until("first actual browser starts the first cue on the shared native player", () => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${saved.tracks[0]!.id}`));
   await httpRemote.minimize();
   await otherRemote.restore();

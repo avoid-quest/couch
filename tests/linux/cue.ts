@@ -36,7 +36,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await httpRemote.ui.click(`${panel} [data-music-album=${JSON.stringify(album.id)}]`);
   await assertResponsive(httpRemote.ui, "Phone cue album");
   await httpRemote.screenshot("cue-phone-album");
-  await httpRemote.ui.button("Play Second tone on TV", panel);
+  await httpRemote.ui.button("Play Second tone", panel);
   await until("phone starts the second cue at relative zero with its own duration", () => all(state => state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${tracks[1]!.id}` && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2 && Math.abs(state.player.duration! - tracks[1]!.duration!) < 0.01));
   const phoneEntryId = first().currentEntryId!;
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
