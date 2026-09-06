@@ -12,7 +12,8 @@ assert.ok(container && process.env.JELLYFIN_SUBTITLE_EVIDENCE && process.env.SUB
 const artifacts = resolve(process.env.JELLYFIN_SUBTITLE_EVIDENCE!);
 const corpus = resolve(process.env.SUBTITLE_CORPUS!);
 const port = Number(process.env.JELLYFIN_NATIVE_PORT ?? 45500);
-const origin = `http://127.0.0.1:${port}`;
+const endpoint = `http://127.0.0.1:${port}`;
+const origin = "http://127.0.0.1:45300";
 const nativePort = Number(process.env.JELLYFIN_NATIVE_DRIVER ?? 45544), phonePort = Number(process.env.JELLYFIN_PHONE_DRIVER ?? 45545);
 await mkdir(artifacts, { recursive: true, mode: 0o700 });
 const checks: string[] = [], measurements: unknown[] = [];
@@ -37,7 +38,7 @@ class Remote {
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
   constructor(readonly token: string) {
     const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-    this.socket = new Socket(`${origin.replace("http", "ws")}/api/ws?token=${token}`, { headers: { origin } });
+    this.socket = new Socket(`${endpoint.replace("http", "ws")}/api/ws?token=${token}`, { headers: { origin, host: new URL(origin).host } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data));
       if (message.type === "state") this.state = message.state;
@@ -58,7 +59,7 @@ const first = () => remotes[0]!.state!;
 const all = (predicate: (state: SessionState) => boolean) => remotes.every(remote => remote.state && predicate(remote.state));
 const command = (action: Action) => remotes[0]!.command(action);
 async function api(path: string, token: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
-  const response = await fetch(origin + path, { method, headers: { origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(endpoint + path, { method, headers: { origin, host: new URL(origin).host, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
   assert.ok(response.ok, `${path}: ${response.status}`); return response.json() as Promise<any>;
 }
 const files = () => exec("find", "/tmp", "-maxdepth", "2", "-path", "/tmp/couch-subtitles-*/*", "-type", "f").toString().trim().split("\n").filter(Boolean);
