@@ -52,18 +52,35 @@ export async function verifyReplayGain(context: Context) {
     await driver.button("Playback", "[role=dialog]");
     await until("saved ReplayGain selector is visible", () => driver.execute("return !!document.querySelector('#preferred-replaygain')"));
   };
-  const capture = async (fixture: Fixture, id: string, mode: ReplayGainMode, label: string, radio = false) => {
-    await stop();
-    await clients[0]!.command({ type: "preferences", profileId: first().activeProfile.id, preferences: { replayGain: mode, speed: 1 } });
+  const capture = async (fixture: Fixture, id: string, mode: ReplayGainMode, label: string, radio = false, current = false) => {
+    const before = structuredClone({ playbackId: first().player.playbackId, mode: first().player.replayGain, preferences: first().preferences });
+    if (current) {
+      assert.ok(before.playbackId && before.mode !== mode && first().player.status === "paused", "Current-mode measurement starts with a different observed mode on the paused item");
+      await clients[0]!.command({ type: "seek", playbackId: before.playbackId, position: 0 });
+      await until("current-mode reference starts at zero without replacing playback", () => all(state => state.player.playbackId === before.playbackId && state.player.position < 0.1));
+    } else {
+      await stop();
+      await clients[0]!.command({ type: "preferences", profileId: first().activeProfile.id, preferences: { replayGain: mode, speed: 1 } });
+    }
     const path = `${artifactDir}/replaygain-${label}.wav`, log = `${artifactDir}/replaygain-${label}.log`;
-    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-i", "couch.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
+    const recorder = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "info", "-y", "-f", "pulse", "-sample_rate", String(manifest.sampleRate), "-channels", "2", "-c:a", "pcm_f32le", "-i", "couch.monitor", "-t", "5", "-ac", "1", "-c:a", "pcm_f32le", path], { stdout: "ignore", stderr: Bun.file(log), timeout: 25_000, killSignal: "SIGKILL" });
     try {
       await until("float audio capture is running before Play", async () => await Bun.file(log).exists() && (await Bun.file(log).text()).includes("Output #0"));
-      await play(id);
+      const input = (await Bun.file(log).text()).split("Output #0")[0]!;
+      assert.match(input, /Input #0, pulse,[\s\S]*Audio: pcm_f32le[^\n]*48000 Hz[^\n]*stereo[^\n]*flt/, "Pulse input negotiates float32 before output conversion");
+      const sinks = Buffer.from(await output(["pactl", "list", "short", "sinks"])).toString();
+      assert.match(sinks, /\bcouch\s+[^\n]*float32le 2ch 48000Hz/, "Pulse sink retains float32 samples at the reference rate");
+      await Bun.write(`${artifactDir}/replaygain-${label}-sinks.txt`, sinks);
+      if (current) {
+        await clients[0]!.command({ type: "replayGain", playbackId: before.playbackId!, mode });
+        await until("current mode changes on both controllers without reloading or saving", () => all(state => state.player.playbackId === before.playbackId && state.player.replayGain === mode && JSON.stringify(state.preferences) === JSON.stringify(before.preferences)));
+        await clients[0]!.command({ type: "pause", playbackId: before.playbackId!, paused: false });
+      } else await play(id);
       const excluded = radio || fixture.name === "video" || fixture.name === "r128-overflow";
       await until("native ReplayGain mode matches music eligibility on both controllers", () => all(state => excluded ? state.player.replayGain === undefined : state.player.replayGain === mode));
       const player = structuredClone(first().player);
       assert.equal(await recorder.exited, 0, "Actual Couch audio recording completes");
+      if (current) assert.ok(all(state => state.player.playbackId === before.playbackId && state.player.replayGain === mode && JSON.stringify(state.preferences) === JSON.stringify(before.preferences)), "Measured current gain keeps the playback ID and saved default unchanged");
       const recording = JSON.parse(Buffer.from(await output(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels,codec_name", "-of", "json", path])).toString()).streams[0];
       assert.deepEqual(recording, { codec_name: "pcm_f32le", sample_rate: String(manifest.sampleRate), channels: 1 }, "Actual capture preserves float samples at the reference rate");
       const captured = new Float32Array(await output(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "f32le", "-ar", String(manifest.sampleRate), "-ac", "1", "-"]));
@@ -78,7 +95,7 @@ export async function verifyReplayGain(context: Context) {
         assert.ok(measured.peak <= 1.0001, `${label}: supported peak policy stays within nominal full scale`);
         assert.ok(measured.residualRms < 0.003, `${label}: captured waveform retains its reference shape`);
       } else assert.ok(measured.aboveFullScaleSamples > 0 || measured.nearFullScaleSamples > measured.samples / 10, "R128 missing peak demonstrates the native clipping-policy limit");
-      captures.push({ label, fixture: fixture.file, fixtureSha256: fixture.sha256, mode, radio, player, captureSha256: createHash("sha256").update(Buffer.from(await Bun.file(path).arrayBuffer())).digest("hex"), ...measured });
+      captures.push({ label, fixture: fixture.file, fixtureSha256: fixture.sha256, mode, radio, currentTransition: current ? before : null, player, captureSha256: createHash("sha256").update(Buffer.from(await Bun.file(path).arrayBuffer())).digest("hex"), ...measured });
       await Bun.write(`${artifactDir}/replaygain-captures.json`, JSON.stringify({ versions, captures, physicalOutputQualified: false }, null, 2));
     } finally {
       if (recorder.exitCode === null) { recorder.kill("SIGKILL"); await recorder.exited; }
@@ -148,6 +165,7 @@ export async function verifyReplayGain(context: Context) {
     await Bun.write(`${artifactDir}/replaygain-layouts.json`, JSON.stringify(layouts, null, 2));
     await close(otherRemote.ui);
     await otherRemote.restore();
+    await capture(tagged, taggedId, "track", "current-album-to-track", false, true);
     await stop();
     for (const mode of ["off", "track", "album"] as const) await capture(tagged, taggedId, mode, `tagged-${mode}`);
     for (const name of ["boost", "clipping", "untagged", "missing-peak", "missing-peak-attenuation", "r128-missing-peak", "r128-overflow", "r128-nonfinite", "cover-art", "video"]) {
