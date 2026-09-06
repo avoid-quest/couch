@@ -160,14 +160,33 @@ read-only on the TV and ordinary remotes. Administrator status belongs to the
 paired browser credential. It does not change the watching profile, local history
 or connected Jellyfin account.
 
-**Connection** shows the TV address, connection status, and this remote's name
-and role. **Reconnect** keeps the browser paired and waits for a current snapshot
-before enabling controls. **Pair again** forgets this browser's current credential
-and returns to pairing. It does not revoke that credential on the server.
-Existing pairings migrate with their exact token hashes preserved and receive
-stable IDs and names such as Remote 1. They keep working after restart. Controller
-listing, renaming, revocation and role management remain in the
-[controller-management ticket](https://github.com/avoid-quest/couch/issues/11).
+**Connection** is available before pairing and while disconnected. It shows the
+known TV name, address, LAN links and address QR, plus this remote's current name
+and role when authenticated. Server and player availability are separate: a
+reachable server can still have an unavailable player. Rejected or revoked
+credentials return to pairing without repeatedly trying the same credential.
+
+**Reconnect** retains this browser's credential and retries the same TV, including
+its known LAN addresses if its hostname cannot be reached. Controls wait for a
+current snapshot. The server accepts requests only from its allowed local
+addresses and advertised origins; this does not enable Internet administration.
+**Pair again** forgets only this browser's current credential and returns to
+pairing. It does not revoke that credential on the server or change other remotes.
+
+Administrators can rename paired remotes, approve another administrator, remove
+administration, and revoke access in **Connection > Paired remotes**. Revocation
+closes the device's existing sockets, rejects later requests and cancels admitted
+mutations still waiting on a media lookup. Names and roles update on connected
+views. Controller pairing always grants browsing and playback only. Ordinary
+controllers can inspect their own connection and pair again, but cannot manage
+other devices. Existing pairings retain their exact token hashes across migration
+and restart, with stable IDs and names such as Remote 1.
+
+The server rejects removing or demoting the last administrator. A connected sole
+administrator must approve another administrator before using **Pair again**.
+This browser safeguard cannot prevent lost browser storage or a lost device;
+use recovery below if no administrator remains accessible. Rejected credentials
+and disconnected browsers can still return to pairing.
 
 Folder and Jellyfin connection setup still require local TV input. Paired D-pad
 commands cannot activate these controls, including actions in a dialog already
@@ -177,11 +196,11 @@ and [Jellyfin](https://github.com/avoid-quest/couch/issues/18) is separate work.
 
 ### Recover administrator access
 
-Recovery requires trusted local access to the TV computer. Stop Couch, generate
+Recovery requires trusted local or SSH access to the TV computer. Stop Couch, generate
 a fresh secret of 32 to 256 hexadecimal characters, and supply it through
 `COUCH_ADMIN_RECOVERY_CODE` when restarting the app. For example, use
 `openssl rand -hex 32` to generate a secret, then run these commands in a local
-Bash terminal, entering the secret at the hidden prompt:
+Bash terminal in a source checkout, entering the secret at the hidden prompt:
 
 ```bash
 read -rsp 'Recovery secret: ' COUCH_ADMIN_RECOVERY_CODE
@@ -196,6 +215,13 @@ accepts the configured secret. Restarting with the same value neither extends
 that deadline nor makes a consumed secret reusable. An expired or consumed secret
 requires a fresh value and another local restart. Recovery grants administration
 to the replacement browser; it does not revoke the old administrator.
+
+For an installed appliance, use its documented stop/start invocation and pass the
+same environment variable to the process that launches Couch in the TV session.
+An SSH shell must restart that existing session through its supervisor; launching
+a second desktop from SSH is not a recovery procedure. The installed supervisor
+invocation and its target SSH qualification belong to the appliance boot/package
+work and are still pending; the commands above cover a local source checkout.
 
 Bun removes the recovery variable from its environment before starting media
 helpers. The server stores a hash, and never sends the secret in a snapshot or

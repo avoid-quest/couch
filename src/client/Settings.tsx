@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ControllerIdentity } from "../shared/controllers";
+import type { ConnectionDetails, Controller, ControllerIdentity } from "../shared/controllers";
 import type { Action, ConnectionInfo, PlaybackPreferences as Preferences } from "../shared/protocol";
 import type { WatchingProfile } from "../shared/library";
 import { SettingsSources } from "./SettingsSources";
@@ -16,6 +16,8 @@ import { SetupQr } from "./SetupQr";
 import { QualitySelect } from "./QualitySelect";
 import type { useVideoQualityPreference } from "./video-quality";
 import { PlaybackPreferences } from "./PlaybackPreferences";
+import { PairedRemotes } from "./PairedRemotes";
+import { knownConnection } from "./connection";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
@@ -23,6 +25,11 @@ type Props = {
   credentials: { origin: string; token: string } | null;
   connected: boolean;
   status: string;
+  identity: ControllerIdentity | null;
+  details: ConnectionDetails | null;
+  pairingRequired: boolean;
+  reachable: boolean;
+  playerStatus?: string;
   host: ConnectionInfo | null;
   administratorClaimed: boolean;
   name: string;
@@ -39,11 +46,12 @@ type Props = {
   libraryVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
   const [open, setOpen] = useState(initialOpen);
   const [section, setSection] = useState("general");
   useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
-  const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
+  const [devices, setDevices] = useState<Controller[] | null>(null);
+  const [forgetting, setForgetting] = useState(false);
   const [draftName, setDraftName] = useState(name);
   const [savedName, setSavedName] = useState(name);
   const [code, setCode] = useState("");
@@ -60,10 +68,12 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   const token = credentials?.token;
   const administrator = !host && identity?.authority === "administrator";
   const canWrite = connected && !loading && !pending;
-  const setupUrl = host?.urls[0];
+  const urls = host?.urls ?? details?.urls ?? [];
+  const setupUrl = urls[0];
+  const lastAdministrator = connected && administrator && (devices === null || devices.filter(device => device.role === "administrator").length <= 1);
 
   useEffect(() => { setSavedName(name); setDraftName(name); }, [name]);
-  useEffect(() => setIdentity(null), [origin, token]);
+  useEffect(() => { setDevices(null); setForgetting(false); }, [origin, token, identity?.authority]);
   useEffect(() => {
     if (open && administrator && !loading && notice === "This remote is now the administrator.") nameInput.current?.focus();
   }, [open, administrator, loading, notice]);
@@ -81,12 +91,15 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     };
     setLoading(true);
     setError(null);
-    void Promise.all([get<ControllerIdentity>("/api/controllers/me"), get<{ name: string }>("/api/settings")]).then(async ([caller, settings]) => {
+    void get<{ name: string }>("/api/settings").then(async settings => {
       if (controller.signal.aborted) return;
-      setIdentity(caller);
       setSavedName(settings.name);
       setDraftName(settings.name);
-      if (host && !administratorClaimed && caller.authority === "host" && caller.claimAvailable) {
+      if (identity?.authority === "administrator") {
+        const result = await get<{ controllers: Controller[] }>("/api/controllers");
+        if (!controller.signal.aborted) setDevices(result.controllers);
+      }
+      if (host && !administratorClaimed && identity?.authority === "host" && identity.claimAvailable) {
         const nextCode = await get<ClaimCode>("/api/controllers/claim-code");
         if (!controller.signal.aborted) { setClaimCode(nextCode); setNow(Date.now()); }
       }
@@ -94,7 +107,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load settings.");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [open, connected, origin, token, host, administratorClaimed, version, refresh]);
+  }, [open, connected, origin, token, host, administratorClaimed, identity?.authority, identity?.claimAvailable, version, refresh]);
 
   useEffect(() => {
     if (!open || !claimCode) return;
@@ -108,9 +121,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     return () => mutation.current?.abort();
   }, [open, connected, origin, token]);
 
-  const update = async (event: FormEvent, path: string, body: unknown, success: string) => {
+  const update = async (event: { preventDefault(): void }, path: string, body: unknown, success: string, method: "POST" | "DELETE" = "POST") => {
     event.preventDefault();
-    if (!credentials || !canWrite) return;
+    if (!credentials || !canWrite) return false;
     const controller = new AbortController();
     mutation.current = controller;
     setPending(true);
@@ -118,14 +131,16 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     setNotice(null);
     try {
       const response = await fetch(`${credentials.origin}${path}`, {
-        method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
+        method, headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
         body: JSON.stringify(body), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save settings.");
       if (!controller.signal.aborted) { setCode(""); setNotice(success); setRefresh(value => value + 1); }
+      return !controller.signal.aborted;
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not save settings.");
+      return false;
     } finally {
       if (!controller.signal.aborted) setPending(false);
       if (mutation.current === controller) mutation.current = null;
@@ -133,18 +148,18 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   };
 
   const pairAgain = () => { setOpen(false); onPairAgain(); };
-  const addresses = host && <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+  const addresses = <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
     {setupUrl && <SetupQr url={setupUrl} />}
     <div className="min-w-0 space-y-1">
-      <p className="font-medium">Open on your phone</p>
-      {host.urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block min-h-11 content-center break-all text-muted-foreground underline underline-offset-4">{url}</a>)}
-      {!host.urls.length && <p className="text-muted-foreground">No local address is available. Check the TV's network connection.</p>}
+      <p className="font-medium">TV addresses on your network</p>
+      {urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block min-h-11 content-center break-all text-muted-foreground underline underline-offset-4">{url}</a>)}
+      {!urls.length && <p className="text-muted-foreground">No advertised address is known. Check the TV's network connection.</p>}
     </div>
   </div>;
 
   return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); }}>
     <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("general")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
-    <DialogContent data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
+    <DialogContent data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
       <DialogHeader>
         <DialogTitle className={host ? "text-lg" : undefined}>Settings</DialogTitle>
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
@@ -211,15 +226,24 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <TabsContent value="connection" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
             <dt className="text-muted-foreground">Status</dt><dd className="min-w-0 break-words">{status}</dd>
-            {!host && <><dt className="text-muted-foreground">TV address</dt><dd className="min-w-0 break-all">{origin || location.origin}</dd></>}
+            <dt className="text-muted-foreground">TV name</dt><dd className="min-w-0 break-words">{savedName}</dd>
+            <dt className="text-muted-foreground">TV address</dt><dd className="min-w-0 break-all">{origin || knownConnection()?.origin || location.origin}</dd>
+            <dt className="text-muted-foreground">Server</dt><dd>{connected ? "Connected" : reachable ? "Reachable" : status}</dd>
+            <dt className="text-muted-foreground">Player</dt><dd>{!reachable ? "Unknown while disconnected" : !playerStatus ? "Unknown" : playerStatus === "unavailable" ? "Unavailable" : "Available"}</dd>
             {identity?.controller && <><dt className="text-muted-foreground">This remote</dt><dd className="min-w-0 space-y-1"><p className="break-words">{identity.controller.name}</p><Badge variant="secondary">{identity.authority === "administrator" ? "Administrator" : "Controller"}</Badge></dd></>}
           </dl>
-          {host && <><Separator />{addresses}<div className="rounded-lg border bg-muted/30 p-3"><p className="font-medium">Controller pairing code</p><p className="my-2 font-mono text-2xl tracking-wider" data-pairing-code>{host.pairingCode}</p><p className="text-muted-foreground">Connects a remote for browsing and playback.</p></div></>}
+          {pairingRequired && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}
+          {status === "Connection rejected" && <p role="alert">The TV rejected this browser's address. Open one of its advertised LAN addresses.</p>}
+          <Separator />{addresses}
+          {host && <div className="rounded-lg border bg-muted/30 p-3"><p className="font-medium">Controller pairing code</p><p className="my-2 font-mono text-2xl tracking-wider" data-pairing-code>{host.pairingCode}</p><p className="text-muted-foreground">Connects a remote for browsing and playback.</p></div>}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="min-h-11" onClick={onReconnect}><RefreshCw aria-hidden="true" />Reconnect</Button>
-            {!host && <Button variant="outline" className="min-h-11" onClick={pairAgain}>{credentials ? "Pair again" : "Pair with TV"}</Button>}
+            {!host && <Button variant="outline" className="min-h-11" disabled={lastAdministrator && !pairingRequired} onClick={() => credentials && !pairingRequired ? setForgetting(true) : pairAgain()}>{credentials ? "Pair again" : "Pair with TV"}</Button>}
           </div>
-          {!host && <p className="text-muted-foreground">Reconnect keeps this browser paired. Pair again forgets this browser's current connection.</p>}
+          {!host && <p className="text-muted-foreground">Reconnect keeps this browser's credential and retries this TV, including its known LAN addresses. Pair again forgets only this browser's credential. It does not revoke access on the TV.</p>}
+          {lastAdministrator && !pairingRequired && <p className="text-muted-foreground">Approve another administrator before forgetting this browser. Lost access requires local or SSH recovery on the TV computer.</p>}
+          {forgetting && <div role="alert" className="space-y-3 rounded-lg border p-3"><p>Forget this browser's pairing? You will need the code shown on the TV to connect again.{identity?.authority === "administrator" ? " Administration will require another administrator or local/SSH recovery." : ""}</p><div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setForgetting(false)}>Cancel</Button><Button className="min-h-11" disabled={lastAdministrator && !pairingRequired} onClick={pairAgain}>Forget this browser</Button></div></div>}
+          {administrator && devices && <><Separator /><PairedRemotes devices={devices} currentId={identity.controller!.id} disabled={!canWrite} update={update} /></>}
         </TabsContent>
       </Tabs>
       {loading && <p role="status" className="text-muted-foreground">Loading settings…</p>}
