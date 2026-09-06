@@ -136,6 +136,20 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
 
   return {
     getPlayable(id: string) { return { source: channel(id).streamUrl }; },
+    async getLivePlayable(id: string, signal: AbortSignal) {
+      const item = channel(id);
+      const combined = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]);
+      try {
+        const media = await guideFetch(item.streamUrl, 512 * 1024, request, combined);
+        combined.throwIfAborted();
+        if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
+        if (!liveHlsPlaylist(Buffer.from(media.bytes).toString("utf8"), media.url)) throw new GuideError("Go live is no longer available for this channel. Use Play.", 409);
+        return { source: item.streamUrl, goLive: true };
+      } catch (error) {
+        if (error instanceof GuideError) throw error;
+        throw new GuideError("Could not check this channel's live playlist. Use Play.", 502);
+      }
+    },
     async handle(req: Request, identity: Identity): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device before connecting.", 401); return value; };
       const administrator = () => { if (caller().authority === "controller") throw new GuideError("An administrator is required to manage guide sources.", 403); };

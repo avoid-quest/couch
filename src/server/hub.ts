@@ -69,11 +69,11 @@ export function createHub(options: HubOptions) {
   const session = createSession(store, options.sendPlayer, state => {
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
-    resolveSource: (entry, playbackId, signal, fromStart) => {
+    resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
-      if (entry.source.startsWith("iptv:")) return guide.getPlayable(entry.source.slice(5));
+      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
       if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.

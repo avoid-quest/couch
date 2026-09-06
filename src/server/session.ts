@@ -6,9 +6,9 @@ import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean };
+export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean };
 type SessionOptions = {
-  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean) => MediaSource | Promise<MediaSource>;
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
   deactivate?: () => void;
   observe?: (player: PlayerState) => void;
   now?: () => number;
@@ -119,7 +119,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     broadcast();
     return true;
   };
-  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}) => {
+  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false) => {
     authorize();
     available();
     const entry = state.queue.find(entry => entry.id === entryId);
@@ -149,7 +149,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       broadcast();
     };
     try {
-      const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart) ?? { source: entry.source };
+      const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart, goLive) ?? { source: entry.source };
       const load = ({ metadata, radio, subtitleWarning: warning, ...media }: MediaSource) => {
         if (state.player.playbackId !== playbackId) return;
         authorize();
@@ -307,6 +307,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           queue.splice(before, 0, entry!);
           saveQueue(queue);
           broadcast();
+          break;
+        }
+        case "goLive": {
+          currentPlayback(action.playbackId);
+          const entry = state.queue.find(entry => entry.id === state.currentEntryId);
+          if (!entry?.source.startsWith("iptv:")) throw new Error("Go live is only available for the current guide channel.");
+          play(entry.id, true, false, authorize, true);
           break;
         }
         case "play": play(action.entryId, action.fromStart, false, authorize); break;

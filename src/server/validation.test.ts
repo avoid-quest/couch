@@ -71,3 +71,9 @@ test.each(["enqueueLibrary", "enqueueJellyfin", "enqueueWeb"])("%s validates pla
     expect(() => parse({ ...action, playNow: false, fromStart })).toThrow();
   }
 });
+
+test("Go live requires a current playback identity and exposes no native option parameter", () => {
+  const command = (action: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "live", action }), false);
+  expect(command({ type: "goLive", playbackId: "current", goLive: false, source: "https://untrusted.test", demuxerOptions: { live_start_index: -100 } }).action).toEqual({ type: "goLive", playbackId: "current" });
+  for (const playbackId of [undefined, "", -1]) expect(() => command({ type: "goLive", playbackId })).toThrow();
+});
