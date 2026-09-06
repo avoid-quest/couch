@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { addTVFolder } from "./folder-settings";
 import { assertResponsive } from "./ui";
-import { musicControls, type MusicContext, type SavedMusic } from "./music";
+import { musicControls, restoreQueue, type MusicContext, type SavedMusic } from "./music";
 import type { LibraryItem, MusicAlbum } from "../../src/shared/library";
 
 const panel = '.library-panel [data-slot="tabs-content"][data-state="active"] .music-panel';
@@ -9,6 +9,7 @@ const panel = '.library-panel [data-slot="tabs-content"][data-state="active"] .m
 export async function verifyCue(context: MusicContext & { screenshot: (name: string) => Promise<void> }) {
   const { ui, until, clients, api, httpRemote, artifactDir } = context;
   const { first, all, stop } = musicControls(context);
+  const originalQueue = structuredClone(first().queue);
   await stop();
   await httpRemote.minimize();
   await addTVFolder(ui, until, "cue-fixtures");
@@ -84,15 +85,31 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("cue rescan preserves album and track IDs", async () => JSON.stringify((await api(`/api/library/music/albums/${album.id}`)).items.map((item: LibraryItem) => item.id)) === JSON.stringify(tracks.map(track => track.id)));
   const result = { album, tracks, playlist, profileId };
   await Bun.write(`${artifactDir}/cue-before-restart.json`, JSON.stringify(result, null, 2));
+  await restoreQueue(context, originalQueue);
   await httpRemote.minimize();
   return result;
 }
 
 export async function assertCueAfterRestart(context: MusicContext, saved: Awaited<ReturnType<typeof verifyCue>>) {
-  const { all } = musicControls(context);
+  const { all, first, stop } = musicControls(context);
   assert.ok(all(state => state.player.status === "idle" && state.player.playbackId === null));
   assert.deepEqual((await context.api(`/api/library/music/albums/${saved.album.id}`)).items.map((item: LibraryItem) => item.id), saved.tracks.map(track => track.id));
   const playlist = (await context.api(`/api/playlists/${saved.playlist.id}`)).playlist as SavedMusic["playlist"];
   assert.deepEqual(playlist.entries, saved.playlist.entries);
-  await Bun.write(`${context.artifactDir}/cue-after-restart.json`, JSON.stringify({ stopped: true, stableIds: true, playlistPreserved: true, physicalOutputQualified: false }, null, 2));
+  const originalProfile = first().activeProfile.id;
+  const originalQueue = structuredClone(first().queue);
+  await context.api(`/api/profiles/${saved.profileId}/select`, {});
+  const entryId = crypto.randomUUID();
+  try {
+    const item = (await context.api("/api/library/items?q=Second%20tone")).items.find((item: LibraryItem) => item.id === saved.tracks[1]!.id) as LibraryItem;
+    assert.ok(item.progress && Math.abs(item.progress.position - 2) < 0.08, "Restart retains the observed segment-relative checkpoint");
+    await context.clients[1]!.command({ type: "enqueueLibrary", itemId: item.id, entryId });
+    await context.clients[1]!.command({ type: "play", entryId });
+    await context.until("restarted native player resumes a fresh cue occurrence from stored track progress", () => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.position >= 1.9 && state.player.position < 3 && Math.abs(state.player.duration! - saved.tracks[1]!.duration!) < 0.01));
+    await Bun.write(`${context.artifactDir}/cue-after-restart.json`, JSON.stringify({ stoppedBeforeExplicitPlay: true, stableIds: true, playlistPreserved: true, savedProgress: item.progress, resumedPlayer: first().player, physicalOutputQualified: false }, null, 2));
+  } finally {
+    await stop();
+    await restoreQueue(context, originalQueue);
+    await context.api(`/api/profiles/${originalProfile}/select`, {});
+  }
 }

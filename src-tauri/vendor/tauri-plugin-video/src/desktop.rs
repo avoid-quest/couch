@@ -2200,7 +2200,7 @@ mod linux_mpv {
                 init.set_option("audio-display", "no")?;
                 Ok(())
             }).unwrap();
-            for (start, end) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (None, None)] {
+            for (start, end) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (Some(400.0 / 75.0), Some(875.0 / 75.0)), (None, None)] {
                 mpv.command("stop", &[]).unwrap();
                 discard_events(&mut mpv).unwrap();
                 configure_start(&mpv, start).unwrap();

@@ -53,7 +53,7 @@ async function openPlaylist(ui: UiDriver, until: Wait, id?: string) {
   if (id) await ui.click(`[data-playlist-id=${JSON.stringify(id)}]`);
 }
 
-async function restoreQueue(context: MusicContext, queue: QueueEntry[]) {
+export async function restoreQueue(context: MusicContext, queue: QueueEntry[]) {
   const { first, all, stop } = musicControls(context);
   await stop();
   for (const entry of [...first().queue]) await context.clients[0]!.command({ type: "remove", entryId: entry.id });
