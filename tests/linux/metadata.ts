@@ -164,8 +164,9 @@ try {
   await until("native title correction commits and both controllers receive invalidation", async () => (await view()).values.title === "Correct movie" && all(state => state.libraryVersion > beforeVersion && state.libraryVersion === clients[0]!.state!.libraryVersion));
   await capture("native-metadata-editor");
   assert.equal(await ui.execute("return document.querySelector('.metadata-editor').textContent.includes('On your paired administrator phone or browser')"), true);
-  await ui.key(keys.escape); await ui.button("Play Correct movie"); await ui.watching();
+  await ui.key(keys.escape); await ui.button("Play Correct movie");
   await until("metadata correction preserves native playback", () => all(state => state.player.status === "playing" && state.player.position > 1));
+  await ui.watching();
   await redactCredentials(); await assertNativeVideoPixels(ui.execute, artifacts, "metadata-playing", [253, 0, 0]); await assertNativeUiPixels(ui.execute, artifacts);
   await clients[0]!.command({ type: "stop" }); await until("Stop is current on both controllers", () => all(state => state.player.status === "idle"));
   await movieEditor(ui, "Correct movie", movie.id);
