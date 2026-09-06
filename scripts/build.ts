@@ -2,6 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import tailwind from "bun-plugin-tailwind";
 import { version } from "../package.json";
 import tauri from "../src-tauri/tauri.conf.json";
+import { releaseVersion } from "./release-version";
 
 const targets: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
@@ -16,7 +17,7 @@ if (version !== tauri.version || version !== cargo.package.version) throw new Er
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
 const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim() !== "";
 const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? await Bun.file("src-tauri/resources/tools.json").json() : null;
-const buildInfo = JSON.stringify({ version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, bun: Bun.version, packaged: helpers !== null, helpers });
+const buildInfo = JSON.stringify({ version: releaseVersion(version, process.env.COUCH_RELEASE_ID), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, bun: Bun.version, packaged: helpers !== null, helpers });
 await Bun.write("src-tauri/build-info.json", buildInfo);
 
 await rm("dist", { recursive: true, force: true });
