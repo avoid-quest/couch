@@ -12,7 +12,7 @@ import { openStore } from "./store";
 const cleanup: Array<() => void> = [];
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close(); });
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
-const preferences = { audioLanguage: "ita", subtitleLanguage: "eng", subtitles: "off", speed: 1.25 } as const;
+const preferences = { replayGain: "off", audioLanguage: "ita", subtitleLanguage: "eng", subtitles: "off", speed: 1.25 } as const;
 const history: HistoryItem = { mediaId: "library:movie", libraryItemId: "movie", title: "Movie", position: 24, duration: 120, watched: true, lastPlayedAt: 100 };
 
 function fixture() {

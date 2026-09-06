@@ -73,6 +73,10 @@ pub enum PlaybackCommand {
         playback_id: String,
         speed: f64,
     },
+    ReplayGain {
+        playback_id: String,
+        mode: ReplayGainMode,
+    },
     AudioDelay {
         playback_id: String,
         delay: f64,
@@ -95,6 +99,7 @@ pub struct PlaybackPreferences {
     pub subtitles: SubtitlePreference,
     pub speed: f64,
     pub audio_delay: f64,
+    pub replay_gain: ReplayGainMode,
 }
 
 impl Default for PlaybackPreferences {
@@ -105,8 +110,18 @@ impl Default for PlaybackPreferences {
             subtitles: SubtitlePreference::Auto,
             speed: 1.0,
             audio_delay: 0.0,
+            replay_gain: ReplayGainMode::Off,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReplayGainMode {
+    #[default]
+    Off,
+    Track,
+    Album,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -181,6 +196,8 @@ pub struct PlayerState {
     pub speed: f64,
     pub audio_delay: f64,
     pub subtitle_delay: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replay_gain: Option<ReplayGainMode>,
     pub subtitle_error: Option<String>,
     pub now_playing: Option<NowPlaying>,
     pub error: Option<String>,
@@ -200,6 +217,7 @@ impl Default for PlayerState {
             speed: 1.0,
             audio_delay: 0.0,
             subtitle_delay: 0.0,
+            replay_gain: None,
             subtitle_error: None,
             now_playing: None,
             error: (!cfg!(target_os = "linux"))
@@ -219,6 +237,28 @@ pub struct VideoRect {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replaygain_private_pipe_defaults_and_strict_modes() {
+        for (mode, expected) in [("off", ReplayGainMode::Off), ("track", ReplayGainMode::Track), ("album", ReplayGainMode::Album)] {
+            let command = format!(r#"{{"type":"replayGain","playbackId":"music","mode":"{mode}"}}"#);
+            assert!(matches!(serde_json::from_str::<PlaybackCommand>(&command).unwrap(), PlaybackCommand::ReplayGain { playback_id, mode } if playback_id == "music" && mode == expected));
+            let preferences: PlaybackPreferences = serde_json::from_value(serde_json::json!({ "replayGain": mode })).unwrap();
+            assert_eq!(preferences.replay_gain, expected);
+        }
+        let preferences: PlaybackPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(preferences.replay_gain, ReplayGainMode::Off);
+        for mode in ["null", "1", "true", "[]", "{}", "\"TRACK\"", "\"invalid\""] {
+            let command = format!(r#"{{"type":"replayGain","playbackId":"music","mode":{mode}}}"#);
+            assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
+        }
+        let state = PlayerState { replay_gain: Some(ReplayGainMode::Album), ..Default::default() };
+        let state = serde_json::to_value(state).unwrap();
+        assert_eq!(state["replayGain"], "album");
+        assert!(state.get("replayGainPeak").is_none());
+        assert!(state.get("replayGainDb").is_none());
+        assert!(serde_json::to_value(PlayerState::default()).unwrap().get("replayGain").is_none());
+    }
 
     #[test]
     fn pipe_contract_accepts_typescript_commands_and_ready_message() {

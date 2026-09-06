@@ -5,7 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::protocol::{
-    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlayerState, TrackKind, VideoRect,
+    ExternalSubtitle, PlaybackCommand, PlaybackPreferences, PlayerState, ReplayGainMode, TrackKind, VideoRect,
 };
 use crate::Host;
 
@@ -163,6 +163,12 @@ impl Player {
                 }
                 Ok(())
             }
+            PlaybackCommand::ReplayGain { playback_id, mode } => {
+                if self.state.playback_id.as_deref() == Some(&playback_id) {
+                    self.replay_gain(app, mode)?;
+                }
+                Ok(())
+            }
             PlaybackCommand::SubtitleDelay { playback_id, delay } => {
                 if self.state.playback_id.as_deref() == Some(&playback_id) {
                     self.control(app, "subtitleDelay", delay, -1)?;
@@ -256,6 +262,7 @@ impl Player {
                 value,
                 index,
                 subtitle: None,
+                replay_gain: None,
             })
             .map_err(|error| error.to_string())?;
         self.apply(snapshot)
@@ -279,8 +286,27 @@ impl Player {
                     title: subtitle.title,
                     language: subtitle.language,
                 }),
+                replay_gain: None,
             })
             .map_err(|error| error.to_string())?;
+        self.apply(snapshot)
+    }
+
+    fn replay_gain(&mut self, app: &AppHandle, mode: ReplayGainMode) -> Result<(), String> {
+        use tauri_plugin_video::{NativeControlRequest, NativeReplayGain, VideoExt};
+        let Some(session_key) = self.state.playback_id.clone() else { return Ok(()); };
+        let snapshot = app.video().desktop().control_native(NativeControlRequest {
+            session_key,
+            action: "replayGain".into(),
+            value: 0.0,
+            index: -1,
+            subtitle: None,
+            replay_gain: Some(match mode {
+                ReplayGainMode::Off => NativeReplayGain::Off,
+                ReplayGainMode::Track => NativeReplayGain::Track,
+                ReplayGainMode::Album => NativeReplayGain::Album,
+            }),
+        }).map_err(|error| error.to_string())?;
         self.apply(snapshot)
     }
 
@@ -370,6 +396,11 @@ impl Player {
         self.state.speed = observed.speed;
         self.state.audio_delay = observed.audio_delay;
         self.state.subtitle_delay = observed.subtitle_delay;
+        self.state.replay_gain = observed.replay_gain.map(|mode| match mode {
+            tauri_plugin_video::NativeReplayGain::Off => ReplayGainMode::Off,
+            tauri_plugin_video::NativeReplayGain::Track => ReplayGainMode::Track,
+            tauri_plugin_video::NativeReplayGain::Album => ReplayGainMode::Album,
+        });
         self.state.subtitle_error = observed.subtitle_error;
         self.state.now_playing = observed
             .now_playing
@@ -428,6 +459,9 @@ impl Player {
     fn control(&mut self, _: &AppHandle, _: &str, _: f64, _: i32) -> Result<(), String> {
         Ok(())
     }
+    fn replay_gain(&mut self, _: &AppHandle, _: ReplayGainMode) -> Result<(), String> {
+        Ok(())
+    }
     fn add_subtitle(&mut self, _: &AppHandle, _: ExternalSubtitle) -> Result<(), String> {
         Err("Native playback currently requires Linux".into())
     }
@@ -450,7 +484,7 @@ mod tests {
         serde_json::from_value(serde_json::json!({
             "mpvState": {
                 "volume": 0.65, "seekable": true, "ended": false, "loading": false,
-                "speed": 1.5, "audioDelay": -0.2, "subtitleDelay": 0.4,
+                "speed": 1.5, "audioDelay": -0.2, "subtitleDelay": 0.4, "replayGain": "album",
                 "chapters": [{ "title": "Second chapter", "position": 10.0 }]
                 ,"nowPlaying": { "title": "Song", "artist": "Actual artist" }
             },
@@ -472,6 +506,7 @@ mod tests {
         assert_eq!(player.state.speed, 1.5);
         assert_eq!(player.state.audio_delay, -0.2);
         assert_eq!(player.state.subtitle_delay, 0.4);
+        assert_eq!(player.state.replay_gain, Some(ReplayGainMode::Album));
         assert_eq!(player.state.tracks[0].kind, TrackKind::Audio);
         assert_eq!(player.state.tracks[0].index, 2);
         assert!(player.state.tracks[0].selected);
@@ -481,8 +516,10 @@ mod tests {
         assert_eq!(track.artist.as_deref(), Some("Actual artist"));
         let mut ordinary = snapshot();
         ordinary.mpv_state.as_mut().unwrap().now_playing = None;
+        ordinary.mpv_state.as_mut().unwrap().replay_gain = None;
         player.apply(ordinary).unwrap();
         assert!(player.state.now_playing.is_none());
+        assert!(player.state.replay_gain.is_none());
     }
 
     #[test]

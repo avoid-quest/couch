@@ -1193,6 +1193,7 @@ mod linux_mpv {
     struct MpvPlayer {
         session_key: String,
         radio: bool,
+        replay_gain: crate::mpv_replaygain::ReplayGain,
         max_video_height: Option<u16>,
         pending_subtitles: Vec<crate::NativeSubtitle>,
         subtitle_error: Option<String>,
@@ -1437,6 +1438,7 @@ mod linux_mpv {
         let mut player = MpvPlayer {
             session_key: String::new(),
             radio: false,
+            replay_gain: crate::mpv_replaygain::ReplayGain::default(),
             max_video_height: None,
             pending_subtitles: Vec::new(),
             subtitle_error: None,
@@ -1481,6 +1483,7 @@ mod linux_mpv {
         player.radio = payload.radio;
         crate::mpv_tracks::reset(&player.mpv, payload.max_video_height)?;
         crate::mpv_subtitles::reset(&player.mpv, &payload.preferences)?;
+        player.replay_gain.reset(&player.mpv, payload.preferences.replay_gain)?;
         player.pending_subtitles.clone_from(&payload.subtitles);
         player.subtitle_error = None;
         player.max_video_height = payload.max_video_height;
@@ -1726,6 +1729,9 @@ mod linux_mpv {
                     };
                     player.tracks_dirty = true;
                 }
+                "replayGain" => player.replay_gain.set_mode(&player.mpv, payload.replay_gain.ok_or_else(|| {
+                    Error::InvalidRequest("ReplayGain mode is missing".into())
+                })?)?,
                 action => {
                     return Err(Error::InvalidRequest(format!(
                         "unsupported native action: {action}"
@@ -1837,6 +1843,7 @@ mod linux_mpv {
             player.widget.hide();
             player.session_key.clear();
             player.radio = false;
+            player.replay_gain.reset(&player.mpv, crate::NativeReplayGain::Off)?;
             player.loaded = false;
             player.tracks.clear();
             player.track_targets.clear();
@@ -1906,6 +1913,7 @@ mod linux_mpv {
                 speed: property::<f64>(&player.mpv, "speed").unwrap_or(1.0),
                 audio_delay: property::<f64>(&player.mpv, "audio-delay").unwrap_or(0.0),
                 subtitle_delay: property::<f64>(&player.mpv, "sub-delay").unwrap_or(0.0),
+                replay_gain: player.replay_gain.observe(&player.mpv)?,
                 subtitle_error: player.subtitle_error.clone(),
                 now_playing: if player.radio && player.loaded
                     && !property::<bool>(&player.mpv, "eof-reached").unwrap_or(false)
@@ -2069,7 +2077,8 @@ mod linux_mpv {
                     player.tracks_dirty = true;
                 }
                 Event::Hook { id } => {
-                    let selection = crate::mpv_tracks::select(&player.mpv, player.max_video_height);
+                    let selection = crate::mpv_tracks::select(&player.mpv, player.max_video_height)
+                        .and_then(|()| player.replay_gain.select(&player.mpv, player.radio));
                     if selection.is_ok() {
                         for subtitle in std::mem::take(&mut player.pending_subtitles) {
                             if crate::mpv_subtitles::add(&player.mpv, &subtitle, false).is_err() {
