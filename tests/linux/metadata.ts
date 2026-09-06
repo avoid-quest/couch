@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { mkdir, readFile, rename } from "node:fs/promises";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import type { MetadataView } from "../../src/shared/metadata";
-import { UiDriver, startHttpRemote, keys, assertResponsive } from "./ui";
+import { UiDriver, startHttpRemote, keys } from "./ui";
 import { addTVFolder } from "./folder-settings";
 import { assertNativeUiPixels, assertNativeVideoPixels } from "./pixels";
 
@@ -28,6 +28,37 @@ async function api(path: string, body?: unknown, token = administrator) {
   return fetch(`${origin}${path}`, { method: body === undefined ? "GET" : "POST", headers: { Origin: origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
 }
 async function data(path: string, body?: unknown) { const response = await api(path, body); assert.equal(response.status, 200); return response.json(); }
+async function scan(sourceId: string, unavailable = false) {
+  const source = async () => (await data("/api/library/sources")).sources.find((entry: any) => entry.id === sourceId);
+  const before = await source(); assert.ok(before);
+  const response = await api(`/api/library/sources/${sourceId}/scan`, {}); assert.equal(response.status, 202);
+  await until(unavailable ? "renamed source finishes unavailable" : "source scan finishes with a newer completion time", async () => {
+    const current = await source();
+    return unavailable ? current?.status === "unavailable" : current?.status === "ready" && current.lastScanned > (before.lastScanned ?? 0);
+  });
+}
+async function metadataLayout(target: UiDriver, width: number) {
+  const layout = await target.execute(`
+    const editor = document.querySelector('.metadata-editor'), dialog = editor.closest('[role=dialog]');
+    const controls = [...editor.querySelectorAll('button, input, textarea')].filter(element => element.getClientRects().length && getComputedStyle(element).visibility === 'visible');
+    const minimum = innerWidth < 960 || matchMedia('(pointer: coarse)').matches ? 44 : 24;
+    return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth, minimum,
+      dialogOverflow: dialog.scrollWidth > dialog.clientWidth + 1,
+      clipped: controls.filter(element => element.tagName === 'BUTTON' && element.scrollWidth > element.clientWidth + 2).map(element => element.textContent),
+      small: controls.map(element => { const rect = (element.type === 'checkbox' ? element.closest('label') : element).getBoundingClientRect(); return { name: element.getAttribute('data-metadata-field') || element.textContent || element.id, width: rect.width, height: rect.height }; }).filter(rect => rect.width < minimum - .5 || rect.height < minimum - .5),
+      fields: controls.filter(element => element.hasAttribute('data-metadata-field')).length };
+  `);
+  assert.equal(layout.width, width, "Layout checks use the observed requested CSS width");
+  assert.ok(layout.fields >= 7, "Metadata fields are rendered during layout checks");
+  assert.ok(layout.scrollWidth <= width + 1 && !layout.dialogOverflow, `No page or dialog horizontal overflow: ${JSON.stringify(layout)}`);
+  assert.deepEqual(layout.clipped, [], "Metadata button text stays inside its controls");
+  assert.deepEqual(layout.small, [], `Metadata controls meet the ${layout.minimum}px target for this viewport`);
+  checks.push(`metadata layout and controls at ${width} CSS pixels`);
+}
+async function redactCredentials() {
+  for (const target of [sessionId ? ui : null, phone?.ui]) if (target) await target.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], #administrator-code, #pairing-code, input[type=password]').forEach(element => element.style.setProperty('visibility', 'hidden', 'important'))");
+}
+async function phoneCapture(name: string) { await redactCredentials(); await phone!.screenshot(name); }
 async function launch() {
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("native Couch connects", () => ui.execute("return document.querySelector('[role=status]')?.textContent === 'Connected'"), 30_000);
@@ -44,7 +75,7 @@ async function movieEditor(target: UiDriver, title: string, itemId: string) {
   await until("metadata editor loads the current title", () => target.execute("return document.querySelector('[data-metadata-field=title]')?.value === arguments[0]", [title]));
 }
 async function capture(name: string) {
-  await ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code]').forEach(element => element.style.visibility = 'hidden')");
+  await redactCredentials();
   const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifacts}/${name}.png`], { stdout: "ignore", stderr: "inherit" }); assert.equal(await child.exited, 0);
 }
 async function fixtures() {
@@ -135,7 +166,7 @@ try {
   assert.equal(await ui.execute("return document.querySelector('.metadata-editor').textContent.includes('On your paired administrator phone or browser')"), true);
   await ui.key(keys.escape); await ui.button("Play Correct movie"); await ui.watching();
   await until("metadata correction preserves native playback", () => all(state => state.player.status === "playing" && state.player.position > 1));
-  await assertNativeVideoPixels(ui.execute, artifacts, "metadata-playing", [253, 0, 0]); await assertNativeUiPixels(ui.execute, artifacts);
+  await redactCredentials(); await assertNativeVideoPixels(ui.execute, artifacts, "metadata-playing", [253, 0, 0]); await assertNativeUiPixels(ui.execute, artifacts);
   await clients[0]!.command({ type: "stop" }); await until("Stop is current on both controllers", () => all(state => state.player.status === "idle"));
   await movieEditor(ui, "Correct movie", movie.id);
   await phone.restore(); await movieEditor(phone.ui, "Correct movie", movie.id);
@@ -150,7 +181,7 @@ try {
   await until("phone file input reads actual artwork", () => phone!.ui.execute("return document.querySelector('.metadata-editor').textContent.includes('Artwork selected')"));
   await phone.ui.button("Save corrections");
   await until("phone saves its title and artwork together", async () => { const current = await view(); return current.values.title === "Phone correction" && !!current.values.artworkId; });
-  await phone.screenshot("phone-metadata-editor"); await phone.minimize();
+  await phoneCapture("phone-metadata-editor"); await phone.minimize();
   await keyboard(ui, '[data-metadata-field="title"]', "Stale TV correction"); await ui.button("Save corrections");
   await until("TV keeps its stale draft with an explicit reload error", () => ui.execute("return document.querySelector('.metadata-editor [role=alert]')?.textContent.includes('Reload') && document.querySelector('[data-metadata-field=title]').value === 'Stale TV correction'"));
   assert.equal((await view()).values.title, "Phone correction");
@@ -167,13 +198,13 @@ try {
   await Bun.write("/mnt/metadata-reimport/Movie.nfo", nfo); await Bun.write("/mnt/metadata-reimport/Movie-poster.png", files.get("artwork-0.png")!);
   const added = await api("/api/library/sources", { path: "/mnt/metadata-reimport" }); assert.equal(added.status, 201);
   const imported = (await added.json()).sources.find((source: any) => source.path === "/mnt/metadata-reimport"); assert.ok(imported);
-  await data(`/api/library/sources/${imported.id}/scan`, {});
+  await scan(imported.id);
   const exportedArtwork = (await view()).values.artworkId;
   await until("exported NFO and artwork reimport with the same correction", async () => (await data("/api/library/items?q=Phone%20correction")).items.filter((item: any) => item.artworkId === exportedArtwork).length === 2);
   for (const width of [320, 375, 390, 768, 1024, 1440, 1920]) {
     for (let attempt = 0; attempt < 3; attempt++) { const rect = await phone.ui.request(`/session/${phone.ui.session()}/window/rect`); const actual = await phone.ui.execute("return innerWidth"); if (actual === width) break; await phone.ui.request(`/session/${phone.ui.session()}/window/rect`, { width: Math.round(rect.width * width / actual), height: 950 }); }
     await until(`metadata editor reaches ${width} CSS pixels`, () => phone!.ui.execute("return innerWidth === arguments[0]", [width]));
-    await assertResponsive(phone.ui, `Metadata editor ${width}`); await phone.screenshot(`metadata-editor-${width}`);
+    await metadataLayout(phone.ui, width); await phoneCapture(`metadata-editor-${width}`);
   }
   await phone.restore(); await phone.ui.key(keys.escape);
   await phone.ui.section("Library"); await phone.ui.button("Shows", '[aria-label="Library view"]');
@@ -183,8 +214,8 @@ try {
   await keyboard(phone.ui, '[data-metadata-field="season"]', "2"); await keyboard(phone.ui, '[data-metadata-field="episode"]', "4");
   await phone.ui.button("Save corrections");
   await until("phone episode order correction commits", async () => { const saved = await data(`/api/metadata/items/${episode.id}`); return saved.values.season === 2 && saved.values.episode === 4 && saved.origins.episode === "Manual"; });
-  await phone.screenshot("phone-episode-order");
-  await rename("/mnt/metadata-fixtures", "/mnt/metadata-offline"); await data(`/api/library/sources/${source}/scan`, {});
+  await phoneCapture("phone-episode-order");
+  await rename("/mnt/metadata-fixtures", "/mnt/metadata-offline"); await scan(source, true);
   assert.equal((await view()).values.title, "Phone correction");
   assert.equal(await readFile("/mnt/metadata-offline/Movie.nfo", "utf8"), '<movie><title>Wrong movie</title><year>2020</year><custom keep="yes">Preserve me</custom></movie>');
   await phone.minimize(); await webdriver(`/session/${sessionId}`, undefined, "DELETE"); sessionId = "";
@@ -194,12 +225,15 @@ try {
   await phone.restore(); await phone.refresh(); await until("administrator phone reconnects after restart", () => phone!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   await movieEditor(phone.ui, "Phone correction", movie.id);
   assert.equal(await phone.ui.execute("return document.querySelector('[data-metadata-field=title]')?.previousElementSibling?.textContent"), "Origin: Manual");
-  await phone.screenshot("phone-metadata-offline-restart");
+  await phoneCapture("phone-metadata-offline-restart");
   await Bun.write(`${artifacts}/metadata-results.json`, JSON.stringify({ status: "passed", source: process.env.COUCH_QUALIFICATION_HEAD, checks, widths: [320,375,390,768,1024,1440,1920], liveTmdb: "blocked: owner has no authorized API access", scope: "Ubuntu software rendering and null audio; no physical hardware claim" }, null, 2));
 } catch (error) {
   await Bun.write(`${artifacts}/metadata-results.json`, JSON.stringify({ status: "failed", checks, error: String(error) }, null, 2));
-  if (phone) { await phone.screenshot("phone-metadata-failure").catch(() => {}); await Bun.write(`${artifacts}/phone-failure-dom.txt`, String(await phone.ui.execute("return document.body.innerText").catch(() => ""))); }
-  if (sessionId) { await capture("native-metadata-failure").catch(() => {}); await Bun.write(`${artifacts}/native-failure-dom.txt`, String(await ui.execute("return document.body.innerText").catch(() => ""))); }
+  try {
+    await redactCredentials();
+    if (phone) { await phoneCapture("phone-metadata-failure"); await Bun.write(`${artifacts}/phone-failure-dom.txt`, String(await phone.ui.execute("return document.body.innerText"))); }
+    if (sessionId) { await capture("native-metadata-failure"); await Bun.write(`${artifacts}/native-failure-dom.txt`, String(await ui.execute("return document.body.innerText"))); }
+  } catch { console.warn("Skipped failure captures because redaction or capture could not complete."); }
   throw error;
 } finally {
   for (const client of clients) client.socket.close(); await phone?.close();
