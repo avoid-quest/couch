@@ -5,11 +5,11 @@ import type { ControllerIdentity } from "../shared/controllers";
 import type { GuideChannel, GuideProgram } from "../shared/iptv";
 import type { Recording, RecordingMapping, RecordingsPage } from "../shared/recordings";
 import { boundedBytes, record } from "./iptv-feeds";
-import { backendUuid, connectionInput, createTvheadend, RecordingError, type BackendJob, type RecordingConnection } from "./tvheadend";
+import { backendUuid, connectionInput, createTvheadend, RecordingError, type BackendJob, type RecordingConnection, type RecordingVerification } from "./tvheadend";
 
 type Selection = { channel: GuideChannel; program: GuideProgram };
 type Job = Recording & { sourceId: string; tvgId: string; backendChannel: string; backendId: string | null; eventId: null; backendCause: string | null };
-type Setup = { revision: number; connection: RecordingConnection; mappings: RecordingMapping[] };
+type Setup = { qualified?: boolean; revision: number; connection: RecordingConnection; mappings: RecordingMapping[] };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const publicJob = ({ sourceId: _source, tvgId: _tvg, backendChannel: _channel, backendId: _backend, eventId: _event, backendCause: _cause, ...job }: Job): Recording => job;
 const knownCauses = new Map([["No free adapter", "No free recording input."], ["No assigned adapters", "No input is assigned to this channel."], ["File missing", "The recording file is missing."], ["Invalid", "The backend rejected this recording."], ["Not enough disk space", "The backend ran out of recording space."]]);
@@ -29,7 +29,8 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
   db.run(`CREATE TABLE IF NOT EXISTS recording_setup (id INTEGER PRIMARY KEY CHECK(id = 1), data TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS recording_jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS recording_jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS recording_qualification (id INTEGER PRIMARY KEY CHECK(id = 1), data TEXT NOT NULL);`);
   const shutdown = new AbortController();
   let connectionGeneration = new AbortController();
   let closed = false, checkedAt: number | null = null, error: string | null = null;
@@ -39,9 +40,9 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   const jobs = (): Job[] => db.query<{ data: string }, []>("SELECT data FROM recording_jobs ORDER BY rowid DESC").all().map(row => JSON.parse(row.data));
   const get = (id: string): Job => { const row = jobs().find(job => job.id === id); if (!row) throw new RecordingError("Recording not found.", 404); return row; };
   const save = (job: Job) => db.query("INSERT OR REPLACE INTO recording_jobs VALUES (?, ?)").run(job.id, JSON.stringify(job));
-  const configured = () => { const value = setup(); if (!value) throw new RecordingError("An administrator must connect a recording backend first.", 409); return value; };
+  const configured = () => { const value = setup(); if (!value?.qualified) throw new RecordingError("An administrator must verify recording backend setup first.", 409); return value; };
   const backend = (value = configured()) => createTvheadend(value.connection, shutdown.signal, request);
-  const snapshot = (): RecordingsPage => ({ configured: !!setup(), revision: setup()?.revision ?? 0, checkedAt, error, jobs: jobs().map(publicJob) });
+  const snapshot = (): RecordingsPage => ({ configured: !!setup()?.qualified, revision: setup()?.revision ?? 0, checkedAt, error, jobs: jobs().map(publicJob) });
   const serial = <T>(work: () => Promise<T>): Promise<T> => {
     const next = tail.then(() => { assertOpen(); return work(); });
     tail = next.catch(() => {});
@@ -129,7 +130,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         }
         if (path === "/api/recordings/setup") {
           administrator();
-          if (req.method === "GET") return json({ revision: setup()?.revision ?? 0, configured: !!setup(), mappings: setup()?.mappings ?? [] });
+          if (req.method === "GET") return json({ revision: setup()?.revision ?? 0, configured: !!setup()?.qualified, mappings: setup()?.mappings ?? [] });
           if (req.method !== "POST") return method("GET, POST");
           const value = await body(req);
           return await serial(async () => {
@@ -138,9 +139,12 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
             if (value.revision !== (previous?.revision ?? 0)) throw new RecordingError("Recording setup changed on another remote. Reload it and try again.", 409);
             const connection = connectionInput(value);
             if (previous && jobs().length && ["endpoint", "username", "playbackUsername", "profileId"].some(key => connection[key as keyof RecordingConnection] !== previous.connection[key as keyof RecordingConnection])) throw new RecordingError("Existing jobs belong to this backend and accounts. Keep their identity when replacing credentials.", 409);
-            const channels = await backend({ revision: 0, connection, mappings: [] }).verify(req.signal);
+            const channels = await backend({ revision: 0, connection, mappings: [] }).verify(req.signal, {
+              load: () => { const row = db.query<{ data: string }, []>("SELECT data FROM recording_qualification WHERE id = 1").get(); return row ? JSON.parse(row.data) as RecordingVerification : null; },
+              save: intent => { if (intent) db.query("INSERT OR REPLACE INTO recording_qualification VALUES (1, ?)").run(JSON.stringify(intent)); else db.run("DELETE FROM recording_qualification WHERE id = 1"); },
+            });
             administrator(); guard();
-            const next = { revision: (previous?.revision ?? 0) + 1, connection, mappings: previous?.mappings ?? [] };
+            const next = { qualified: true, revision: (previous?.revision ?? 0) + 1, connection, mappings: previous?.mappings ?? [] };
             db.query("INSERT OR REPLACE INTO recording_setup VALUES (1, ?)").run(JSON.stringify(next));
             connectionGeneration.abort(); connectionGeneration = new AbortController(); onConnectionChanged();
             error = null; publish(); return json({ revision: next.revision, channels });

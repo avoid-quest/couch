@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +27,7 @@ function fixture() {
   let selected = { channel, program }, identity: ControllerIdentity | null = host;
   let fail = false, loseCreate = false, loseCancel = false, writeAllowed = false, missingChannel = false, incomplete = false, createCount = 0;
   let blockCreate: Promise<void> | undefined;
+  let hideViewer = false, keepCancel = false, loseProbeCreate = false, missingProbeCreate = false, probeCount = 0;
   let rows: Record<string, unknown>[] = [];
   const calls: { path: string; account: string; body: URLSearchParams }[] = [];
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(req) {
@@ -36,15 +38,16 @@ function fixture() {
     if (path === "/api/dvr/entry/class") return Response.json({});
     if (path === "/api/dvr/config/grid") return Response.json({ entries: [{ uuid: profileId }], total: 1 });
     if (path === "/api/channel/grid") return Response.json({ entries: missingChannel ? [] : [{ uuid: backendChannel, name: "Backend channel", enabled: true, services: ["service"] }], total: missingChannel ? 0 : 1 });
-    if (path === "/api/dvr/entry/grid") return Response.json({ entries: rows, total: rows.length + Number(incomplete) });
+    if (path === "/api/dvr/entry/grid") { const entries = account === "viewer" && hideViewer ? [] : rows; return Response.json({ entries, total: entries.length + Number(incomplete) }); }
     if (path === "/api/dvr/entry/create") {
-      createCount++;
       const conf = JSON.parse(body.get("conf")!);
-      rows.push({ uuid: createCount.toString(16).padStart(32, "0"), channel: conf.channel, owner: "recorder", comment: conf.comment, start: conf.start, stop: conf.stop, sched_status: "scheduled", status: "Scheduled", filesize: 0, errorcode: 0 });
+      if (conf.enabled === false) probeCount++; else createCount++;
+      if (conf.enabled === false && missingProbeCreate) return new Response("lost", { status: 502 });
+      rows.push({ uuid: (createCount + probeCount).toString(16).padStart(32, "0"), enabled: conf.enabled, channel: conf.channel, owner: "recorder", comment: conf.comment, start: conf.start, stop: conf.stop, sched_status: "scheduled", status: "Scheduled", filesize: 0, errorcode: 0 });
       await blockCreate;
-      return loseCreate ? new Response("lost", { status: 502 }) : Response.json({ uuid: rows.at(-1)!.uuid });
+      return loseCreate || conf.enabled === false && loseProbeCreate ? new Response("lost", { status: 502 }) : Response.json({ uuid: rows.at(-1)!.uuid });
     }
-    if (path === "/api/dvr/entry/cancel") { rows = rows.filter(row => row.uuid !== body.get("uuid")); return loseCancel ? new Response("lost", { status: 502 }) : Response.json({}); }
+    if (path === "/api/dvr/entry/cancel") { if (!keepCancel) rows = rows.filter(row => row.uuid !== body.get("uuid")); return loseCancel ? new Response("lost", { status: 502 }) : Response.json({}); }
     if (path === "/api/idnode/save") return new Response("", { status: writeAllowed ? 200 : 403 });
     return new Response("", { status: 404 });
   } });
@@ -61,6 +64,7 @@ function fixture() {
   };
   const schedule = () => api("/schedule", "POST", { programId: selected.program.id, start: selected.program.start, end: selected.program.end, title: selected.program.title, revision: 2 });
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
+    get probeCount() { return probeCount; }, set hideViewer(value: boolean) { hideViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
     set fail(value: boolean) { fail = value; }, set loseCreate(value: boolean) { loseCreate = value; }, set loseCancel(value: boolean) { loseCancel = value; }, set writeAllowed(value: boolean) { writeAllowed = value; }, set missingChannel(value: boolean) { missingChannel = value; }, set incomplete(value: boolean) { incomplete = value; }, set identity(value: ControllerIdentity | null) { identity = value; }, set selected(value: typeof selected) { selected = value; }, set blockCreate(value: Promise<void> | undefined) { blockCreate = value; },
     async reopen() { await recordings.close(); recordings = make(); },
   };
@@ -165,4 +169,68 @@ test("recording queue restart stays stopped and native progress belongs to the a
   expect(reopened.progress("household", entry.source)?.position).toBe(20);
   expect(restarted.state.currentEntryId).toBeNull(); expect(restarted.state.player.playbackId).toBeNull();
   restarted.close();
+});
+
+
+test("empty-library setup rejects playback without view-all or with manage-all rights and removes its disabled check", async () => {
+  for (const writable of [false, true]) {
+    const app = fixture(); app.hideViewer = !writable; app.writeAllowed = writable;
+    const response = await app.api("/setup", "POST", { ...app.input, revision: 0 });
+    expect(response.status).toBe(409); expect((await response.json()).error).toContain(writable ? "read-only" : "view-all");
+    expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows).toHaveLength(0); expect(app.probeCount).toBe(1);
+    const conf = JSON.parse(app.calls.find(call => call.path === "/api/dvr/entry/create")!.body.get("conf")!);
+    expect(conf.enabled).toBe(false); expect(conf.start).toBeGreaterThan(Date.now() / 1000 + 86_399); expect(conf.stop - conf.start).toBe(60);
+    expect((await app.schedule()).status).toBe(409); expect(app.createCount).toBe(0);
+  }
+});
+
+test("setup reconciles a lost disabled-create response and does not add permission jobs per programme", async () => {
+  const app = fixture(); app.loseProbeCreate = true; await app.setup();
+  expect(app.probeCount).toBe(1); expect(app.rows).toHaveLength(0);
+  await app.schedule(); await app.schedule();
+  expect(app.probeCount).toBe(1); expect(app.createCount).toBe(1);
+});
+
+test("a never-confirmed disabled permission check survives restart without another create", async () => {
+  const app = fixture(); app.missingProbeCreate = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(409);
+  await app.reopen(); app.missingProbeCreate = false;
+  const retry = await app.api("/setup", "POST", { ...app.input, revision: 0 });
+  expect(retry.status).toBe(409); expect((await retry.json()).error).toContain("not confirmed");
+  expect(app.probeCount).toBe(1); expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows).toHaveLength(0);
+});
+
+test("setup remains blocked until disabled-entry cleanup is confirmed after restart", async () => {
+  const app = fixture(); app.keepCancel = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(409);
+  expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows).toHaveLength(1); expect(app.rows[0]!.enabled).toBe(false);
+  const id = String(app.rows[0]!.uuid);
+  await app.reopen(); app.keepCancel = false; app.loseCancel = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(200);
+  expect(app.probeCount).toBe(1); expect(app.rows).toHaveLength(0); expect(app.recordings.snapshot().configured).toBe(true);
+  expect(app.calls.filter(call => call.path === "/api/dvr/entry/cancel").map(call => call.body.get("uuid"))).toEqual([id, id]);
+});
+
+
+test("a setup saved before permission qualification cannot schedule until verified again", async () => {
+  const app = fixture(); await app.setup();
+  const database = new Database(app.databasePath);
+  const row = database.query<{ data: string }, []>("SELECT data FROM recording_setup WHERE id = 1").get()!;
+  const legacy = JSON.parse(row.data); delete legacy.qualified;
+  database.query("UPDATE recording_setup SET data = ? WHERE id = 1").run(JSON.stringify(legacy)); database.close();
+  await app.reopen();
+  expect(app.recordings.snapshot().configured).toBe(false);
+  expect((await app.schedule()).status).toBe(409); expect(app.createCount).toBe(0);
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 2 })).status).toBe(200);
+  expect(app.recordings.snapshot().configured).toBe(true);
+});
+
+test("incomplete cleanup keeps the disabled verification intent and cannot commit setup", async () => {
+  const app = fixture(); app.keepCancel = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(409);
+  app.incomplete = true;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(502);
+  expect(app.recordings.snapshot().configured).toBe(false); expect(app.rows[0]!.enabled).toBe(false); expect(app.probeCount).toBe(1);
+  app.incomplete = false; app.keepCancel = false;
+  expect((await app.api("/setup", "POST", { ...app.input, revision: 0 })).status).toBe(200); expect(app.probeCount).toBe(1);
 });
