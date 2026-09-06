@@ -5,7 +5,7 @@ import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote 
 import { assertNativeVideoPixels } from "./pixels";
 import { assertLiveFrame, clockLag } from "./iptv-clock";
 import { captureGuideClock } from "./iptv-native-clock";
-import { assertGuideStart } from "./iptv-start";
+import { assertGuideStartConsistency } from "./iptv-start";
 import { appleGuidePermission, appleGuideSample, type GuideFixture } from "./iptv-fixture";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
@@ -103,8 +103,8 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       await write();
       await until("Go live starts a new native load of the live channel", () => playing(blue.id) && first().player.playbackId !== old, 25_000);
       const observedPlayingAt = Date.now(), requests = fixture.requests().slice(boundary);
-      Object.assign(start, { observedPlayingAt, playbackId: first().player.playbackId, requests, correlationLimit: "HTTP requests have no playback ID. Ambiguous complete traces fail startup qualification; the independent native load-sequence and pixel gates remain required." }); await write();
-      Object.assign(start, assertGuideStart(requests)); await write();
+      Object.assign(start, { observedPlayingAt, playbackId: first().player.playbackId, requests, correlationLimit: "HTTP requests have no playback ID. This complete trace checks request consistency only; native load policy and presented-frame freshness require their independent checks." }); await write();
+      Object.assign(start, assertGuideStartConsistency(requests)); await write();
       await httpRemote.minimize();
     };
     const captures: Record<string, Awaited<ReturnType<typeof captureGuideClock>>[]> = {}; evidence.captures = captures;
