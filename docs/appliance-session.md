@@ -28,6 +28,8 @@ sudo couch-session restart
 ```
 
 `restart` clears the failed-start budget and restarts the complete application.
+`logs` reads the dedicated runtime account's journal, including TV service,
+supervisor and audio messages, even when invoked by the root administrator.
 For a lost administrator browser, run `sudo couch-session recover-admin` in a
 private administrator terminal. It generates a fresh 256-bit code and restarts
 the same supervised native owner, passing `COUCH_ADMIN_RECOVERY_CODE` to its

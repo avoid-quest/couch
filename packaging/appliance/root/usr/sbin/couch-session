@@ -26,6 +26,6 @@ case "${1:-status}" in
         user_systemctl restart couch-tv.service
         printf 'Pair your replacement browser, then use this administrator code within 10 minutes:\n%s\n' "$code"
         ;;
-    logs) journalctl "_UID=$uid" --user-unit=couch-tv.service --no-pager -n 200 ;;
+    logs) journalctl "_UID=$uid" --no-pager -n 200 ;;
     *) echo 'Usage: couch-session {status|restart|stop|logs|recover-admin}' >&2; exit 2 ;;
 esac
