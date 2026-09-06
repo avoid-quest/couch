@@ -14,7 +14,7 @@ cp /work/bin/* /artifacts/bin/
 sha256sum /work/bin/* > /artifacts/binaries.sha256
 find src src-tauri scripts packaging tests -type f -not -path '*/binaries/*' -print0 | sort -z | xargs -0 sha256sum > /artifacts/sources.sha256
 cargo test --locked --manifest-path src-tauri/Cargo.toml cue_ -- --nocapture
-cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video cue_bounds -- --nocapture
+COUCH_CUE_PCM_ARTIFACTS=/artifacts/cue-pcm cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video cue_bounds -- --nocapture
 mkdir -p /mnt/cue-fixtures /root/.config
 cp tests/fixtures/cue/album.cue tests/fixtures/cue/album.flac tests/fixtures/cue/missing.cue /mnt/cue-fixtures/
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/artifacts/pulseaudio.log

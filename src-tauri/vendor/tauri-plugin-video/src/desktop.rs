@@ -2200,7 +2200,9 @@ mod linux_mpv {
                 init.set_option("audio-display", "no")?;
                 Ok(())
             }).unwrap();
-            for (start, end) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (Some(400.0 / 75.0), Some(875.0 / 75.0)), (None, None)] {
+            let artifacts = std::env::var_os("COUCH_CUE_PCM_ARTIFACTS").map(std::path::PathBuf::from);
+            if let Some(path) = &artifacts { fs::create_dir_all(path).unwrap(); }
+            for (case, (start, end)) in [(Some(400.0 / 75.0), Some(875.0 / 75.0)), (Some(875.0 / 75.0), Some(18.0)), (Some(400.0 / 75.0), Some(875.0 / 75.0)), (None, None)].into_iter().enumerate() {
                 mpv.command("stop", &[]).unwrap();
                 discard_events(&mut mpv).unwrap();
                 configure_start(&mpv, start).unwrap();
@@ -2221,11 +2223,20 @@ mod linux_mpv {
                     .args(["-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
                 assert!(decoded.status.success(), "{}", String::from_utf8_lossy(&decoded.stderr));
                 let expected = ((end.unwrap_or(18.0) - start.unwrap_or(0.0)) * 44100.0_f64).round() as usize;
-                assert_eq!(decoded.stdout.len() / 2, expected, "The cue must decode exactly its bounded sample count");
                 let reference = Command::new("ffmpeg").args(["-v", "error", "-i"]).arg(&source)
                     .args(["-af", &format!("atrim=start_sample={}:end_sample={}", (start.unwrap_or(0.0) * 44100.0).round() as usize, (end.unwrap_or(18.0) * 44100.0).round() as usize), "-f", "s16le", "-acodec", "pcm_s16le", "-"]).output().unwrap();
                 assert!(reference.status.success());
-                assert_eq!(decoded.stdout, reference.stdout, "Decoded samples must come from this cue segment");
+                let first_difference = decoded.stdout.chunks_exact(2).zip(reference.stdout.chunks_exact(2)).position(|(actual, expected)| actual != expected);
+                let diagnostic = format!("case={case} start={start:?} end={end:?} actual_samples={} expected_samples={expected} reference_samples={} first_differing_sample={first_difference:?}", decoded.stdout.len() / 2, reference.stdout.len() / 2);
+                eprintln!("{diagnostic}");
+                if let Some(path) = &artifacts {
+                    fs::copy(&output, path.join(format!("case-{case}.wav"))).unwrap();
+                    fs::write(path.join(format!("case-{case}-actual.s16le")), &decoded.stdout).unwrap();
+                    fs::write(path.join(format!("case-{case}-reference.s16le")), &reference.stdout).unwrap();
+                    fs::write(path.join(format!("case-{case}.txt")), &diagnostic).unwrap();
+                }
+                assert_eq!(decoded.stdout.len() / 2, expected, "The cue must decode exactly its bounded sample count: {diagnostic}");
+                assert_eq!(decoded.stdout, reference.stdout, "Decoded samples must come from this cue segment: {diagnostic}");
             }
             assert_eq!(mpv.get_property::<String>("options/start").unwrap(), "none");
             assert_eq!(mpv.get_property::<String>("options/end").unwrap(), "none");
