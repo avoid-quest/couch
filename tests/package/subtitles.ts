@@ -316,6 +316,7 @@ async function preferencesAndRestart(token: string) {
   assert.ok(!first().player.tracks?.some(t => t.kind === "subtitle" && t.selected));
   if (browser) {
     await until("paired phone reconnects after native restart", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+    await driver(45345, `/session/${browser}/window/maximize`, {});
     await settings(phone);
     await until("phone shows the restarted Household subtitle Off selection", () => phone.execute("return document.querySelector('#playback-subtitles')?.textContent.trim() === 'Off'"));
     await Bun.write(`${artifacts}/phone-restarted-off.png`, Buffer.from(await driver(45345, `/session/${browser}/screenshot`), "base64"));
