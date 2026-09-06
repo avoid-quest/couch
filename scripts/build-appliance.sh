@@ -11,7 +11,7 @@ trap 'rm -rf "$staging"' EXIT HUP INT TERM
 cp -R packaging/appliance/root/. "$staging/"
 cp -R packaging/appliance/DEBIAN "$staging/DEBIAN"
 sed "s/^Version: .*/Version: $version/" packaging/appliance/DEBIAN/control > "$staging/DEBIAN/control"
-chmod 0755 "$staging/DEBIAN/postinst" "$staging/usr/lib/couch-appliance/session" "$staging/usr/sbin/couch-session"
+chmod 0755 "$staging/DEBIAN/postinst" "$staging/usr/lib/couch-appliance/session" "$staging/usr/lib/couch-appliance/initialize-audio" "$staging/usr/sbin/couch-session"
 mkdir -p "$staging/usr/share/doc/couch-appliance"
 cp packaging/NOTICE "$staging/usr/share/doc/couch-appliance/copyright"
 printf '{"package":"couch-appliance","version":"%s","sourceCommit":"%s"}\n' "$version" "$revision" > "$staging/usr/share/doc/couch-appliance/build-info.json"

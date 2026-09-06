@@ -11,6 +11,7 @@ Environment=GDK_BACKEND=x11
 EnvironmentFile=/etc/couch/appliance.env
 EnvironmentFile=-/run/couch-appliance/recovery.env
 ExecStartPre=/usr/bin/pactl info
+ExecStartPre=/usr/lib/couch-appliance/initialize-audio
 ExecStart=/usr/bin/couch
 Restart=always
 RestartSec=5

@@ -51,9 +51,18 @@ precedence still applies outside this unit: explicit `COUCH_DATA_DIR`, then
 `$XDG_DATA_HOME/quest.avoid.couch`, then `$HOME/.local/share/quest.avoid.couch`.
 Package upgrades do not move or remove data, profiles, pairings, sources or media.
 WirePlumber's saved routes and volume stay under the same runtime home.
+When the package creates the runtime account, it marks one initial audio setup
+attempt. After PipeWire starts, Couch selects the first available HDMI stereo
+profile and its output sink. Each discovery wait is limited to ten seconds. The
+attempt is consumed even if HDMI is absent or setup fails, so subsequent boots
+and upgrades preserve the user's saved audio route. An administrator can request
+another initial setup by recreating
+`/var/lib/couch/.local/state/couch-appliance/initialize-audio` for `couch-tv` and
+restarting the TV service.
 
 At login the session disables X11 screensaver/DPMS blanking and selects the first
-connected external output as primary, falling back to the laptop panel. Logind
+connected external output as primary at 1920x1080 when supported, otherwise its
+preferred mode, falling back to the laptop panel. Logind
 ignores idle time. With an external display connected or the laptop docked, lid
 closure leaves the TV running. With only the laptop display, lid closure suspends
 on AC and battery. The power button, suspend key and administrator power commands
