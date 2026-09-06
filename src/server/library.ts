@@ -210,13 +210,15 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         try { album = await readCueAlbum(root, relative(root, path), source.id); }
         catch (error) {
           cueFailures++;
-          if (cueErrors.length < 3) cueErrors.push(`${basename(path)}: ${error instanceof Error ? error.message : "Could not read cue sheet."}`);
+          if (cueErrors.length < 3) cueErrors.push(`${basename(path)}: ${error instanceof Error && !("code" in error) ? error.message : "Could not read cue sheet. Check that the file is available and readable."}`);
           continue;
         }
         await verifySource(source);
         authorize();
         assertOpen();
-        const info = await lstat(path);
+        const info = await lstat(path).catch(() => { throw new Error("Cue sheet became unavailable during the scan."); });
+        authorize();
+        assertOpen();
         cueAudio.add(album.sourcePath);
         db.transaction(() => {
           for (const track of album.tracks) saveItem({

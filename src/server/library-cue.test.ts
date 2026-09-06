@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs/promises";
 import { copyFile, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -109,4 +110,42 @@ test("cue library queue, saved playlist and relative progress survive restart wi
   expect(detail.status).toBe(200);
   expect(JSON.stringify(await detail.json())).not.toContain("album.flac");
   expect(store2.progress("household", entry.source)?.position).toBe(2);
+});
+
+
+test("cue filesystem failures do not expose host paths in source payloads", async () => {
+  const { library, media, source } = await setup();
+  const original = fs.open;
+  const intercept = spyOn(fs, "open").mockImplementation(async (path, flags, mode) => {
+    if (String(path) === join(media, "album.cue")) throw Object.assign(new Error(`EACCES: permission denied, open '${path}'`), { code: "EACCES" });
+    return original(path, flags, mode);
+  });
+  try {
+    const result = await library.scan(source.id);
+    expect(result.warning).toContain("album.cue: Could not read cue sheet");
+    // Paired controllers receive sources without the host-only path field.
+    const payload = library.listSources().map(({ path: _path, ...source }) => source);
+    expect(JSON.stringify(payload)).not.toContain(media);
+    expect(JSON.stringify(payload)).not.toContain("EACCES");
+  } finally { intercept.mockRestore(); }
+});
+
+test("revocation during the final cue stat prevents catalog publication", async () => {
+  const { library, media, source } = await setup();
+  const album = library.musicAlbums().items[0]!;
+  const originalTracks = library.albumTracks(album.id).items;
+  await writeFile(join(media, "album.cue"), (await Bun.file(join(media, "album.cue")).text()).replace("First tone", "Unauthorized title"));
+  const original = fs.lstat;
+  let authorizations = 0, revoked = false;
+  const intercept = spyOn(fs, "lstat").mockImplementation((async (...args: Parameters<typeof fs.lstat>) => {
+    const info = await original(...args);
+    if (String(args[0]) === join(media, "album.cue") && authorizations >= 3) revoked = true;
+    return info;
+  }) as typeof fs.lstat);
+  try {
+    const result = await library.scan(source.id, () => { authorizations++; if (revoked) throw new Error("Controller access revoked"); });
+    expect(revoked).toBe(true);
+    expect(result.status).toBe("error");
+    expect(library.albumTracks(album.id).items).toEqual(originalTracks);
+  } finally { intercept.mockRestore(); }
 });
