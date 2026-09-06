@@ -125,7 +125,7 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   let requested = false;
-  const delayed = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() { requested = true; await gate; return new Response(Bun.file("/fixtures/multitrack.mkv")); } });
+  const delayed = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() { requested = true; await gate; return new Response(Bun.file("/mnt/fixtures/multitrack.mkv")); } });
   const loadingId = crypto.randomUUID();
   try {
     await clients[0]!.command({ type: "enqueue", entry: { id: loadingId, title: "Profile loading guard", source: `http://127.0.0.1:${delayed.port}/delayed.mkv` } });

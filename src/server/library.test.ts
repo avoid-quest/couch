@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { createMediaFolders } from "./media-folders";
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
@@ -5,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLibrary, type Library } from "./library";
+
+const folders = createMediaFolders({ roots: [realpathSync(tmpdir())], mountInfo: async () => null });
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { while (cleanups.length) await cleanups.pop()!(); });
@@ -29,7 +33,7 @@ async function setup(ffprobePath: string | null = null) {
   const media = join(root, "media");
   await mkdir(media);
   const databasePath = join(root, "library.sqlite");
-  const library = createLibrary({ databasePath, ffprobePath });
+  const library = createLibrary({ folders, databasePath, ffprobePath });
   cleanups.push(() => library.close());
   return { root, media, databasePath, library };
 }
@@ -49,7 +53,7 @@ test("scan indexes nested media, skips symlinks and nonmedia, and preserves IDs 
   await symlink(join(root, "private.mp4"), join(media, "escape.mp4"));
   await symlink(root, join(media, "recursive"));
   const source = await sourceWithFiles(library, media, ["Two.MKV", "Three.mp3", "notes.txt", "streams.m3u"]);
-  expect((await library.addSource(media)).id).toBe(source.id);
+  await expect(library.addSource(media)).rejects.toThrow("already a source");
   const original = library.search();
   expect(original.items.map(item => item.title)).toEqual(["One", "Three", "Two"]);
   expect(original.items.map(item => item.kind)).toEqual(["audio", "audio", "video"]);
@@ -62,7 +66,7 @@ test("scan indexes nested media, skips symlinks and nonmedia, and preserves IDs 
   await library.scan(source.id);
   expect(library.search().items).toEqual(original.items);
   await library.close();
-  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => reopened.close());
   expect(reopened.search().items).toEqual(original.items);
   const playable = await reopened.getPlayable(original.items[0]!.id);
@@ -119,7 +123,7 @@ test("probe metadata is searchable and unchanged files do not launch new probes"
   const countPath = join(root, "probes.log");
   await Bun.write(executable, `#!${process.execPath}\nawait Bun.write(${JSON.stringify(countPath)}, (await Bun.file(${JSON.stringify(countPath)}).text().catch(() => '')) + 'probe\\n');\nconsole.log(JSON.stringify({format:{duration:'123.25',tags:{TITLE:'A tagged song',ARTIST:'Björk',album:'Debut'}}}));\n`);
   await chmod(executable, 0o755);
-  const metadataLibrary = createLibrary({ databasePath, ffprobePath: executable });
+  const metadataLibrary = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => metadataLibrary.close());
   const source = await sourceWithFiles(metadataLibrary, media, ["one.mkv"]);
   const item = metadataLibrary.search({ query: "bjork" }).items[0]!;
@@ -160,7 +164,7 @@ test("probe work stays bounded and failed metadata leaves files available", asyn
   const log = join(root, "probe.log");
   await Bun.write(executable, `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nappendFileSync(${JSON.stringify(log)}, 'start\\n');\nawait Bun.sleep(40);\nappendFileSync(${JSON.stringify(log)}, 'end\\n');\nprocess.exit(1);\n`);
   await chmod(executable, 0o755);
-  const bounded = createLibrary({ databasePath, ffprobePath: executable });
+  const bounded = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => bounded.close());
   await sourceWithFiles(bounded, media, ["One.mp4", "Two.mp4", "Three.mp4", "Four.mp4", "Five.mp4"]);
   let active = 0;
@@ -183,7 +187,7 @@ test("closing the library terminates active probes and records an interrupted sc
   const started = join(root, "started");
   await Bun.write(executable, `#!${process.execPath}\nawait Bun.write(${JSON.stringify(started)}, 'started');\nawait Bun.sleep(60_000);\n`);
   await chmod(executable, 0o755);
-  const running = createLibrary({ databasePath, ffprobePath: executable });
+  const running = createLibrary({ folders, databasePath, ffprobePath: executable });
   cleanups.push(() => running.close());
   await Bun.write(join(media, "One.mp4"), "media");
   const source = await running.addSource(media);
@@ -195,7 +199,7 @@ test("closing the library terminates active probes and records an interrupted sc
   await running.close();
   expect(Date.now() - beforeClose).toBeLessThan(1_000);
   expect((await scan).status).toBe("error");
-  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => reopened.close());
   expect(reopened.listSources()[0]?.error).toBe("Scan interrupted.");
 });
@@ -242,7 +246,7 @@ test("tagged albums preserve compilation credits, numeric disc ordering, artwork
   expect(library.musicAlbums({ query: "%" }).items).toEqual([]);
   expect(library.search({ query: "Ensemble" }).total).toBe(3);
   await library.close();
-  const reopened = createLibrary({ databasePath, ffprobePath: null });
+  const reopened = createLibrary({ folders, databasePath, ffprobePath: null });
   cleanups.push(() => reopened.close());
   expect(reopened.albumTracks(albums.items[0]!.id)).toEqual(ordered);
   expect(reopened.artwork(albums.items[0]!.artworkId!)?.data).toEqual(cover);

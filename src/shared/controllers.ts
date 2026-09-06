@@ -1,3 +1,7 @@
+import type { PlayerState } from "./protocol";
+
+export type ConnectionDetails = { name: string; urls: string[]; player: PlayerState["status"] };
+
 export type Controller = {
   id: string;
   name: string;

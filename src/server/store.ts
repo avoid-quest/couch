@@ -72,6 +72,14 @@ export function openStore(path: string) {
   const controllerColumns = "id, name, role, createdAt, lastSeenAt";
   const controller = (id: string) => db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE id = ?`).get(id);
   const administratorExists = () => db.query("SELECT 1 FROM devices WHERE role = 'administrator' LIMIT 1").get() !== null;
+  const requireController = (id: string) => {
+    const device = controller(id);
+    if (!device) throw new ControllerError("This remote is no longer paired.", 404);
+    return device;
+  };
+  const protectAdministrator = (device: Controller) => {
+    if (device.role === "administrator" && !db.query("SELECT 1 FROM devices WHERE role = 'administrator' AND id != ? LIMIT 1").get(device.id)) throw new ControllerError("Keep at least one administrator. Approve another remote first.", 409);
+  };
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
   const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
@@ -181,6 +189,28 @@ export function openStore(path: string) {
       return token.length <= 128 && db.query("SELECT 1 FROM devices WHERE token_hash = ?").get(hash(token)) !== null;
     },
     controller,
+    controllers() { return db.query<Controller, []>(`SELECT ${controllerColumns} FROM devices ORDER BY createdAt, id`).all(); },
+    renameController(id: string, value: unknown) {
+      const name = controllerName(value);
+      requireController(id);
+      db.query("UPDATE devices SET name = ? WHERE id = ?").run(name, id);
+      return controller(id)!;
+    },
+    setControllerRole(id: string, role: unknown) {
+      if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Controller or Administrator.");
+      return db.transaction(() => {
+        const device = requireController(id);
+        if (role === "controller") protectAdministrator(device);
+        db.query("UPDATE devices SET role = ? WHERE id = ?").run(role, id);
+        return controller(id)!;
+      }).immediate();
+    },
+    revokeController(id: string) {
+      db.transaction(() => {
+        protectAdministrator(requireController(id));
+        db.query("DELETE FROM devices WHERE id = ?").run(id);
+      }).immediate();
+    },
     controllerForToken(token: string) {
       return token.length <= 128 ? db.query<Controller, [string]>(`SELECT ${controllerColumns} FROM devices WHERE token_hash = ?`).get(hash(token)) : null;
     },

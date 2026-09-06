@@ -1,0 +1,32 @@
+#!/bin/bash
+set -euo pipefail
+pending=$HOME/.local/state/couch-appliance/initialize-audio
+[[ -f $pending ]] || exit 0
+# Attempt this only for a newly created runtime account. Never replace a saved
+# route on later boots, including after an interrupted or unsuccessful attempt.
+rm -f "$pending"
+export LC_ALL=C
+selection=
+for attempt in {1..10}; do
+    selection=$(pactl list cards | awk '/^Card #/ {card=$2; sub(/^#/, "", card)} !found && $1 ~ /^output:hdmi-stereo[^+]*:$/ && /available: yes/ {profile=$1; sub(/:$/, "", profile); print card, profile; found=1}')
+    [[ -z $selection ]] || break
+    sleep 1
+done
+if [[ -z $selection ]]; then
+    echo 'No available HDMI stereo profile; keeping the default audio route.'
+    exit 0
+fi
+read -r card profile <<< "$selection"
+card_name=$(pactl list short cards | awk -v card="$card" '$1 == card {sub(/^alsa_card\./, "alsa_output.", $2); print $2}')
+sink=$card_name.${profile#output:}
+pactl set-card-profile "$card" "$profile"
+for attempt in {1..10}; do
+    if pactl list short sinks | awk -v sink="$sink" '$2 == sink {found=1} END {exit !found}'; then
+        pactl set-default-sink "$sink"
+        echo "Initial TV audio route: $sink"
+        exit 0
+    fi
+    sleep 1
+done
+echo 'The initial HDMI sink did not appear; inspect couch-session logs.' >&2
+exit 1

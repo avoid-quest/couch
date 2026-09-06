@@ -149,7 +149,7 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   const delayed = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() {
     requested = true;
     await gate;
-    return new Response(Bun.file("/fixtures/multitrack.mkv"));
+    return new Response(Bun.file("/mnt/fixtures/multitrack.mkv"));
   } });
   const loadingEntry = crypto.randomUUID();
   try {

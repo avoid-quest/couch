@@ -6,6 +6,7 @@ import { assertNativeUiPixels, assertNativeVideoPixels } from "./pixels";
 import { UiDriver, assertNativePortal, assertResponsive, assertTheme, keys, qualityLabel, startHttpRemote } from "./ui";
 import { verifyLocalProgress, assertLocalProgressAfterRestart, verifyJellyfinResume } from "./progress";
 import { verifyExternalSubtitles, assertSubtitleCleanup, verifyJellyfinSubtitles, verifyPlaybackPreferences, assertPlaybackPreferencesAfterRestart } from "./subtitles";
+import { addTVFolder, verifyFolderSettings } from "./folder-settings";
 import { verifyMusic, assertMusicAfterRestart } from "./music";
 import { verifyVideoLibrary, assertVideoLibraryAfterRestart } from "./video-library";
 import { verifyReplayGain } from "./replaygain";
@@ -18,6 +19,7 @@ import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 import { verifyAppearance } from "./appearance";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
+import { preparePublicConnection, verifyConnection, verifyRecovery } from "./connection";
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -26,16 +28,16 @@ const checks: string[] = [];
 const radioFixture = await createRadioFixture();
 const plainMediaAuth: boolean[] = [];
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-const driver = Bun.spawn(["tauri-driver"], {
+let driver = Bun.spawn(["tauri-driver"], {
   stdout: Bun.file(`${artifactDir}/driver.log`), stderr: Bun.file(`${artifactDir}/native.log`),
 });
 const media = Bun.serve({
   hostname: "127.0.0.1", port: 4200,
   routes: {
-    "/multitrack.mkv": () => new Response(Bun.file("/fixtures/multitrack.mkv")),
+    "/multitrack.mkv": () => new Response(Bun.file("/mnt/fixtures/multitrack.mkv")),
     "/radio.mp3": request => {
       plainMediaAuth.push(request.headers.has("authorization") || request.headers.has("x-emby-token"));
-      return new Response(Bun.file("/fixtures/radio.mp3"));
+      return new Response(Bun.file("/mnt/fixtures/radio.mp3"));
     },
     "/web.html": () => new Response('<!doctype html><title>Local web fixture</title><meta property="og:image" content="http://127.0.0.1:4200/logo.svg"><video controls poster="http://127.0.0.1:4200/logo.svg"><source src="/dash/manifest.mpd" type="application/dash+xml"></video>', { headers: { "Content-Type": "text/html" } }),
     "/dash/:file": request => new Response(Bun.file(`/web-fixtures/${request.params.file}`)),
@@ -534,22 +536,8 @@ try {
   await verifyVideoQuality({ ui, httpRemote: httpRemote!, otherRemote: secondHttpRemote, until, clients, artifactDir, screenshot });
   await secondHttpRemote.minimize();
 
-  await section("Library");
-  await click('.library-heading button');
-  let folderWindow = "";
-  await until("native library folder picker opens", async () => {
-    folderWindow = (await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output.split("\n")[0] ?? "";
-    return !!folderWindow;
-  });
-  assert.equal((await xdotool("windowactivate", "--sync", folderWindow)).code, 0);
-  // Leave GTK's Recent view before submitting an explicit folder location.
-  assert.equal((await xdotool("key", "--clearmodifiers", "alt+Home")).code, 0);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+l")).code, 0);
-  assert.equal((await xdotool("type", "--clearmodifiers", "/fixtures/")).code, 0);
-  assert.equal((await xdotool("key", "Return")).code, 0);
-  await Bun.sleep(300);
-  if ((await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output) await xdotool("key", "Return");
-  await until("native folder selection scans media for paired remotes", async () => {
+  await addTVFolder(ui, until, "fixtures");
+  await until("Sources folder selection scans media for paired remotes", async () => {
     const { sources } = await api("/api/library/sources");
     return sources.some((source: any) => source.status === "ready" && source.itemCount >= 2);
   }, 30_000);
@@ -591,11 +579,14 @@ try {
   const persistedVideoLibrary = await verifyVideoLibrary(musicContext);
   const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
+  const persistedFolderSettings = await verifyFolderSettings(musicContext);
   const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
   const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
   const persistedProfiles = await verifyProfileManagement(profileContext);
   const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
+  const connectionContext = { origin, ui, httpRemote, until, artifactDir };
+  await verifyConnection(connectionContext);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -609,7 +600,17 @@ try {
   });
   assert.ok(performance.now() - exitStarted < 3_000, "desktop and sidecar shut down within three seconds");
   await verifyShutdownReport?.();
-  await until("real HTTP browser disables stale controls after host shutdown", async () => await httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Reconnecting' && document.querySelector('#media-url')?.disabled"));
+  await until("real HTTP browser distinguishes server unavailability and disables stale controls after host shutdown", async () => await httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Server unavailable' && document.querySelector('#media-url')?.disabled"));
+  // Restart the local launcher with a fresh recovery environment after the long
+  // playback checks, so its ten-minute claim deadline starts at this restart.
+  driver.kill();
+  await driver.exited;
+  const recoveryCode = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+  driver = Bun.spawn(["tauri-driver"], {
+    env: { ...process.env, COUCH_ADMIN_RECOVERY_CODE: recoveryCode },
+    stdout: Bun.file(`${artifactDir}/recovery-driver.log`), stderr: Bun.file(`${artifactDir}/recovery-native.log`),
+  });
+  await until("local recovery launcher is ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
@@ -632,6 +633,8 @@ try {
   await persistedAppearance.verifyAfterRestart();
   await persistedJellyfinSettings?.verifyAfterRestart();
   await persistedRadioSettings.verifyAfterRestart();
+  await persistedFolderSettings.verifyAfterRestart();
+  await verifyRecovery(connectionContext, recoveryCode);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
   assert.equal((await api("/api/library/items?q=Linux&offset=0&limit=30")).items[0].id, library.items[0].id);
@@ -645,6 +648,7 @@ try {
   await click(".provider-views button:nth-child(2)");
   await until("provider favorites survive desktop restart in the native Saved view", async () => await execute("return document.querySelector('.provider-item h4')?.textContent") === providerFavorite.title);
 
+  const publicConnection = await preparePublicConnection(connectionContext, secondHttpRemote);
   await radioAcceptance.prepareShutdown();
   clients.forEach(client => client.socket.close());
   const radioExitStarted = performance.now();
@@ -655,12 +659,14 @@ try {
   });
   assert.ok(performance.now() - radioExitStarted < 3_000, "Radio backoff does not delay desktop shutdown");
   await radioAcceptance.assertShutdown();
+  await publicConnection.assertOffline();
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
   await until("desktop reconnects after shutdown during radio backoff", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   clients.forEach(client => client.connect());
   await radioAcceptance.assertAfterRestart();
+  await publicConnection.assertAfterRestart();
 
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {

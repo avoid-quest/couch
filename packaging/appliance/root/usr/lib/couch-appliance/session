@@ -1,0 +1,51 @@
+#!/bin/bash
+set -eu
+[ "$(id -un)" = couch-tv ] || { echo 'Couch session requires the couch-tv runtime account' >&2; exit 1; }
+export XDG_SESSION_TYPE=x11
+systemctl --user import-environment DISPLAY XAUTHORITY XDG_SESSION_TYPE
+dbus-update-activation-environment --systemd DISPLAY XAUTHORITY XDG_SESSION_TYPE
+xset s off
+xset -dpms
+
+# Start on the attached TV when available, with the laptop panel as a fallback.
+output=$(xrandr --query | awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}')
+if [ -n "$output" ]; then
+    xrandr --output "$output" --mode 1920x1080 --primary || xrandr --output "$output" --auto --primary
+    while read -r panel; do xrandr --output "$panel" --off; done < <(xrandr --query | awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}')
+fi
+
+openbox --config-file /usr/share/couch-appliance/openbox.xml &
+wm=$!
+notice=
+cleanup() {
+    trap - EXIT HUP INT TERM
+    systemctl --user stop couch-tv.service || true
+    [ -z "$notice" ] || kill "$notice" 2>/dev/null || true
+    kill "$wm" 2>/dev/null || true
+    wait || true
+}
+trap cleanup EXIT HUP INT TERM
+systemctl --user reset-failed couch-tv.service || true
+systemctl --user start couch-tv.service || true
+
+# Keep LightDM's session alive after the restart limit, so it cannot reset the
+# budget by logging in again. Recovery remains visible until an admin restarts it.
+while kill -0 "$wm" 2>/dev/null; do
+    state=$(systemctl --user show couch-tv.service --property=ActiveState --value)
+    if [[ "$state" = failed || "$state" = inactive ]]; then
+        if [ -z "$notice" ]; then
+            logger -t couch-session "Couch TV is $state. Inspect couch-session logs; recover with couch-session restart."
+            xmessage -center -buttons '' 'Couch TV needs attention.
+
+From SSH or Ctrl+Alt+F3, sign in with your administrator account.
+Run: sudo couch-session logs
+Then: sudo couch-session restart' &
+            notice=$!
+        fi
+    elif [ -n "$notice" ]; then
+        kill "$notice" 2>/dev/null || true
+        wait "$notice" 2>/dev/null || true
+        notice=
+    fi
+    sleep 2
+done

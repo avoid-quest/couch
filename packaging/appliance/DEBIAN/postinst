@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+[ "$1" = configure ] || exit 0
+created=false
+if ! getent passwd couch-tv >/dev/null; then
+    adduser --system --group --home /var/lib/couch --shell /bin/sh couch-tv
+    created=true
+fi
+# An unrelated existing account must never become the automatic TV login.
+[ "$(getent passwd couch-tv | cut -d: -f6)" = /var/lib/couch ]
+[ "$(id -Gn couch-tv)" = couch-tv ]
+[ "$(passwd -S couch-tv | awk '{print $2}')" = L ]
+install -d -o couch-tv -g couch-tv -m 0700 /var/lib/couch
+install -d -o couch-tv -g couch-tv -m 0700 /var/lib/couch/.local /var/lib/couch/.local/share
+if $created; then
+    install -d -o couch-tv -g couch-tv -m 0700 /var/lib/couch/.local/state /var/lib/couch/.local/state/couch-appliance
+    install -o couch-tv -g couch-tv -m 0600 /dev/null /var/lib/couch/.local/state/couch-appliance/initialize-audio
+fi
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+fi

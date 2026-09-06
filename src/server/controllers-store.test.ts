@@ -172,3 +172,25 @@ test("installation names persist separately from watching profiles and controlle
   close(first);
   expect(open(file).installationName()).toBe("Café TV");
 });
+
+test("device management persists names and roles while protecting the final administrator", () => {
+  const file = path();
+  const store = open(file);
+  const oneToken = store.pair("One"), twoToken = store.pair("Two");
+  const one = store.controllerForToken(oneToken)!, two = store.controllerForToken(twoToken)!;
+  store.setControllerRole(one.id, "administrator");
+  for (const mutate of [() => store.revokeController(one.id), () => store.setControllerRole(one.id, "controller")]) expect(mutate).toThrow("Keep at least one administrator");
+  expect(store.renameController(two.id, "  Kitchen remote  ").name).toBe("Kitchen remote");
+  expect(() => store.setControllerRole(two.id, "host")).toThrow("Choose Controller or Administrator");
+  store.setControllerRole(two.id, "administrator");
+  store.setControllerRole(one.id, "controller");
+  store.revokeController(one.id);
+  expect(store.isPaired(oneToken)).toBeFalse();
+  expect(store.controllerForToken(oneToken)).toBeNull();
+  expect(() => store.renameController(one.id, "Gone")).toThrow("no longer paired");
+  close(store);
+  const reopened = open(file);
+  expect(reopened.controllers()).toEqual([expect.objectContaining({ id: two.id, name: "Kitchen remote", role: "administrator" })]);
+  expect(reopened.controllerForToken(twoToken)?.role).toBe("administrator");
+  expect(() => reopened.revokeController(two.id)).toThrow("Keep at least one administrator");
+});

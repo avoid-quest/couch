@@ -1,3 +1,4 @@
+import { addTVFolder, closeFolderSources, folderCard, openFolderSources } from "./folder-settings";
 import { strict as assert } from "node:assert";
 import { rename } from "node:fs/promises";
 import type { LibraryItem, LibrarySource, VideoShow } from "../../src/shared/library";
@@ -13,12 +14,6 @@ const active = '.library-panel [data-slot="tabs-content"][data-state="active"] .
 const labeled = (value: string) => `[aria-label=${JSON.stringify(value)}]`;
 const row = (id: string) => `${active} [data-video-item="${id}"]`;
 
-async function xdotool(...args: string[]) {
-  const child = Bun.spawn(["xdotool", ...args], { stdout: "pipe", stderr: "inherit" });
-  const output = await new Response(child.stdout).text();
-  return { code: await child.exited, output: output.trim() };
-}
-
 async function nativeScreenshot(context: Context, name: string) {
   await context.httpRemote.minimize();
   await context.ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code]').forEach(element => element.style.visibility = 'hidden')");
@@ -30,16 +25,12 @@ async function rescan(context: Context, sourceId: string, status = "ready") {
   const { ui, until, api, clients } = context;
   const version = clients[0]!.state!.libraryVersion ?? 0;
   await context.httpRemote.minimize();
-  await ui.section("Library");
-  await ui.click('[data-action="library-folders"]');
-  const index = await ui.execute("return [...document.querySelectorAll('.library-folders li')].findIndex(item => item.textContent.includes('/video-fixtures'))");
-  assert.ok(index >= 0);
-  await ui.button("Scan again", `.library-folders li:nth-child(${index + 1})`);
+  await openFolderSources(ui, until);
+  await ui.button("Scan again", folderCard(sourceId));
   await until(`video library rescan commits ${status} and invalidates both controllers`, async () =>
     (await api("/api/library/sources")).sources.some((source: LibrarySource) => source.id === sourceId && source.status === status)
     && clients.every(client => (client.state?.libraryVersion ?? 0) > version));
-  await ui.key(keys.escape);
-  await until("video folder dialog closes before browsing", () => ui.execute("return !document.querySelector('[role=dialog]')"));
+  await closeFolderSources(ui, until);
 }
 
 async function restoreQueue(context: Context, queue: QueueEntry[]) {
@@ -63,7 +54,7 @@ async function loadedArtwork(ui: UiDriver, context: Context, width: number, desc
 
 async function verifySelectedShowRefresh(context: Context, source: LibrarySource, show: VideoShow) {
   const { ui, httpRemote, until, api } = context;
-  const nfoPath = "/video-fixtures/Observatory/tvshow.nfo", fanartPath = "/video-fixtures/Observatory/fanart.jpg";
+  const nfoPath = "/mnt/video-fixtures/Observatory/tvshow.nfo", fanartPath = "/mnt/video-fixtures/Observatory/fanart.jpg";
   const nfo = await Bun.file(nfoPath).text(), fanart = await Bun.file(fanartPath).bytes();
   await httpRemote.minimize();
   await ui.section("Library");
@@ -76,7 +67,7 @@ async function verifySelectedShowRefresh(context: Context, source: LibrarySource
   await httpRemote.ui.button("Search", active);
   try {
     await Bun.write(nfoPath, nfo.replace(show.title, "Revised observatory journals").replace(show.plot!, "Updated local show plot."));
-    await Bun.write(fanartPath, await Bun.file("/video-fixtures/Movie/Observatory-poster.jpg").bytes());
+    await Bun.write(fanartPath, await Bun.file("/mnt/video-fixtures/Movie/Observatory-poster.jpg").bytes());
     await rescan(context, source.id);
     const current = (await api(`/api/library/items?showId=${show.id}&limit=1`)).items[0].video.show as VideoShow;
     assert.equal(current.title, "Revised observatory journals");
@@ -110,27 +101,10 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await httpRemote.minimize();
   await ui.section("Library");
   await ui.execute("window.__videoLibraryStage = document.querySelector('.video-stage')");
-  await ui.button("Add folder", ".library-heading");
-  let picker = "";
-  await until("native folder picker opens for the playable video catalog", async () => { picker = (await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output.split("\n")[0] ?? ""; return !!picker; });
-  assert.ok(await Bun.file("/video-fixtures/Movie/Observatory.mkv").exists(), "The playable movie exists in this native test container");
-  assert.equal((await xdotool("windowactivate", "--sync", picker)).code, 0);
-  assert.equal((await xdotool("getwindowfocus")).output, picker, "Physical input targets the native folder picker");
-  // Leave GTK's Recent/search view before entering an absolute folder location.
-  assert.equal((await xdotool("key", "--clearmodifiers", "alt+Home")).code, 0);
-  await Bun.sleep(250);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+l")).code, 0);
-  await Bun.sleep(150);
-  assert.equal((await xdotool("key", "--clearmodifiers", "ctrl+a")).code, 0);
-  assert.equal((await xdotool("type", "--clearmodifiers", "--delay", "25", "/video-fixtures/")).code, 0);
-  await Bun.sleep(150);
-  await nativeScreenshot(context, "native-video-folder-location");
-  assert.equal((await xdotool("key", "--clearmodifiers", "Return")).code, 0);
-  await Bun.sleep(300);
-  if ((await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output) await xdotool("key", "Return");
-  await until("native folder location is accepted and the chooser closes", async () => !(await xdotool("search", "--onlyvisible", "--name", "Add a media folder on this player")).output);
+  assert.ok(await Bun.file("/mnt/video-fixtures/Movie/Observatory.mkv").exists(), "The playable movie exists in this native test container");
+  await addTVFolder(ui, until, "video-fixtures");
   let source!: LibrarySource;
-  await until("actual native folder selection scans two movies and four multi-season episodes", async () => {
+  await until("actual Sources folder selection scans two movies and four multi-season episodes", async () => {
     source = (await api("/api/library/sources")).sources.find((item: LibrarySource) => item.name === "video-fixtures");
     return source?.status === "ready" && source.itemCount === 6;
   }, 30_000);
@@ -150,7 +124,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   assert.ok(malformed?.available && !malformed.artworkId, "Malformed NFO/artwork leaves a playable file with embedded title fallback");
   const allItems = [movie, ...episodes, malformed] as LibraryItem[];
   const ids = allItems.map(item => item.id).sort();
-  for (const item of allItems) assert.ok(!JSON.stringify(item).includes("/video-fixtures") && !JSON.stringify(item).includes("Original sidecar data"));
+  for (const item of allItems) assert.ok(!JSON.stringify(item).includes("/mnt/video-fixtures") && !JSON.stringify(item).includes("Original sidecar data"));
   const artworkUrl = `${origin}/api/library/artwork/${movie.artworkId}`;
   assert.equal((await fetch(artworkUrl, { headers: { origin } })).status, 401);
 
@@ -219,7 +193,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   for (const replacement of ["episode", "stop"] as const) {
     let requested = false;
     const gate = Promise.withResolvers<void>();
-    const delayed = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() { requested = true; await gate.promise; return new Response(Bun.file("/fixtures/multitrack.mkv")); } });
+    const delayed = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch() { requested = true; await gate.promise; return new Response(Bun.file("/mnt/fixtures/multitrack.mkv")); } });
     try {
       const entryId = crypto.randomUUID();
       await clients[0]!.command({ type: "enqueue", entry: { id: entryId, title: "Pending catalog source", source: `http://127.0.0.1:${delayed.port}/movie.mkv` } });
@@ -243,14 +217,14 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await rescan(context, source.id);
   assert.deepEqual((await api(`/api/library/items?showId=${show.id}`)).items.map((item: LibraryItem) => item.id), episodes.map(item => item.id));
   assert.ok(Math.abs((await currentMovie()).progress!.position - 7) < 0.5);
-  const nfo = await Bun.file("/video-fixtures/Movie/Observatory.nfo").text();
-  await Bun.write("/video-fixtures/Movie/Observatory.nfo", nfo.replace(videoFixtureMovie, "Rescanned observatory title"));
+  const nfo = await Bun.file("/mnt/video-fixtures/Movie/Observatory.nfo").text();
+  await Bun.write("/mnt/video-fixtures/Movie/Observatory.nfo", nfo.replace(videoFixtureMovie, "Rescanned observatory title"));
   await rescan(context, source.id);
   assert.equal((await api("/api/library/items?q=Rescanned")).items[0].id, movie.id);
-  await Bun.write("/video-fixtures/Movie/Observatory.nfo", nfo);
+  await Bun.write("/mnt/video-fixtures/Movie/Observatory.nfo", nfo);
   await rescan(context, source.id);
   await verifySelectedShowRefresh(context, source, show);
-  await rename("/video-fixtures", "/video-fixtures-offline");
+  await rename("/mnt/video-fixtures", "/mnt/video-fixtures-offline");
   await rescan(context, source.id, "unavailable");
   const offlineMovie = await currentMovie();
   assert.equal(offlineMovie.available, false);
@@ -266,7 +240,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await ui.section("Library");
   await nativeScreenshot(context, "native-video-offline");
   await Bun.write(`${artifactDir}/video-library-before-restart.json`, JSON.stringify({ source, movie: offlineMovie, show, episodes, ids, note: "Source unavailable; real native H264/AAC fixture and decoded local artwork. Software rendering and silent audio." }, null, 2));
-  await Bun.write(`${artifactDir}/video-library-fixture-manifest.json`, await Bun.file("/video-fixtures-offline/fixture-manifest.json").text());
+  await Bun.write(`${artifactDir}/video-library-fixture-manifest.json`, await Bun.file("/mnt/video-fixtures-offline/fixture-manifest.json").text());
   await ui.section("Queue");
   return { source, movie: offlineMovie, show, ids, queue };
 }
@@ -297,7 +271,7 @@ export async function assertVideoLibraryAfterRestart(context: Context, expected:
   assert.deepEqual(freshArtwork, { status: 200, mimeType: "image/jpeg", hash: movie.artworkId, width: 240, height: 360 }, "Fresh authenticated bytes for the expected movie decode after host restart while its source remains offline");
   await loadedArtwork(httpRemote.ui, context, 240, "HTTP movie card displays persisted artwork after offline restart", row(movie.id));
   await httpRemote.screenshot("http-video-offline-restart");
-  await rename("/video-fixtures-offline", "/video-fixtures");
+  await rename("/mnt/video-fixtures-offline", "/mnt/video-fixtures");
   await rescan(context, expected.source.id);
   await httpRemote.restore();
   await until("restoring the source enables the same movie UUID and resume action on the phone", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0] + ' button[aria-label^=Resume]:enabled')", [row(movie.id)]));
