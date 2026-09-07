@@ -19,6 +19,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
     deny_unknown_fields
 )]
 pub enum Action {
+    Restart {
+        confirm_interrupt: bool,
+    },
     Status {
         request_id: Option<String>,
     },
@@ -583,6 +586,45 @@ async fn backup(
     Ok(())
 }
 
+fn verify_supervisor(properties: &str, cgroup: &str, pid: u32) -> Result<(), String> {
+    let values: std::collections::HashMap<_, _> = properties
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .collect();
+    let owner = pid.to_string();
+    let group = values.get("ControlGroup").copied().unwrap_or("");
+    if values.get("MainPID") != Some(&owner.as_str())
+        || group.is_empty()
+        || !cgroup
+            .lines()
+            .any(|line| line.splitn(3, ':').nth(2) == Some(group))
+        || values.get("ActiveState") != Some(&"active")
+        || values.get("Restart") != Some(&"always")
+        || values.get("KillMode") != Some(&"control-group")
+        || values
+            .get("RestartPreventExitStatus")
+            .is_none_or(|value| !value.is_empty())
+    {
+        return Err("Couch must be the active systemd service owner with its supported restart policy. Inspect couch-tv.service through SSH.".into());
+    }
+    Ok(())
+}
+async fn supervised_restart() -> Result<(), String> {
+    let output = tokio::time::timeout(Duration::from_secs(5), tokio::process::Command::new("/usr/bin/systemctl")
+        .args(["--user", "show", "couch-tv.service", "--property=MainPID,ControlGroup,ActiveState,Restart,KillMode,RestartPreventExitStatus"])
+        .kill_on_drop(true).output()).await.map_err(|_| "The systemd service inspection timed out.")?.map_err(error)?;
+    if !output.status.success() {
+        return Err(
+            "The installed systemd service is unavailable. Inspect Couch through SSH.".into(),
+        );
+    }
+    verify_supervisor(
+        &String::from_utf8(output.stdout).map_err(error)?,
+        &fs::read_to_string("/proc/self/cgroup").map_err(error)?,
+        std::process::id(),
+    )
+}
+
 pub async fn run(
     app: tauri::AppHandle,
     directory: PathBuf,
@@ -636,10 +678,39 @@ pub async fn run(
                 }
                 return Ok(serde_json::json!({"ok":true}));
             }
+            if let Action::Restart { confirm_interrupt } = request.action {
+                if !confirm_interrupt {
+                    return Err("Confirm interruption before restarting Couch.".into());
+                }
+                supervised_restart().await?;
+                let nonce = uuid::Uuid::new_v4().to_string();
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                *app.state::<crate::Host>()
+                    .update_checkpoint
+                    .lock()
+                    .expect("checkpoint lock poisoned") = Some((nonce.clone(), sender));
+                disrupted_request.store(true, std::sync::atomic::Ordering::Relaxed);
+                app.state::<crate::Host>().report_message(serde_json::json!({"type":"appimageQuiesce","nonce":nonce,"restart":true,"confirmInterrupt":true,"whenIdle":false}));
+                let (closed, result) = tokio::time::timeout(Duration::from_secs(30), receiver)
+                    .await
+                    .map_err(|_| "The restart checkpoint timed out. Inspect Couch through SSH.")?
+                    .map_err(error)?;
+                disrupted_request.store(closed, std::sync::atomic::Ordering::Relaxed);
+                result?;
+                if !closed { return Err("The restart checkpoint did not close control admission.".into()); }
+                report(serde_json::json!({"ok":true,"accepted":true}));
+                // Keep HTTP alive long enough for the authenticated result. The
+                // ordinary host exit drains the coordinator; systemd replaces both.
+                tokio::time::sleep(Duration::from_millis(750)).await;
+                app.exit(0);
+                return Ok(serde_json::json!({"ok":true}));
+            }
             let trust = enrollment()?;
             let path = directory.join("candidate.AppImage");
             match request.action {
-                Action::Status { .. } | Action::Complete { .. } => unreachable!(),
+                Action::Restart { .. } | Action::Status { .. } | Action::Complete { .. } => {
+                    unreachable!()
+                }
                 Action::Check { .. } | Action::CheckRepair {} => {
                     let channel = match request.action {
                         Action::Check { channel } => Some(channel),
@@ -676,6 +747,7 @@ pub async fn run(
                             "Installation requires the enrolled systemd AppImage path.".into()
                         );
                     }
+                    supervised_restart().await?;
                     let (mut update, summary) = if repair {
                         if current_identity()["candidateId"] != *candidate_id {
                             return Err("Refresh the running release before repair.".into());
@@ -700,7 +772,9 @@ pub async fn run(
                         );
                     }
                     journal(&directory, &mut transaction, "accepted", None)?;
-                    report(serde_json::json!({"ok":true,"transaction":transaction}));
+                    report(
+                        serde_json::json!({"ok":true,"accepted":true,"transaction":transaction}),
+                    );
                     let mut disrupted = false;
                     let installation = async {
                         let bytes = if repair {
@@ -830,12 +904,35 @@ pub async fn run(
                 report(serde_json::json!({"error":message}));
             }
         }
+        if !disrupted_request.load(std::sync::atomic::Ordering::Relaxed) {
+            app.state::<crate::Host>()
+                .update_busy
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn restart_requires_current_supervised_owner_and_clean_exit_policy() {
+        let valid = "MainPID=42\nControlGroup=/user.slice/couch-tv.service\nActiveState=active\nRestart=always\nKillMode=control-group\nRestartPreventExitStatus=";
+        let group = "0::/user.slice/couch-tv.service\n";
+        assert!(verify_supervisor(valid, group, 42).is_ok());
+        for invalid in [
+            valid.replace("MainPID=42", "MainPID=41"),
+            valid.replace("Restart=always", "Restart=on-failure"),
+            valid.replace("KillMode=control-group", "KillMode=process"),
+            valid.replace("ActiveState=active", "ActiveState=failed"),
+            valid.replace("RestartPreventExitStatus=", "RestartPreventExitStatus=0"),
+        ] {
+            assert!(verify_supervisor(&invalid, group, 42).is_err());
+        }
+        assert!(verify_supervisor(valid, "0::/unrelated.service", 42).is_err());
+        // NRestarts does not expose systemd's current rate-limit counter.
+        assert!(verify_supervisor(&format!("{valid}\nNRestarts=999"), group, 42).is_ok());
+    }
     const KEY: &str = include_str!("../tests/fixtures/update/public.key");
     const SIGNATURE: &str = include_str!("../tests/fixtures/update/archive.sig");
     const ARCHIVE: &[u8] = include_bytes!("../tests/fixtures/update/archive");

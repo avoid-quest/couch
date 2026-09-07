@@ -119,6 +119,78 @@ try {
   assert.notEqual(supervised(), firstPid);
   assert.ok(state.queue.some((entry: any) => entry.id === "installed-tone"), "Restart preserves the queued item");
   assert.deepEqual(await api("/api/build"), build);
+  // Optional newer-baseline journey. The signed A/B runner may deliberately use
+  // an older A without General restart, so this must be explicitly requested.
+  if (process.env.COUCH_QUALIFY_GENERAL_RESTART === "1") {
+    inside("apt-get", "install", "-y", "--no-install-recommends", "sqlite3");
+    inside("mkdir", "-p", "/media/couch-restart");
+    inside("ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "120", "/media/couch-restart/Restart.flac");
+    const { sources } = await api("/api/library/sources", { path: "/media/couch-restart" });
+    const source = sources.find((source: any) => source.path === "/media/couch-restart");
+    assert.ok(source, "The generated media folder was registered");
+    await api(`/api/library/sources/${source.id}/scan`, {});
+    let local: any;
+    await until("Installed folder scan indexes resumable local media", async () => {
+      local = (await api("/api/library/items?q=Restart")).items[0];
+      return local;
+    });
+    const command = (action: unknown) => socket!.send(JSON.stringify({ type: "command", requestId: crypto.randomUUID(), action }));
+    command({ type: "enqueueLibrary", itemId: local.id, entryId: "installed-restart-local", playNow: true });
+    await until("Indexed local playback has dirty progress between periodic writes", async () => state.currentEntryId === "installed-restart-local" && state.player.status === "playing" && state.player.position > 3 && state.player.position < 9);
+    const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
+    const sql = (statement: string) => inside("sqlite3", `${dataDir}/couch.sqlite`, statement);
+    const stored = () => Number(sql("SELECT printf('%!.26g', position) FROM viewing_progress WHERE profileId='" + seed.profileId + "' AND mediaId='library:" + local.id + "';"));
+    const before = stored();
+    assert.ok(state.player.position > before + 1, "The observed position is newer than its periodic save");
+    const beforePid = supervised();
+    sql("CREATE TRIGGER reject_restart_checkpoint BEFORE INSERT ON viewing_progress BEGIN SELECT RAISE(FAIL, 'qualification checkpoint failure'); END;");
+    const rejected = await fetch(`${origin}/api/settings/restart`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[0]}`, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ confirmInterrupt: true }) });
+    assert.equal(rejected.status, 409);
+    assert.match((await rejected.json()).error, /Could not save viewing progress/);
+    assert.equal((await api("/api/controllers/me")).authority, "administrator");
+    assert.equal(supervised(), beforePid, "Failed checkpoint does not retire HTTP or the native owner");
+    sql("DROP TRIGGER reject_restart_checkpoint;");
+    // Exercise the administrator's actual General confirmation, not an SSH restart.
+    const admin = browsers[0]!;
+    await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
+    const click = (text: string) => execute(admin, "const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === arguments[0] && !b.disabled); if (!button) return false; button.click(); return true", [text]);
+    await until("Administrator opens restart confirmation", async () => click("Restart Couch"));
+    let observed = 0, beforeRestart = 0;
+    await until("Restart confirmation has unsaved native progress", async () => {
+      beforeRestart = stored(); observed = state.player.position;
+      return observed > beforeRestart + 1;
+    });
+    assert.equal(await click("Confirm restart"), true);
+    const savedPreferences = state.preferences;
+    await until("General restart replaces the native systemd owner", async () => service("show", "couch-tv.service", "-p", "MainPID", "--value") !== beforePid && service("show", "couch-tv.service", "-p", "MainPID", "--value") !== "0");
+    await retained("Administrator restart retains both browser identities without autoplay");
+    assert.deepEqual(state.preferences, savedPreferences);
+    assert.ok(state.queue.some((entry: any) => entry.id === "installed-restart-local"));
+    const saved = stored();
+    await Bun.write(`${fixtures}/restart-progress.json`, JSON.stringify({ before, beforeRestart, observed, saved }));
+    assert.ok(saved >= observed, `Restart saves the latest dirty native position: ${saved} >= ${observed}`);
+    await until("General reports confirmed coordinator replacement", async () => execute(admin, "return document.body.textContent.includes('Couch restarted. Playback is stopped.')"));
+    // systemd does not expose its current start-limit counter to the app. Prove
+    // an exhausted budget fails honestly and operator recovery retains data.
+    const dropin = "/etc/systemd/user/couch-tv.service.d/qualification-restart-limit.conf";
+    inside("sh", "-c", 'printf "[Unit]\\nStartLimitIntervalSec=600\\nStartLimitBurst=1\\n" > "$1"', "sh", dropin);
+    service("daemon-reload");
+    service("reset-failed", "couch-tv.service");
+    service("restart", "couch-tv.service");
+    await retained("One start consumes the disposable supervisor restart budget");
+    await execute(admin, "const b = document.querySelector('button[aria-label=Settings]'); if (b && !document.querySelector('[role=tablist]')) b.click(); return true");
+    await until("Administrator requests restart with the exhausted budget", async () => click("Restart Couch"));
+    assert.equal(await click("Confirm restart"), true);
+    await until("Systemd truthfully reports start-limit-hit", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
+    await until("General reports missing reconnect and SSH recovery", async () => execute(admin, "return document.body.textContent.includes('Couch did not reconnect.')"), 75_000);
+    inside("rm", dropin);
+    service("daemon-reload");
+    service("reset-failed", "couch-tv.service");
+    service("start", "couch-tv.service");
+    await retained("Operator recovery after exhausted restart budget retains paired browsers");
+    assert.ok(stored() >= observed);
+    assert.ok(state.queue.some((entry: any) => entry.id === "installed-restart-local"));
+  }
   // Optional signed journey. The caller supplies a verified B receipt and enrolls
   // its signed feed; this consumer never publishes or chooses an archive URL.
   const updateReceipt = process.env.COUCH_QUALIFY_UPDATE_RECEIPT;

@@ -140,3 +140,21 @@ test("failed status dispatch preserves the running mutation", async () => {
   expect(await checking).toEqual(candidate);
   native.close();
 });
+
+test("accepted installation retains the restart reservation until terminal completion", async () => {
+  const sent: { id: string; action: AppImageUpdateAction }[] = [];
+  const native = createNativeAppImageUpdates((id, action) => sent.push({ id, action }));
+  const installing = native.request({ op: "install", candidateId: candidate.summary.id, requestId: "d".repeat(32), confirmInterrupt: true });
+  native.receive({ requestId: sent[0]!.id, ok: true, accepted: true });
+  await installing;
+  await expect(native.restart(true)).rejects.toThrow("already running");
+  const status = native.request({ op: "status" });
+  native.receive({ requestId: sent[1]!.id, ok: true });
+  await status;
+  native.receive({ requestId: sent[0]!.id, ok: true });
+  const restarting = native.restart(true);
+  await expect(native.feed.check("preview", new AbortController().signal)).rejects.toThrow("already running");
+  native.receive({ requestId: sent[2]!.id, error: "The service is unsupervised." });
+  await expect(restarting).rejects.toThrow("unsupervised");
+  native.close();
+});

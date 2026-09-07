@@ -1164,3 +1164,45 @@ test("active and uncertain recordings defer idle updates, while confirmed future
     now += 300_000; expect(hub.idleReason()).toBeNull();
   } finally { db.close(); }
 });
+
+test("General restart requires an administrator confirmation and installed supervisor", async () => {
+  const { hub } = fixture();
+  const admin = await pair(hub), guest = await pair(hub);
+  await claimAdministrator(hub, admin);
+  const restart = (token: string, confirmInterrupt: boolean) => controllerApi(hub, token, "/api/settings/restart", "POST", { confirmInterrupt });
+  expect((await restart(guest, true)).status).toBe(403);
+  expect((await restart(hostToken, true)).status).toBe(403);
+  expect((await restart(admin, false)).status).toBe(400);
+  expect((await restart(admin, true)).status).toBe(409);
+  expect((await controllerApi(hub, admin, "/api/build")).status).toBe(200);
+});
+
+test("restart checkpoint failure preserves authenticated HTTP, playback and dirty progress for retry", async () => {
+  let hub!: Hub;
+  const fixtureResult = fixture(undefined, undefined, undefined, { restart: async () => hub.prepareRestart() });
+  hub = fixtureResult.hub;
+  const admin = await pair(hub);
+  await claimAdministrator(hub, admin);
+  hub.session.observe(idle);
+  hub.session.command({ type: "enqueue", entry: { id: "restart-local", title: "Restart local", source: "file:///restart.mp4" }, playNow: true });
+  const player = { ...idle, playbackId: hub.session.state.player.playbackId, status: "playing" as const, position: 12, duration: 100 };
+  hub.session.observe(player);
+  hub.session.observe({ ...player, position: 17 });
+  const db = new Database(fixtureResult.databasePath);
+  try {
+    db.run("CREATE TRIGGER reject_restart_progress BEFORE INSERT ON viewing_progress BEGIN SELECT RAISE(FAIL, 'fixture disk failure'); END");
+    const response = await controllerApi(hub, admin, "/api/settings/restart", "POST", { confirmInterrupt: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "Could not save viewing progress. Check the TV's storage." });
+    expect((await controllerApi(hub, admin, "/api/settings")).status).toBe(200);
+    expect(hub.session.state.player.playbackId).toBe(player.playbackId);
+    expect(() => hub.session.command({ type: "volume", volume: 44 })).not.toThrow();
+    db.run("DROP TRIGGER reject_restart_progress");
+    const accepted = await controllerApi(hub, admin, "/api/settings/restart", "POST", { confirmInterrupt: true });
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toMatchObject({ ok: true, instanceId: expect.any(String) });
+    expect((await controllerApi(hub, admin, "/api/settings/restart")).status).toBe(200);
+    expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(17);
+    expect(() => hub.session.command({ type: "volume", volume: 30 })).toThrow("update");
+  } finally { db.close(); }
+});
