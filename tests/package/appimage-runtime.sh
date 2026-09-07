@@ -21,7 +21,10 @@ dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/product
 for command in bun node npm cargo rustc cc gcc g++ make; do
   if command -v "$command"; then echo "Unexpected development command: $command"; exit 1; fi
 done
-if dpkg-query -W -f='${binary:Package}\n' | grep -E -- '(^build-essential$|-dev(:amd64)?$)'; then exit 1; fi
+# Ubuntu systemd depends on systemd-dev's shared XML/directory metadata, not development libraries.
+dpkg-query -L systemd-dev > /evidence/systemd-dev-files.txt
+if grep -vE '^/(\.|usr(/share(/.*)?)?)$' /evidence/systemd-dev-files.txt; then exit 1; fi
+if dpkg-query -W -f='${binary:Package}\n' | grep -v '^systemd-dev$' | grep -E -- '(^build-essential$|-dev(:amd64)?$)'; then exit 1; fi
 test -r /usr/lib/x86_64-linux-gnu/dri/iHD_drv_video.so
 dpkg-query -W va-driver-all intel-media-va-driver > /evidence/va-drivers.txt
 ffprobe -version > /evidence/ffprobe-version.txt

@@ -31,12 +31,24 @@ class Download(unittest.TestCase):
             zipped.writestr('couch.deb', b'test')
         raw = archive.getvalue()
         artifact = dict(expired=False, name='couch-release-42.2', workflow_run=dict(id=42, head_sha='a'*40), digest='sha256:' + hashlib.sha256(raw).hexdigest())
-        return {'actions/artifacts/123': json.dumps(artifact).encode(), 'actions/runs/42/attempts/2': json.dumps(self.run).encode(), 'actions/artifacts/123/zip': raw}
+        return {'actions/artifacts/123': json.dumps(artifact).encode(), 'actions/runs/42': json.dumps(self.run).encode(), 'actions/artifacts/123/zip': raw}
 
     def test_exact_authenticated_attempt_downloads(self):
         with patch.object(downloader, 'api', side_effect=self.responses().__getitem__):
             downloader.download(123, self.destination)
         self.assertEqual((self.destination / 'couch.deb').read_bytes(), b'test')
+
+    def test_successful_retry_reuses_an_earlier_build(self):
+        self.run['run_attempt'] = 3
+        with patch.object(downloader, 'api', side_effect=self.responses().__getitem__):
+            downloader.download(123, self.destination)
+        self.assertTrue(self.destination.exists())
+
+    def test_failed_retry_does_not_qualify_an_earlier_build(self):
+        self.run.update(run_attempt=3, conclusion='failure')
+        with patch.object(downloader, 'api', side_effect=self.responses().__getitem__):
+            with self.assertRaises(ValueError):
+                downloader.download(123, self.destination)
 
     def test_fork_main_pull_request_is_rejected_before_download(self):
         self.run.update(event='pull_request', head_repository=dict(full_name='fixture-fork/couch'))
@@ -48,7 +60,7 @@ class Download(unittest.TestCase):
 
     def test_run_event_origin_and_attempt_must_match(self):
         original = copy.deepcopy(self.run)
-        for change in [dict(event='pull_request'), dict(head_repository=dict(full_name='fixture-fork/couch')), dict(run_attempt=3), dict(head_branch='topic')]:
+        for change in [dict(event='pull_request'), dict(head_repository=dict(full_name='fixture-fork/couch')), dict(run_attempt=1), dict(head_branch='topic')]:
             self.run = dict(original, **change)
             with patch.object(downloader, 'api', side_effect=self.responses().__getitem__):
                 with self.assertRaises(ValueError):
