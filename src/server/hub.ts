@@ -155,7 +155,7 @@ export function createHub(options: HubOptions) {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
   } : undefined);
-  manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady) : undefined;
+  manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady, updates.canRepair) : undefined;
   const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
@@ -257,6 +257,7 @@ export function createHub(options: HubOptions) {
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
+      if (manual && url.pathname === "/api/updates/repair" && request.method === "POST") return cors(request, await manual.repair(request, identity));
       if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
       if (url.pathname === "/api/activity" && request.method === "POST") {
         try {
@@ -418,7 +419,7 @@ export function createHub(options: HubOptions) {
   })();
 
   return {
-    server, session, pairingCode, urls, origin, idleReason, idleAdmission,
+    server, session, pairingCode, urls, origin, idleReason, idleAdmission, verifyTools: toolHealth.verify,
     close: () => close(),
     quiesce: async () => {
       if (closing && !requiredCheckpoint) throw new Error("The TV was stopped without an update checkpoint.");

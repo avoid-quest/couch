@@ -43,11 +43,11 @@ class Handler(socketserver.BaseRequestHandler):
                 raise Rejected("Send one update operation.")
             operation = request.pop("op", None)
             if operation == "status" and set(request) <= {"requestId"}:
-                result = {"transaction": self.server.transactions.status(request.get("requestId"))}
+                result = {"transaction": self.server.transactions.status(request.get("requestId")), "current": self.server.transactions.current_summary()}
             elif operation == "context" and not request:
                 result = {"context": self.server.transactions.context()}
-            elif operation == "install":
-                record, start = self.server.transactions.submit(request)
+            elif operation in ("install", "repair-current"):
+                record, start = self.server.transactions.submit(request, operation)
                 # Start independently of whether the caller receives this reply.
                 if start:
                     self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)

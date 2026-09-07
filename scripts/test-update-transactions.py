@@ -857,12 +857,14 @@ class SnapshotTests(unittest.TestCase):
 
 
 def load_tests(loader, tests, pattern):
-    # The existing CI entry point owns both suites. Importing its fixtures from
-    # the standalone recovery script does not invoke unittest discovery.
-    recovery_spec = importlib.util.spec_from_file_location("recovery_tests", Path(__file__).with_name("test-update-recovery.py"))
-    recovery_tests = importlib.util.module_from_spec(recovery_spec)
-    recovery_spec.loader.exec_module(recovery_tests)
-    return unittest.TestSuite((tests, loader.loadTestsFromModule(recovery_tests)))
+    # Imported fixture modules do not invoke discovery; each suite runs once.
+    suite = unittest.TestSuite((tests,))
+    for name in ("recovery", "repair"):
+        spec = importlib.util.spec_from_file_location(name + "_tests", Path(__file__).with_name("test-update-" + name + ".py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        suite.addTests(loader.loadTestsFromModule(module))
+    return suite
 
 
 if __name__ == "__main__":

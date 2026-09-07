@@ -183,3 +183,35 @@ test("idle is rechecked after private context awaits and admission closes atomic
     expect(calls).toBe(1);
   } finally { store.close(); }
 });
+
+test("repair trial requires fresh nonce-correlated tool smoke before commit; restoration has its own readiness", async () => {
+  let active = { ...transaction, intent: "repair-current", repairRuntime: true }, checks = 0;
+  const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const maintenance = createMaintenance({ build, observe: () => {}, context: async () => ({ ok: true, context: active }), player: () => "idle", quiesce: async () => ({ progressSaved: true, admissionClosed: true }), database: async () => {}, native: async () => build, frontend: () => build, tools: async runtime => { expect(runtime).toBe(true); checks++; entered.resolve(); await gate.promise; } });
+  const request = (op: string, nonce = active.nonce) => maintenance.handle({ op, protocol: "maintenance-v1", updateId: active.updateId, nonce, candidate: { candidateId: active.candidateId, ...build }, confirmInterrupt: true });
+  await maintenance.initialize();
+  expect(await request("readiness", "f".repeat(32))).toMatchObject({ ok: false }); expect(checks).toBe(0);
+  const pending = request("readiness");
+  await entered.promise;
+  active = { ...active, phase: "committing", committed: true };
+  expect(await request("commit")).toMatchObject({ ok: false });
+  active = { ...active, phase: "trial", committed: false }; gate.resolve();
+  expect(await pending).toMatchObject({ ok: true, toolRepair: "verified-v1" });
+  expect(await request("readiness")).toMatchObject({ toolRepair: "verified-v1" }); expect(checks).toBe(1);
+  active = { ...active, phase: "committing", committed: true };
+  expect(await request("commit")).toMatchObject({ ok: true });
+  const restored = createMaintenance({ build, observe: () => {}, context: async () => ({ ok: true, context: { ...transaction, intent: "recovery" } }), player: () => "idle", quiesce: async () => ({ progressSaved: true, admissionClosed: true }), database: async () => {}, native: async () => build, frontend: () => build, tools: async () => { throw new Error("A restoration is not a repair success"); } });
+  await restored.initialize();
+  expect(await restored.handle({ op: "readiness", protocol: "maintenance-v1", updateId: transaction.updateId, nonce: transaction.nonce, candidate: { candidateId: transaction.candidateId, ...build }, confirmInterrupt: true })).toMatchObject({ ok: true });
+});
+
+test("a correct running build with failed tool smoke cannot commit a repair", async () => {
+  let active = { ...transaction, intent: "repair-current", repairRuntime: false };
+  const maintenance = createMaintenance({ build, observe: () => {}, context: async () => ({ ok: true, context: active }), player: () => "idle", quiesce: async () => ({ progressSaved: true, admissionClosed: true }), database: async () => {}, native: async () => build, frontend: () => build, tools: async () => { throw new Error("bad helper"); } });
+  await maintenance.initialize();
+  const raw = { protocol: "maintenance-v1", updateId: transaction.updateId, nonce: transaction.nonce, candidate: { candidateId: transaction.candidateId, ...build }, confirmInterrupt: true };
+  expect(await maintenance.handle({ ...raw, op: "readiness" })).toMatchObject({ ok: false });
+  active = { ...active, phase: "committing", committed: true };
+  expect(await maintenance.handle({ ...raw, op: "commit" })).toMatchObject({ ok: false });
+  expect(maintenance.admitted()).toBe(false);
+});

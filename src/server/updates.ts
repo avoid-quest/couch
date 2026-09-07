@@ -112,6 +112,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   return {
     get state() { return structuredClone(state); },
     automatic,
+    canRepair: () => !busy(),
     candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && candidate.summary.expiresAt > Date.now(),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {

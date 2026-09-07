@@ -1,5 +1,6 @@
 """Durable update identity and the single maintenance transaction state machine."""
 import re
+from contextlib import nullcontext
 import threading
 import time
 import uuid
@@ -13,7 +14,7 @@ HOOK_DRAIN_SECONDS = 330
 
 
 def public(record):
-    value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision", "idleDeferred")}
+    value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision", "idleDeferred", "intent", "repairRuntime")}
     if record.get("recoveryPending") and not record.get("committed"):
         value["phase"] = "restoring"
     return value
@@ -105,10 +106,23 @@ class Transactions:
             value = dict(self.record)
             if value["phase"] == "restoring":
                 value.update(value["restoration"])
+                value["intent"] = "recovery"
                 value["phase"] = {"trial": "trial", "committing": "committing"}.get(value["stage"], "restoring")
-            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt", "whenIdle")}
+            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt", "whenIdle", "intent", "repairRuntime")}
 
-    def submit(self, request):
+    def current_summary(self):
+        current = self.storage.read("current.json")
+        return {key: current.get(key) for key in ("candidateId", "version", "revision")} if isinstance(current, dict) else None
+
+    def submit(self, request, intent="install"):
+        repair_runtime = False
+        if intent == "repair-current":
+            if not isinstance(request, dict) or set(request) != {"expectedCurrentId", "requestId", "confirmInterrupt", "repairRuntime"} or type(request["repairRuntime"]) is not bool:
+                raise Rejected("Confirm the enrolled current release, runtime repair and playback interruption choice.")
+            repair_runtime = request["repairRuntime"]
+            request = {"candidateId": request["expectedCurrentId"], "requestId": request["requestId"], "confirmInterrupt": request["confirmInterrupt"]}
+        elif intent != "install":
+            raise Rejected("Unsupported maintenance intent.")
         if not isinstance(request, dict) or set(request) not in ({"candidateId", "requestId", "confirmInterrupt"}, {"candidateId", "requestId", "confirmInterrupt", "whenIdle"}):
             raise Rejected("Send an opaque staged candidate, retry identity and interruption choice.")
         if not isinstance(request["candidateId"], str) or not SHA.fullmatch(request["candidateId"]) or not isinstance(request["requestId"], str) or not TOKEN.fullmatch(request["requestId"]) or type(request["confirmInterrupt"]) is not bool:
@@ -119,13 +133,15 @@ class Transactions:
             existing = self.directory / (request["requestId"] + ".json")
             if existing.exists():
                 previous = load_json(existing.read_bytes())
-                if any(previous.get(key) != value for key, value in request.items()) or previous.get("whenIdle", False) != request.get("whenIdle", False):
+                if previous.get("intent", "install") != intent or previous.get("repairRuntime", False) != repair_runtime or any(previous.get(key) != value for key, value in request.items()) or previous.get("whenIdle", False) != request.get("whenIdle", False):
                     raise Rejected("That retry identity belongs to another update request.")
                 return public(previous), False
             with self.storage.lock():
                 if self.record and self.record["phase"] not in FINISHED or self.storage.read("active.json"):
                     raise Rejected("Finish the current maintenance transaction before another update.")
-                self.record = {**request, "updateId": uuid.uuid4().hex, "nonce": uuid.uuid4().hex, "phase": "accepted", "error": None, "disrupted": False, "hookComplete": False, "committed": False, "createdAt": int(time.time() * 1000)}
+                if intent == "repair-current" and (self.current_summary() or {}).get("candidateId") != request["candidateId"]:
+                    raise Rejected("The enrolled current release changed. Refresh Tools before repairing it.")
+                self.record = {**request, **({"intent": intent, "repairRuntime": repair_runtime} if intent == "repair-current" else {}), "updateId": uuid.uuid4().hex, "nonce": uuid.uuid4().hex, "phase": "accepted", "error": None, "disrupted": False, "hookComplete": False, "committed": False, "createdAt": int(time.time() * 1000)}
                 self.persist()
                 return public(self.record), True
 
@@ -134,11 +150,22 @@ class Transactions:
             try:
                 self.transition("preflight")
                 key = self.key()
-                current = self.storage.current(key)
-                _, previous_manifest = copy_receipt(self.storage.receipts / current["candidateId"], None, key, False, current["candidateId"])
+                repairing = self.record.get("intent") == "repair-current"
+                try:
+                    current = self.storage.current(key)
+                    _, previous_manifest = copy_receipt(self.storage.receipts / current["candidateId"], None, key, False, current["candidateId"])
+                except Rejected as error:
+                    if repairing:
+                        raise Rejected("The exact current-release receipt or archives are unavailable or failed authentication. Restore their authenticated copy through SSH before retrying repair.") from error
+                    raise
                 require_format(previous_manifest, current)
                 candidate_id = self.record["candidateId"]
-                _, manifest = self.storage.retain(self.platform.staging() / candidate_id, key, True, candidate_id)
+                if repairing:
+                    if candidate_id != current["candidateId"]:
+                        raise Rejected("Repair can reinstall only the enrolled current release.")
+                    manifest = previous_manifest
+                else:
+                    _, manifest = self.storage.retain(self.platform.staging() / candidate_id, key, True, candidate_id)
                 require_format(manifest, current)
                 self.transition("preflight", **identity(manifest), previous=current)
                 packages = [self.storage.receipts / candidate_id / package["filename"] for package in manifest["packages"]]
@@ -148,16 +175,18 @@ class Transactions:
                 self.platform.install(self.record, packages)
                 if not self.record["hookComplete"]:
                     raise Rejected("APT did not complete this transaction's maintenance hook.")
-                self.transition("trial")
-                self.platform.start_trial(self.record)
-                self.platform.ready(self.record)
-                # Committing marks the data restoration boundary before any
-                # normal application writes can be admitted.
-                self.transition("committing", committed=True)
-                save(self.storage.root / "current.json", {"candidateId": candidate_id, **identity(manifest)})
-                self.platform.commit(self.record)
-                self.transition("succeeded")
-                self.clear_active()
+                # Keep other package managers out of the repair verification/commit window.
+                with self.platform.package_lock() if repairing else nullcontext():
+                    self.transition("trial")
+                    self.platform.start_trial(self.record)
+                    self.platform.ready(self.record)
+                    # Committing marks the data restoration boundary before any
+                    # normal application writes can be admitted.
+                    self.transition("committing", committed=True)
+                    save(self.storage.root / "current.json", {"candidateId": candidate_id, **identity(manifest)})
+                    self.platform.commit(self.record)
+                    self.transition("succeeded")
+                    self.clear_active()
             except Exception as error:
                 if isinstance(error, IdleDeferred):
                     self.record["idleDeferred"] = True

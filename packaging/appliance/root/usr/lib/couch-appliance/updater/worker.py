@@ -8,7 +8,7 @@ import tempfile
 from receipt import Rejected, run, trusted_file
 from retention import sync_directory
 
-MODULES = ("serve", "transactions", "recovery", "ubuntu", "worker", "receipt", "retention", "maintenance", "hook")
+MODULES = ("serve", "transactions", "recovery", "ubuntu", "worker", "receipt", "retention", "maintenance", "hook", "system_packages")
 SOURCE = Path("/usr/lib/couch-appliance/updater")
 OVERRIDE = Path("/etc/systemd/system/couch-updater.service.d/90-transaction.conf")
 

@@ -76,7 +76,7 @@ class Bridge:
             item["output"] = bytearray(frame(payload))
             item["waiting"] = False
             self.selector.modify(item["socket"], selectors.EVENT_WRITE, token)
-        elif value["kind"] == "worker" and isinstance(payload, dict) and payload.get("op") in ("context", "status", "install"):
+        elif value["kind"] == "worker" and isinstance(payload, dict) and payload.get("op") in ("context", "status", "install", "repair-current"):
             connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             try:
                 # The root-owned listener already exists; bound even a full accept queue.

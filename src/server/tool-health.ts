@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ManagedToolHealth, ToolHealth, ToolObservation } from "../shared/tool-health";
+import type { ManagedToolHealth, ToolHealth, ToolObservation, UbuntuPackageStatus } from "../shared/tool-health";
 import { probeMediaHelper, runDiagnosticCommand } from "./diagnostics-system";
 
 const cacheSeconds = 10;
@@ -57,6 +57,20 @@ export function createToolHealth(options: Options) {
   let cached: ToolHealth | null = null;
   let pending: Promise<ToolHealth> | null = null;
 
+  let systemCached: UbuntuPackageStatus | null = null, systemPending: Promise<UbuntuPackageStatus> | null = null;
+  const systemStatus = async () => {
+    if (systemCached && Date.now() - Date.parse(systemCached.checkedAt) < 30_000) return systemCached;
+    return systemPending ??= (async (): Promise<UbuntuPackageStatus> => {
+      const value: UbuntuPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "Ubuntu package status is unavailable for this installation." };
+      if (!options.packaged) return value;
+      try {
+        const result = JSON.parse(await (options.command ?? runDiagnosticCommand)("/usr/bin/python3", ["-I", "/usr/lib/couch-appliance/updater/system_packages.py"], { PATH: "/usr/bin:/bin", LC_ALL: "C" }));
+        if (result.ok !== true || [result.available, result.security, result.broken].some(number => !Number.isSafeInteger(number) || number < 0 || number > 1_000_000) || result.indexUpdatedAt !== null && !Number.isSafeInteger(result.indexUpdatedAt)) throw new Error();
+        return { ...value, available: result.available, security: result.security, broken: result.broken, indexUpdatedAt: result.indexUpdatedAt, error: null };
+      } catch { return { ...value, error: "Ubuntu package indexes or the package-status runtime are unavailable. Check through system administration; Couch releases are separate." }; }
+    })().then(result => { systemCached = result; return result; }).finally(() => { systemPending = null; });
+  };
+
   const timeoutReport = (): ToolHealth => ({ checkedAt: new Date().toISOString(), cacheSeconds, tools: managedTools.map(tool => ({ name: tool.name, expectedVersion: expectedHelper(options.helpers, tool.file)?.version ?? null, installed: unknown(), effective: { ...unknown(), source: "unavailable" } })), ffprobe: unknown() });
   async function probe(name: "yt-dlp" | "Deno" | "ffprobe", executable: string | null, signal: AbortSignal): Promise<ToolObservation> {
     if (!executable) return observation("missing", "The executable was not found.");
@@ -65,7 +79,7 @@ export function createToolHealth(options: Options) {
     catch { return observation("error", "The local version check failed or exceeded its 1.5 second / 4 KiB limit."); }
   }
 
-  async function collect(signal: AbortSignal): Promise<ToolHealth> {
+  async function collect(signal: AbortSignal, installedOnly = false): Promise<ToolHealth> {
     const packages: { installed: ToolObservation; path: string; resolved: string | null; identity: { dev: number; ino: number } | null; expectedVersion: string | null }[] = [];
     for (const tool of managedTools) {
       const expected = expectedHelper(options.helpers, tool.file), packagePath = join(directory, tool.file);
@@ -81,6 +95,7 @@ export function createToolHealth(options: Options) {
       }
       packages.push({ installed, path: packagePath, resolved: signal.aborted ? null : await realpath(packagePath).catch(() => null), identity: signal.aborted ? null : await stat(packagePath).catch(() => null), expectedVersion: expected?.version ?? null });
     }
+    if (installedOnly) return { checkedAt: new Date().toISOString(), cacheSeconds: 0, ffprobe: unknown(), tools: packages.map((value, index) => ({ name: managedTools[index]!.name, expectedVersion: value.expectedVersion, installed: value.installed, effective: { ...value.installed, source: "package" } })) };
     const tools: ManagedToolHealth[] = [];
     async function effectiveProbe(name: "yt-dlp" | "Deno" | "ffprobe", executable: string | null) {
       if (!executable) return { result: observation("missing", "The executable was not found."), packageIndex: -1 };
@@ -107,6 +122,31 @@ export function createToolHealth(options: Options) {
   }
 
   return {
+    async verify(runtime: boolean) {
+      const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(checkMilliseconds)]);
+      const report = await collect(signal, true);
+      if (report.tools.some(tool => tool.installed.status !== "ready")) throw new Error("Package tools failed fresh hash/version checks.");
+      const command = options.command ?? runDiagnosticCommand;
+      const safeEnv = { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" };
+      // Fixed generated media exercises extraction without contacting a website
+      // or using the effective tool overrides. No browser can choose these inputs.
+      const wav = Buffer.alloc(46);
+      wav.write("RIFF"); wav.writeUInt32LE(38, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16);
+      wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(2, 40);
+      const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => new URL(request.url).pathname === "/couch-tool-smoke.wav" ? new Response(wav, { headers: { "Content-Type": "audio/wav" } }) : new Response(null, { status: 404 }) });
+      const source = `http://127.0.0.1:${server.port}/couch-tool-smoke.wav`;
+      try {
+        signal.throwIfAborted();
+        if (await command(join(directory, "yt-dlp"), ["--ignore-config", "--no-plugin-dirs", "--no-cache-dir", "--force-generic-extractor", "--skip-download", "--get-url", source], safeEnv) !== source) throw new Error("Package extractor smoke failed.");
+        if (await command(join(directory, "deno"), ["eval", "--no-config", "--no-lock", "console.log(6 * 7)"], safeEnv) !== "42") throw new Error("Package runtime smoke failed.");
+        if (runtime) {
+          await probeMediaHelper("ffprobe", "/usr/bin/ffprobe", safeEnv, command);
+          const value = await command("/usr/bin/ffprobe", ["-v", "error", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", source], safeEnv);
+          if (value !== "pcm_s16le") throw new Error("Ubuntu ffprobe runtime smoke failed.");
+        }
+        signal.throwIfAborted();
+      } finally { server.stop(true); }
+    },
     // Filesystem reads may ignore cancellation. Root stops the service and
     // verifies its empty cgroup before taking any maintenance snapshot.
     async close() { shutdown.abort(); },
@@ -117,9 +157,13 @@ export function createToolHealth(options: Options) {
       if (!permitted()) return json({ error: "An administrator remote is required to check media tools." }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const url = new URL(request.url);
-      if (url.pathname !== "/api/tools") return json({ error: "Not found." }, 404);
+      if (!["/api/tools", "/api/tools/ubuntu"].includes(url.pathname)) return json({ error: "Not found." }, 404);
       if (url.search) return json({ error: "Tool checks do not accept parameters." }, 400);
       if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
+      if (url.pathname === "/api/tools/ubuntu") {
+        const result = await systemStatus();
+        return !permitted() || shutdown.signal.aborted ? json({ error: "Administrator access is no longer available." }, 403) : json(result);
+      }
       if (!cached || Date.now() - Date.parse(cached.checkedAt) >= cacheSeconds * 1000) {
         // A timed-out filesystem probe remains the single pending collection;
         // repeated requests cannot accumulate work on an unresponsive mount.

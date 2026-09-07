@@ -79,7 +79,7 @@ export function connectUpdater(child: Pick<Subprocess<"pipe", "pipe", "ignore">,
   void child.exited.then(() => stop(true));
   return {
     ready: started.promise,
-    async request(payload: { op: "context" } | { op: "status"; requestId?: string } | { op: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean }) {
+    async request(payload: { op: "context" } | { op: "status"; requestId?: string } | { op: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean; whenIdle?: true } | { op: "repair-current"; expectedCurrentId: string; requestId: string; confirmInterrupt: boolean; repairRuntime: boolean }) {
       await started.promise;
       if (closed || pending.size >= 8) throw failure();
       const id = crypto.randomUUID().replaceAll("-", "");
