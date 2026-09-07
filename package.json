@@ -14,7 +14,7 @@
     "desktop": "bun scripts/desktop.ts dev --no-dev-server",
     "desktop:build": "bun scripts/desktop.ts build",
     "package:prepare": "bun scripts/package-prepare.ts",
-    "package:build": "bun run package:prepare && bun scripts/desktop.ts build --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked",
+    "package:build": "bun run package:prepare && PATCHELF=/usr/bin/patchelf bun scripts/desktop.ts build --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked && bun scripts/package-verify-helpers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:linux": "bun scripts/linux-test.ts",

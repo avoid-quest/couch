@@ -205,6 +205,7 @@ try {
   assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], installed.archiveSha256);
   await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
 } catch (error) {
+  await Bun.write(`${fixtures}/tool-health-failure.json`, JSON.stringify(await api("/api/tools").catch(error => ({ error: String(error) })), null, 2));
   await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, error: String(error) }, null, 2));
   throw error;
 } finally {
