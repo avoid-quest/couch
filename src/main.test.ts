@@ -9,7 +9,7 @@ afterEach(async () => {
   for (const task of cleanup.splice(0).reverse()) await task();
 });
 
-test.each(["stdin close", "shutdown message"])("the sidecar accepts native observations, protects its data, and exits on %s", async reason => {
+test.each(["stdin close", "shutdown message", "AppImage admission"])("the sidecar accepts native observations, protects its data, and exits on %s", async reason => {
   const dir = await mkdtemp(join(tmpdir(), "couch-sidecar-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
   await chmod(dir, 0o755);
@@ -19,6 +19,7 @@ test.each(["stdin close", "shutdown message"])("the sidecar accepts native obser
       ...process.env,
       NODE_ENV: "production",
       COUCH_NATIVE: "1",
+      COUCH_APPIMAGE: reason === "AppImage admission" ? "1" : "0",
       COUCH_HOST: "127.0.0.1",
       COUCH_PORT: "0",
       COUCH_HOST_TOKEN: token,
@@ -56,6 +57,18 @@ test.each(["stdin close", "shutdown message"])("the sidecar accepts native obser
     type: "player",
     state: { playbackId: null, status: "idle", position: 0, duration: null, volume: 50, seekable: false, error: null },
   };
+  if (reason === "AppImage admission") {
+    const status = await message();
+    expect(status.type).toBe("appimageUpdate");
+    if (status.type !== "appimageUpdate") throw new Error("Missing startup status");
+    expect(status.action.type).toBe("status");
+    // The native host reports idle before the asynchronous startup gate opens.
+    child.stdin.write(JSON.stringify(observation) + "\n");
+    child.stdin.write(JSON.stringify({ type: "appimageUpdate", requestId: status.requestId, ok: true, transaction: null }) + "\n");
+    await child.stdin.flush();
+    expect(await message()).toEqual({ type: "observe" });
+    expect((await health()).player).toBe("unavailable");
+  }
   // Split a message to cover pipe chunk boundaries rather than assuming one read per line.
   const line = `${JSON.stringify(observation)}\n`;
   child.stdin.write(line.slice(0, 12));
