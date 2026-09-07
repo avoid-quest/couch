@@ -91,7 +91,7 @@ test("changing credentials clears old observations before the new check finishes
 test("Ubuntu cached security/package status is distinct from release updates and never offers an upgrade", async () => {
   request.mockImplementation((async input => Response.json(String(input).endsWith("/ubuntu") ? { available: 4, security: 2, broken: 1, indexUpdatedAt: null, checkedAt: "2026-09-07", error: null } : report)) as typeof fetch);
   await render();
-  expect(document.body.textContent).toContain("4 available Ubuntu package updates");
+  expect(document.body.textContent).toContain("4 actionable Ubuntu upgrades");
   expect(document.body.textContent).toContain("2 from the security pocket");
   expect(document.body.textContent).toContain("broken dependencies: 1");
   expect(document.body.textContent).toContain("index refresh: Unknown");
@@ -102,12 +102,12 @@ test("a completed repair clears prior tool and Ubuntu observations while its fre
   request.mockImplementation((async input => Response.json(String(input).endsWith("/ubuntu") ? { available: 4, security: 2, broken: 0, indexUpdatedAt: null } : report)) as typeof fetch);
   await render(true, "admin", "old");
   expect(document.body.textContent).toContain("2026.08.19");
-  expect(document.body.textContent).toContain("4 available Ubuntu package updates");
+  expect(document.body.textContent).toContain("4 actionable Ubuntu upgrades");
   const gate = Promise.withResolvers<Response>();
   request.mockImplementation((async (_input, _init) => gate.promise.then(response => response.clone())) as typeof fetch);
   await render(true, "admin", "repaired");
   expect(document.body.textContent).not.toContain("2026.08.19");
-  expect(document.body.textContent).not.toContain("4 available Ubuntu package updates");
+  expect(document.body.textContent).not.toContain("4 actionable Ubuntu upgrades");
   expect(document.body.textContent).toContain("Checking local media tools");
   await act(async () => gate.resolve(Response.json(report)));
 });

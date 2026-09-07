@@ -27,6 +27,7 @@ struct Host {
     player: mpsc::Sender<player::Request>,
     display: mpsc::Sender<display::Request>,
     updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
+    update_checkpoint: Mutex<Option<(String, tokio::sync::oneshot::Sender<(bool, Result<(), String>)>)>>,
     shutting_down: AtomicBool,
     child_exited: watch::Sender<bool>,
 }
@@ -214,6 +215,7 @@ pub fn run() {
                 .shell()
                 .sidecar("couch-server")?
                 .env("COUCH_NATIVE", "1")
+                .env("COUCH_BUNDLED_TOOLS", app.path().resource_dir()?.join("tools"))
                 .env("COUCH_APPIMAGE", if appimage_update::running(app.handle()) { "1" } else { "0" })
                 .env("COUCH_HOST_TOKEN", token)
                 .env("COUCH_DATA_DIR", &data_dir)
@@ -238,6 +240,7 @@ pub fn run() {
                 player: player_sender,
                 display: display_sender,
                 updates: update_sender,
+                update_checkpoint: Mutex::new(None),
                 shutting_down: AtomicBool::new(false),
                 child_exited,
             });
@@ -275,9 +278,17 @@ pub fn run() {
                                         });
                                     }
                                 }
+                                Ok(SidecarMessage::AppimageQuiesced { nonce, closed, error }) => {
+                                    let mut pending = host.update_checkpoint.lock().expect("checkpoint lock poisoned");
+                                    if pending.as_ref().is_some_and(|(id, _)| id == &nonce) {
+                                        if let Some((_, sender)) = pending.take() { let _ = sender.send((closed, error.map_or(Ok(()), Err))); }
+                                    }
+                                }
                                 Ok(SidecarMessage::AppimageUpdate { request_id, action }) => {
                                     if uuid::Uuid::parse_str(&request_id).is_ok() {
-                                        if host.updates.try_send(appimage_update::Request { id: request_id.clone(), action }).is_err() {
+                                        if let crate::appimage_update::Action::Status { request_id: ref saved_id } = action {
+                                            host.report_message(appimage_update::status(&handle, saved_id.as_deref(), &request_id));
+                                        } else if host.updates.try_send(appimage_update::Request { id: request_id.clone(), action }).is_err() {
                                             host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
                                         }
                                     }

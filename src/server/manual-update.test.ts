@@ -94,14 +94,14 @@ test("repair is an administrator's exact-current intent and never consults the n
   expect(calls.at(-1)).toEqual({ op: "repair-current", ...repair });
 });
 
-test("an older live worker exposes the explicit refresh requirement until its new status is available", async () => {
+test("unavailable enrolled installation rejects work until native status becomes available", async () => {
   let upgraded = false;
   const calls: string[] = [];
   const manual = createManualUpdate({ request: async value => { calls.push(value.op); return { ok: true, transaction: null, ...(upgraded ? { repairCurrent: true, current: { candidateId: payload.candidateId, version: "current", revision: "a".repeat(40) } } : {}) }; } }, () => true, () => true);
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: false, current: null });
   expect(manual.needsRefresh()).toBe(true);
   expect(await (await manual.install(request(), admin)).json()).toMatchObject({ accepted: false });
-  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("refresh-worker");
+  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("AppImage installation");
   expect(calls.every(op => op === "status")).toBe(true);
   upgraded = true;
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: true, current: { candidateId: payload.candidateId } });

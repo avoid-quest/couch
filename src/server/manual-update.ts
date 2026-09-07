@@ -1,12 +1,12 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
-import type { createUpdaterClient } from "./updater-client";
+import type { UpdateRequest } from "../shared/updates";
 
 type Install = { candidateId: string; requestId: string; confirmInterrupt: boolean };
 type Repair = { expectedCurrentId: string; requestId: string; confirmInterrupt: boolean; repairRuntime: boolean };
-type Worker = Pick<ReturnType<typeof createUpdaterClient>, "request">;
-const finished = new Set(["succeeded", "failed", "restored"]);
+type Worker = { request: (request: UpdateRequest) => Promise<unknown> };
+const finished = new Set(["succeeded", "failed", "restored", "operator-required"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
 export function createManualUpdate(worker: Worker, admitted: () => boolean, candidateReady: (id: string) => boolean, canRepair = () => true) {
@@ -20,7 +20,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   };
   const status = async (requestId?: string) => {
     const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean };
-    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The external update worker is unavailable. Check its service through SSH.", 503);
+    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Check Couch through SSH.", 503);
     current = result.current && /^[a-f0-9]{64}$/.test(result.current.candidateId) && typeof result.current.version === "string" && typeof result.current.revision === "string" ? result.current : null;
     repairAvailable = result.repairCurrent === true;
     if (!requestId) busy = !!result.transaction && !finished.has(result.transaction.phase);
@@ -32,7 +32,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     guard();
     if (!previous && repairAvailable === false) {
       onUnaccepted();
-      throw new ControllerError("After maintenance finishes, run sudo couch-update refresh-worker through SSH before another installation or repair.", 409);
+      throw new ControllerError("AppImage installation is not available. Check the enrolled installation through SSH.", 409);
     }
     const repairing = "expectedCurrentId" in body;
     const ready = repairing ? canRepair() && current?.candidateId === body.expectedCurrentId : candidateReady(body.candidateId);
@@ -43,7 +43,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     busy = true;
     const result = await worker.request(repairing ? { op: "repair-current", ...body } : { op: "install", ...body, ...(whenIdle ? { whenIdle: true as const } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction; error?: string };
     guard();
-    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The worker could not accept this update. Refresh its status.", 409);
+    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The native updater could not accept this update. Refresh its status.", 409);
     busy = !finished.has(result.transaction.phase);
     return result.transaction;
   };

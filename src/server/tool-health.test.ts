@@ -4,7 +4,7 @@ import { chmod, link, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ToolHealth } from "../shared/tool-health";
+import type { ToolHealth, UbuntuPackageStatus } from "../shared/tool-health";
 import { runDiagnosticCommand } from "./diagnostics-system";
 import { createToolHealth } from "./tool-health";
 
@@ -208,11 +208,9 @@ test("repair verification ignores the health cache and effective overrides, and 
 
 test("Ubuntu status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
-  const health = createToolHealth({ ...f.options, command: async (path, args, _env, timeout) => {
+  const health = createToolHealth({ ...f.options, ubuntuStatus: async () => {
     calls++;
-    expect(path).toBe("/usr/bin/python3"); expect(args).toEqual(["-I", "/usr/lib/couch-appliance/updater/system_packages.py"]);
-    expect(timeout).toBe(5_000);
-    return JSON.stringify({ ok: true, available: 4, security: 2, broken: 0, indexUpdatedAt: null });
+    return { available: 4, security: 2, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null };
   } });
   try {
     const url = "http://localhost/api/tools/ubuntu";
@@ -226,12 +224,12 @@ test("Ubuntu status is a bounded fixed read, remains separate and never accepts 
 });
 
 test("shutdown during Ubuntu inspection reports unavailable rather than revoked access", async () => {
-  const f = await fixture(), gate = Promise.withResolvers<string>(), started = Promise.withResolvers<void>();
-  const health = createToolHealth({ ...f.options, command: () => { started.resolve(); return gate.promise; } });
+  const f = await fixture(), gate = Promise.withResolvers<UbuntuPackageStatus>(), started = Promise.withResolvers<void>();
+  const health = createToolHealth({ ...f.options, ubuntuStatus: () => { started.resolve(); return gate.promise; } });
   const response = health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator);
   await started.promise;
   const closing = health.close();
-  gate.resolve(JSON.stringify({ ok: true, available: 0, security: 0, broken: 0, indexUpdatedAt: null }));
+  gate.resolve({ available: 0, security: 0, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null });
   expect((await response).status).toBe(503);
   await closing;
 });

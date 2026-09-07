@@ -179,12 +179,12 @@ test("repair archive rejection clears its saved request and leaves the staged up
   expect(button("Check for updates").disabled).toBe(false);
 });
 
-test("an older live worker shows the fixed SSH transition instead of silently hiding repair", async () => {
+test("unenrolled AppImage explains installation requirements instead of hiding repair", async () => {
   report.status = "ready";
   report.installation = { enabled: true, transaction: null, repairAvailable: false };
   await render();
-  expect(document.body.textContent).toContain("sudo couch-update refresh-worker");
-  expect(document.body.textContent).toContain("keeps TV playback running");
+  expect(document.body.textContent).toContain("release feed is not enrolled");
+  expect(document.body.textContent).toContain("signing key and endpoint");
   expect(button("Repair current release")).toBeUndefined();
   expect(button("Install update").disabled).toBe(true);
 });
@@ -305,7 +305,7 @@ test("manual installation stays discoverable when maintenance support is disable
   expect(button("Install update")).toBeDefined();
   expect(button("Install update").disabled).toBe(true);
   expect(document.body.textContent).toContain("Manual installation is not enabled");
-  expect(document.body.textContent).toContain("sudo couch-update enable");
+  expect(document.body.textContent).toContain("supported AppImage installation procedure");
   expect(button("Check for updates").disabled).toBe(false);
 });
 
@@ -340,4 +340,13 @@ test("AppImage staging shows byte progress and never suggests enabling the Debia
   expect(document.body.textContent).toContain(report.installationUnavailable);
   expect(document.body.textContent).not.toContain("couch-update enable");
   expect(button("Install update").disabled).toBe(true);
+});
+
+test("operator recovery result remains visible without permanently locking future repairs", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, repairAvailable: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase: "operator-required", error: "Tool smoke failed", createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain("couch-recover");
+  expect(document.body.textContent).toContain("Tool smoke failed");
+  expect(button("Install update").disabled).toBe(false);
 });

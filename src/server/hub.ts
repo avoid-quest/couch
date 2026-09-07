@@ -3,10 +3,9 @@ import { randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
 import { createUpdateIdle } from "./update-idle";
 import { createManualUpdate } from "./manual-update";
-import type { createUpdaterClient } from "./updater-client";
+import type { UpdateRequest } from "../shared/updates";
 import { createUpdates } from "./updates";
 import type { UpdateFeed, UpdateRelease } from "./update-feed";
-import { createUpdateFeed } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
 import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
@@ -55,7 +54,7 @@ type HubOptions = {
   development?: boolean;
   advertisedUrls?: string[];
   appimageFeed?: UpdateFeed<UpdateRelease>;
-  updater?: Pick<ReturnType<typeof createUpdaterClient>, "request">;
+  updater?: { request: (request: UpdateRequest) => Promise<unknown> };
   admitted?: () => boolean;
   frontendReady?: (build: unknown) => boolean;
   idleNow?: () => number;
@@ -160,8 +159,8 @@ export function createHub(options: HubOptions) {
     const recording = recordings.snapshot().jobs.some(job => job.status === "running" || job.status === "checking" || job.status === "pending" && job.start <= Date.now());
     return idle.reason(library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
   };
-  const idleAdmission = () => manual?.needsRefresh() ? "Refresh the update worker through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
-  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.appimageFeed ?? (buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined), undefined, admitted, options.updater ? {
+  const idleAdmission = () => manual?.needsRefresh() ? "Check the AppImage installation through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
+  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.appimageFeed, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
   } : undefined);
