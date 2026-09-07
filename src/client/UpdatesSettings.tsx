@@ -81,7 +81,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
   const canStage = state?.currentCheck && candidate && candidate.expiresAt > Date.now() && state.status !== "ready";
-  const canInstall = !busy && state?.installation?.enabled && state.status === "ready" && candidate && state.installation.repairAvailable !== false;
+  const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && candidate && candidate.expiresAt > Date.now() && state.installation.repairAvailable !== false;
   return <div className="min-w-0 space-y-4">
     <p className="text-muted-foreground">Release settings apply to this TV installation. Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">

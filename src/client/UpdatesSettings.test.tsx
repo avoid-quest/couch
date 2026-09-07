@@ -319,3 +319,14 @@ for (const authority of ["host", "controller"] as const) test(`${authority} can 
   expect(button("Install update")).toBeUndefined();
   expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
 });
+
+
+for (const stale of ["expired", "not-current"]) test(`a ${stale} staged release cannot be installed`, async () => {
+  report.status = "ready"; report.installation = { enabled: true, transaction: null };
+  if (stale === "expired") report.candidate!.expiresAt = Date.now() - 1;
+  else report.currentCheck = false;
+  await render();
+  expect(button("Install update").disabled).toBe(true);
+  expect(button("Check for updates").disabled).toBe(false);
+  expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
+});
