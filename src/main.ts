@@ -5,7 +5,7 @@ import { createMaintenance, manualUpdatesEnabled, type MaintenanceBuild } from "
 import { createUpdaterClient } from "./server/updater-client";
 import { createNativeReadiness } from "./server/readiness-native";
 import { loadedBuild } from "./shared/build";
-import { chmod, mkdir } from "node:fs/promises";
+import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import frontend from "./client/index.html";
 import { createNativeDiagnostics } from "./server/diagnostics-native";
@@ -63,7 +63,8 @@ const updater = maintenance ? createUpdaterClient(request => maintenance.handle(
 // Read root transaction authority before opening/migrating any application DB.
 if (updater) { await updater.ready; await maintenance!.initialize(); }
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
-if (process.platform !== "win32") await chmod(dataDir, 0o700);
+// Preserve the administrator's permissions on data shared with us through an ACL.
+if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
   ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),

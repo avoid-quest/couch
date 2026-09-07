@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ !inputs.build-run && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
+    if: ${{ inputs.build-run == 0 && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     outputs:
@@ -88,7 +88,7 @@ jobs:
 
   qualify:
     needs: build
-    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run) }}
+    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run > 0) }}
     permissions:
       contents: read
       actions: read
@@ -99,7 +99,7 @@ jobs:
       matrix:
         format: [deb, AppImage]
     env:
-      COUCH_RELEASE_ID: ${{ inputs.build-run && format('{0}.{1}', inputs.build-run, inputs.build-attempt) || needs.build.outputs.release-id }}
+      COUCH_RELEASE_ID: ${{ inputs.build-run > 0 && format('{0}.{1}', inputs.build-run, inputs.build-attempt) || needs.build.outputs.release-id }}
       COUCH_RELEASE_NOTES: ${{ inputs.notes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: package-inputs-${{ env.COUCH_RELEASE_ID }}
-          run-id: ${{ inputs.build-run || github.run_id }}
+          run-id: ${{ inputs.build-run > 0 && inputs.build-run || github.run_id }}
           github-token: ${{ github.token }}
           path: .artifacts/package-release
       - name: Prepare qualification
@@ -126,11 +126,14 @@ jobs:
           bun install --frozen-lockfile
       - name: Qualify the built package on clean Ubuntu
         run: bun tests/package/qualify.ts .artifacts/package-release/*.${{ matrix.format }}
+      - name: Qualify installed AppImage restart and SSH recovery
+        if: matrix.format == 'AppImage'
+        run: bash scripts/test-appliance-systemd.sh --appimage "$(realpath .artifacts/package-release/*.AppImage)" "$PWD/.artifacts/appimage-qualification/installed"
       - name: Assemble the qualified Debian release
-        if: ${{ !inputs.build-run && matrix.format == 'deb' }}
+        if: ${{ inputs.build-run == 0 && matrix.format == 'deb' }}
         run: bun scripts/package-release.ts
       - name: Assemble the qualified AppImage
-        if: ${{ !inputs.build-run && matrix.format == 'AppImage' }}
+        if: ${{ inputs.build-run == 0 && matrix.format == 'AppImage' }}
         run: |
           mkdir -p .artifacts/qualified-release
           cp .artifacts/package-release/*.AppImage .artifacts/package-release/couch-source.tar.gz src-tauri/build-info.json .artifacts/qualified-release/
@@ -138,7 +141,7 @@ jobs:
           cd .artifacts/qualified-release
           sha256sum *.AppImage *.json *.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: ${{ !inputs.build-run }}
+        if: ${{ inputs.build-run == 0 }}
         with:
           name: couch-${{ matrix.format == 'deb' && 'release' || 'appimage' }}-${{ needs.build.outputs.release-id }}
           path: .artifacts/qualified-release/

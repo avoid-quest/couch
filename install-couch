@@ -1,13 +1,13 @@
 #!/bin/bash
-# Install authenticated, locally downloaded release packages on Ubuntu Server.
+# Install authenticated, locally downloaded AppImage and appliance package on Ubuntu Server.
 set -euo pipefail
 fail() { echo "install-couch: $*" >&2; exit 1; }
 [[ $EUID = 0 ]] || fail 'Run with sudo from your SSH administrator account.'
-[[ $# -ge 2 ]] || fail 'Usage: sudo bash install-couch /absolute/couch.deb /absolute/couch-appliance.deb [--data-dir /existing/data] [--release-key FILE --release-key-sha256 SHA256 --release-feed URL --release-channel preview|stable]'
+[[ $# -ge 2 ]] || fail 'Usage: sudo bash install-couch /absolute/Couch.AppImage /absolute/couch-appliance.deb [--data-dir /existing/data] [--release-key FILE --release-key-sha256 SHA256 --release-feed URL]'
 app=$(realpath "$1")
 session=$(realpath "$2")
 shift 2
-data= release_key= release_key_sha256= release_feed= release_channel=
+data= release_key= release_key_sha256= release_feed=
 while [[ $# -gt 0 ]]; do
     [[ $# -ge 2 ]] || fail "Missing value for $1"
     case $1 in
@@ -15,20 +15,23 @@ while [[ $# -gt 0 ]]; do
         --release-key) release_key=$2 ;;
         --release-key-sha256) release_key_sha256=$2 ;;
         --release-feed) release_feed=$2 ;;
-        --release-channel) release_channel=$2 ;;
         *) fail "Unknown option: $1" ;;
     esac
     shift 2
 done
-if [[ -n $release_key$release_key_sha256$release_feed$release_channel ]]; then
+if [[ -n $release_key$release_key_sha256$release_feed ]]; then
     [[ $release_key = /* && -f $release_key && $release_key_sha256 =~ ^[a-f0-9]{64}$ ]] || fail 'Supply the authenticated absolute public-key file and its SHA256 from the trusted Mac.'
     [[ $(sha256sum "$release_key" | cut -d ' ' -f1) = "$release_key_sha256" ]] || fail 'Release key SHA256 mismatch.'
-    [[ $release_feed =~ ^https?://[A-Za-z0-9.:_-]+(/[A-Za-z0-9._~/-]*)?$ && $release_channel =~ ^(preview|stable)$ ]] || fail 'Supply the LAN/HTTPS feed URL and preview or stable channel.'
-    [[ ! -e /etc/apt/keyrings/couch.asc ]] || cmp -s "$release_key" /etc/apt/keyrings/couch.asc || fail 'Existing Couch signing key differs. Rotate it through the trusted update path.'
+    if [[ -f /etc/couch/appimage-update.json ]]; then
+        command -v jq >/dev/null || fail 'Install jq before changing existing updater trust.'
+        jq -e --rawfile pubkey "$release_key" '.pubkey == ($pubkey|rtrimstr("\n"))' /etc/couch/appimage-update.json >/dev/null || fail 'Existing updater signing key differs. Rotate it deliberately through SSH.'
+    fi
+    [[ $release_feed =~ ^https?://[A-Za-z0-9.:_-]+(/[A-Za-z0-9._~/-]*)?$ && $release_feed = */ ]] || fail 'Supply the LAN/HTTPS feed base URL ending in /.'
 fi
 . /etc/os-release
 [[ $ID = ubuntu && $VERSION_ID = 24.04 && $(dpkg --print-architecture) = amd64 ]] || fail 'Ubuntu 24.04 amd64 is required.'
 [[ -d /run/systemd/system ]] || fail 'Boot Ubuntu with systemd before running the installer.'
+[[ ! -L /var/lib/couch/application ]] || fail 'The application directory is a symbolic link; inspect it through SSH.'
 exec 9>/run/couch-install.lock
 flock -n 9 || fail 'Another Couch installation is running.'
 state=/var/lib/couch-installer
@@ -45,7 +48,7 @@ restore_policy() {
 }
 # A previous run may have lost power while its temporary deny policy was active.
 restore_policy
-[[ $(dpkg-deb -f "$app" Package) = couch && $(dpkg-deb -f "$session" Package) = couch-appliance ]] || fail 'Expected the Couch and Couch appliance release packages.'
+[[ -f $app && $app = *.AppImage && $(dpkg-deb -f "$session" Package) = couch-appliance ]] || fail 'Expected a trusted Couch AppImage and Couch appliance package.'
 [[ ! -e /etc/X11/default-display-manager || $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'This machine already uses another display manager.'
 
 config=/etc/couch/appliance.env
@@ -75,17 +78,6 @@ if [[ -n $data ]] && ! $had_config && ! $pending; then
     pending=true
 fi
 
-# Enroll only a key supplied through the authenticated installation channel.
-if [[ -n $release_key ]]; then
-    printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/couch.asc\n' "$release_feed" "$release_channel" > "$state/couch.sources"
-    [[ ! -e /etc/apt/sources.list.d/couch.sources ]] || cmp -s "$state/couch.sources" /etc/apt/sources.list.d/couch.sources || fail 'Existing Couch channel differs. Change the channel deliberately before reinstalling.'
-    install -d -m 0755 /etc/apt/keyrings /etc/apt/sources.list.d
-    install -m 0644 "$release_key" /etc/apt/keyrings/.couch.asc
-    mv /etc/apt/keyrings/.couch.asc /etc/apt/keyrings/couch.asc
-    install -m 0644 "$state/couch.sources" /etc/apt/sources.list.d/.couch.sources
-    mv /etc/apt/sources.list.d/.couch.sources /etc/apt/sources.list.d/couch.sources
-fi
-
 # Suppress maintainer-script service starts until both packages and dependencies
 # are configured. Preserve the administrator's existing policy on every exit.
 rm -f "$state/original-policy"
@@ -99,14 +91,73 @@ trap 'exit 143' TERM HUP
 rm -f "$policy"
 printf '#!/bin/sh\nexit 101\n' > "$policy"
 chmod 0755 "$policy"
+# Disable the obsolete root worker before any package/session mutation. Retain its
+# historical receipts and backups, but never let it restart a competing app.
+systemctl disable --now couch-updater.socket couch-updater.service 2>/dev/null || true
+! systemctl is-active --quiet couch-updater.service || fail 'The legacy updater is still active; inspect it through SSH.'
+if getent passwd couch-tv >/dev/null; then
+    uid=$(id -u couch-tv)
+    if [[ -S /run/user/$uid/bus ]]; then
+        runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user stop couch-tv.service
+    fi
+fi
 if systemctl is-active --quiet lightdm; then systemctl stop lightdm; fi
 # Keep an interrupted transaction from booting into a half-configured session.
 systemctl mask lightdm.service
 sync -f /etc/systemd/system
+# Keep a consistent migration snapshot after all legacy writers have stopped.
+if getent passwd couch-tv >/dev/null; then
+    ! pgrep -u couch-tv -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains; inspect it through SSH before retrying.'
+fi
+if [[ -z $data && -f $config ]]; then
+    data=$(sed -n 's/^COUCH_DATA_DIR=//p' "$config" | tail -1)
+    data=${data#\"}; data=${data%\"}
+fi
+data=${data:-/var/lib/couch/.local/share/quest.avoid.couch}
+migration="$state/migration-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+install -d -m 0700 "$migration"
+[[ ! -d $data ]] || cp -a "$data" "$migration/data"
+[[ ! -f $config ]] || cp -a "$config" "$migration/appliance.env"
+if [[ -f /var/lib/couch/application/Couch.AppImage ]]; then
+    cp -a /var/lib/couch/application/Couch.AppImage /var/lib/couch/application/build.json "$migration/"
+    (cd "$migration" && sha256sum Couch.AppImage > SHA256SUMS)
+fi
+# Preserve the installed Debian binaries for deliberate operator diagnosis.
+[[ ! -x /usr/bin/couch ]] || cp -a /usr/bin/couch /usr/bin/couch-server "$migration/"
+sync -f "$migration"
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends -o Dpkg::Options::=--force-confold "$app" "$session"
+DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends -o Dpkg::Options::=--force-confold "$session"
+
+runuser -u couch-tv -- install -d -m 0700 /var/lib/couch/application
+# The runtime account owns this tree: perform every write as that account so a
+# substituted link can never make root overwrite or change ownership elsewhere.
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/Couch.AppImage.new; chmod 0700 /var/lib/couch/application/Couch.AppImage.new' < "$app"
+# Probe as the runtime account: AppImage extraction caches must not be root-owned.
+runuser -u couch-tv -- /var/lib/couch/application/Couch.AppImage.new --version > "$state/build.json"
+jq -e '.version | type == "string"' "$state/build.json" >/dev/null
+jq -e '.dataFormat == 1 and (.revision | test("^[a-f0-9]{40}$"))' "$state/build.json" >/dev/null
+jq --arg hash "$(sha256sum /var/lib/couch/application/Couch.AppImage.new | cut -d ' ' -f1)" '. + {archiveSha256:$hash}' "$state/build.json" > "$state/build-with-hash.json"
+mv "$state/build-with-hash.json" "$state/build.json"
+# Remove the old application package only after the companion no longer depends
+# on it. Data lives outside both packages and is never restored automatically.
+if dpkg-query -W -f='${db:Status-Status}' couch 2>/dev/null | grep -qx installed; then
+    DEBIAN_FRONTEND=noninteractive apt-get remove --yes couch
+fi
+rm -f /etc/apt/sources.list.d/couch.sources
+rm -f /etc/systemd/system/couch-updater.service.d/90-transaction.conf
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/build.json' < "$state/build.json"
+runuser -u couch-tv -- mv -f /var/lib/couch/application/Couch.AppImage.new /var/lib/couch/application/Couch.AppImage
+sync -f /var/lib/couch/application
+if [[ -n $release_key ]]; then
+    jq -n --arg endpoint "$release_feed" --rawfile pubkey "$release_key" '{endpoint:$endpoint,pubkey:($pubkey|rtrimstr("\n"))}' > "$state/appimage-update.json"
+    if [[ -f /etc/couch/appimage-update.json ]]; then
+        jq -e --rawfile pubkey "$release_key" '.pubkey == ($pubkey|rtrimstr("\n"))' /etc/couch/appimage-update.json >/dev/null || fail 'Existing updater signing key differs. Rotate it deliberately through SSH.'
+    fi
+    install -o root -g root -m 0644 "$state/appimage-update.json" /etc/couch/appimage-update.json
+fi
 
 if [[ -n $data ]]; then
+    [[ -d $data ]] || install -d -o couch-tv -g couch-tv -m 0700 "$data"
     # Preserve original ownership and permit only the new runtime account.
     setfacl -R -m u:couch-tv:rwX "$data"
     find "$data" -type d -exec setfacl -m d:u:couch-tv:rwx {} +
@@ -127,7 +178,10 @@ fi
 restore_policy
 trap - EXIT
 systemctl unmask lightdm.service
+# Package service starts were suppressed; activate the newly installed OS authorization.
 systemctl daemon-reload
+systemctl reload dbus.service
+systemctl start polkit.service
 systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
 systemctl restart systemd-journald.service
 udevadm trigger --subsystem-match=input --action=change

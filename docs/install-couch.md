@@ -2,17 +2,17 @@
 
 Start with Ubuntu 24.04 Server on x86_64 hardware, an SSH administrator with sudo,
 AC power, and a connected display. Copy the authenticated release's `install-couch`,
-`couch` Debian package and `couch-appliance` Debian package onto the machine.
+`Couch.AppImage` and `couch-appliance` Debian package onto the machine.
 Verify their hashes against the release manifest before invoking the installer.
 The private development package is transferred through the authenticated Mac.
 
-Run one command, using the two downloaded package paths:
+Run one command, using the downloaded artifact paths:
 
 ```sh
-sudo bash install-couch /absolute/path/couch.deb /absolute/path/couch-appliance.deb
+sudo bash install-couch /absolute/path/Couch.AppImage /absolute/path/couch-appliance.deb
 ```
 
-The installer checks the OS and packages, runs APT with production dependencies,
+The installer checks Ubuntu 24.04 and the companion package, runs APT with production dependencies,
 then starts LightDM. Package maintainer scripts cannot start services while APT
 is working. They do not run APT themselves. The runtime uses the locked,
 unprivileged `couch-tv` account. The existing administrator keeps SSH and sudo.
@@ -33,7 +33,8 @@ existing `/etc/couch/appliance.env` on repeated installation and upgrades; omit
 separately. Keep your existing OS backup and a backup of Couch data before changing
 the machine's session.
 
-Re-run the same command to repair the session or install newer release packages.
+Re-run the same command to repair the session or complete an interrupted migration.
+Application updates use Tauri after trusted key enrollment.
 APT preserves the configured data path, and the session package does not delete
 settings, profiles, pairings, sources or media. An APT failure restores any
 preexisting service-start policy and leaves the GUI stopped for diagnosis. The
@@ -53,3 +54,24 @@ Qualification must cover a clean Ubuntu installation, repeat and upgrade with
 preserved data, offline and cold boot, bounded native/coordinator failure recovery,
 and an actual 1080p SDR picture with stereo audio. Container checks establish
 package behavior only. Record the human's physical observations separately.
+
+The migration stops the old updater and all supervised writers, saves consistent
+data and configuration under `/var/lib/couch-installer/`, installs the companion,
+removes the old `couch` Debian package and its application APT source, then places
+the bundle at `/var/lib/couch/application/Couch.AppImage` owned by `couch-tv`.
+The Ubuntu companion no longer depends on the application Debian package.
+Old updater receipts/backups remain available for diagnosis; their worker is disabled.
+
+Enroll the Tauri public key through the authenticated administrator channel:
+
+```sh
+sudo bash install-couch /absolute/Couch.AppImage /absolute/couch-appliance.deb \
+  --release-key /absolute/couch.pub --release-key-sha256 TRUSTED_SHA256 \
+  --release-feed 'https://releases.example/tauri/'
+```
+
+The hash must come from the trusted publisher, not the feed being enrolled.
+The installer writes root-owned `/etc/couch/appimage-update.json` with the endpoint
+and public key; an existing different key is refused before stopping the session.
+The application retains the selected Stable/Preview channel in its existing data.
+See [operator recovery](update-worker.md) before the first installation.

@@ -575,6 +575,7 @@ name = "couch"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "libc",
  "libmpv2",
  "libmpv2-sys",
  "log",

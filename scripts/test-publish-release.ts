@@ -1,7 +1,7 @@
 /** Disposable Ubuntu integration test: installs dummy packages, never run on an appliance. */
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { digest, run } from './publish-release';
@@ -73,21 +73,7 @@ try {
   writeFileSync(signed, readFileSync(signed, 'utf8').replace('Origin: Couch', 'Origin: Tampered'));
   assert.notEqual(spawnSync('apt-get', [...options, '-o', 'APT::Update::Error-Mode=any', 'update']).status, 0);
   assert.equal(run('dpkg-query', '-W', '-f=${Version}', 'couch'), '0.1.0+build.2.1');
-  const commands = join(root, 'commands');
-  mkdirSync(commands);
-  for (const [name, code] of [['systemctl', 0], ['apt-get', 73]] as const) {
-    writeFileSync(join(commands, name), `#!/bin/sh\nexit ${code}\n`); chmodSync(join(commands, name), 0o755);
-  }
-  mkdirSync('/run/systemd/system', { recursive: true });
-  const args = [resolve(import.meta.dir, '../install-couch'), join(first, 'couch_0.1.0+build.1.1_amd64.deb'), join(first, 'couch-appliance_0.1.0+build.1.1_all.deb'), '--release-key', publicKey, '--release-key-sha256', digest(publicKey), '--release-feed', 'http://127.0.0.1:8765/', '--release-channel', 'preview'];
-  const env = { ...process.env, PATH: `${commands}:${process.env.PATH}` };
-  assert.equal(spawnSync('bash', args, { env }).status, 73);
-  assert.deepEqual(readFileSync('/etc/apt/keyrings/couch.asc'), readFileSync(publicKey));
-  assert.match(readFileSync('/etc/apt/sources.list.d/couch.sources', 'utf8'), /Signed-By: \/etc\/apt\/keyrings\/couch.asc/);
-  args[args.indexOf('--release-key-sha256') + 1] = '0'.repeat(64);
-  const rejected = spawnSync('bash', args, { env });
-  assert.notEqual(rejected.status, 0); assert.match(rejected.stderr.toString(), /Release key SHA256 mismatch/);
-  console.log('PASS: authenticated APT install/upgrade, immutable Stable promotion, concurrent publication, downgrade/tamper/signing-failure rejection, by-hash retention and installer key enrollment');
+  console.log('PASS: authenticated APT install/upgrade, immutable Stable promotion, concurrent publication, downgrade/tamper/signing-failure rejection, by-hash retention');
 } finally {
   run('gpgconf', '--kill', 'gpg-agent');
   process.env.GNUPGHOME = previousHome;

@@ -53,29 +53,47 @@ jobs:
             native:
               - *non-docs
               - '{src-tauri/**,rust-toolchain.toml,package.json,bun.lock,scripts/{build,release-version}.ts,.github/workflows/check.yml}'
+            appliance:
+              - '{install-couch,packaging/appliance/**,scripts/{build-appliance,test-appliance,test-appliance-systemd}.sh,.github/workflows/check.yml}'
             releases:
               - '{scripts/*release*,install-couch,.github/workflows/check.yml,.github/workflows/releases.yml}'
       - uses: oven-sh/setup-bun@v2
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
         with:
           bun-version: 1.4.2
-      - name: Test signed releases and installer trust enrollment
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.releases != 'false'
+      - name: Install host test dependencies
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
+        env:
+          RELEASES: ${{ steps.paths.outcome != 'success' || steps.paths.outputs.releases != 'false' }}
+          APPLIANCE: ${{ steps.paths.outcome != 'success' || steps.paths.outputs.appliance != 'false' }}
+          NATIVE: ${{ steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' }}
         run: |
-          if ! command -v apt-ftparchive; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends apt-utils
+          packages=()
+          if [[ $RELEASES = true ]] && ! command -v apt-ftparchive >/dev/null; then packages+=(apt-utils); fi
+          if [[ $APPLIANCE = true ]]; then
+            command -v setfacl >/dev/null || packages+=(acl)
+            command -v jq >/dev/null || packages+=(jq)
           fi
-          sudo "$(command -v bun)" scripts/test-publish-release.ts
+          command -v ffmpeg >/dev/null || packages+=(ffmpeg)
+          if [[ $NATIVE = true ]]; then
+            for package in libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev; do
+              [[ $(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null) = installed ]] || packages+=("$package")
+            done
+          fi
+          if (( ${#packages[@]} )); then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends "${packages[@]}"
+          fi
+      - name: Test signed releases
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.releases != 'false'
+        run: sudo "$(command -v bun)" scripts/test-publish-release.ts
+      - name: Test appliance installation and recovery
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.appliance != 'false'
+        run: |
+          sudo bash scripts/test-appliance.sh
+          bash scripts/test-appliance-systemd.sh
       - run: bun install --frozen-lockfile
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-      - name: Install media test dependency
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-        run: |
-          if ! command -v ffmpeg; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends ffmpeg
-          fi
       - run: bun run typecheck
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       # Isolate the real clock from process-wide mocks in the other tests.
@@ -86,11 +104,6 @@ jobs:
       # Tauri's build script requires the generated sidecar for native tests.
       - run: bun run build
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-      - name: Install native dependencies
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev
       - name: Set up Rust
         if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
         run: rustup show active-toolchain
