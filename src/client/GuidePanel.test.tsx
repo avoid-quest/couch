@@ -7,6 +7,8 @@ let root: Root, window: Window, tick: () => void;
 let programGate: ReturnType<typeof Promise.withResolvers<void>> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 let recordingPage: any = null;
+let recordingFailure = false, setupFailure = false;
+let backendChannels: { uuid: string; name: string }[] = [];
 let authority = "controller";
 const recordingPosts: { path: string; body: any }[] = [];
 const ranges: { start: number; end: number }[] = [], groups: string[] = [];
@@ -28,6 +30,7 @@ beforeEach(async () => {
   process.env.TZ = "Europe/Rome";
   setSystemTime(new Date(2026, 9, 24, 23, 59, 30));
   ranges.length = 0; groups.length = 0; recordingPosts.length = 0; recordingPage = null; authority = "controller";
+  recordingFailure = false; setupFailure = false; backendChannels = [];
   window = new Window({ url: "http://localhost" });
   for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -39,8 +42,9 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.pathname.startsWith("/api/recordings")) {
-      if (url.pathname.endsWith("/setup")) return Response.json({ configured: true, revision: 1, mappings: [] });
-      if (url.pathname.endsWith("/channels")) return Response.json({ channels: [] });
+      if (url.pathname.endsWith("/setup")) return setupFailure ? Response.json({ error: "Temporary setup failure" }, { status: 502 }) : Response.json({ configured: true, revision: 1, mappings: [] });
+      if (url.pathname.endsWith("/channels")) return Response.json({ channels: backendChannels });
+      if (url.pathname === "/api/recordings" && recordingFailure) return Response.json({ error: "Temporary recordings failure" }, { status: 502 });
       if (init?.method === "POST") {
         const body = init.body ? JSON.parse(String(init.body)) : undefined; recordingPosts.push({ path: url.pathname, body });
         if (url.pathname.endsWith("/schedule")) return Response.json({ job: { title: body.title }, existing: false });
@@ -187,4 +191,71 @@ test("paired navigation cannot select a portalled recording setup option on the 
     expect(trigger.textContent).toBe("News · news");
     expect(recordingPosts).toEqual([]);
   } finally { layout.mockRestore(); }
+});
+
+test("an initial recordings load failure can be retried without a backend refresh or version update", async () => {
+  recordingFailure = true;
+  const { GuidePanel } = await import("./GuidePanel");
+  await act(async () => root.render(<GuidePanel origin="http://localhost" token="retry" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  await click("Recordings");
+  expect(button("Retry recordings").disabled).toBe(false);
+  expect(document.body.textContent).toContain("Temporary recordings failure");
+  expect(document.body.textContent).not.toContain("Loading recordings…");
+  recordingFailure = false; await click("Retry recordings");
+  expect(document.body.textContent).not.toContain("Temporary recordings failure");
+  expect(document.body.textContent).toContain("An administrator can connect Tvheadend");
+  expect(recordingPosts).toEqual([]);
+});
+
+test("recordings crossing midnight include the end date", async () => {
+  const start = new Date(2026, 9, 24, 23, 45), end = new Date(2026, 9, 25, 0, 15);
+  recordingPage = { configured: true, revision: 1, checkedAt: Date.now(), error: null, jobs: [{ id: "overnight", programId: "saved", channelId: "news", channelName: "News", title: "Overnight", start: +start, end: +end, status: "pending", cause: null, revision: 2, cancelRequested: false }] };
+  const { GuidePanel } = await import("./GuidePanel");
+  await act(async () => root.render(<GuidePanel origin="http://localhost" token="dates" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush(); await click("Recordings");
+  expect(document.querySelector('[data-recording-id="overnight"]')!.textContent).toContain(end.toLocaleString([], { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }));
+});
+
+test("recovered setup reload clears its error and invalid backend selection", async () => {
+  authority = "administrator"; setupFailure = true; backendChannels = [{ uuid: "a".repeat(32), name: "Old backend channel" }];
+  await click("Recordings"); await click("Recording setup");
+  expect(document.body.textContent).toContain("Temporary setup failure");
+  setupFailure = false; await click("Reload setup");
+  expect(document.body.textContent).not.toContain("Temporary setup failure");
+  expect(document.body.textContent).toContain("Failed view");
+  expect(document.body.textContent).toContain("failed recordings");
+  const select = async (id: string, label: string) => {
+    await act(async () => document.querySelector(id)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" })));
+    const option = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.startsWith(label))!;
+    expect(option).toBeDefined();
+    await act(async () => { option.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); option.dispatchEvent(new MouseEvent("click", { bubbles: true })); }); await flush();
+  };
+  await select("#recording-guide-channel", "News"); await select("#recording-backend-channel", "Old backend channel");
+  expect(button("Save channel mapping").disabled).toBe(false);
+  backendChannels = [{ uuid: "b".repeat(32), name: "Replacement backend channel" }]; await click("Reload setup");
+  expect(document.querySelector("#recording-backend-channel")!.textContent).toBe("Select a backend channel");
+  expect(button("Save channel mapping").disabled).toBe(true);
+  await act(async () => button("Save channel mapping").closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(recordingPosts).toEqual([]);
+});
+
+test("recording requests permit multi-step workflows and still honor caller cancellation", async () => {
+  const { useRecordings } = await import("./RecordingsPanel");
+  let call: ReturnType<typeof useRecordings>["request"];
+  function Probe() { call = useRecordings({ origin: "http://localhost", token: "long", connected: true, active: false, version: 0 }).request; return null; }
+  await act(async () => root.render(<Probe />));
+  const timers: { after: number; controller: AbortController }[] = [];
+  const timeout = spyOn(AbortSignal, "timeout").mockImplementation(after => { const controller = new AbortController(); timers.push({ after, controller }); return controller.signal; });
+  let elapsed = 0;
+  request.mockImplementation((async (_input: RequestInfo | URL, init?: RequestInit) => {
+    for (const timer of timers.splice(0)) if (timer.after <= elapsed) timer.controller.abort(new DOMException("Timed out", "TimeoutError"));
+    init?.signal?.throwIfAborted(); return Response.json({ ok: true });
+  }) as typeof fetch);
+  try {
+    for (const [path, duration] of [["setup", 120_000], ["schedule", 65_000], ["job/cancel", 40_000]] as const) {
+      elapsed = duration; expect((await call!(path, { method: "POST" })).ok).toBe(true);
+    }
+    elapsed = 31_000; await expect(call!("", { method: "GET" })).rejects.toThrow("Timed out");
+    const controller = new AbortController(); controller.abort(new Error("Caller left")); elapsed = 0;
+    await expect(call!("setup", { method: "POST", signal: controller.signal })).rejects.toThrow("Caller left");
+  } finally { timeout.mockRestore(); }
 });

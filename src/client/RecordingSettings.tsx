@@ -23,7 +23,7 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState("");
   useEffect(() => {
-    setCredentials(empty); setSetup(null); setBackendChannels([]);
+    setCredentials(empty); setSetup(null); setBackendChannels([]); setBackendChannel(""); setError(null); setNotice("");
     if (!connected) return;
     const controller = new AbortController();
     void request("setup", { signal: controller.signal }).then(response => response.json() as Promise<Setup>).then(value => {
@@ -38,13 +38,13 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
     try {
       const response = await request("setup", { method: "POST", body: JSON.stringify({ ...credentials, revision: setup?.revision ?? 0 }) });
       const value = await response.json();
-      setSetup(previous => ({ configured: true, revision: value.revision, mappings: previous?.mappings ?? [] })); setBackendChannels(value.channels); setCredentials(empty);
+      setSetup(previous => ({ configured: true, revision: value.revision, mappings: previous?.mappings ?? [] })); setBackendChannels(value.channels); setBackendChannel(""); setCredentials(empty);
       setNotice("Private accounts verified and saved on the TV. Map a guide channel below."); onUpdated();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save recording setup."); }
     finally { setBusy(false); }
   }
   async function map(event: FormEvent) {
-    event.preventDefault(); const channel = channels.find(item => item.id === channelId); if (!channel || !setup) return;
+    event.preventDefault(); const channel = channels.find(item => item.id === channelId); if (!channel || !setup || !backendChannels.some(item => item.uuid === backendChannel)) return;
     setBusy(true); setError(null); setNotice("");
     try {
       const response = await request("mappings", { method: "POST", body: JSON.stringify({ revision: setup.revision, channelId, sourceId: channel.sourceId, tvgId: channel.tvgId, backendChannel }) });
@@ -56,8 +56,8 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
     <Button variant="outline" disabled={!connected || busy} onClick={() => setRefresh(value => value + 1)}>Reload setup</Button>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-    <p className="text-sm text-muted-foreground">Use Tvheadend API 20 or newer with Basic authentication over HTTPS, or HTTP on loopback. Give the recorder basic DVR access. Give a separate playback account basic/view-all DVR access and streaming, with no administrator or manage-all rights.</p>
-    <p className="text-sm text-muted-foreground">Verification briefly adds a disabled "Couch recording permission check" entry to Tvheadend. It cannot record. Couch removes it before saving setup. If verification or cleanup is interrupted, verify again with the same backend and accounts.</p>
+    <p className="text-sm text-muted-foreground">Use Tvheadend API 20 or newer with Basic authentication over HTTPS, or HTTP on loopback. Both accounts need WebUI, Basic DVR and Failed view access. The separate playback account also needs View all, with no administrator or Manage all rights.</p>
+    <p className="text-sm text-muted-foreground">Verification briefly adds a disabled "Couch recording permission check" among Tvheadend's failed recordings. It cannot record. Couch removes it before saving setup. Missing Failed view can prevent cleanup; correct the permissions and verify again with the same backend and accounts.</p>
     <form className="space-y-3" onSubmit={event => void save(event)}>
       <h3 className="font-medium">{setup?.configured ? "Replace private credentials" : "Connect a recording backend"}</h3>
       {fields.map(([key, label, type]) => <div key={key} className="space-y-1"><Label htmlFor={`recording-${key}`}>{label}</Label><Input id={`recording-${key}`} value={credentials[key]} type={type} autoComplete="off" spellCheck={false} autoCapitalize="none" required maxLength={key === "profileId" ? 32 : key === "endpoint" ? 2048 : key.toLowerCase().includes("password") ? 4096 : 200} disabled={!connected || busy || !setup} onChange={event => setCredentials(previous => ({ ...previous, [key]: event.target.value }))} /></div>)}
@@ -69,7 +69,7 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
       <p className="text-sm text-muted-foreground">Select one of the channels on the current guide page and its exact backend channel. Channel names alone do not establish a match.</p>
       <div className="space-y-1"><Label htmlFor="recording-guide-channel">Couch guide channel</Label><Select value={channelId} onValueChange={setChannelId} disabled={!connected || busy}><SelectTrigger id="recording-guide-channel"><SelectValue placeholder="Select a guide channel" /></SelectTrigger><SelectContent>{channels.map(channel => <SelectItem key={channel.id} value={channel.id}>{channel.name} · {channel.tvgId}</SelectItem>)}</SelectContent></Select></div>
       <div className="space-y-1"><Label htmlFor="recording-backend-channel">Backend channel</Label><Select value={backendChannel} onValueChange={setBackendChannel} disabled={!connected || busy}><SelectTrigger id="recording-backend-channel"><SelectValue placeholder="Select a backend channel" /></SelectTrigger><SelectContent>{backendChannels.map(channel => <SelectItem key={channel.uuid} value={channel.uuid}>{channel.name} · {channel.uuid}</SelectItem>)}</SelectContent></Select></div>
-      <Button disabled={!connected || busy || !channels.some(channel => channel.id === channelId) || !backendChannel}>Save channel mapping</Button>
+      <Button disabled={!connected || busy || !channels.some(channel => channel.id === channelId) || !backendChannels.some(channel => channel.uuid === backendChannel)}>Save channel mapping</Button>
       <ul className="space-y-2 text-sm">{setup.mappings.map(mapping => <li key={mapping.channelId} className="break-all rounded border p-2">{channels.find(channel => channel.id === mapping.channelId)?.name ?? "Saved guide channel"} · {mapping.tvgId}<br /><span className="text-muted-foreground">{mapping.backendChannel}</span></li>)}</ul>
     </form>}
   </section>;
