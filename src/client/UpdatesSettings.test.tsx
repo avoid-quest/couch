@@ -179,6 +179,16 @@ test("repair archive rejection clears its saved request and leaves the staged up
   expect(button("Check now").disabled).toBe(false);
 });
 
+test("an older live worker shows the fixed SSH transition instead of silently hiding repair", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null, repairAvailable: false };
+  await render();
+  expect(document.body.textContent).toContain("sudo couch-update refresh-worker");
+  expect(document.body.textContent).toContain("keeps TV playback running");
+  expect(button("Repair current release")).toBeUndefined();
+  expect(button("Install update").disabled).toBe(true);
+});
+
 
 test("an older finished transaction cannot erase a newly saved request whose delivery is unknown", async () => {
   const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };

@@ -150,7 +150,7 @@ export function createHub(options: HubOptions) {
     const recording = recordings.snapshot().jobs.some(job => job.status === "running" || job.status === "checking" || job.status === "pending" && job.start <= Date.now());
     return idle.reason(library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
   };
-  const idleAdmission = () => updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
+  const idleAdmission = () => manual?.needsRefresh() ? "Refresh the update worker through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
   const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),

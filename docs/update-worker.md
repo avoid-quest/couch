@@ -362,6 +362,24 @@ remain requirements before activation on the TV.
 ## Exact-current tool repair
 
 An administrator can choose **Repair current release** under Updates → Tools.
+After upgrading from a release whose worker stays in memory, Tools asks for the
+one-time SSH command `sudo couch-update refresh-worker`. Run it after maintenance
+finishes. It requires existing activation, authenticated matching installed/current
+identities, clean package health and both updater/package locks. It refuses active
+or unresolved transactions. It temporarily stops only the existing updater socket
+and service, removes only a matching terminal frozen override, reloads units, then
+reopens that socket after releasing the locks. It leaves the TV app running and
+does not enable any unit. An unknown override needs administrator inspection.
+The upgraded app defers new manual or automatic transactions until this handover,
+so an old loaded worker cannot freeze new source using its old module list.
+Existing durable request status and retries remain available.
+
+New workers retire after the terminal transaction thread and all replies drain.
+Their systemd-owned socket keeps pending requests for a fresh packaged process.
+A terminal frozen worker also hands over on startup when active.json was already
+cleared, including a crash between override removal and daemon-reload. An
+unresolved transaction keeps its frozen code; no package script restarts it.
+
 The warning identifies the enrolled current release and requires explicit consent
 to stop any playing media. The browser sends only the current receipt ID, its
 saved request ID, playback consent and the optional Ubuntu runtime repair flag.

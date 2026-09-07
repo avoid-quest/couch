@@ -8,6 +8,10 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import socket
+import socketserver
+import struct
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -19,6 +23,9 @@ import receipt
 import recovery
 import system_packages
 import ubuntu
+import serve
+import operator_client
+import worker
 
 
 class RepairTests(unittest.TestCase):
@@ -206,6 +213,165 @@ class UbuntuRepairTests(unittest.TestCase):
         cache = Cache([package("Ubuntu", "noble-security"), package("Ubuntu", "noble-updates"), package("Third-party", "noble-security"), package("Ubuntu", "noble-security", False)])
         with patch.dict(sys.modules, {"apt": SimpleNamespace(Cache=lambda: cache)}), patch.object(system_packages.Path, "exists", return_value=False):
             self.assertEqual(system_packages.inspect(), {"available": 2, "security": 1, "broken": 1, "indexUpdatedAt": None})
+
+
+class WorkerLifetimeTests(unittest.TestCase):
+    def test_retirement_reloads_even_if_a_previous_exit_already_removed_the_override(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(worker, "OVERRIDE", Path(directory) / "missing"), patch.object(worker, "run") as systemctl:
+            worker.release(Path(directory), "a" * 32)
+            systemctl.assert_called_once_with("/usr/bin/systemctl", "daemon-reload")
+
+    def test_terminal_retirement_waits_for_the_reply_and_execution_thread(self):
+        entered, reply, execution = threading.Event(), threading.Event(), threading.Event()
+        finalized = []
+        class Handler(socketserver.BaseRequestHandler):
+            def handle(self):
+                self.server.transactions.record = {"phase": "succeeded"}
+                entered.set()
+                if reply.wait(2): self.request.sendall(b"terminal receipt\n")
+        with tempfile.TemporaryDirectory() as directory, serve.Server(directory + "/socket", Handler) as server:
+            server.transactions = SimpleNamespace(record=None, mutex=threading.RLock())
+            server.worker = threading.Thread(target=lambda: execution.wait(2))
+            server.worker.start()
+            thread = threading.Thread(target=lambda: server.serve_until_idle(lambda: finalized.append(True)))
+            thread.start()
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(2); client.connect(server.server_address)
+                    self.assertTrue(entered.wait(2))
+                    self.assertEqual(finalized, [])
+                    reply.set()
+                    self.assertEqual(client.recv(1024), b"terminal receipt\n")
+                    self.assertTrue(thread.is_alive())
+                    self.assertEqual(finalized, [])
+                execution.set(); server.worker.join(2); thread.join(2)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(finalized, [True])
+            finally:
+                reply.set(); execution.set(); server.worker.join(2); thread.join(2)
+
+    def test_unresolved_and_installing_workers_do_not_retire(self):
+        with tempfile.TemporaryDirectory() as directory, serve.Server(directory + "/socket", serve.Handler) as server:
+            phases = iter(("installing", "quiescing", "trial", "operator-required", "restoring", "committing", "succeeded"))
+            server.transactions = SimpleNamespace(record=None, mutex=threading.RLock())
+            observed = []
+            def next_phase():
+                phase = next(phases)
+                observed.append(phase)
+                server.transactions.record = {"phase": phase}
+            server.handle_request = next_phase
+            server.serve_until_idle(lambda: self.assertEqual(observed[-1], "succeeded"))
+            self.assertEqual(len(observed), 7)
+
+    def test_frozen_startup_without_active_record_hands_queued_requests_to_fresh_code(self):
+        with tempfile.TemporaryDirectory() as directory, serve.Server(directory + "/socket", serve.Handler) as server:
+            server.transactions = SimpleNamespace(record=None, mutex=threading.RLock())
+            finalized = []
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(2); client.connect(server.server_address); client.sendall(b"queued status\n")
+                server.serve_until_idle(lambda: finalized.append(True), retained_idle=True)
+                self.assertEqual(finalized, [True])
+                # The listening socket belongs to systemd, independent of the
+                # retiring process. The fresh process can accept this same queue.
+                with server.socket.accept()[0] as fresh:
+                    self.assertEqual(fresh.recv(1024), b"queued status\n")
+                    fresh.sendall(b"fresh repair capability\n")
+                self.assertEqual(client.recv(1024), b"fresh repair capability\n")
+
+    def test_main_marks_terminal_frozen_startup_for_handover_even_with_record_none(self):
+        root = Path("/fixture/state")
+        transaction = SimpleNamespace(record=None, context=lambda: None, platform=SimpleNamespace(release_worker=lambda record: released.append(record)))
+        released = []
+        with patch.object(serve.os, "geteuid", return_value=0), patch.object(serve.os, "umask"), patch.dict(serve.os.environ, {"LISTEN_PID": str(serve.os.getpid()), "LISTEN_FDS": "1"}), patch.object(serve, "Retention", return_value=SimpleNamespace(root=root)), patch.object(serve, "Ubuntu"), patch.object(serve, "Transactions", return_value=transaction), patch.object(serve, "__file__", str(root / "workers" / ("a" * 32) / "serve.py")), patch.object(serve, "Server") as factory, patch.object(serve.socket, "socket"), patch.object(serve.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=1000)):
+            serve.main()
+            finalize, retained_idle = factory.return_value.__enter__.return_value.serve_until_idle.call_args.args
+            self.assertTrue(retained_idle)
+            finalize()
+        self.assertEqual(released, [{"updateId": "a" * 32}])
+
+
+class WorkerRefreshTests(unittest.TestCase):
+    def setUp(self):
+        fixtures.fixtures.TransactionTests.setUp(self)
+        self.locked = False
+        @contextmanager
+        def package_lock():
+            self.locked = True
+            try: yield
+            finally: self.locked = False
+        self.calls = []
+        self.platform.package_lock = package_lock
+        self.platform.package_health = lambda: self.assertTrue(self.locked)
+        self.override = self.root / "override.conf"
+        patch.object(worker, "OVERRIDE", self.override).start()
+        patch.object(operator_client, "Ubuntu", return_value=self.platform).start()
+        patch.object(operator_client, "activation_status", return_value="enabled").start()
+        patch.object(operator_client, "enrolled_key", return_value=b"fixture").start()
+        patch.object(operator_client, "installed", return_value=self.previous).start()
+        patch.object(operator_client, "trusted_file", side_effect=lambda path: Path(path).read_bytes()).start()
+        def run(*args):
+            self.calls.append(args)
+            if "start" in args:
+                self.assertFalse(self.locked)
+                with self.storage.lock(): pass
+            else:
+                self.assertTrue(self.locked)
+                with self.assertRaises(receipt.Rejected), self.storage.lock(): pass
+            return b""
+        patch.object(operator_client, "run", side_effect=run).start()
+        patch.object(worker, "run", side_effect=run).start()
+
+    def rpc(self, payload):
+        replies = []
+        peer = SimpleNamespace(getsockopt=lambda *args: struct.pack("3i", 1, 0, 0), settimeout=lambda value: None, recv=lambda count: json.dumps(payload).encode() + b"\n", sendall=lambda data: replies.append(json.loads(data)))
+        server = SimpleNamespace(app_uid=0, transactions=self.engine, worker=None)
+        with patch.object(serve.socket, "SO_PEERCRED", 17, create=True): serve.Handler(peer, "fixture", server)
+        if server.worker: server.worker.join(2)
+        return replies[0]
+
+    def test_explicit_old_worker_transition_restarts_only_its_existing_socket_after_locks_release(self):
+        # Old worker status lacked current/repairCurrent and rejected repair.
+        # The fixed operator transition is independent of that old RPC protocol.
+        result = operator_client.refresh_worker(self.storage)
+        self.assertEqual(result["worker"], "refreshed")
+        self.assertEqual(self.calls, [("/usr/bin/systemctl", "is-active", "--quiet", "couch-updater.socket"), ("/usr/bin/systemctl", "stop", "couch-updater.socket", "couch-updater.service"), ("/usr/bin/systemctl", "daemon-reload"), ("/usr/bin/systemctl", "start", "couch-updater.socket")])
+        status = self.rpc({"op": "status"})
+        self.assertTrue(status["repairCurrent"])
+        self.assertEqual(status["current"]["candidateId"], self.previous["candidateId"])
+        request = {"op": "repair-current", "expectedCurrentId": self.previous["candidateId"], "requestId": "b" * 32, "confirmInterrupt": False, "repairRuntime": False}
+        self.assertTrue(self.rpc(request)["ok"])
+        self.assertEqual(self.engine.status()["phase"], "succeeded")
+
+    def test_refresh_refuses_active_unhealthy_unenrolled_and_disabled_states_without_service_changes(self):
+        fixtures.save(self.storage.root / "active.json", {"phase": "installing"})
+        with self.assertRaisesRegex(receipt.Rejected, "active transaction"): operator_client.refresh_worker(self.storage)
+        (self.storage.root / "active.json").unlink()
+        for target, options in (("activation_status", {"return_value": "disabled"}), ("installed", {"return_value": {**self.previous, "revision": "0" * 40}})):
+            with patch.object(operator_client, target, **options), self.assertRaises(receipt.Rejected): operator_client.refresh_worker(self.storage)
+        self.platform.package_health = lambda: (_ for _ in ()).throw(receipt.Rejected("Interrupted package work"))
+        with self.assertRaises(receipt.Rejected): operator_client.refresh_worker(self.storage)
+        self.assertEqual(self.calls, [])
+
+    def test_unmatched_override_is_not_stopped_or_removed(self):
+        self.override.write_bytes(worker.configuration(self.storage.root, "c" * 32))
+        with self.assertRaisesRegex(receipt.Rejected, "no matching terminal"): operator_client.refresh_worker(self.storage)
+        self.assertTrue(self.override.exists())
+        self.assertEqual(self.calls, [])
+
+    def test_matching_terminal_override_is_removed_before_socket_reactivation(self):
+        update_id = "c" * 32
+        fixtures.save(self.engine.directory / ("c" * 32 + ".json"), {"phase": "restored", "updateId": update_id})
+        self.override.write_bytes(worker.configuration(self.storage.root, update_id))
+        with patch.object(worker, "trusted_file", side_effect=lambda path: Path(path).read_bytes()):
+            operator_client.refresh_worker(self.storage)
+        self.assertFalse(self.override.exists())
+        self.assertIn(("/usr/bin/systemctl", "daemon-reload"), self.calls)
+        self.assertEqual(self.calls[-1], ("/usr/bin/systemctl", "start", "couch-updater.socket"))
+
+    def test_package_lock_failure_never_stops_the_worker(self):
+        self.platform.package_lock = lambda: (_ for _ in ()).throw(receipt.Rejected("APT is active"))
+        with self.assertRaisesRegex(receipt.Rejected, "APT is active"): operator_client.refresh_worker(self.storage)
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":

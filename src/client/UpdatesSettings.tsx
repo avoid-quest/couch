@@ -140,12 +140,13 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
-      </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming("install")}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
+      </> : <Button className="min-h-11" disabled={busy || state.installation.repairAvailable === false} onClick={() => setConfirming("install")}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
     </div>}
     <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
     {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
     <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
-      {state?.installation?.enabled && state.installation.current && !retry && !installing && <div className="space-y-2">
+      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The update worker needs a one-time SSH refresh after this upgrade. After maintenance finishes, the administrator can run <code>sudo couch-update refresh-worker</code>. This keeps TV playback running.</p>}
+      {state?.installation?.enabled && state.installation.repairAvailable !== false && state.installation.current && !retry && !installing && <div className="space-y-2">
         <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
         {confirming === "repair" ? <>
           <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>

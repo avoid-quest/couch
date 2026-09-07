@@ -55,10 +55,11 @@ def preserve(root, update_id):
 
 
 def release(root, update_id):
-    if not OVERRIDE.exists():
-        return
-    if trusted_file(OVERRIDE) != configuration(root, update_id):
-        raise Rejected("The updater service override belongs to another transaction.")
-    OVERRIDE.unlink()
-    sync_directory(OVERRIDE.parent)
+    if OVERRIDE.exists():
+        if trusted_file(OVERRIDE) != configuration(root, update_id):
+            raise Rejected("The updater service override belongs to another transaction.")
+        OVERRIDE.unlink()
+        sync_directory(OVERRIDE.parent)
+    # A previous exit may have unlinked the file before daemon-reload finished.
+    # Successful reload is required before socket activation starts fresh code.
     run("/usr/bin/systemctl", "daemon-reload")

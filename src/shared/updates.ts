@@ -26,5 +26,5 @@ export type UpdateState = {
   currentCheck: boolean;
   candidate: UpdateCandidate | null;
   error: string | null;
-  installation?: { current?: { candidateId: string; version: string; revision: string } | null; enabled: boolean; transaction: UpdateTransaction | null; requestedTransaction?: UpdateTransaction | null };
+  installation?: { current?: { candidateId: string; version: string; revision: string } | null; repairAvailable?: boolean; enabled: boolean; transaction: UpdateTransaction | null; requestedTransaction?: UpdateTransaction | null };
 };

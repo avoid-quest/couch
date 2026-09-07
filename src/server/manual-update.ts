@@ -11,6 +11,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 
 export function createManualUpdate(worker: Worker, admitted: () => boolean, candidateReady: (id: string) => boolean, canRepair = () => true) {
   let busy = false;
+  let repairAvailable: boolean | null = null;
   let current: NonNullable<UpdateState["installation"]>["current"] = null;
   const authorize = (identity: () => ControllerIdentity | null) => {
     const caller = identity();
@@ -18,9 +19,10 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     if (caller.authority !== "administrator") throw new ControllerError("An administrator remote is required to install updates.", 403);
   };
   const status = async (requestId?: string) => {
-    const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current };
+    const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean };
     if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The external update worker is unavailable. Check its service through SSH.", 503);
     current = result.current && /^[a-f0-9]{64}$/.test(result.current.candidateId) && typeof result.current.version === "string" && typeof result.current.revision === "string" ? result.current : null;
+    repairAvailable = result.repairCurrent === true;
     if (!requestId) busy = !!result.transaction && !finished.has(result.transaction.phase);
     return result.transaction;
   };
@@ -28,6 +30,10 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     guard();
     const previous = await status(body.requestId);
     guard();
+    if (!previous && repairAvailable === false) {
+      onUnaccepted();
+      throw new ControllerError("After maintenance finishes, run sudo couch-update refresh-worker through SSH before another installation or repair.", 409);
+    }
     const repairing = "expectedCurrentId" in body;
     const ready = repairing ? canRepair() && current?.candidateId === body.expectedCurrentId : candidateReady(body.candidateId);
     if (!previous && (!admitted() || busy || !ready)) {
@@ -59,6 +65,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
 
   return {
     busy: () => busy,
+    needsRefresh: () => repairAvailable === false,
     status,
     automatic: (candidateId: string, requestId: string, guard: () => void) => submit({ candidateId, requestId, confirmInterrupt: false }, guard, true),
     async read(identity: () => ControllerIdentity | null, requestId?: string) {
@@ -67,7 +74,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       const transaction = await status();
       const requestedTransaction = requestId ? await status(requestId) : undefined;
       authorize(identity);
-      return { enabled: true, current, transaction, ...(requestId ? { requestedTransaction } : {}) };
+      return { enabled: true, current, repairAvailable: repairAvailable === true, transaction, ...(requestId ? { requestedTransaction } : {}) };
     },
     install: (request: Request, identity: () => ControllerIdentity | null) => handle(request, identity),
     repair: (request: Request, identity: () => ControllerIdentity | null) => handle(request, identity, true),

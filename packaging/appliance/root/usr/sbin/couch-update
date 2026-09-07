@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, "/usr/lib/couch-appliance/updater")
 from receipt import Rejected
 from retention import Retention
-from operator_client import activation_status, enable, request
+from operator_client import activation_status, enable, refresh_worker, request
 from transactions import TOKEN
 
 
@@ -17,6 +17,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status")
     commands.add_parser("enable")
+    commands.add_parser("refresh-worker")
     commands.add_parser("restore").add_argument("update_id")
     commands.add_parser("enroll-current").add_argument("receipt")
     args = parser.parse_args()
@@ -29,6 +30,8 @@ def main():
             result = storage.enroll(args.receipt)
         elif args.command == "enable":
             result = enable(storage)
+        elif args.command == "refresh-worker":
+            result = refresh_worker(storage)
         elif args.command == "restore":
             if not TOKEN.fullmatch(args.update_id):
                 raise Rejected("Use the exact updateId recorded by status.")
