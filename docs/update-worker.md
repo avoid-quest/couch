@@ -1,7 +1,8 @@
 # External update worker
 
 The companion package supplies the root worker for [manual phone updates](https://github.com/avoid-quest/couch/issues/7),
-retained signed releases and explicit SSH trial restoration. Installation ships
+retained signed releases, bounded automatic startup-trial recovery and explicit
+SSH restoration. Installation ships
 disabled; the administrator activates it after appliance qualification.
 
 A receipt contains the exact `InRelease`, `release.json`, `Packages` and both
@@ -140,8 +141,8 @@ bytes. Quiescing and backup retain their separate hook execution deadline.
 The app coordinator implements this protocol behind the persistent root-owned
 `/etc/couch/manual-updates.enabled` flag. No package script creates that flag or
 enables the worker units. An administrator enables phone installation explicitly
-through SSH after appliance qualification. Automatic recovery, idle scheduling
-and tool repair remain separate work. Source and fixture verification alone
+through SSH after appliance qualification. Idle scheduling and tool repair remain
+separate work. Source and fixture verification alone
 do not report issue 7 complete.
 
 On activated Linux startup, one unprivileged Python bridge runs from the fixed
@@ -243,17 +244,90 @@ If package identity changed, a verified snapshot is required before reinstalling
 Once either trial has durably committed normal admission, this command refuses
 to restore old data. Interrupted or unsuccessful restoration remains
 `operator-required`; retained evidence and failed trial data are kept for SSH
-inspection. It never guesses that readiness succeeded or performs automatic
-rollback.
+inspection. It never guesses that readiness succeeded. A root-requested retry can restore
+the original snapshot again after a failed previous-build trial, retaining that
+trial's data under a new recorded sibling path.
+
+## Automatic startup-trial recovery
+
+An activated worker automatically restores an update that disrupted Couch but
+has not committed normal admission. A failed or interrupted installation,
+failed migration, wrong build, or expired readiness deadline enters the same
+verified restoration protocol used by SSH. Public status reports `restoring`,
+then a distinct `restored` result with the previous version and revision. A
+failure before disruption leaves the original app running and performs no
+restoration. The initiating browser does not need to remain connected.
+
+Both signed releases must declare the currently supported integer data format
+`1` in their build and compatibility metadata. Unknown or incompatible formats
+are refused before disruption. Recovery revalidates the previous signature,
+package bytes and this format contract, plus this transaction's snapshot hashes.
+It uses root-retained archives without consulting the staged download or release
+feed. Expired publication metadata is allowed for that already accepted previous
+receipt; it never authorizes an expired new candidate. A corrupt receipt or
+snapshot stops recovery and preserves the evidence for SSH inspection.
+
+Before the final APT operation, the root worker fsyncs a private copy of its fixed
+Python modules under `workers/<updateId>`. An owned persistent systemd drop-in
+points `couch-updater.service` to this copy. Replacing or downgrading the companion
+package therefore does not replace the code responsible for finishing the active
+transaction after a worker or machine restart. Completed transactions remove only
+their matching drop-in; retained code remains available for inspection. No global
+APT hook or package-time activation is added. A failure to remove the override is
+reported in the service journal without changing an already durable outcome.
+
+Restoration masks and stops the app, checks that its process group has no writers,
+and keeps startup admission closed. It logs `dpkg --audit` and runs
+`dpkg --force-confold --configure --pending` to process an interrupted package
+operation. A failed candidate configuration may still be replaced by the two
+retained archives through APT with `--fix-broken --allow-downgrades`. Package
+removals and fix-missing remain disabled. APT uses the administrator's authenticated
+dependency sources if repair needs additional packages; unavailable dependencies
+leave an inspectable failure. This is package-manager repair, not an atomic
+filesystem package swap. See the [dpkg configuration commands](https://manpages.debian.org/bookworm/dpkg/dpkg.1.en.html)
+and [Ubuntu APT repair options](https://manpages.ubuntu.com/manpages/noble/man8/apt-get.8.html).
+Each package subprocess has a 30-minute deadline; readiness keeps its 90-second
+bound. A timed-out package process group is killed and reaped before recovery
+can continue. A still-running maintenance hook gets at most 330 seconds to drain;
+recovery never races that hook's snapshot or stop operation.
+
+The data replacement has its own durable journal. It records the configured
+parent and original directory inode identities, a nonce-derived private staging
+directory and a failed-trial sibling before either rename. The verified snapshot
+copy is fsynced and its inode recorded before moving live data aside. After a
+restart, the worker distinguishes both completed renames from the directory
+identities even if the subsequent journal write never happened. It completes the
+same swap without deleting the snapshot or either installed data tree. Changed
+parents, symlinks and ambiguous identities stop recovery. Copying requires the
+snapshot size plus a 256 MiB reserve on the destination filesystem; subsequent
+space exhaustion preserves the original data and the partial private copy for
+inspection or retry. The unchanged-app path still handles failed checkpoints
+that produced no snapshot.
+
+Each automatic start is journaled before restoration, with at most three starts
+across abrupt worker or machine restarts. A caught recovery failure stops automatic
+attempts immediately; reboot does not retry it indefinitely. SSH can explicitly
+retry the same transaction after the operator resolves the cause. Restarting a
+previous-build trial first stops its writers and prepares a fresh copy of the
+same original snapshot, retaining the failed previous trial as well. The final
+package lock protects package health, identity, data restoration and trial
+acceptance. The committed flag is durable before the accepted receipt or normal
+admission changes. A crash at or after that boundary never triggers automatic or
+SSH data rollback, even if the final success message was lost. Such an incomplete
+commit remains `operator-required` for inspection; the worker does not infer
+success or discard possibly accepted writes.
 
 ## Inspection and verification
 
 `sudo couch-update status` exposes the current receipt and active transaction.
 Through SSH, root can inspect `/var/lib/couch-updater/transactions/<requestId>.json`,
 `logs/<updateId>.log`, `backups/<updateId>` and the retained receipts. A worker
-restart records a failure before package work or `operator-required` when the
-interruption may have changed packages or data. It does not guess success,
-automatically reinstall packages, or clear ambiguous maintenance state.
+restart records a failure before disruption or queues bounded recovery of an
+uncommitted interrupted trial. A restart before the authenticated hook verifies unchanged
+installed identity and package health without stopping playback; a mismatch or
+package lock leaves maintenance fenced for inspection and does not start recovery.
+A failed recovery or incomplete commit remains
+`operator-required`; it does not clear ambiguous state.
 Preserve this evidence when investigating or restoring a failed trial.
 
 Run `python3 scripts/test-update-retention.py` for descriptor, content,
@@ -265,17 +339,25 @@ enrolled on the TV. These tests neither install Couch nor qualify native or
 phone updates.
 
 `python3 scripts/test-update-transactions.py` checks durable state, retries,
-failure boundaries and SQLite backup without installing packages.
+failure boundaries and SQLite backup without installing packages. It also loads
+the recovery suite through the existing CI entry point.
+`python3 scripts/test-update-recovery.py` checks automatic recovery, restart
+budgets, snapshot corruption, missing staged downloads and commit boundaries with
+package, supervisor and readiness doubles. On Linux it also runs the real
+directory replacement with faults after both renames. Its retained-worker check
+imports the frozen modules after removing the package-owned source fixture;
+systemd itself remains a double.
 `python3 scripts/test-update-transactions-ubuntu.py` installs tiny dummy Debian
 packages in a disposable Ubuntu 24.04 container, exercises real APT locks,
 acquisition and the frozen hook, disconnects the initiating client and checks
-readiness failure, explicit previous-package/data restoration and unchanged-app
-resume after a failed checkpoint with no snapshot. Its session, native and browser operations are explicit
+readiness failure, automatic and explicit previous-package/data restoration,
+a killed dummy-package dpkg process followed by real package-manager repair,
+and unchanged-app resume after a failed checkpoint with no snapshot. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
 watchdog, or on the dedicated disposable Ubuntu runner in
 [Update worker CI](../.github/workflows/updater.yml). Never run it on the
-TV or a development host. That workflow runs both focused suites and both real
+TV or a development host. That workflow runs the focused suites and both real
 Ubuntu fixtures for companion package, worker, test and workflow changes with
 read-only repository permissions and a five-minute job deadline.
 Feature-branch push and metadata-only events do not run this workflow. A newer

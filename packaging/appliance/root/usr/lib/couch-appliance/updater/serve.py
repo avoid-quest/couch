@@ -1,6 +1,7 @@
 """Socket-activated root worker. Shipped disabled until explicit SSH activation."""
 import json
 import os
+from pathlib import Path
 import pwd
 import socket
 import socketserver
@@ -9,7 +10,7 @@ import sys
 import threading
 import time
 
-sys.path.insert(0, "/usr/lib/couch-appliance/updater")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from receipt import Rejected, load_json
 from retention import Retention
 from transactions import Transactions
@@ -107,11 +108,20 @@ def main():
     # A separate instance cannot alter an existing transaction before obtaining
     # its root storage lock. systemd owns the sole listening socket.
     transactions = Transactions(storage, Ubuntu(storage.root))
+    frozen = Path(__file__).resolve().parent
+    if not transactions.context() and frozen.parent == storage.root / "workers":
+        try:
+            transactions.platform.release_worker({"updateId": frozen.name})
+        except Exception:
+            print("The idle retained updater override needs SSH inspection.", flush=True)
     with Server("/run/couch-updater/control.sock", Handler, bind_and_activate=False) as server:
         server.socket.close()
         server.socket = socket.socket(fileno=3)
         server.app_uid = pwd.getpwnam("couch-tv").pw_uid
         server.transactions = transactions
+        if transactions.record and transactions.record.get("recoveryPending"):
+            server.worker = threading.Thread(target=transactions.recover, daemon=False)
+            server.worker.start()
         server.serve_forever()
 
 

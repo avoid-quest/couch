@@ -42,6 +42,12 @@ class Platform:
         self.supported = True
         self.failure = None
 
+    def preserve_worker(self, record):
+        pass
+
+    def release_worker(self, record):
+        pass
+
     def staging(self):
         return self.stages
 
@@ -93,6 +99,7 @@ class TransactionTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.addCleanup(patch.stopall)
+        patch("transactions.HOOK_DRAIN_SECONDS", 0).start()
         patch.object(receipt, "signed_fields", side_effect=lambda data, key: json.loads(data)).start()
         patch.object(receipt, "run", side_effect=fixtures.fake_control).start()
         self.storage = Retention(self.root / "state")
@@ -136,7 +143,7 @@ class TransactionTests(unittest.TestCase):
         self.platform.ready = lambda record: (require_lock(), original_ready(record))
         self.platform.commit = lambda record: (require_lock(), original_commit(record))
         self.platform.restore_packages = lambda record, packages: self.platform.calls.append("restore-apt")
-        self.platform.restore_data = lambda backup: self.platform.calls.append("restore-data") or "/fixture/failed-trial"
+        self.platform.restore_data = lambda backup, state, persist: self.platform.calls.append("restore-data") or "/fixture/failed-trial"
         def start(record):
             require_lock()
             context = self.engine.context()
@@ -368,14 +375,31 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(first["updateId"], duplicate["updateId"])
         self.assertEqual(duplicate["phase"], "failed")
 
-    def test_restart_during_install_requires_operator_without_reinstall_loop(self):
+    def test_restart_before_authenticated_hook_keeps_unchanged_playback_running(self):
+        self.request["confirmInterrupt"] = False
         self.engine.submit(self.request)
-        self.engine.transition("installing")
+        self.engine.transition("installing", previous=self.previous)
+        self.platform.unchanged_previous = lambda previous: previous == self.previous
         restarted = Transactions(self.storage, self.platform, lambda: b"fixture")
-        self.assertEqual(restarted.status()["phase"], "operator-required")
+        self.assertEqual(restarted.status()["phase"], "failed")
+        self.assertFalse(restarted.record["recoveryPending"])
+        self.assertIsNone(restarted.context())
         self.assertEqual(self.platform.calls, [])
-        with self.assertRaises(receipt.Rejected):
-            restarted.submit({**self.request, "requestId": "b" * 32})
+        self.assertEqual(self.storage.current(b"fixture"), self.previous)
+
+    def test_restart_before_hook_keeps_changed_or_locked_packages_fenced_without_recovery(self):
+        for changed in (False, receipt.Rejected("package manager busy")):
+            with self.subTest(changed=changed):
+                self.engine.submit(self.request)
+                self.engine.transition("installing", previous=self.previous)
+                with patch.object(self.platform, "unchanged_previous", create=True, side_effect=changed if isinstance(changed, Exception) else None, return_value=changed):
+                    restarted = Transactions(self.storage, self.platform, lambda: b"fixture")
+                self.assertEqual(restarted.status()["phase"], "operator-required")
+                self.assertFalse(restarted.record["recoveryPending"])
+                self.assertIsNotNone(restarted.context())
+                self.assertEqual(self.platform.calls, [])
+                with self.assertRaises(receipt.Rejected):
+                    restarted.submit({**self.request, "requestId": "b" * 32})
 
     def test_restart_preserves_terminal_journal_before_active_marker_cleanup(self):
         for phase in ("succeeded", "restored", "failed"):
@@ -746,20 +770,31 @@ class SnapshotTests(unittest.TestCase):
         self.database.close()
         (self.data / "preferences.json").write_text("failed trial")
         previous_mode = self.data.stat().st_mode & 0o777
-        failed = Path(recovery.restore_data(self.data, backup))
+        failed = Path(recovery.restore_data(self.data, backup, {"nonce": "a" * 32}, lambda: None))
         self.assertEqual((self.data / "preferences.json").read_text(), '{"unchanged":true}')
         self.assertEqual((failed / "preferences.json").read_text(), "failed trial")
         self.assertEqual(self.data.stat().st_mode & 0o777, previous_mode)
         self.assertEqual(self.data.stat().st_uid, os.geteuid())
         self.assertTrue((self.data / "media").is_symlink())
         self.assertEqual((outside / "movie").read_bytes(), b"external media")
-        self.assertEqual(list(self.root.glob(".couch-restore-*")), [])
+        stages = list(self.root.glob(".couch-restore-*"))
+        self.assertEqual(len(stages), 1)
+        self.assertEqual(list(stages[0].iterdir()), [])
 
     def test_space_failure_does_not_touch_live_data_or_leave_partial_backup(self):
         with patch.object(maintenance.shutil, "disk_usage", return_value=shutil._ntuple_diskusage(100, 100, 0)), self.assertRaises(receipt.Rejected):
             maintenance.snapshot(self.data, self.root / "backup")
         self.assertFalse((self.root / "backup").exists())
         self.assertEqual(self.database.execute("SELECT value FROM preserved").fetchall(), [("pairing and progress",)])
+
+
+def load_tests(loader, tests, pattern):
+    # The existing CI entry point owns both suites. Importing its fixtures from
+    # the standalone recovery script does not invoke unittest discovery.
+    recovery_spec = importlib.util.spec_from_file_location("recovery_tests", Path(__file__).with_name("test-update-recovery.py"))
+    recovery_tests = importlib.util.module_from_spec(recovery_spec)
+    recovery_spec.loader.exec_module(recovery_tests)
+    return unittest.TestSuite((tests, loader.loadTestsFromModule(recovery_tests)))
 
 
 if __name__ == "__main__":
