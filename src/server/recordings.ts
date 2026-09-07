@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { GuideChannel, GuideProgram } from "../shared/iptv";
 import type { Recording, RecordingMapping, RecordingsPage } from "../shared/recordings";
-import { boundedBytes, record } from "./iptv-feeds";
+import { boundedBytes, GuideError, record } from "./iptv-feeds";
 import { backendUuid, connectionInput, createTvheadend, RecordingError, type BackendJob, type RecordingConnection, type RecordingVerification } from "./tvheadend";
 
 type Selection = { channel: GuideChannel; program: GuideProgram };
@@ -76,7 +76,8 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
           const failed = /Error$/i.test(row.sched_status) || row.sched_status === "unknown" || row.errorcode > 0;
           const status = failed ? "failed" : row.sched_status === "scheduled" ? "pending" : row.sched_status === "recording" ? "running" : row.sched_status === "completed" && row.filesize > 0 ? "completed" : "failed";
           const rawCause = failed ? `${row.status ?? ""}`.slice(0, 1000) : null;
-          update(job, { backendId: row.uuid, status, backendCause: job.backendCause ?? rawCause, cause: job.cause ?? (failed ? knownCauses.get(row.status) ?? "The backend could not record this programme." : status === "failed" ? "The backend did not produce a completed recording." : null) });
+          const backendCause = job.backendCause ?? rawCause;
+          update(job, { backendId: row.uuid, status, backendCause, cause: backendCause !== null ? knownCauses.get(backendCause) ?? "The backend could not record this programme." : status === "failed" ? "The backend did not produce a completed recording." : null });
         }
       })();
       checkedAt = Date.now(); error = null; publish();
@@ -220,7 +221,8 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         }
         return json({ error: "Not found." }, 404);
       } catch (reason) {
-        return json({ error: reason instanceof RecordingError ? reason.message : "Could not complete the recording request." }, reason instanceof RecordingError ? reason.status : 502);
+        const safe = reason instanceof RecordingError || reason instanceof GuideError;
+        return json({ error: safe ? reason.message : "Could not complete the recording request." }, safe ? reason.status : 502);
       }
     },
     async close() {

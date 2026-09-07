@@ -8,6 +8,7 @@ import type { GuideChannel, GuideProgram } from "../shared/iptv";
 import type { Recording, RecordingsPage } from "../shared/recordings";
 import { createRecordings } from "./recordings";
 import { connectionInput } from "./tvheadend";
+import { GuideError } from "./iptv-feeds";
 import { openStore } from "./store";
 import { createSession } from "./session";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
@@ -29,6 +30,7 @@ function fixture() {
   let blockCreate: Promise<void> | undefined;
   let blockChannels: Promise<void> | undefined;
   let backendTimeOffset = 0;
+  let missingGuide = false;
   let changeAfterWriteCheck = false;
   let hideViewer = false, hideFailedRecorder = false, hideFailedViewer = false, keepCancel = false, loseProbeCreate = false, missingProbeCreate = false, probeCount = 0;
   let rows: Record<string, unknown>[] = [];
@@ -63,7 +65,7 @@ function fixture() {
   const endpoint = `http://127.0.0.1:${server.port}`;
   const input = { endpoint, username: "recorder", password: "private-recorder", playbackUsername: "viewer", playbackPassword: "private-viewer", profileId };
   let broadcasts = 0;
-  const make = () => createRecordings({ databasePath, selection: id => { if (id !== selected.program.id) throw new Error("Missing programme"); return selected; }, channel: id => { if (id !== selected.channel.id) throw new Error("Missing channel"); return selected.channel; }, pollMs: 0, onChange: () => { broadcasts++; } });
+  const make = () => createRecordings({ databasePath, selection: id => { if (missingGuide || id !== selected.program.id) throw new GuideError("This programme is no longer in the guide. Refresh the guide.", 404); return selected; }, channel: id => { if (missingGuide || id !== selected.channel.id) throw new GuideError("This channel is no longer in the guide. Refresh the guide.", 404); return selected.channel; }, pollMs: 0, onChange: () => { broadcasts++; } });
   let recordings = make(); cleanup.push(() => recordings.close());
   const api = (path = "", method = "GET", body?: unknown, signal?: AbortSignal) => recordings.handle(new Request(`http://localhost/api/recordings${path}`, { method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal }), () => identity);
   const setup = async () => {
@@ -73,6 +75,7 @@ function fixture() {
   const schedule = () => api("/schedule", "POST", { programId: selected.program.id, start: selected.program.start, end: selected.program.end, title: selected.program.title, revision: 2 });
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
     set backendTimeOffset(value: number) { backendTimeOffset = value; },
+    set missingGuide(value: boolean) { missingGuide = value; },
     set changeAfterWriteCheck(value: boolean) { changeAfterWriteCheck = value; },
     get probeCount() { return probeCount; }, set blockChannels(value: Promise<void> | undefined) { blockChannels = value; }, set hideViewer(value: boolean) { hideViewer = value; }, set hideFailedRecorder(value: boolean) { hideFailedRecorder = value; }, set hideFailedViewer(value: boolean) { hideFailedViewer = value; }, set keepCancel(value: boolean) { keepCancel = value; }, set loseProbeCreate(value: boolean) { loseProbeCreate = value; }, set missingProbeCreate(value: boolean) { missingProbeCreate = value; },
     set fail(value: boolean) { fail = value; }, set loseCreate(value: boolean) { loseCreate = value; }, set loseCancel(value: boolean) { loseCancel = value; }, set writeAllowed(value: boolean) { writeAllowed = value; }, set missingChannel(value: boolean) { missingChannel = value; }, set incomplete(value: boolean) { incomplete = value; }, set identity(value: ControllerIdentity | null) { identity = value; }, set selected(value: typeof selected) { selected = value; }, set blockCreate(value: Promise<void> | undefined) { blockCreate = value; },
@@ -363,4 +366,45 @@ test("permission-check deletion revalidates the entry after asynchronous rights 
   expect(app.calls.some(call => call.path === "/api/idnode/delete")).toBe(false);
   expect(app.rows).toHaveLength(1); expect(app.rows[0]!.filename).toBe("/changed-after-permission-check.ts");
   expect(app.recordings.snapshot().configured).toBe(false); expect(app.createCount).toBe(0);
+});
+
+test("removed guide selections preserve their safe 404 for scheduling and mapping", async () => {
+  const app = fixture(); await app.setup(); app.missingGuide = true;
+  const before = app.calls.length;
+  for (const response of [await app.schedule(), await app.api("/mappings", "POST", { channelId: channel.id, sourceId: channel.sourceId, tvgId: channel.tvgId, backendChannel, revision: 2 })]) {
+    expect(response.status).toBe(404); expect((await response.json()).error).toContain("Refresh the guide");
+  }
+  expect(app.calls).toHaveLength(before); expect(app.createCount).toBe(0);
+});
+
+test("duplicate reconciliation warnings clear after recovery while the original backend failure survives", async () => {
+  const app = fixture(); await app.setup();
+  const gate = Promise.withResolvers<void>(); app.blockCreate = gate.promise;
+  const pending = app.schedule();
+  try {
+    for (let i = 0; i < 100 && !app.createCount; i++) await Bun.sleep(1);
+    expect(app.rows).toHaveLength(1);
+    app.rows.push({ ...app.rows[0], uuid: "9".repeat(32) });
+  } finally { gate.resolve(); }
+  const uncertain = await job(await pending);
+  expect(uncertain.status).toBe("checking"); expect(uncertain.cause).toContain("duplicate");
+  app.rows.pop(); await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]).toMatchObject({ status: "pending", cause: null });
+  Object.assign(app.rows[0]!, { sched_status: "recordingError", status: "No free adapter", errorcode: 200 });
+  await app.recordings.refresh();
+  app.rows.push({ ...app.rows[0] }); await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]!.cause).toContain("duplicate");
+  app.rows.pop(); Object.assign(app.rows[0]!, { sched_status: "completedError", status: "File missing", errorcode: 0 });
+  await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]!.cause).toBe("No free recording input.");
+});
+
+test("a restored cancelled entry clears its review warning after normal reconciliation", async () => {
+  const app = fixture(); await app.setup(); const pending = await job(await app.schedule());
+  const row = { ...app.rows[0]! };
+  await job(await app.api(`/${pending.id}/cancel`, "POST", { revision: pending.revision }));
+  app.rows.push(row); await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]!.cause).toContain("restored");
+  await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]).toMatchObject({ status: "pending", cause: null });
 });

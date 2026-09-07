@@ -116,6 +116,8 @@ export function createTvheadend(connection: RecordingConnection, shutdown: Abort
       let backendTime = 0;
       for (const playback of [false, true]) {
         const identity = await call("access/whoami", {}, playback, signal);
+        // The maintained /dvrfile route accepts DVR OR streaming access. Basic
+        // DVR is sufficient here; cross-owner failed access is checked below.
         if (identity.username !== (playback ? connection.playbackUsername : connection.username) || identity.admin || !identity.dvr) throw new RecordingError("Use authenticated non-administrator recorder and playback accounts with DVR access on Tvheadend API 20 or newer.", 409);
         if (!playback && verification) {
           if (!Number.isSafeInteger(identity.time) || Math.abs(Number(identity.time) - Date.now() / 1000) > 60) throw new RecordingError("The backend clock must agree with Couch within one minute before setup can be verified.", 409);
