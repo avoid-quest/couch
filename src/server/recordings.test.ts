@@ -67,10 +67,13 @@ function fixture() {
   cleanup.push(() => server.stop(true));
   const endpoint = `http://127.0.0.1:${server.port}`;
   const input = { endpoint, username: "recorder", password: "private-recorder", playbackUsername: "viewer", playbackPassword: "private-viewer", profileId };
-  let broadcasts = 0;
+  let broadcasts = 0, createResponseHeld = false;
   const request = Object.assign(async (...args: Parameters<typeof fetch>) => {
     const response = await fetch(...args);
-    if (String(args[0]).endsWith("/api/dvr/entry/create")) await holdCreateResponse;
+    if (String(args[0]).endsWith("/api/dvr/entry/create") && holdCreateResponse) {
+      createResponseHeld = true;
+      await holdCreateResponse;
+    }
     return response;
   }, { preconnect: fetch.preconnect });
   const make = () => createRecordings({ databasePath, selection: id => { if (missingGuide || id !== selected.program.id) throw new GuideError("This programme is no longer in the guide. Refresh the guide.", 404); return selected; }, channel: id => { if (missingGuide || id !== selected.channel.id) throw new GuideError("This channel is no longer in the guide. Refresh the guide.", 404); return selected.channel; }, admitted: () => admitted, pollMs: 0, fetch: request, onChange: () => { broadcasts++; } });
@@ -84,7 +87,8 @@ function fixture() {
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
     set admitted(value: boolean) { admitted = value; },
     set blockJobs(value: Promise<void> | undefined) { blockJobs = value; },
-    set holdCreateResponse(value: Promise<void> | undefined) { holdCreateResponse = value; },
+    get createResponseHeld() { return createResponseHeld; },
+    set holdCreateResponse(value: Promise<void> | undefined) { holdCreateResponse = value; createResponseHeld = false; },
     set backendTimeOffset(value: number) { backendTimeOffset = value; },
     set missingGuide(value: boolean) { missingGuide = value; },
     set changeAfterWriteCheck(value: boolean) { changeAfterWriteCheck = value; },
@@ -502,7 +506,8 @@ test("shutdown drains an admitted create and restart reconciles its UUID without
   const app = fixture(); await app.setup();
   const gate = Promise.withResolvers<void>(); app.holdCreateResponse = gate.promise;
   const pending = app.schedule();
-  await until(() => app.createCount === 1);
+  await until(() => app.createResponseHeld);
+  expect(app.createCount).toBe(1);
   const snapshot = app.recordings.snapshot(), broadcasts = app.broadcasts;
   app.admitted = false;
   let finished = false;
