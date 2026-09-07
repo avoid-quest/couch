@@ -28,6 +28,7 @@ base64 = "0.22"
 sha2 = "0.10"
 semver = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 time = { version = "0.3", features = ["parsing"] }
 
 [target.'cfg(unix)'.dependencies]
