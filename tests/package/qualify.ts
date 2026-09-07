@@ -169,7 +169,7 @@ try {
   await command({ type: "stop" });
   await command({ type: "enqueueWeb", url: "http://127.0.0.1:44212/fixture.html", entryId: crypto.randomUUID(), playNow: true });
   await until("Bundled yt-dlp extracts a webpage and native playback advances", async () => state.player.status === "playing" && state.player.position > 1);
-  const toolDir = appimage ? "/opt/squashfs-root/usr/lib/couch/tools" : run(["docker", "exec", container, "sh", "-c", "dirname $(dpkg-query -L couch | grep '/tools/deno$')"]);
+  const toolDir = appimage ? "/opt/squashfs-root/usr/lib/Couch/tools" : run(["docker", "exec", container, "sh", "-c", "dirname $(dpkg-query -L couch | grep '/tools/deno$')"]);
   assert.equal(run(["docker", "exec", "-u", "qualifier", container, `${toolDir}/deno`, "eval", "console.log(6 * 7)"]), "42");
   record("Bundled Deno executes without a system JavaScript runtime");
   await command({ type: "stop" });
