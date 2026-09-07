@@ -30,6 +30,7 @@ import { createDiagnostics } from "./diagnostics";
 import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
 import { createGuide } from "./iptv";
+import { createRecordings } from "./recordings";
 
 type HubOptions = {
   hostname?: string;
@@ -82,6 +83,7 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
+      if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
       if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
       // Older directory favorites were queued as direct URLs before radio had
@@ -111,6 +113,15 @@ export function createHub(options: HubOptions) {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
       if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }); }
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
+    },
+  });
+  const recordings = createRecordings({ databasePath: options.databasePath, selection: guide.recordingSelection, channel: guide.recordingChannel,
+    onChange: () => session.invalidate("recordings"),
+    onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
+    enqueue: (job, authorize) => {
+      const existing = session.state.queue.find(entry => entry.source === `recording:${job.id}`);
+      if (existing) session.command({ type: "play", entryId: existing.id }, authorize);
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize);
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
@@ -213,6 +224,7 @@ export function createHub(options: HubOptions) {
       if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, identity));
       if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, identity));
       if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
+      if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, identity));
       if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
       if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
       if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
@@ -328,6 +340,7 @@ export function createHub(options: HubOptions) {
       if (closed) return;
       closed = true;
       shutdown.abort();
+      const recordingShutdown = recordings.close();
       guide.close();
       for (const controller of inspections.values()) controller.abort();
       session.close();
@@ -338,7 +351,7 @@ export function createHub(options: HubOptions) {
       subtitles.close();
       playlists.close();
       collections.close();
-      await Promise.all([library.close(), jellyfin.close()]);
+      await Promise.all([library.close(), jellyfin.close(), recordingShutdown]);
       radio.close();
       store.close();
     },

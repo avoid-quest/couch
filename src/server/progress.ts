@@ -8,6 +8,7 @@ export class ViewingError extends Error {
 
 export function localMediaId(entry: QueueEntry): string | null {
   if (entry.live) return null;
+  if (/^recording:[a-f0-9-]{36}$/.test(entry.source)) return entry.source;
   if (/^library:[\w-]{1,80}$/.test(entry.source)) return entry.source;
   if (entry.source.startsWith("file:")) {
     return `file:${new Bun.CryptoHasher("sha256").update(new URL(entry.source).href).digest("hex")}`;

@@ -93,7 +93,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           let mediaId: string;
           try { mediaId = decodeURIComponent(pathname.slice("/api/progress/".length)); }
           catch { throw new RequestError("Invalid media identity."); }
-          if (!/^(library:[\w-]{1,80}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (!/^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
           const changes = await body(request);
           authorize();
           if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))
