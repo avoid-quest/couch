@@ -96,8 +96,10 @@ async function retained(description: string) {
 const media = Bun.serve({ hostname: "127.0.0.1", port: 44212, fetch: () => new Response(Bun.file(new URL("../fixtures/cue/album.flac", import.meta.url))) });
 try {
   await until("Installed HTTP coordinator starts", async () => api("/api/build").then(() => true).catch(() => false));
-  const build = await api("/api/build");
-  const installed = JSON.parse(inside("cat", "/var/lib/couch/application/build.json"));
+  let build = await api("/api/build");
+  const initialBuild = build;
+  const transactions: unknown[] = [];
+  let installed = JSON.parse(inside("cat", "/var/lib/couch/application/build.json"));
   assert.equal(build.version, installed.version);
   assert.equal(build.revision, installed.revision);
   assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], installed.archiveSha256);
@@ -117,6 +119,71 @@ try {
   assert.notEqual(supervised(), firstPid);
   assert.ok(state.queue.some((entry: any) => entry.id === "installed-tone"), "Restart preserves the queued item");
   assert.deepEqual(await api("/api/build"), build);
+  // Optional signed journey. The caller supplies a verified B receipt and enrolls
+  // its signed feed; this consumer never publishes or chooses an archive URL.
+  const updateReceipt = process.env.COUCH_QUALIFY_UPDATE_RECEIPT;
+  if (updateReceipt) {
+    const expected = await Bun.file(updateReceipt).json();
+    assert.ok(typeof expected.version === "string" && /^[a-f0-9]{40}$/.test(expected.revision));
+    assert.ok(/^[a-f0-9]{64}$/.test(expected.archiveSha256));
+    assert.notEqual(expected.version, build.version, "A and B must be different qualified builds");
+    await until("Updater completes its initial check", async () => !["checking", "downloading"].includes((await api("/api/updates")).status));
+    await api("/api/updates/policy", { policy: "manual" });
+    await api("/api/updates/channel", { channel: "preview" });
+    let update: any;
+    await until("Signed B candidate is available", async () => {
+      update = await api("/api/updates");
+      assert.notEqual(update.status, "failed", update.error);
+      return update.currentCheck && ["available", "ready"].includes(update.status);
+    });
+    assert.equal(update.candidate.version, expected.version);
+    assert.equal(update.candidate.revision, expected.revision);
+    const candidate = update.candidate;
+    await api("/api/updates/stage", { candidateId: candidate.id });
+    await until("Signed B download reports its complete byte count", async () => {
+      update = await api("/api/updates");
+      assert.notEqual(update.status, "failed", update.error);
+      return update.status === "ready";
+    }, 30 * 60_000);
+    assert.deepEqual(update.progress, { received: candidate.bytes, total: candidate.bytes });
+    for (const repair of [false, true]) {
+      const beforePid = supervised();
+      const requestId = crypto.randomUUID().replaceAll("-", "");
+      const current = (await api("/api/updates")).installation.current;
+      const body = repair
+        ? { repair: { expectedCurrentId: current.candidateId, requestId, confirmInterrupt: false, repairRuntime: false } }
+        : { install: { candidateId: candidate.id, requestId, confirmInterrupt: false } };
+      const accepted = await api(repair ? "/api/updates/repair" : "/api/updates/install", body);
+      assert.equal(accepted.transaction.requestId, requestId);
+      let transaction: any;
+      await until(repair ? "Exact-current repair commits" : "Signed A to B installation commits", async () => {
+        // Expected coordinator downtime must not hide a reported transaction failure.
+        const response = await api(`/api/updates?requestId=${requestId}`).catch(() => null);
+        transaction = response?.installation.requestedTransaction;
+        if (!transaction) return false;
+        assert.ok(!["failed", "operator-required"].includes(transaction.phase), JSON.stringify(transaction));
+        return transaction.phase === "succeeded";
+      }, 30 * 60_000);
+      assert.equal(transaction.version, expected.version);
+      assert.equal(transaction.revision, expected.revision);
+      assert.equal(transaction.intent, repair ? "repair-current" : "install");
+      transactions.push(transaction);
+      if (repair) assert.deepEqual(transaction.progress, { received: candidate.bytes, total: candidate.bytes });
+      await retained(repair ? "Exact-current repair reconnects both retained browsers without autoplay" : "Signed update reconnects both retained browsers without autoplay");
+      assert.notEqual(supervised(), beforePid, "Systemd replaced the native owner");
+      build = await api("/api/build");
+      installed = JSON.parse(inside("cat", "/var/lib/couch/application/build.json"));
+      assert.equal(build.version, expected.version);
+      assert.equal(build.revision, expected.revision);
+      assert.equal(installed.version, expected.version);
+      assert.equal(installed.revision, expected.revision);
+      assert.equal(installed.archiveSha256, expected.archiveSha256);
+      assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], expected.archiveSha256);
+      assert.ok(state.queue.some((entry: any) => entry.id === "installed-tone"));
+      assert.equal((await api("/api/updates")).policy, "manual");
+      assert.equal((await api("/api/updates")).channel, "preview");
+    }
+  }
   const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
   assert.ok(dataDir.startsWith("/"));
   // A disposable operator backup: recovery must retain writes made after it.
@@ -136,7 +203,7 @@ try {
   assert.ok((await api("/api/profiles")).profiles.some((profile: any) => profile.id === newer.id), "Recovery preserves newer database writes");
   assert.deepEqual(await api("/api/build"), build);
   assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], installed.archiveSha256);
-  await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ build, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
+  await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
 } catch (error) {
   await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, error: String(error) }, null, 2));
   throw error;
