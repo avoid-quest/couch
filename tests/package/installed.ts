@@ -256,6 +256,37 @@ try {
       assert.equal((await api("/api/updates")).channel, "preview");
     }
   }
+  // Run after the signed transaction so the baseline may predate startup controls.
+  if (process.env.COUCH_QUALIFY_GENERAL_STARTUP === "1") {
+    const path = "/api/settings/startup";
+    const original = await api(path);
+    assert.equal(original.enabled, true, "Appliance installs default to passwordless TV startup");
+    assert.equal(original.fullscreenAtLaunch, true);
+    assert.equal(original.applies, "next-session");
+    const beforePid = supervised();
+    const denied = await fetch(`${origin}${path}`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) });
+    assert.equal(denied.status, 403, "A paired nonadministrator cannot change TV startup");
+    for (const enabled of [false, true]) {
+      assert.equal((await api(path, { enabled })).enabled, enabled);
+      assert.equal((await api(path)).enabled, enabled, "Readback comes from the effective OS setting");
+      assert.equal(supervised(), beforePid, "Changing next-session startup does not interrupt Couch");
+    }
+    checks.push("Installed administrator toggles effective passwordless TV startup without interrupting the current session");
+    const override = "/etc/lightdm/lightdm.conf.d/99-qualification-override.conf";
+    inside("sh", "-c", 'printf "[Seat:seat0]\\nautologin-user=couch-tv\\n" > "$1"', "sh", override);
+    try {
+      const rejected = await fetch(`${origin}${path}`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[0]}`, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) });
+      assert.equal(rejected.status, 503);
+      assert.match((await rejected.json()).error, /overridden.*LightDM/);
+      assert.equal((await api(path)).enabled, true, "An overriding OS setting is never reported as disabled");
+      assert.equal(supervised(), beforePid);
+      checks.push("Conflicting effective LightDM configuration rejects the requested change with operator guidance");
+    } finally {
+      inside("rm", override);
+      await api(path, { enabled: true });
+    }
+    await Bun.write(`${fixtures}/startup-result.json`, JSON.stringify({ initial: original, final: await api(path), scope: "Installed OS readback, authorization and noninterrupting toggle; physical reboot acceptance is separate." }, null, 2));
+  }
   const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
   assert.ok(dataDir.startsWith("/"));
   // A disposable operator backup: recovery must retain writes made after it.
