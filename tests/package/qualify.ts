@@ -184,10 +184,14 @@ try {
   await until("Browser pairs through the production form and renders remote controls", async () => execute("return !!document.querySelector('.remote-controller') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !document.querySelector('.video-stage')"));
   await Bun.write(`${root}/browser-remote.png`, Buffer.from(await driver(44445, `/session/${browser}/screenshot`), "base64"));
   socket!.close();
+  // WebDriver deletes only the AppImage launcher; close the actual window to drain the sidecar.
+  run(["docker", "exec", "-e", "DISPLAY=:99", container, "sh", "-c", "xdotool search --onlyvisible --class '^Couch$' windowactivate --sync && xdotool key alt+F4"]);
+  await until("Native app and coordinator exit before restart", async () => run(["docker", "exec", container, "sh", "-c", "pgrep -x 'couch|couch-server' | wc -l"]) === "0");
   await driver(44444, `/session/${native}`, undefined, "DELETE");
   native = "";
   await start();
   await connect();
+  await until("Paired browser reconnects after native restart", async () => execute("return !!document.querySelector('.remote-controller') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   assert.equal(state.activeProfile.id, profile.id);
   assert.equal(state.currentEntryId, null);
   assert.equal((await api("/api/library/items")).items.length, 1);
