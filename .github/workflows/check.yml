@@ -31,7 +31,7 @@ jobs:
         id: base
         continue-on-error: true
         env:
-          BEFORE: ${{ github.event.before }}
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
         # Compare the actual PR merge tree to its first parent, or the push's prior tip.
         run: |
           base="${BEFORE:-$(git rev-parse HEAD^1)}"
