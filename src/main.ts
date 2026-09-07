@@ -1,3 +1,4 @@
+import { createNativeAppImageUpdates } from "./server/appimage-update-native";
 import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
 import { createMaintenance, manualUpdatesEnabled, type MaintenanceBuild } from "./server/maintenance";
@@ -28,12 +29,14 @@ function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
+const appimage = native && process.env.COUCH_APPIMAGE === "1";
+const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
 let hub: Hub;
-const activated = native && buildInfo.packaged && process.platform === "linux" && manualUpdatesEnabled();
+const activated = !appimage && native && buildInfo.packaged && process.platform === "linux" && manualUpdatesEnabled();
 const maintenance = activated ? createMaintenance({
   build: loadedBuild,
   context: (): Promise<unknown> => updater!.request({ op: "context" }),
@@ -63,6 +66,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.platform !== "win32") await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
+  ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
   nativeDisplay: nativeDisplay.request,
   ...(maintenance ? {
     admitted: maintenance.admitted,
@@ -107,6 +111,7 @@ async function close() {
   closing = true;
   nativeDiagnostics.close();
   nativeDisplay.close();
+  appimageUpdates.close();
   nativeReadiness.close();
   await updater?.close();
   try { await hub.close(); } finally { process.exit(0); }
@@ -129,6 +134,7 @@ if (native) {
         const message: HostMessage = JSON.parse(line);
         if (message.type === "player") hub.session.observe(message.state);
         else if (message.type === "readiness") nativeReadiness.receive(message.nonce, message.ok, message.build);
+        else if (message.type === "appimageUpdate") appimageUpdates.receive(message);
         else if (message.type === "display") nativeDisplay.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);
         else if (message.type === "shutdown") await close();

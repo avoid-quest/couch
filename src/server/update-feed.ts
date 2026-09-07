@@ -14,7 +14,8 @@ function fail(message: string): never { throw new UpdateError(message); }
 type Package = { name: string; version: string; architecture: string; filename: string; size: number; sha256: string };
 type Manifest = { schemaVersion: number; releaseId: string; build: { version: string; revision: string; packaged: boolean; dirty: boolean; target: string }; ci: { ref: string; repository: string; workflow: string; runId: string; attempt: string }; qualification: { checks: unknown[] }; compatibility: { os: string; osVersion: string; architecture: string }; releaseNotes: string; packages: Package[] };
 export type VerifiedRelease = { summary: UpdateCandidate; manifest: Manifest; metadata: Buffer; index: Buffer; signed: Buffer; feed: string; channel: ReleaseChannel };
-export type UpdateFeed = { check(channel: ReleaseChannel, signal: AbortSignal): Promise<VerifiedRelease | null>; stage(candidate: VerifiedRelease, signal: AbortSignal): Promise<void> };
+export type UpdateRelease = { summary: UpdateCandidate; staged?: boolean };
+export type UpdateFeed<T extends UpdateRelease = VerifiedRelease> = { installationUnavailable?: string; check(channel: ReleaseChannel, signal: AbortSignal): Promise<T | null>; stage(candidate: T, signal: AbortSignal, progress?: (value: { received: number; total: number }) => void): Promise<void> };
 
 // These paths are installation inputs. No HTTP request can replace them.
 async function enrolledFeed() {

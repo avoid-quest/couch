@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
-import { UpdateError, type UpdateFeed, type VerifiedRelease } from "./update-feed";
+import { UpdateError, type UpdateFeed, type UpdateRelease } from "./update-feed";
 
 type Automation = {
   busy: () => boolean;
@@ -15,8 +15,8 @@ type Automation = {
 type Attempt = { candidateId: string; requestId: string };
 const finished = new Set(["succeeded", "failed", "restored"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
-  const state: UpdateState = { running, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
+export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed<UpdateRelease>, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
+  const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
   let attempt: Attempt | null = null;
   try {
     const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
@@ -29,7 +29,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Saved update settings could not be read. Select your channel again to save it."; }
   }
-  let candidate: VerifiedRelease | null = null;
+  let candidate: UpdateRelease | null = null;
   let job: Promise<void> | undefined;
   let changing = false, closed = false;
   let saving: Promise<void> | undefined;
@@ -47,7 +47,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   const start = (kind: "checking" | "downloading") => {
     if (!feed || busy()) return;
     const wasReady = state.status === "ready", previousId = candidate?.summary.id;
-    state.status = kind; state.error = null;
+    state.status = kind; state.error = null; state.progress = null;
     if (kind === "checking") state.currentCheck = false;
     job = (async () => {
       const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(kind === "checking" ? 120_000 : 30 * 60_000)]);
@@ -57,9 +57,9 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         state.lastSuccessfulCheck = Date.now();
         await persist();
         state.currentCheck = true;
-        state.status = candidate ? wasReady && previousId === candidate.summary.id ? "ready" : "available" : "idle";
+        state.status = candidate ? (candidate.staged ?? (wasReady && previousId === candidate.summary.id)) ? "ready" : "available" : "idle";
       } else {
-        await feed.stage(candidate!, signal);
+        await feed.stage(candidate!, signal, progress => { state.progress = progress; });
         state.status = "ready";
       }
     })().catch(error => {
@@ -134,7 +134,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (busy()) throw new ControllerError("An update operation is already running. Wait for it to finish.", 409);
         if (field === "policy") {
           if (value !== "manual" && value !== "idle") throw new ControllerError("Choose Manual or Auto when idle.");
-          if (value === "idle" && !automation) throw new ControllerError("Activate the qualified update worker through SSH before enabling automatic installation.", 409);
+          if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Activate the qualified update worker through SSH before enabling automatic installation.", 409);
           const previous = state.policy;
           changing = true; state.policy = value;
           try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and five idle minutes." : null; }

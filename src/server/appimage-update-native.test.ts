@@ -1,0 +1,36 @@
+import { expect, test } from "bun:test";
+import { createNativeAppImageUpdates } from "./appimage-update-native";
+import type { AppImageUpdateAction } from "../shared/updates";
+const candidate = { summary: { id: "a".repeat(64), releaseId: "2.1", version: "0.1.0+build.2.1", revision: "b".repeat(40), notes: "new", bytes: 50, publishedAt: 1, expiresAt: Date.now() + 60_000 }, staged: true };
+test("private pipe uses fixed actions, correlates replies and forwards progress", async () => {
+  const sent: { id: string; action: AppImageUpdateAction }[] = [];
+  const native = createNativeAppImageUpdates((id, action) => sent.push({ id, action }));
+  const checking = native.feed.check("preview", new AbortController().signal);
+  expect(sent[0]!.action).toEqual({ type: "check", channel: "preview" });
+  native.receive({ requestId: "wrong", error: "must ignore" });
+  native.receive({ requestId: sent[0]!.id, candidate });
+  expect(await checking).toEqual(candidate);
+  const progress: unknown[] = [];
+  const staging = native.feed.stage(candidate, new AbortController().signal, value => progress.push(value));
+  expect(sent[1]!.action).toEqual({ type: "stage", candidateId: candidate.summary.id });
+  native.receive({ requestId: sent[1]!.id, progress: { received: 25, total: 50 } });
+  native.receive({ requestId: sent[1]!.id, staged: true });
+  await staging; expect(progress).toEqual([{ received: 25, total: 50 }]);
+  const repair = native.checkRepair(new AbortController().signal);
+  expect(sent[2]!.action).toEqual({ type: "checkRepair" });
+  native.receive({ requestId: sent[2]!.id, error: "Current archive missing" });
+  await expect(repair).rejects.toThrow("Current archive missing");
+  native.close();
+});
+test("interrupted request stays exclusive until native completion and shutdown rejects it", async () => {
+  let id = "";
+  const native = createNativeAppImageUpdates(request => { id = request; });
+  const controller = new AbortController();
+  const request = native.feed.check("stable", controller.signal);
+  controller.abort();
+  await expect(request).rejects.toThrow("interrupted");
+  await expect(native.feed.check("stable", new AbortController().signal)).rejects.toThrow("already running");
+  native.receive({ requestId: id, candidate: null });
+  const next = native.feed.check("stable", new AbortController().signal);
+  native.close(); await expect(next).rejects.toThrow("connection closed");
+});

@@ -1,3 +1,4 @@
+mod appimage_update;
 mod diagnostics;
 mod display;
 mod player;
@@ -25,6 +26,7 @@ struct Host {
     child: Mutex<Option<CommandChild>>,
     player: mpsc::Sender<player::Request>,
     display: mpsc::Sender<display::Request>,
+    updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
     shutting_down: AtomicBool,
     child_exited: watch::Sender<bool>,
 }
@@ -182,6 +184,7 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_video::init());
 
     builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             connection_info,
             set_video_rect,
@@ -194,6 +197,7 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             prepare_data_dir(&data_dir)?;
+            let (update_sender, update_receiver) = tokio::sync::mpsc::channel(1);
             let (display_sender, display_receiver) = mpsc::channel();
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
@@ -207,6 +211,7 @@ pub fn run() {
                 .shell()
                 .sidecar("couch-server")?
                 .env("COUCH_NATIVE", "1")
+                .env("COUCH_APPIMAGE", if appimage_update::running(app.handle()) { "1" } else { "0" })
                 .env("COUCH_HOST_TOKEN", token)
                 .env("COUCH_DATA_DIR", &data_dir)
                 .env(
@@ -229,9 +234,11 @@ pub fn run() {
                 child: Mutex::new(Some(child)),
                 player: player_sender,
                 display: display_sender,
+                updates: update_sender,
                 shutting_down: AtomicBool::new(false),
                 child_exited,
             });
+            tauri::async_runtime::spawn(appimage_update::run(app.handle().clone(), data_dir.join("updates/appimage"), update_receiver));
             let display_handle = app.handle().clone();
             std::thread::Builder::new().name("display".into()).spawn(move || display::run(display_handle, data_dir.join("display-output"), display_receiver))?;
             let handle = app.handle().clone();
@@ -263,6 +270,13 @@ pub fn run() {
                                             nonce,
                                             deadline: std::time::Instant::now() + std::time::Duration::from_secs(2),
                                         });
+                                    }
+                                }
+                                Ok(SidecarMessage::AppimageUpdate { request_id, action }) => {
+                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                        if host.updates.try_send(appimage_update::Request { id: request_id.clone(), action }).is_err() {
+                                            host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
+                                        }
                                     }
                                 }
                                 Ok(SidecarMessage::Display { request_id, action }) => {
