@@ -110,7 +110,7 @@ if (appimage) void (async () => {
       await appimageUpdates.complete(null);
     }
   } catch (error) { await appimageUpdates.complete(error instanceof Error ? error.message : "Startup verification failed.").catch(() => {}); }
-  finally { admission = true; }
+  finally { admission = true; send({ type: "observe" }); }
 })();
 
 if (native) {

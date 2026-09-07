@@ -119,6 +119,7 @@ try {
     socket = new BunWebSocket(await remoteSocketUrl(origin, previousToken), { headers: { Origin: origin } });
     socket.onmessage = event => { const message = JSON.parse(event.data); if (message.type === "state") state = message.state; else if (message.type === "result") commands.get(message.requestId)?.(message); };
     await until("Existing remote connects to the one native coordinator", async () => state);
+    await until("Native player is ready before playback commands", async () => state.player.status === "idle");
   };
   await connect();
   await command({ type: "enqueueLibrary", itemId: (await api("/api/library/items")).items[0].id, entryId: crypto.randomUUID(), playNow: true });
