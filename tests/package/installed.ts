@@ -264,12 +264,23 @@ try {
     assert.equal(original.fullscreenAtLaunch, true);
     assert.equal(original.applies, "next-session");
     const beforePid = supervised();
+    const admin = browsers[0]!;
+    await driver(admin.port, `/session/${admin.id}/url`, { url: origin });
+    await retained("The final build's refreshed remote retains its existing pairing");
+    await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
+    const click = (text: string) => execute(admin, "const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === arguments[0] && !b.disabled); if (!b) return false; b.click(); return true", [text]);
     const denied = await fetch(`${origin}${path}`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) });
     assert.equal(denied.status, 403, "A paired nonadministrator cannot change TV startup");
     for (const enabled of [false, true]) {
-      assert.equal((await api(path, { enabled })).enabled, enabled);
+      await until("General exposes the effective startup control", async () => click(enabled ? "Enable automatic startup" : "Disable automatic startup"));
+      await until("General shows the saved next-session startup mode", async () => execute(admin, "return document.querySelector('[data-startup-mode]')?.textContent.includes(arguments[0])", [enabled ? "Couch starts automatically" : "Login screen; Couch does not start automatically"]));
       assert.equal((await api(path)).enabled, enabled, "Readback comes from the effective OS setting");
       assert.equal(supervised(), beforePid, "Changing next-session startup does not interrupt Couch");
+    }
+    for (const [button, tab] of [["Pair again / manage remotes", "Connection"], ["Effective overrides", "Advanced"]]) {
+      assert.equal(await click(button!), true);
+      await until(`General links to ${tab}`, async () => execute(admin, "return [...document.querySelectorAll('[role=tab]')].some(t => t.textContent.trim() === arguments[0] && t.getAttribute('aria-selected') === 'true')", [tab]));
+      assert.equal(await click("General"), true);
     }
     checks.push("Installed administrator toggles effective passwordless TV startup without interrupting the current session");
     const override = "/etc/lightdm/lightdm.conf.d/99-qualification-override.conf";
