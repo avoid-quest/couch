@@ -8,6 +8,7 @@ export type UpdateTransaction = {
   error: string | null;
   createdAt: number;
   updatedAt: number;
+  progress?: { received: number; total: number };
   idleDeferred?: boolean | null;
   intent?: "install" | "repair-current" | null;
   repairRuntime?: boolean | null;

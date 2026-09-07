@@ -88,6 +88,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. Waiting for the matching running build." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating the TV"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       <p>{transaction?.phase || "Waiting for the TV to confirm this request"}</p>
+      {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB verified repair download</p>}
       {transaction?.error && <p>{transaction.error}</p>}
       {!connected && <p>The TV is restarting or offline. This page will reconnect; keep it open.</p>}
       {transaction?.phase === "operator-required" && <p>From the administrator's SSH account, inspect <code>sudo couch-update status</code> and use the documented restoration command. Do not reinstall or delete the data directory.</p>}
@@ -163,7 +164,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         {confirming === "repair" ? <>
           <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={repairRuntime} onChange={event => setRepairRuntime(event.target.checked)} /> Also reinstall Ubuntu's ffprobe media runtime</Label>
+          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={repairRuntime} onChange={event => setRepairRuntime(event.target.checked)} /> Also repair Ubuntu media dependencies</Label>
           <p className="text-muted-foreground">Runtime repair uses Ubuntu's ffmpeg package at its installed version, or its Ubuntu candidate if absent. The exact archive must be available. Other runtime failures remain visible for system administration.</p>
           <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button>
           <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
