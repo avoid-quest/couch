@@ -21,6 +21,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video r
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video cue_bounds
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video external_subtitles
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video iptv_live_start
+cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video startup_buffer
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video radio_metadata
 cargo test --locked --manifest-path src-tauri/Cargo.toml -p tauri-plugin-video replaygain_native_policy -- --nocapture
 bun tests/linux/fixtures.ts

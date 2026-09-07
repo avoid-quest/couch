@@ -121,3 +121,6 @@ impl Builder {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new().build()
 }
+
+#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+mod mpv_startup;

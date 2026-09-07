@@ -1259,6 +1259,7 @@ mod linux_mpv {
         track_targets: Vec<TrackTarget>,
         tracks_dirty: bool,
         default_buffer: MpvBufferDefaults,
+        startup_buffer: crate::mpv_startup::StartupBuffer,
         default_network: crate::mpv_radio::NetworkDefaults,
         default_live_start: crate::mpv_iptv::LiveStartDefaults,
         error: Rc<RefCell<Option<String>>>,
@@ -1407,6 +1408,7 @@ mod linux_mpv {
         mpv.disable_event(mpv_event_id::Tick).map_err(mpv_error)?;
         mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
         let default_buffer = MpvBufferDefaults::read(&mpv);
+        let startup_buffer = crate::mpv_startup::StartupBuffer::read(&mpv)?;
         let default_network = crate::mpv_radio::NetworkDefaults::read(&mpv)?;
         let default_live_start = crate::mpv_iptv::LiveStartDefaults::read(&mpv)?;
 
@@ -1524,6 +1526,7 @@ mod linux_mpv {
             track_targets: Vec::new(),
             tracks_dirty: true,
             default_buffer,
+            startup_buffer,
             default_network,
             default_live_start,
             error: render_error,
@@ -1560,6 +1563,7 @@ mod linux_mpv {
                 .map_err(mpv_error)?;
         }
         configure_buffer(player, payload)?;
+        player.startup_buffer.configure(&player.mpv, &payload.uri, payload.audio_uri.as_deref(), payload.radio || payload.go_live)?;
         player.cue = payload.end_position.is_some();
         configure_start(&player.mpv, payload.start_position, player.cue)?;
         configure_end(&player.mpv, payload.end_position)?;

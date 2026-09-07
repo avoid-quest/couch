@@ -158,6 +158,7 @@ jobs:
           bun test ./tests/linux/iptv-clock.test.ts & pids+=("$!")
           bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts' & pids+=("$!")
           cargo test --manifest-path src-tauri/Cargo.toml --locked --verbose & pids+=("$!")
+          cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer & pids+=("$!")
           status=0
           for pid in "${pids[@]:1}"; do
             child_status=0
