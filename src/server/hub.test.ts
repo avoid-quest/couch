@@ -1124,3 +1124,43 @@ test.each([false, true])("quiesce starts and awaits recording shutdown, propagat
     hubs.splice(hubs.indexOf(hub), 1);
   } else expect(result).toEqual({ progressSaved: true, admissionClosed: true });
 });
+
+test("either remote's input resets idle time, while authenticated status polling does not", async () => {
+  let now = 0;
+  const { hub } = fixture(undefined, undefined, undefined, { idleNow: () => now });
+  hub.session.observe(idle);
+  const first = await pair(hub), second = await pair(hub);
+  const one = new Peer(hub, first), two = new Peer(hub, second);
+  await Promise.all([one.ready(), two.ready()]);
+  now = 300_000; expect(hub.idleReason()).toBeNull();
+  expect((await controllerApi(hub, first, "/api/controllers/me")).status).toBe(200);
+  expect(hub.idleReason()).toBeNull();
+  expect((await controllerApi(hub, second, "/api/activity", "POST", { activity: true })).status).toBe(204);
+  expect(hub.idleReason()).not.toBeNull();
+  now += 300_000; expect(hub.idleReason()).toBeNull();
+  expect(await one.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
+  expect(hub.idleReason()).not.toBeNull();
+  now += 300_000; expect(hub.idleReason()).toBeNull();
+  expect(await two.command({ type: "volume", volume: 33 })).toMatchObject({ ok: true });
+  expect(hub.idleReason()).not.toBeNull();
+});
+
+test("active and uncertain recordings defer idle updates, while confirmed future backend jobs do not", () => {
+  let now = 0;
+  const { hub, databasePath } = fixture(undefined, undefined, undefined, { idleNow: () => now });
+  hub.session.observe(idle);
+  const db = new Database(databasePath);
+  const job = { id: "recording", status: "pending", start: Date.now() + 3_600_000, end: Date.now() + 7_200_000, title: "Future recording", channelName: "Fixture", programId: "program", channelId: "channel", cause: null, revision: 1, cancelRequested: false };
+  const save = () => db.query("INSERT OR REPLACE INTO recording_jobs VALUES (?, ?)").run(job.id, JSON.stringify(job));
+  try {
+    save(); now = 300_000; expect(hub.idleReason()).toBeNull();
+    for (const status of ["running", "checking", "pending"]) {
+      job.status = status; job.start = Date.now() - 1; save();
+      expect(hub.idleReason()).toContain("recordings");
+      now += 300_000; expect(hub.idleReason()).toContain("recordings");
+    }
+    job.status = "completed"; save();
+    expect(hub.idleReason()).toContain("five continuous");
+    now += 300_000; expect(hub.idleReason()).toBeNull();
+  } finally { db.close(); }
+});

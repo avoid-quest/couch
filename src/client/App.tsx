@@ -1,3 +1,4 @@
+import { useUpdateActivity } from "./update-activity";
 import { loadedBuild } from "../shared/build";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -67,6 +68,7 @@ export function App() {
   const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
   const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
+  useUpdateActivity(credentials, connected);
   useEffect(() => {
     if (!nativeHost || !credentials) return;
     const stop = new AbortController();

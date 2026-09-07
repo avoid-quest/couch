@@ -485,6 +485,74 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.engine.status()["phase"], "operator-required")
         self.assertFalse(self.engine.record["hookComplete"])
 
+    def test_idle_request_cannot_authorize_playback_interruption(self):
+        for value in (False, "true", True):
+            with self.assertRaises(receipt.Rejected):
+                self.engine.submit({**self.request, "whenIdle": value, "confirmInterrupt": True})
+        self.assertIsNone(self.engine.status())
+
+    def test_idle_refusal_aborts_before_dpkg_without_recovery_or_service_stop(self):
+        self.request.update(whenIdle=True, confirmInterrupt=False)
+        self.platform.quiesce = lambda record: (_ for _ in ()).throw(receipt.IdleDeferred("new controller input"))
+        self.engine.submit(self.request)
+        with patch.object(recovery, "restore") as restoring:
+            self.engine.execute()
+            restoring.assert_not_called()
+        self.assertEqual(self.engine.status()["phase"], "failed")
+        self.assertTrue(self.engine.status()["idleDeferred"])
+        self.assertFalse(self.engine.record["disrupted"])
+        self.assertFalse(self.engine.record["hookComplete"])
+        self.assertEqual(self.platform.calls, ["preflight", "apt-lock"])
+        self.assertIsNone(self.storage.read("active.json"))
+        self.assertEqual(self.storage.current(b"fixture"), self.previous)
+        with self.assertRaises(receipt.Rejected):
+            self.engine.submit({key: value for key, value in self.request.items() if key != "whenIdle"})
+
+    def test_late_authenticated_idle_refusal_cancels_pending_recovery_after_apt_exits(self):
+        entered, release = threading.Event(), threading.Event()
+        errors = []
+        def hook():
+            try: self.engine.hook(self.engine.record["updateId"])
+            except receipt.IdleDeferred as error: errors.append(error)
+        hook_thread = threading.Thread(target=hook)
+        def install(record, packages):
+            hook_thread.start()
+            self.assertTrue(entered.wait(2))
+            raise receipt.Rejected("APT exited while awaiting idle admission")
+        def quiesce(record):
+            entered.set()
+            self.assertTrue(release.wait(2))
+            raise receipt.IdleDeferred("Idle admission was never closed")
+        self.request.update(whenIdle=True, confirmInterrupt=False)
+        self.platform.install, self.platform.quiesce = install, quiesce
+        self.engine.submit(self.request)
+        execution = threading.Thread(target=self.engine.execute)
+        with patch("transactions.HOOK_DRAIN_SECONDS", 2), patch.object(recovery, "restore") as restoring:
+            execution.start()
+            try:
+                self.assertTrue(entered.wait(2))
+                deadline = time.monotonic() + 2
+                while self.engine.record["phase"] != "operator-required" and time.monotonic() < deadline:
+                    time.sleep(0.001)
+                self.assertEqual(self.engine.record["phase"], "operator-required")
+            finally:
+                release.set(); hook_thread.join(2); execution.join(2)
+            restoring.assert_not_called()
+        self.assertFalse(execution.is_alive()); self.assertFalse(hook_thread.is_alive())
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(self.engine.status()["phase"], "failed")
+        self.assertTrue(self.engine.status()["idleDeferred"])
+        self.assertFalse(self.engine.record["disrupted"])
+        self.assertIsNone(self.storage.read("active.json"))
+
+    def test_only_an_idle_transaction_accepts_authenticated_no_admission_deferral(self):
+        platform = Ubuntu.__new__(Ubuntu)
+        platform.coordinator = lambda *args: {"idleDeferred": True, "admissionClosed": False}
+        platform.systemctl = lambda *args: self.fail("A refused idle admission must not stop the service")
+        with self.assertRaises(receipt.IdleDeferred): platform.quiesce({"whenIdle": True})
+        with self.assertRaises(receipt.Rejected) as failure: platform.quiesce({})
+        self.assertNotIsInstance(failure.exception, receipt.IdleDeferred)
+
     def test_quiesce_completion_rechecks_live_apt_ancestry(self):
         authorizations = []
         def authorize(peer_pid):

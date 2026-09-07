@@ -1,6 +1,7 @@
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
+import { createUpdateIdle } from "./update-idle";
 import { createManualUpdate } from "./manual-update";
 import type { createUpdaterClient } from "./updater-client";
 import { createUpdates } from "./updates";
@@ -50,6 +51,7 @@ type HubOptions = {
   updater?: Pick<ReturnType<typeof createUpdaterClient>, "request">;
   admitted?: () => boolean;
   frontendReady?: (build: unknown) => boolean;
+  idleNow?: () => number;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -76,6 +78,7 @@ export function createHub(options: HubOptions) {
     }
   }
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
+  const idle = createUpdateIdle(options.idleNow);
   let closed = false;
   const admitted = () => !closed && (options.admitted?.() ?? true);
   const shutdown = new AbortController();
@@ -83,6 +86,7 @@ export function createHub(options: HubOptions) {
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
   const session = createSession(store, options.sendPlayer, state => {
+    idle.playback(state.player.status, !!state.radioRetry);
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
@@ -106,7 +110,7 @@ export function createHub(options: HubOptions) {
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const folders = createMediaFolders();
-  const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => session.invalidate("library") });
+  const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
   const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   const folderSettings = createFolderSettings(library, folders);
@@ -142,7 +146,15 @@ export function createHub(options: HubOptions) {
   const updateDirectory = join(dirname(options.databasePath), "updates");
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
-  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined, undefined, () => admitted() && !manual?.busy());
+  const idleReason = () => {
+    const recording = recordings.snapshot().jobs.some(job => job.status === "running" || job.status === "checking" || job.status === "pending" && job.start <= Date.now());
+    return idle.reason(library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
+  };
+  const idleAdmission = () => updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
+  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined, undefined, admitted, options.updater ? {
+    busy: () => !!manual?.busy(), idle: idleAdmission,
+    status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
+  } : undefined);
   manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady) : undefined;
   const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
@@ -204,6 +216,7 @@ export function createHub(options: HubOptions) {
           if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
           if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
           try {
+            idle.activity();
             const token = store.pair("name" in body ? body.name : undefined);
             session.invalidate("controller");
             return respond({ token, controller: store.controllerForToken(token) });
@@ -237,6 +250,7 @@ export function createHub(options: HubOptions) {
           return cors(request, json({ ok: true }));
         } catch { return cors(request, json({ error: "Invalid frontend build acknowledgment." }, 400)); }
       }
+      if (request.method !== "GET" && request.method !== "HEAD") idle.activity();
       if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
       if (manual && url.pathname === "/api/updates" && request.method === "GET") {
         try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
@@ -244,26 +258,35 @@ export function createHub(options: HubOptions) {
       }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
       if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
-      const currentIdentity = () => admitted() ? identity() : null;
-      const authorize = () => {
-        if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
-        if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
-      };
-      if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
-      if (caller.controller) store.touchController(caller.controller.id);
-      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity));
-      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
-      if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
-      if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
-      if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
-      return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      if (url.pathname === "/api/activity" && request.method === "POST") {
+        try {
+          if (await settingField(request, "activity") !== true || !admitted() || !identity()) return cors(request, json({ error: "Controls are paused." }, 503));
+          idle.activity(); return cors(request, new Response(null, { status: 204 }));
+        } catch { return cors(request, json({ error: "Send a controller activity signal." }, 400)); }
+      }
+      const finishWork = !websocket && !["GET", "HEAD"].includes(request.method) ? idle.begin("Waiting for a settings, scan or import request to finish.") : undefined;
+      try {
+        const currentIdentity = () => admitted() ? identity() : null;
+        const authorize = () => {
+          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+        };
+        if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
+        if (caller.controller) store.touchController(caller.controller.id);
+        if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity));
+        if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
+        if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+        if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
+        return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
+      } finally { finishWork?.(); }
     },
     websocket: {
       data: {} as SocketData,
@@ -282,6 +305,7 @@ export function createHub(options: HubOptions) {
       close(socket) { sockets.delete(socket); },
       async message(socket, message) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
+        idle.activity();
         if (socket.data.controllerId) store.touchController(socket.data.controllerId);
         if (Date.now() - socket.data.window >= 1000) { socket.data.window = Date.now(); socket.data.count = 0; }
         if (++socket.data.count > 60) { socket.close(1008, "Too many commands."); return; }
@@ -291,6 +315,7 @@ export function createHub(options: HubOptions) {
           socket.close(1008, "Invalid command or unsupported media source.");
           return;
         }
+        const finishWork = idle.begin("Waiting for a controller command to finish.");
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         try {
           const authorize = socket.data.authorize;
@@ -310,7 +335,7 @@ export function createHub(options: HubOptions) {
               void inspectWebMedia(action.url, controller.signal).then(metadata => {
                 if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(action.entryId, source, metadata); }
               }).catch(() => {}).finally(() => {
-                if (inspections.get(action.entryId) === controller) inspections.delete(action.entryId);
+                if (inspections.get(action.entryId) === controller) { inspections.delete(action.entryId); idle.activity(); }
               });
             }
           } else if (action.type === "enqueueLibrary") {
@@ -349,7 +374,7 @@ export function createHub(options: HubOptions) {
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };
           diagnostics.log.add("Controller command", result.error);
-        }
+        } finally { finishWork(); }
         socket.send(JSON.stringify(result));
       },
     },
@@ -393,7 +418,7 @@ export function createHub(options: HubOptions) {
   })();
 
   return {
-    server, session, pairingCode, urls, origin,
+    server, session, pairingCode, urls, origin, idleReason, idleAdmission,
     close: () => close(),
     quiesce: async () => {
       if (closing && !requiredCheckpoint) throw new Error("The TV was stopped without an update checkpoint.");

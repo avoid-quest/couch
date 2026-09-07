@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 
-from receipt import Rejected, SHA, copy_receipt, enrolled_key, load_json
+from receipt import IdleDeferred, Rejected, SHA, copy_receipt, enrolled_key, load_json
 from retention import identity, require_format, save, sync_directory
 
 TOKEN = re.compile(r"[a-f0-9]{32}\Z")
@@ -13,7 +13,7 @@ HOOK_DRAIN_SECONDS = 330
 
 
 def public(record):
-    value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision")}
+    value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision", "idleDeferred")}
     if record.get("recoveryPending") and not record.get("committed"):
         value["phase"] = "restoring"
     return value
@@ -106,16 +106,20 @@ class Transactions:
             if value["phase"] == "restoring":
                 value.update(value["restoration"])
                 value["phase"] = {"trial": "trial", "committing": "committing"}.get(value["stage"], "restoring")
-            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt")}
+            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt", "whenIdle")}
 
     def submit(self, request):
-        if not isinstance(request, dict) or set(request) != {"candidateId", "requestId", "confirmInterrupt"} or not isinstance(request["candidateId"], str) or not SHA.fullmatch(request["candidateId"]) or not isinstance(request["requestId"], str) or not TOKEN.fullmatch(request["requestId"]) or type(request["confirmInterrupt"]) is not bool:
+        if not isinstance(request, dict) or set(request) not in ({"candidateId", "requestId", "confirmInterrupt"}, {"candidateId", "requestId", "confirmInterrupt", "whenIdle"}):
             raise Rejected("Send an opaque staged candidate, retry identity and interruption choice.")
+        if not isinstance(request["candidateId"], str) or not SHA.fullmatch(request["candidateId"]) or not isinstance(request["requestId"], str) or not TOKEN.fullmatch(request["requestId"]) or type(request["confirmInterrupt"]) is not bool:
+            raise Rejected("Send an opaque staged candidate, retry identity and interruption choice.")
+        if "whenIdle" in request and (request["whenIdle"] is not True or request["confirmInterrupt"]):
+            raise Rejected("An idle installation cannot authorize playback interruption.")
         with self.mutex:
             existing = self.directory / (request["requestId"] + ".json")
             if existing.exists():
                 previous = load_json(existing.read_bytes())
-                if any(previous[key] != value for key, value in request.items()):
+                if any(previous.get(key) != value for key, value in request.items()) or previous.get("whenIdle", False) != request.get("whenIdle", False):
                     raise Rejected("That retry identity belongs to another update request.")
                 return public(previous), False
             with self.storage.lock():
@@ -155,7 +159,9 @@ class Transactions:
                 self.transition("succeeded")
                 self.clear_active()
             except Exception as error:
-                message = str(error) if isinstance(error, Rejected) else "The update could not finish. Inspect its retained log through SSH."
+                if isinstance(error, IdleDeferred):
+                    self.record["idleDeferred"] = True
+                message = "Couch became active. Wait for five continuous idle minutes." if self.record.get("idleDeferred") else str(error) if isinstance(error, Rejected) else "The update could not finish. Inspect its retained log through SSH."
                 phase = "operator-required" if self.record["disrupted"] or self.record["committed"] else "failed"
                 self.transition(phase, error=message, updateError=message, recoveryPending=phase == "operator-required" and not self.record["committed"])
                 if phase == "failed":
@@ -176,10 +182,14 @@ class Transactions:
 
     def recover(self):
         from recovery import restore
-        if not self.hook_idle.wait(HOOK_DRAIN_SECONDS):
-            self.transition("operator-required", recoveryPending=False, automaticFailed=True,
-                            error="The previous maintenance hook did not stop. Inspect the worker through SSH.")
-            return
+        drained = self.hook_idle.wait(HOOK_DRAIN_SECONDS)
+        with self.mutex:
+            if not self.record.get("recoveryPending"):
+                return
+            if not drained:
+                self.transition("operator-required", recoveryPending=False, automaticFailed=True,
+                                error="The previous maintenance hook did not stop. Inspect the worker through SSH.")
+                return
         restore(self, self.record["updateId"], automatic=True)
 
     def hook(self, update_id, peer_pid=None):
@@ -203,5 +213,14 @@ class Transactions:
                 self.platform.authorize_hook(peer_pid)
                 self.transition("installing", hookComplete=True)
             return {"ok": True}
+        except IdleDeferred:
+            with self.mutex:
+                if self.record is record and record.get("whenIdle") and not record["hookComplete"] and not record["committed"] and record["phase"] in ("quiescing", "operator-required"):
+                    ended = record["phase"] == "operator-required"
+                    self.transition("failed" if ended else "installing", disrupted=False, idleDeferred=True, recoveryPending=False,
+                                    error="Couch became active. Wait for five continuous idle minutes.")
+                    if ended:
+                        self.clear_active()
+            raise
         finally:
             self.hook_idle.set()

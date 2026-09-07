@@ -8,6 +8,7 @@ export type UpdateTransaction = {
   error: string | null;
   createdAt: number;
   updatedAt: number;
+  idleDeferred?: boolean | null;
   restoredVersion?: string | null;
   restoredRevision?: string | null;
 };
@@ -15,7 +16,8 @@ export type ReleaseChannel = "stable" | "preview";
 export type UpdateCandidate = { id: string; releaseId: string; version: string; revision: string; notes: string; bytes: number; publishedAt: number; expiresAt: number };
 export type UpdateState = {
   channel: ReleaseChannel;
-  policy: "manual";
+  policy: "manual" | "idle";
+  waiting?: string | null;
   running: { version: string; revision: string | null };
   status: "unavailable" | "idle" | "checking" | "available" | "downloading" | "ready" | "failed";
   lastSuccessfulCheck: number | null;
