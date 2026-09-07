@@ -34,6 +34,8 @@ test("official signing, promotion and renewal preserve bytes; rollback and tampe
   const metadata = await release(first);
   expect(metadata.version).toBe("0.1.0+build.9.1");
   expect(metadata.dataFormat).toBe(1);
+  expect(Date.parse(metadata.pub_date) % 1000).toBe(0);
+  expect(metadata.expiresAt - Date.parse(metadata.pub_date)).toBe(7 * 86400_000);
   const signature = await Bun.file(join(feed, "releases/9.1/Couch.AppImage.sig")).text();
   expect(metadata.platforms["linux-x86_64"].signature).toBe(signature.trim());
   await release(first, "stable");
