@@ -65,7 +65,7 @@ hash and embedded source revision before consuming the artifact.
 
 Package runs only by manual dispatch or the explicit PR label, rather than on every main merge. It builds both formats once, then a two-format matrix qualifies the same binaries in separate clean Ubuntu containers. Re-running failed qualification jobs reuses that build and its identity. The private downloader requires the overall workflow's latest attempt to have succeeded. Build inputs and diagnostics are retained for seven days; qualified packages for thirty days.
 
-Check uses conservative path filters, treating every dependency change as native. Signed APT and installer tests run within Check while the installed migration still needs them. Cargo caches use stable profile keys and only main writes them; PRs restore the main cache. Workflow edits no longer create new copies of all compiled dependencies.
+Check uses conservative path filters, treating every dependency change as native. Signed APT and installer tests run within Check while the installed migration still needs them. Cargo caches use stable profile keys. Check writes only on main; explicit package qualification also saves its release cache so a packaging fix can reuse compiled dependencies. Workflow edits no longer create new copies of all compiled dependencies.
 
 The source archive shipped beside the package includes the modified native
 dependencies and rebuild instructions. Keep it accessible to the package's

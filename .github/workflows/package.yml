@@ -23,13 +23,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
-      release-id: ${{ steps.identity.outputs.release-id }}
+      release-id: ${{ github.run_id }}.${{ github.run_attempt }}
     env:
       COUCH_RELEASE_ID: ${{ github.run_id }}.${{ github.run_attempt }}
       COUCH_RELEASE_NOTES: ${{ inputs.notes }}
     steps:
-      - id: identity
-        run: echo "release-id=$COUCH_RELEASE_ID" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -51,7 +49,7 @@ jobs:
           # Keep compiled dependencies when a later runtime qualification fails.
           cache-on-failure: true
           key: ubuntu-24.04-release-${{ hashFiles('packaging/inputs.json') }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event.label.name == 'qualify-package' }}
       - run: bun install --frozen-lockfile
       - run: bun run package:prepare
       - name: Build the native TV, Debian package and AppImage
@@ -66,7 +64,6 @@ jobs:
           find src-tauri/target/release/bundle -maxdepth 2 -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec cp {} .artifacts/package-release/ \;
           cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
           git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
-          find .artifacts/package-release -name '*.deb' -printf '%p %s bytes\n' > .artifacts/package-release/size.txt
           cd .artifacts/package-release
           find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
       - name: Build the qualification driver once
