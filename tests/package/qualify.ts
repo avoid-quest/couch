@@ -137,16 +137,32 @@ try {
   };
   await command({ type: "track", playbackId: state.player.playbackId, kind: "subtitle", index: -1 });
   await until("Subtitles turn off", async () => !state.player.tracks.some((track: any) => track.kind === "subtitle" && track.selected));
-  const without = frame("subtitles-off");
+  // Track acknowledgement can precede the next native frame. Wait for settled pixels.
+  await Bun.sleep(350);
+  let without = frame("subtitles-off");
+  await until("Subtitle-off frame settles", async () => {
+    const next = frame("subtitles-off");
+    const stable = next.equals(without);
+    without = next;
+    return stable;
+  });
+  const stage = await driver(44444, `/session/${native}/execute/sync`, { script: "const r = document.querySelector('.video-stage').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }", args: [] });
+  const scale = Math.min(stage.width / 640, stage.height / 360);
+  const width = Math.floor(640 * scale), height = Math.floor(360 * scale);
+  const left = Math.round(stage.x + (stage.width - width) / 2), top = Math.round(stage.y + (stage.height - height) / 2);
+  assert.ok(left >= 0 && top >= 0 && left + width <= 1280 && top + height <= 720, "Subtitle sample lies in the fullscreen native video");
   await command({ type: "track", playbackId: state.player.playbackId, kind: "subtitle", index: subtitle.index });
   await until("Subtitles turn on", async () => state.player.tracks.some((track: any) => track.kind === "subtitle" && track.selected));
   await until("Native subtitle glyphs render over paused video", async () => {
     const withSubtitles = frame("subtitles-on");
-    let brightChanges = 0;
-    for (let offset = 1280 * 400 * 3; offset < without.length; offset += 3) {
-      if (Math.max(withSubtitles[offset]!, withSubtitles[offset + 1]!, withSubtitles[offset + 2]!) > 200 && Math.abs(withSubtitles[offset]! - without[offset]!) > 40) brightChanges++;
+    let brightChanges = 0, upperChanges = 0;
+    for (let y = Math.ceil(height * 0.1); y < height * 0.97; y++) for (let x = Math.ceil(width * 0.05); x < width * 0.95; x++) {
+      const offset = ((top + y) * 1280 + left + x) * 3;
+      const changed = [0, 1, 2].some(channel => Math.abs(withSubtitles[offset + channel]! - without[offset + channel]!) > 35);
+      if (changed && y < height * 0.5) upperChanges++;
+      if (changed && y > height * 0.55 && Math.max(withSubtitles[offset]!, withSubtitles[offset + 1]!, withSubtitles[offset + 2]!) > 180) brightChanges++;
     }
-    return brightChanges > 80;
+    return brightChanges >= 80 && upperChanges < width * height * 0.001;
   });
   await command({ type: "stop" });
   await command({ type: "enqueueWeb", url: "http://127.0.0.1:44212/fixture.html", entryId: crypto.randomUUID(), playNow: true });

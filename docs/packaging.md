@@ -49,7 +49,7 @@ Rust/Bun versions, helper checksums and the resolved Ubuntu build packages.
 ## Build and qualify
 
 The [Package workflow](../.github/workflows/package.yml) uses the pinned project
-Tauri CLI through the official Tauri action. It builds only Debian on Ubuntu
+Tauri CLI through the official Tauri action. It builds Debian and AppImage on Ubuntu
 24.04 x86_64. JavaScript and Rust dependencies stay locked; language tools,
 helper archives, notice downloads, action revisions, the Ubuntu snapshot and
 clean runtime image have explicit pins. Ubuntu's GitHub runner image metadata
