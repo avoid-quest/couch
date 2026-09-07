@@ -33,6 +33,9 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await httpRemote.restore();
   await httpRemote.ui.section("Library");
   await httpRemote.ui.button("Albums", '[aria-label="Library view"]');
+  // The preceding music journey intentionally leaves this controller inside its album.
+  if (await httpRemote.ui.execute("return !!document.querySelector(arguments[0] + ' [data-back]')", [panel])) await httpRemote.ui.button("Back", panel);
+  await until("phone returns to the album grid containing the scanned cue album", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0])", [`${panel} [data-music-album=${JSON.stringify(album.id)}]`]));
   await httpRemote.ui.click(`${panel} [data-music-album=${JSON.stringify(album.id)}]`);
   await assertResponsive(httpRemote.ui, "Phone cue album");
   await httpRemote.screenshot("cue-phone-album");

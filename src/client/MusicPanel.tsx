@@ -27,7 +27,7 @@ export function MusicPanel({ origin, token, connected, canPlay, version, view, a
   onArtistTracks: (artist: MusicArtist) => void;
 }) {
   const [browse, setBrowse] = useState<Browse>({ kind: view, q: "", offset: 0 });
-  const [trail, setTrail] = useState<{ browse: Browse; draft: string; focus: string }[]>([]);
+  const [trail, setTrail] = useState<{ browse: Browse; draft: string; focus: string; scrollTop: number; scrollLeft: number }[]>([]);
   const [draft, setDraft] = useState("");
   const [artists, setArtists] = useState<MusicArtists | null>(null);
   const [albums, setAlbums] = useState<MusicAlbums | null>(null);
@@ -40,6 +40,8 @@ export function MusicPanel({ origin, token, connected, canPlay, version, view, a
   const [notice, setNotice] = useState<string | null>(null);
   const panel = useRef<HTMLElement>(null);
   const restoreFocus = useRef<string | null>(null);
+  const restoreScroll = useRef<{ scrollTop: number; scrollLeft: number } | null>(null);
+  const scrollContainer = () => panel.current?.closest(".tv-browser") ?? document.scrollingElement;
   const queryId = useId();
   const params = new URLSearchParams({ q: browse.q, offset: String(browse.offset), limit: String(pageSize) });
   if (browse.kind === "albums" && browse.artist) params.set("artistId", browse.artist.id);
@@ -70,12 +72,19 @@ export function MusicPanel({ origin, token, connected, canPlay, version, view, a
   useEffect(() => {
     if (busy || loading || !active || !restoreFocus.current || panel.current?.closest("[hidden]")) return;
     if (document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]')) return;
-    panel.current?.querySelector<HTMLButtonElement>(restoreFocus.current)?.focus();
+    panel.current?.querySelector<HTMLButtonElement>(restoreFocus.current)?.focus({ preventScroll: restoreScroll.current !== null });
+    const container = scrollContainer();
+    if (container && restoreScroll.current) {
+      container.scrollTop = restoreScroll.current.scrollTop;
+      container.scrollLeft = restoreScroll.current.scrollLeft;
+    }
+    restoreScroll.current = null;
     restoreFocus.current = null;
   }, [busy, loading, active, dataPath]);
 
   const open = (next: Browse, focus: string) => {
-    setTrail(value => [...value, { browse, draft, focus }]);
+    const container = scrollContainer();
+    setTrail(value => [...value, { browse, draft, focus, scrollTop: container?.scrollTop ?? 0, scrollLeft: container?.scrollLeft ?? 0 }]);
     setBrowse(next);
     setDraft("");
     setNotice(null);
@@ -91,6 +100,7 @@ export function MusicPanel({ origin, token, connected, canPlay, version, view, a
     setNotice(null);
     setError(null);
     restoreFocus.current = previous.focus;
+    restoreScroll.current = previous;
   };
   const search = (event: FormEvent) => {
     event.preventDefault();
