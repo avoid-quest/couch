@@ -14,6 +14,9 @@ test("LightDM readback resolves defaults before ordered matching seat groups, in
   expect(() => startupEnabled(config.replace("autologin-session=couch", "autologin-session=ubuntu"))).toThrow("conflicting");
   expect(() => startupEnabled(config.replace("Sources:", "   [LightDM]\nA  start-default-seat=false\nSources:"))).toThrow("not to start");
   expect(() => startupEnabled("unreadable configuration")).toThrow("no readable");
+  for (const diagnostic of ["Failed to load configuration from 99-private.conf: Permission denied", "Failed to open configuration directory /etc/lightdm/lightdm.conf.d: Permission denied"]) {
+    expect(() => startupEnabled(`${diagnostic}\n${config}`)).toThrow("complete LightDM configuration");
+  }
 });
 
 test("startup writes require current administrator authority, a boolean and exact request fields", async () => {

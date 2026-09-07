@@ -292,6 +292,13 @@ try {
       assert.equal((await api(path)).enabled, true, "An overriding OS setting is never reported as disabled");
       assert.equal(supervised(), beforePid);
       checks.push("Conflicting effective LightDM configuration rejects the requested change with operator guidance");
+      inside("chmod", "0600", override);
+      for (const method of ["GET", "POST"]) {
+        const incomplete = await fetch(`${origin}${path}`, { method, headers: { Authorization: `Bearer ${seed.tokens[0]}`, Origin: origin, "Content-Type": "application/json" }, body: method === "POST" ? JSON.stringify({ enabled: false }) : undefined });
+        assert.equal(incomplete.status, 503);
+        assert.match((await incomplete.json()).error, /complete LightDM configuration/);
+      }
+      checks.push("An unreadable root override rejects partial LightDM readback and saved-success claims");
     } finally {
       inside("rm", override);
       await api(path, { enabled: true });
