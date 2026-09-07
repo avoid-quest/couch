@@ -299,6 +299,8 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       assert.equal(await search.exited, 0, "HTTP browser window exists for real pointer input");
       const pointer = Bun.spawn(["xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1"], { stdout: "ignore", stderr: "inherit" });
       assert.equal(await pointer.exited, 0, "HTTP browser receives a real pointer click");
+      // X11 completion does not acknowledge WebKit event dispatch after window activation.
+      await ui.waitFor("HTTP browser acknowledges the physical pointer event", () => ui.execute("return window.__httpPointer !== null"));
       const hit = await ui.execute("return window.__httpPointer");
       assert.ok(hit?.hit, `HTTP pointer reaches its intended control: ${JSON.stringify({ point, hit })}`);
     };

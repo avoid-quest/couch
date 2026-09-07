@@ -25,7 +25,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
   onEnqueue: (id: string, options?: { playNow?: boolean; fromStart?: boolean }) => Promise<boolean>;
 }) {
   const [browse, setBrowse] = useState<Browse>({ kind: view, q: "", offset: 0 });
-  const [trail, setTrail] = useState<Array<{ browse: Browse; draft: string; focus: string }>>([]);
+  const [trail, setTrail] = useState<Array<{ browse: Browse; draft: string; focus: string; scrollTop: number; scrollLeft: number }>>([]);
   const [draft, setDraft] = useState("");
   const [items, setItems] = useState<LibrarySearch | null>(null);
   const [shows, setShows] = useState<VideoShows | null>(null);
@@ -39,6 +39,8 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
   const [notice, setNotice] = useState<string | null>(null);
   const panel = useRef<HTMLElement>(null);
   const restoreFocus = useRef<string | null>(null);
+  const restoreScroll = useRef<{ scrollTop: number; scrollLeft: number } | null>(null);
+  const scrollContainer = () => panel.current?.closest(".tv-browser") ?? document.scrollingElement;
   const detailTrigger = useRef<HTMLElement | null>(null);
   const queryId = useId();
   const showId = "show" in browse ? browse.show.id : null;
@@ -84,18 +86,25 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
   useEffect(() => {
     if (busy || loading || !active || !restoreFocus.current || panel.current?.closest("[hidden]")) return;
     if (document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]')) return;
-    panel.current?.querySelector<HTMLButtonElement>(restoreFocus.current)?.focus();
+    panel.current?.querySelector<HTMLButtonElement>(restoreFocus.current)?.focus({ preventScroll: restoreScroll.current !== null });
+    const container = scrollContainer();
+    if (container && restoreScroll.current) {
+      container.scrollTop = restoreScroll.current.scrollTop;
+      container.scrollLeft = restoreScroll.current.scrollLeft;
+    }
+    restoreScroll.current = null;
     restoreFocus.current = null;
   }, [busy, loading, active, dataPath]);
 
   const open = (next: Browse, focus: string) => {
-    setTrail(value => [...value, { browse, draft, focus }]);
+    const container = scrollContainer();
+    setTrail(value => [...value, { browse, draft, focus, scrollTop: container?.scrollTop ?? 0, scrollLeft: container?.scrollLeft ?? 0 }]);
     setBrowse(next); setDraft(""); setNotice(null); setError(null); restoreFocus.current = "[data-back]";
   };
   const back = () => {
     const previous = trail.at(-1);
     if (!previous) return;
-    setBrowse(previous.browse); setDraft(previous.draft); setTrail(value => value.slice(0, -1)); setNotice(null); setError(null); restoreFocus.current = previous.focus;
+    setBrowse(previous.browse); setDraft(previous.draft); setTrail(value => value.slice(0, -1)); setNotice(null); setError(null); restoreFocus.current = previous.focus; restoreScroll.current = previous;
   };
   const search = (event: FormEvent) => { event.preventDefault(); setBrowse(value => ({ ...value, q: draft.trim(), offset: 0 })); setRefresh(value => value + 1); };
   const enqueue = async (item: LibraryItem, options?: { playNow?: boolean; fromStart?: boolean }) => {
