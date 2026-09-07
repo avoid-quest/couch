@@ -524,3 +524,12 @@ restart required by `sudo couch-update enable`. Older installed releases may lac
 these commands even when a newer release is published. Follow the
 [activation and recovery procedure](update-worker.md#explicit-ssh-activation-and-trial-restoration).
 The publishing Mac must remain reachable for feed checks and downloads.
+
+### Interface size
+
+TV Appearance uses Default, Larger and Largest with 100%, 135% and 175% interface
+scaling over the TV typography. Existing saved choices are retained. The remote
+keeps its separate 100%, 115% and 130% choices. TV sizing also applies to Settings,
+playback dialogs, icons and focus indicators; it does not zoom the native video
+or subtitles. Try a TV size and confirm it within 20 seconds, or it returns to
+the saved choice. Reset remains available from Appearance.
