@@ -38,29 +38,29 @@ afterEach(async () => {
 test("shows running identity, separate manual policy, notes and only exact-candidate staging", async () => {
   await render();
   for (const value of ["abc123", "0.1.0+build.1.1", "Manual", "Stable", "Second release notes", "Last successful check"]) expect(document.body.textContent).toContain(value);
-  expect(button("Check now").disabled).toBe(false);
+  expect(button("Check for updates").disabled).toBe(false);
   expect(button("Check tools").disabled).toBe(false);
   await act(async () => button("Download update").click());
   expect(calls.find(call => call.url.endsWith("/stage"))?.body).toEqual({ candidateId: report.candidate!.id });
-  expect([...document.querySelectorAll("button")].some(node => /install/i.test(node.textContent || ""))).toBe(false);
+  expect(button("Install update").disabled).toBe(true);
 });
 
-test("stale or expired candidates cannot download, while Check now remains available", async () => {
+test("stale or expired candidates cannot download, while Check for updates remains available", async () => {
   report.currentCheck = false; report.status = "failed"; report.error = "Feed offline. Keep the Mac awake.";
   await render();
   expect(document.body.textContent).toContain("Last known release");
   expect(document.body.textContent).toContain("Feed offline");
   expect(button("Download update").disabled).toBe(true);
-  await act(async () => button("Check now").click());
+  await act(async () => button("Check for updates").click());
   expect(calls.find(call => call.url.endsWith("/check"))?.body).toEqual({ check: true });
 });
 
-test("ready packages have honest status and no nonfunctional install action", async () => {
+test("ready packages keep a disabled install action when support is unavailable", async () => {
   report.status = "ready";
   await render();
   expect(document.body.textContent).toContain("Verified download ready");
   expect(button("Download update")).toBeUndefined();
-  expect([...document.querySelectorAll("button")].some(node => /install/i.test(node.textContent || ""))).toBe(false);
+  expect(button("Install update").disabled).toBe(true);
 });
 
 test("disconnect clears build details and aborts in-flight reads", async () => {
@@ -176,7 +176,7 @@ test("repair archive rejection clears its saved request and leaves the staged up
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
   expect(document.body.textContent).toContain("The enrolled release changed");
   expect(button("Install update").disabled).toBe(false);
-  expect(button("Check now").disabled).toBe(false);
+  expect(button("Check for updates").disabled).toBe(false);
 });
 
 test("an older live worker shows the fixed SSH transition instead of silently hiding repair", async () => {
@@ -224,7 +224,7 @@ test("definitive pre-acceptance expiry clears the saved request so checks and do
   await act(async () => button("Install update").click());
   await act(async () => button("Install and restart").click());
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
-  expect(button("Check now").disabled).toBe(false);
+  expect(button("Check for updates").disabled).toBe(false);
   expect(button("Download update").disabled).toBe(false);
 });
 
@@ -236,7 +236,7 @@ test("request-specific completion clears a saved request superseded by another r
   await render();
   expect(calls.some(call => call.url.endsWith(`?requestId=${saved.requestId}`))).toBe(true);
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
-  expect(button("Check now").disabled).toBe(false);
+  expect(button("Check for updates").disabled).toBe(false);
 });
 
 test("a terminal install retry receipt clears its saved identity even when latest status is empty", async () => {
@@ -251,7 +251,7 @@ test("a terminal install retry receipt clears its saved identity even when lates
   await render();
   await act(async () => button("Retry same request").click());
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
-  expect(button("Check now").disabled).toBe(false);
+  expect(button("Check for updates").disabled).toBe(false);
 });
 
 test("Auto when idle persists separately from the release channel", async () => {
@@ -264,13 +264,13 @@ test("Auto when idle persists separately from the release channel", async () => 
   expect(calls.some(call => call.url.endsWith("/channel") || call.url.endsWith("/install"))).toBe(false);
 });
 
-test("idle waiting keeps Install now behind the restart and playback warning", async () => {
+test("idle waiting keeps manual installation behind the restart and playback warning", async () => {
   report.status = "ready"; report.policy = "idle";
   report.waiting = "Waiting for playback to stop. Paused playback is still active.";
   report.installation = { enabled: true, transaction: null };
   await render();
   expect(document.body.textContent).toContain(report.waiting);
-  await act(async () => button("Install now").click());
+  await act(async () => button("Install update").click());
   expect(document.body.textContent).toContain("Other remotes will disconnect");
   expect(document.body.textContent).toContain("Stop playback if it is running");
   expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
@@ -295,4 +295,38 @@ test("controller pointer and keyboard input report activity, with no idle heartb
   await act(async () => root.render(null));
   document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
   expect(calls).toHaveLength(2);
+});
+
+
+test("manual installation stays discoverable when maintenance support is disabled", async () => {
+  report.status = "ready";
+  report.installation = { enabled: false, transaction: null };
+  await render();
+  expect(button("Install update")).toBeDefined();
+  expect(button("Install update").disabled).toBe(true);
+  expect(document.body.textContent).toContain("Manual installation is not enabled");
+  expect(document.body.textContent).toContain("sudo couch-update enable");
+  expect(button("Check for updates").disabled).toBe(false);
+});
+
+for (const authority of ["host", "controller"] as const) test(`${authority} can discover Updates without accessing administrator operations`, async () => {
+  const { Settings } = await import("./Settings");
+  await act(async () => root.render(<Settings initialOpen credentials={{ origin: "http://localhost", token: "admin" }} connected status="connected" identity={{ authority, controller: null, claimAvailable: false }} host={authority === "host" ? { urls: [], pairingCode: "fixture" } as never : null} details={null} administratorClaimed pairingRequired={false} reachable name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
+  const updates = document.querySelector('[role="tab"][id$="-trigger-updates"]') as HTMLElement;
+  expect(updates).toBeTruthy();
+  await act(async () => { updates.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })); updates.click(); });
+  expect(document.body.textContent).toContain("Open Settings > Updates on an administrator remote");
+  expect(button("Install update")).toBeUndefined();
+  expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
+});
+
+
+for (const stale of ["expired", "not-current"]) test(`a ${stale} staged release cannot be installed`, async () => {
+  report.status = "ready"; report.installation = { enabled: true, transaction: null };
+  if (stale === "expired") report.candidate!.expiresAt = Date.now() - 1;
+  else report.currentCheck = false;
+  await render();
+  expect(button("Install update").disabled).toBe(true);
+  expect(button("Check for updates").disabled).toBe(false);
+  expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
 });

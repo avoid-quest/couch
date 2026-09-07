@@ -81,6 +81,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
   const canStage = state?.currentCheck && candidate && candidate.expiresAt > Date.now() && state.status !== "ready";
+  const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && candidate && candidate.expiresAt > Date.now() && state.installation.repairAvailable !== false;
   return <div className="min-w-0 space-y-4">
     <p className="text-muted-foreground">Release settings apply to this TV installation. Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">
@@ -99,6 +100,42 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <dt>Installation</dt><dd>{state.policy === "idle" ? "Auto when idle" : "Manual"}</dd>
         <dt>Last successful check</dt><dd>{state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "No successful check yet"}</dd>
       </dl>
+      <p role="status">{state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status]}</p>
+      {candidate && <div className="space-y-2 rounded-lg border p-3">
+        <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
+        <p className="break-all font-mono text-xs">{candidate.revision}</p>
+        <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
+        <p className="text-muted-foreground">Download size: {(candidate.bytes / 1024 / 1024).toFixed(1)} MB</p>
+        {!state.currentCheck && <p className="text-muted-foreground">This release has not been confirmed by a successful current check.</p>}
+        {state.status === "ready" && <p>The verified packages are ready on this TV.</p>}
+      </div>}
+      {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
+    </>}
+    {!state && !problem && <p role="status">Loading update status…</p>}
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" className="min-h-11" disabled={busy || state?.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check for updates</Button>
+      {candidate && state?.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update</Button>}
+      {problem && <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Refresh status</Button>}
+    </div>
+    {state && !retry && !installing && <div className="space-y-2">
+      {confirming === "install" ? <>
+        <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before package installation. Other remotes will disconnect.</p>
+        <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
+        <Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button>
+        <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
+      </> : <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update</Button>}
+    </div>}
+    {state && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
+      <p className="font-medium">Manual installation is not enabled on this TV.</p>
+      <p>Manual updates work independently of Auto when idle. The supported path needs the Ubuntu Couch appliance, a signed release feed and an enrolled current release.</p>
+      <p>From the administrator's SSH account, install a signed release that includes maintenance support if this is an older installation. Verify that Couch starts correctly, then enroll that installed release's signed receipt with <code className="break-words">sudo couch-update enroll-current /path/to/current-signed-receipt</code>.</p>
+      <p>When the TV can restart, run <code>sudo couch-update enable</code>, then <code>sudo couch-update status</code>. Enabling restarts Couch. Reopen this page after it reconnects.</p>
+      <p>The receipt must match the installed release. If the command is missing or enrollment fails, complete the signed appliance installation first. Keep SSH available for recovery.</p>
+    </div>}
+    {state?.installation?.enabled && !installing && state.status !== "ready" && <p className="text-muted-foreground">Check for updates, then download and verify an available release to enable Install update. You can install manually with either installation policy.</p>}
+    <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
+    {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
+    {state && <>
       <div className="space-y-2">
         <Label htmlFor="release-channel">Release channel</Label>
         <Select value={state.channel} disabled={busy || state.status === "unavailable"} onValueChange={channel => void update("channel", { channel })}>
@@ -114,36 +151,9 @@ export function UpdatesSettings({ credentials, connected }: Props) {
           <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
         </Select>
         <p className="text-muted-foreground">Auto downloads verified updates on the selected channel, then waits for five continuous minutes of stopped playback, no controller input and no active scans or imports. Pausing and radio reconnects keep waiting.</p>
-        {!state.installation?.enabled && <p className="text-muted-foreground">Automatic installation requires the qualified update worker to be activated through SSH.</p>}
         {state.policy === "idle" && <p role="status">{state.waiting || "Waiting for five continuous idle minutes."}</p>}
       </div>
-      <p role="status">{state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status]}</p>
-      {candidate && <div className="space-y-2 rounded-lg border p-3">
-        <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
-        <p className="break-all font-mono text-xs">{candidate.revision}</p>
-        <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
-        <p className="text-muted-foreground">Download size: {(candidate.bytes / 1024 / 1024).toFixed(1)} MB</p>
-        {!state.currentCheck && <p className="text-muted-foreground">This release has not been confirmed by a successful current check.</p>}
-        {state.status === "ready" && <p>The verified packages are ready on this TV.</p>}
-      </div>}
-      {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
     </>}
-    {!state && !problem && <p role="status">Loading update status…</p>}
-    <div className="flex flex-wrap gap-2">
-      <Button variant="outline" className="min-h-11" disabled={busy || state?.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check now</Button>
-      {candidate && state?.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update</Button>}
-      {problem && <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Refresh status</Button>}
-    </div>
-    {state?.installation?.enabled && state.status === "ready" && !retry && !installing && <div className="space-y-2">
-      {confirming === "install" ? <>
-        <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before package installation. Other remotes will disconnect.</p>
-        <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-        <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Install and restart</Button>
-        <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
-      </> : <Button className="min-h-11" disabled={busy || state.installation.repairAvailable === false} onClick={() => setConfirming("install")}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
-    </div>}
-    <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
-    {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
     <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
       {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The update worker needs a one-time SSH refresh after this upgrade. After maintenance finishes, the administrator can run <code>sudo couch-update refresh-worker</code>. This keeps TV playback running.</p>}
       {state?.installation?.enabled && state.installation.repairAvailable !== false && state.installation.current && !retry && !installing && <div className="space-y-2">
