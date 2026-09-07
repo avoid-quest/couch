@@ -533,3 +533,14 @@ keeps its separate 100%, 115% and 130% choices. TV sizing also applies to Settin
 playback dialogs, icons and focus indicators; it does not zoom the native video
 or subtitles. Try a TV size and confirm it within 20 seconds, or it returns to
 the saved choice. Reset remains available from Appearance.
+
+### YouTube startup buffering on Linux
+
+Network video with a separate audio stream, including ordinary YouTube playback,
+buffers three seconds before starting. This avoids playing the opening seconds and
+then freezing while the network buffer refills. Uncached seeks use the same reserve.
+Local files, single-stream sources, radio and explicit IPTV live returns retain
+their normal buffering settings. Slow or interrupted connections can still rebuffer.
+
+Automatic quality is capped at 1080p; existing queue entries keep their saved quality.
+An old Unrestricted entry must be added again with Automatic to use the new default.
