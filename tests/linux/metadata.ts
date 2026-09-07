@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { mkdir, readFile, rename } from "node:fs/promises";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import type { MetadataView } from "../../src/shared/metadata";
+import { remoteSocketUrl } from "./build";
 import { UiDriver, startHttpRemote, keys } from "./ui";
 import { addTVFolder } from "./folder-settings";
 import { assertNativeUiPixels, assertNativeVideoPixels } from "./pixels";
@@ -93,11 +94,11 @@ class Remote {
   socket!: WebSocket;
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 
-  constructor(readonly token: string) { this.connect(); }
+  constructor(readonly token: string) {}
 
-  connect() {
+  async connect() {
     this.state = null;
-    this.socket = new BunWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${this.token}`, { headers: { origin } });
+    this.socket = new BunWebSocket(await remoteSocketUrl(origin, this.token), { headers: { origin } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data)) as ServerMessage;
       if (message.type === "state") this.state = message.state;
@@ -136,7 +137,9 @@ try {
   await ui.key(keys.escape);
   for (let index = 0; index < 2; index++) {
     const response = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) }); assert.equal(response.status, 200);
-    clients.push(new Remote((await response.json()).token));
+    const remote = new Remote((await response.json()).token);
+    clients.push(remote);
+    await remote.connect();
   }
   await until("two independent controllers receive idle snapshots", () => all(state => state.player.status === "idle"));
   phone = await startHttpRemote(origin, code, artifacts, until, 4446, 1.5);
@@ -220,7 +223,7 @@ try {
   assert.equal((await view()).values.title, "Phone correction");
   assert.equal(await readFile("/mnt/metadata-offline/Movie.nfo", "utf8"), '<movie><title>Wrong movie</title><year>2020</year><custom keep="yes">Preserve me</custom></movie>');
   await phone.minimize(); await webdriver(`/session/${sessionId}`, undefined, "DELETE"); sessionId = "";
-  await launch(); for (const client of clients) client.connect();
+  await launch(); await Promise.all(clients.map(client => client.connect()));
   await until("offline restart reconnects both controllers without autoplay", () => all(state => state.player.status === "idle"));
   assert.equal((await view()).values.title, "Phone correction"); assert.equal((await view()).origins.title, "Manual");
   await phone.restore(); await phone.refresh(); await until("administrator phone reconnects after restart", () => phone!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
@@ -237,7 +240,7 @@ try {
   } catch { console.warn("Skipped failure captures because redaction or capture could not complete."); }
   throw error;
 } finally {
-  for (const client of clients) client.socket.close(); await phone?.close();
+  for (const client of clients) client.socket?.close(); await phone?.close();
   if (sessionId) await webdriver(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});
   driver.kill(); await driver.exited;
 }

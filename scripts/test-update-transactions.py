@@ -254,7 +254,9 @@ class TransactionTests(unittest.TestCase):
 
     def test_activation_status_rejects_unsafe_or_invalid_flags(self):
         flag = self.root / "enabled"
-        with patch.object(operator_client, "FLAG", flag):
+        lstat = Path.lstat
+        parent = SimpleNamespace(st_mode=0o40755, st_uid=0)
+        with patch.object(operator_client, "FLAG", flag), patch.object(Path, "lstat", autospec=True, side_effect=lambda path: parent if path == flag.parent else lstat(path)):
             self.assertEqual(operator_client.activation_status(), "disabled")
             flag.symlink_to(self.root / "missing")
             with self.assertRaises(OSError):
@@ -266,6 +268,11 @@ class TransactionTests(unittest.TestCase):
                     operator_client.activation_status()
             with patch.object(receipt.os, "fstat", return_value=SimpleNamespace(st_uid=0, st_mode=0o100644)):
                 self.assertEqual(operator_client.activation_status(), "enabled")
+                for uid, mode in ((1000, 0o40755), (0, 0o40777), (0, 0o120755)):
+                    parent.st_uid, parent.st_mode = uid, mode
+                    with self.assertRaisesRegex(receipt.Rejected, "configuration directory"):
+                        operator_client.activation_status()
+                parent.st_uid, parent.st_mode = 0, 0o40755
                 save(flag, {"protocol": "unsupported"})
                 with self.assertRaisesRegex(receipt.Rejected, "activation flag"):
                     operator_client.activation_status()

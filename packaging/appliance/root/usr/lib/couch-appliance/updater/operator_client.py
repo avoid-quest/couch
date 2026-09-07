@@ -49,6 +49,9 @@ def activation_status():
         FLAG.lstat()
     except FileNotFoundError:
         return "disabled"
+    parent = FLAG.parent.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_mode & 0o022:
+        raise Rejected("The appliance configuration directory must be root-owned.")
     if load_json(trusted_file(FLAG)) != {"protocol": "maintenance-v1"}:
         raise Rejected("The phone-update activation flag is invalid.")
     return "enabled"
