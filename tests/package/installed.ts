@@ -280,7 +280,9 @@ try {
     for (const [button, tab] of [["Pair again / manage remotes", "Connection"], ["Effective overrides", "Advanced"]]) {
       assert.equal(await click(button!), true);
       await until(`General links to ${tab}`, async () => execute(admin, "return [...document.querySelectorAll('[role=tab]')].some(t => t.textContent.trim() === arguments[0] && t.getAttribute('aria-selected') === 'true')", [tab]));
-      assert.equal(await click("General"), true);
+      const general = await driver(admin.port, `/session/${admin.id}/element`, { using: "css selector", value: '[role="tab"][id$="-trigger-general"]' });
+      await driver(admin.port, `/session/${admin.id}/element/${general["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+      await until("General tab is selected before the next link", async () => execute(admin, 'return document.querySelector(\'[role="tab"][id$="-trigger-general"]\')?.getAttribute("aria-selected") === "true"'));
     }
     checks.push("Installed administrator toggles effective passwordless TV startup without interrupting the current session");
     const override = "/etc/lightdm/lightdm.conf.d/99-qualification-override.conf";
