@@ -6,6 +6,7 @@ user_systemctl() {
     runuser -u couch-tv -- env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" systemctl --user "$@"
 }
 case "${1:-status}" in
+    autostart) [ "$#" = 2 ] || exit 2; /usr/lib/couch-appliance/set-autostart "$2"; echo "Saved for the next graphical session. Inspect lightdm --show-config before restarting LightDM." ;;
     status) user_systemctl status couch-tv.service --no-pager ;;
     restart) user_systemctl reset-failed couch-tv.service || true; user_systemctl restart couch-tv.service ;;
     stop) user_systemctl stop couch-tv.service ;;
@@ -27,5 +28,5 @@ case "${1:-status}" in
         printf 'Pair your replacement browser, then use this administrator code within 10 minutes:\n%s\n' "$code"
         ;;
     logs) journalctl "_UID=$uid" --no-pager -n 200 ;;
-    *) echo 'Usage: couch-session {status|restart|stop|logs|recover-admin}' >&2; exit 2 ;;
+    *) echo 'Usage: couch-session {status|restart|stop|logs|recover-admin|autostart enable|autostart disable}' >&2; exit 2 ;;
 esac

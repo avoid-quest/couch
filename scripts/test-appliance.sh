@@ -92,4 +92,32 @@ grep -q 'symbolic link' "$fixture/error"
 [[ $(stat -c '%U:%a' /etc) = "$permissions" ]]
 rm /var/lib/couch/application
 mv /var/lib/couch/application-kept /var/lib/couch/application
+# Startup writes are fixed, atomic, root-owned and retained by reinstall.
+startup=/etc/lightdm/lightdm.conf.d/90-couch-autostart.conf
+couch-session autostart disable
+grep -qx 'autologin-user=' "$startup"
+[[ $(stat -c '%U:%a' "$startup") = root:644 ]]
+cp "$startup" "$fixture/startup"
+bash install-couch "$fixture/Couch.AppImage" "$package"
+cmp "$startup" "$fixture/startup"
+if /usr/lib/couch-appliance/set-autostart arbitrary; then exit 1; fi
+if /usr/lib/couch-appliance/set-autostart enable extra; then exit 1; fi
+if runuser -u couch-tv -- /usr/lib/couch-appliance/set-autostart enable; then exit 1; fi
+cmp "$startup" "$fixture/startup"
+rm "$startup"
+ln -s "$fixture/newer-data" "$startup"
+if /usr/lib/couch-appliance/set-autostart disable; then exit 1; fi
+cmp "$fixture/newer-data" /var/lib/couch-test-data/keep.txt
+rm "$startup"
+mv /etc/lightdm/lightdm.conf.d /etc/lightdm/lightdm.conf.d-kept
+ln -s "$fixture" /etc/lightdm/lightdm.conf.d
+if /usr/lib/couch-appliance/set-autostart enable; then exit 1; fi
+[[ ! -e "$fixture/90-couch-autostart.conf" ]]
+rm /etc/lightdm/lightdm.conf.d
+mv /etc/lightdm/lightdm.conf.d-kept /etc/lightdm/lightdm.conf.d
+chmod o+w /etc/lightdm/lightdm.conf.d
+if /usr/lib/couch-appliance/set-autostart enable; then exit 1; fi
+chmod o-w /etc/lightdm/lightdm.conf.d
+couch-session autostart enable
+grep -qx 'autologin-user=couch-tv' "$startup"
 echo 'PASS: AppImage migration, Tauri trust/hash, companion closure, policy/profile/data preservation, compatible recovery, retained newer writes, corrupt/incompatible rejection'

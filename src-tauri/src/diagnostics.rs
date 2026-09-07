@@ -10,6 +10,7 @@ pub fn collect(app: &AppHandle, playback_id: Option<String>) -> Value {
     let monitor = app
         .get_webview_window("main")
         .and_then(|window| window.current_monitor().ok().flatten());
+    facts.push(json!({"name":"Fullscreen now", "value":app.get_webview_window("main").and_then(|window| window.is_fullscreen().ok()).map(|value| value.to_string()), "source":"Native window readback"}));
     facts.push(json!({"name":"Selected display", "value":monitor.as_ref().and_then(|monitor| monitor.name()).map(|name| name.chars().take(100).collect::<String>()), "source":"Monitor containing the native window; unknown if unavailable"}));
     facts.push(json!({"name":"Display pixels", "value":monitor.map(|monitor| format!("{} × {}", monitor.size().width, monitor.size().height)), "source":"Native window monitor"}));
     facts.push(json!({"name":"Data directory override", "value":std::env::var_os("COUCH_DATA_DIR").is_some().to_string(), "source":"COUCH_DATA_DIR environment when set, otherwise application data directory; path omitted"}));

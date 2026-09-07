@@ -1,0 +1,8 @@
+[Unit]
+Description=Set Couch passwordless TV startup (%i)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/couch-appliance/set-autostart %i
+TimeoutStartSec=5
+UMask=0022

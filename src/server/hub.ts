@@ -1,3 +1,4 @@
+import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -94,6 +95,10 @@ export function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const startup = createStartup(async () => {
+    const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
+    return value === "true" ? true : value === "false" ? false : null;
+  });
   let sound: ReturnType<typeof createSound> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
@@ -298,6 +303,7 @@ export function createHub(options: HubOptions) {
         };
         if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
+        if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
         if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
