@@ -34,6 +34,12 @@ def run(*arguments):
     return subprocess.check_output(arguments, stderr=subprocess.DEVNULL)
 
 
+def helper_bytes(name, version):
+    # These tiny package-owned executables test real dpkg replacement only.
+    # Actual yt-dlp/Deno smoke is qualified from the final Package artifacts.
+    return f"#!/bin/sh\nprintf '%s\\n' '{name} {version}'\n".encode()
+
+
 def call(request, disconnect=False):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(10)
@@ -73,14 +79,23 @@ class CoordinatorFixture(Ubuntu):
             return {"idleDeferred": True, "admissionClosed": False}
         build = {key: installed()[key] for key in ("version", "revision", "dataFormat")}
         if operation == "capabilities":
-            return {"nativeReadiness": "libmpv-v1", "build": build}
+            return {"nativeReadiness": "libmpv-v1", "build": build, "toolRepair": "package-smoke-v1"}
         if operation == "quiesce":
             return {"progressSaved": not self.bad_checkpoint, "admissionClosed": True}
         if operation == "readiness":
             if self.bad_readiness:
                 # A valid response for an old build must never count as success.
                 return {"build": {**build, "version": "0.1.0+build.1.1"}}
-            return {"build": build, "nativeBuild": build, "frontendBuild": build, "database": "ok", "nativeReadiness": "libmpv-v1", "frontendReady": True}
+            proof = {}
+            if record.get("intent") == "repair-current" and record["phase"] != "restoring":
+                for name in ("yt-dlp", "deno"):
+                    path = Path("/usr/lib/couch-fixture-tools") / name
+                    if hashlib.sha256(path.read_bytes()).digest() != hashlib.sha256(helper_bytes(name, build["version"])).digest():
+                        raise Rejected("Fixture package helper hash mismatch")
+                    if subprocess.check_output([str(path)], timeout=2).decode().strip() != f'{name} {build["version"]}':
+                        raise Rejected("Fixture package helper smoke mismatch")
+                proof["toolRepair"] = "verified-v1"
+            return {"build": build, "nativeBuild": build, "frontendBuild": build, "database": "ok", "nativeReadiness": "libmpv-v1", "frontendReady": True, **proof}
         if operation == "commit":
             return {"admissionOpen": True}
         raise AssertionError(operation)
@@ -201,6 +216,8 @@ class RealTransactions(unittest.TestCase):
                     platform.missing_dependency = dependency
                     call({"op": "install", "candidateId": missing, "requestId": "d" * 32, "confirmInterrupt": True})
                     self.until(lambda: engine.status() and engine.status()["phase"] in ("failed", "operator-required", "succeeded"), 30)
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(engine.status()["phase"], "failed", engine.status())
                     self.assertNotIn("quiesce", platform.calls)
                     self.assertIsNone(platform.child.poll())
@@ -223,6 +240,8 @@ class RealTransactions(unittest.TestCase):
                         self.assertNotIn("quiesce", platform.calls)
                         self.assertIsNone(platform.child.poll())
                     self.until(lambda: engine.status()["phase"] in ("succeeded", "failed", "operator-required"), 60)
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(engine.status()["phase"], "succeeded", engine.status())
                     self.assertEqual(installed()["version"], "0.1.0+build.2.1")
                     with sqlite3.connect(storage.root / "backups" / update_id / "data/couch.sqlite") as backup:
@@ -237,6 +256,8 @@ class RealTransactions(unittest.TestCase):
                     before = len(platform.calls)
                     call({"op": "install", "candidateId": second, "requestId": "b" * 32, "confirmInterrupt": True})
                     self.until(lambda: engine.status()["phase"] == "failed")
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(len(platform.calls), before)
                     signed.write_bytes(original)
                     platform.bad_readiness = True
@@ -333,6 +354,36 @@ class RealTransactions(unittest.TestCase):
                         if platform.child:
                             platform.child.terminate(); platform.child.wait(timeout=5); platform.child = None
 
+                    staged = {str(path): path.read_bytes() for path in (data / "updates/staged").rglob("*") if path.is_file()}
+                    current = storage.current(public_key)
+                    preferences = (data / "preferences.json").read_bytes()
+                    with sqlite3.connect(data / "couch.sqlite") as database:
+                        database_before = database.execute("SELECT * FROM progress").fetchall()
+                    (data / "custom-tool-override").write_text("administrator's separate executable")
+                    Path("/usr/lib/couch-fixture-tools/yt-dlp").unlink()
+                    Path("/usr/lib/couch-fixture-tools/deno").write_bytes(b"corrupt")
+                    calls_before = len(platform.calls)
+                    response = call({"op": "repair-current", "expectedCurrentId": current["candidateId"], "requestId": "1" * 32, "confirmInterrupt": True, "repairRuntime": False})
+                    self.assertTrue(response["ok"], response)
+                    self.until(lambda: engine.status()["phase"] in ("failed", "operator-required", "succeeded", "restored"), 30)
+                    server.worker.join()
+                    self.assertEqual(engine.status()["phase"], "succeeded", engine.status())
+                    self.assertEqual(engine.status()["intent"], "repair-current")
+                    self.assertIn("quiesce", platform.calls[calls_before:])
+                    self.assertTrue(engine.record["hookComplete"])
+                    self.assertEqual(storage.current(public_key), current)
+                    self.assertEqual((data / "preferences.json").read_bytes(), preferences)
+                    self.assertEqual((data / "custom-tool-override").read_text(), "administrator's separate executable")
+                    with sqlite3.connect(data / "couch.sqlite") as database:
+                        self.assertEqual(database.execute("SELECT * FROM progress").fetchall(), database_before)
+                        self.assertEqual(database.execute("PRAGMA quick_check").fetchall(), [("ok",)])
+                    self.assertEqual({str(path): path.read_bytes() for path in (data / "updates/staged").rglob("*") if path.is_file()}, staged)
+                    for name in ("yt-dlp", "deno"):
+                        path = Path("/usr/lib/couch-fixture-tools") / name
+                        self.assertEqual(path.read_bytes(), helper_bytes(name, current["version"]))
+                    self.assertIsNone(storage.read("active.json"))
+                    print("Verified signed exact-current real APT --reinstall restores missing/corrupt dummy helpers; fresh hash/smoke, saved data, override and newer staging preserved. App/native readiness remains doubled.", flush=True)
+
 
                 except Exception:
                     print("Fixture worker state:", engine.status(), flush=True)
@@ -377,6 +428,13 @@ class RealTransactions(unittest.TestCase):
             document = stage / "usr/share/doc" / package["name"] / "build-info.json"
             document.parent.mkdir(parents=True)
             document.write_text(json.dumps(manifest["build"] if package["name"] == "couch" else {"package": "couch-appliance", "version": package["version"], "sourceCommit": manifest["build"]["revision"]}))
+            if package["name"] == "couch":
+                tools = stage / "usr/lib/couch-fixture-tools"
+                tools.mkdir(parents=True)
+                for name in ("yt-dlp", "deno"):
+                    path = tools / name
+                    path.write_bytes(helper_bytes(name, package["version"]))
+                    path.chmod(0o755)
             archive = directory / package["filename"]
             run("dpkg-deb", "--root-owner-group", "--build", str(stage), str(archive))
             package.update(size=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())

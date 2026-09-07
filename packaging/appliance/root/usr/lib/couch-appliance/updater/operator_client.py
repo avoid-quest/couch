@@ -11,6 +11,7 @@ from maintenance import remaining
 from receipt import Rejected, enrolled_key, load_json, run, trusted_file
 from retention import installed, save
 from ubuntu import Ubuntu
+import worker
 
 SOCKET = "/run/couch-updater/control.sock"
 FLAG = Path("/etc/couch/manual-updates.enabled")
@@ -75,3 +76,44 @@ def enable(storage):
         run("/usr/bin/systemctl", "enable", "--now", "couch-updater.socket")
         Ubuntu(storage.root).systemctl("restart", "couch-tv.service")
         return {"phoneUpdates": "enabled", "current": current}
+
+
+def refresh_worker(storage):
+    """One-time handover for older workers that cannot retire themselves."""
+    stopped = False
+    try:
+        with storage.lock():
+            if activation_status() != "enabled":
+                raise Rejected("Activate phone updates before refreshing their worker.")
+            if storage.read("active.json"):
+                raise Rejected("Finish the active transaction before refreshing the worker.")
+            platform = Ubuntu(storage.root)
+            with platform.package_lock():
+                current = storage.current(enrolled_key())
+                build = installed()
+                if type(build.get("dataFormat")) is not int or type(current.get("dataFormat")) is not int or any(build.get(key) != current[key] for key in ("version", "revision", "dataFormat")):
+                    raise Rejected("The installed and enrolled releases must match before worker refresh.")
+                platform.package_health()
+                update_id = None
+                if worker.OVERRIDE.exists():
+                    content = trusted_file(worker.OVERRIDE)
+                    for path in (storage.root / "transactions").glob("*.json"):
+                        record = load_json(trusted_file(path))
+                        if record.get("phase") in ("succeeded", "failed", "restored") and worker.configuration(storage.root, record["updateId"]) == content:
+                            update_id = record["updateId"]
+                            break
+                    if update_id is None:
+                        raise Rejected("The retained worker override has no matching terminal transaction. Inspect it through SSH.")
+                run("/usr/bin/systemctl", "is-active", "--quiet", "couch-updater.socket")
+                # Stop the socket too, so a pending request cannot start a new
+                # instance before these storage/package locks are released.
+                stopped = True
+                run("/usr/bin/systemctl", "stop", "couch-updater.socket", "couch-updater.service")
+                if update_id:
+                    worker.release(storage.root, update_id)
+                else:
+                    run("/usr/bin/systemctl", "daemon-reload")
+    finally:
+        if stopped:
+            run("/usr/bin/systemctl", "start", "couch-updater.socket")
+    return {"worker": "refreshed", "current": current}

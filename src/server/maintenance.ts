@@ -2,12 +2,13 @@ import { lstatSync } from "node:fs";
 
 export type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 type Candidate = MaintenanceBuild & { candidateId: string };
-type Context = Partial<Candidate> & { updateId: string; nonce: string; phase: string; disrupted: boolean; committed: boolean; confirmInterrupt: boolean; whenIdle?: boolean };
+type Context = Partial<Candidate> & { updateId: string; nonce: string; phase: string; disrupted: boolean; committed: boolean; confirmInterrupt: boolean; whenIdle?: boolean; intent?: "install" | "repair-current" | "recovery" | null; repairRuntime?: boolean | null };
 type Options = {
   build: MaintenanceBuild;
   context: () => Promise<unknown>;
   player: () => string;
   idle?: () => string | null;
+  tools?: (runtime: boolean) => Promise<void>;
   observe: () => void;
   quiesce: () => Promise<{ progressSaved: boolean; admissionClosed: boolean }>;
   database: () => Promise<void>;
@@ -36,12 +37,14 @@ export function manualUpdatesEnabled() {
 export function createMaintenance(options: Options) {
   let mode: "starting" | "open" | "trial" | "quiescing" | "failed" = "starting";
   let verified: { updateId: string; nonce: string } | undefined;
+  let tools: { nonce: string; pending: Promise<void> } | undefined;
   const context = async (): Promise<Context | null> => {
     const response = await options.context() as { ok?: unknown; context?: unknown };
     if (!response || response.ok !== true || !("context" in response)) throw error();
     if (response.context === null) return null;
     const value = response.context as Context;
     if (!value || !token(value.updateId) || !token(value.nonce) || !phases.has(value.phase) || typeof value.disrupted !== "boolean" || typeof value.committed !== "boolean" || typeof value.confirmInterrupt !== "boolean") throw error();
+    if (value.intent != null && !["install", "repair-current", "recovery"].includes(value.intent) || value.repairRuntime != null && typeof value.repairRuntime !== "boolean") throw error();
     return value;
   };
   const fail = () => { mode = "failed"; verified = undefined; };
@@ -75,7 +78,7 @@ export function createMaintenance(options: Options) {
           if (waiting) return { protocol: "maintenance-v1", nonce, ok: true, idleDeferred: true, admissionClosed: false };
           if (!request.confirmInterrupt && ["loading", "playing", "paused"].includes(options.player())) throw new Error("Confirm interruption of the current playback before installing.");
           if (request.op === "capabilities") {
-            result = { build: options.build, nativeReadiness: "libmpv-v1" };
+            result = { build: options.build, nativeReadiness: "libmpv-v1", ...(options.tools ? { toolRepair: "package-smoke-v1" } : {}) };
           } else {
             mode = "quiescing";
             result = await options.quiesce();
@@ -86,11 +89,16 @@ export function createMaintenance(options: Options) {
           const nativeBuild = await options.native(nonce);
           const frontendBuild = options.frontend();
           if (mode !== "trial" || !sameBuild(nativeBuild, options.build) || !frontendBuild || !sameBuild(frontendBuild, options.build)) throw error();
-          // Recheck root authority after asynchronous native/database work.
+          if (active.intent === "repair-current") {
+            if (!options.tools) throw error();
+            if (tools?.nonce !== nonce) tools = { nonce, pending: options.tools(active.repairRuntime === true) };
+            await tools.pending;
+          }
+          // Recheck root authority after asynchronous native/database/tool work.
           const current = await context();
           if (!current || current.updateId !== active.updateId || current.nonce !== nonce || current.phase !== "trial" || current.committed) throw error();
           verified = { updateId: active.updateId, nonce };
-          result = { build: options.build, nativeBuild, frontendBuild, database: "ok", nativeReadiness: "libmpv-v1", frontendReady: true };
+          result = { build: options.build, nativeBuild, frontendBuild, database: "ok", nativeReadiness: "libmpv-v1", frontendReady: true, ...(active.intent === "repair-current" ? { toolRepair: "verified-v1" } : {}) };
         } else {
           if (mode !== "trial" || active.phase !== "committing" || !active.committed || verified?.updateId !== active.updateId || verified.nonce !== nonce || !sameBuild(options.build, request.candidate)) throw error();
           mode = "open";

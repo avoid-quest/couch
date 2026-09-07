@@ -13,7 +13,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from receipt import Rejected, load_json
 from retention import Retention
-from transactions import Transactions
+from transactions import FINISHED, Transactions
 from ubuntu import Ubuntu
 from maintenance import remaining
 from recovery import restore
@@ -43,17 +43,22 @@ class Handler(socketserver.BaseRequestHandler):
                 raise Rejected("Send one update operation.")
             operation = request.pop("op", None)
             if operation == "status" and set(request) <= {"requestId"}:
-                result = {"transaction": self.server.transactions.status(request.get("requestId"))}
+                result = {"transaction": self.server.transactions.status(request.get("requestId")), "current": self.server.transactions.current_summary(), "repairCurrent": True}
             elif operation == "context" and not request:
                 result = {"context": self.server.transactions.context()}
-            elif operation == "install":
-                record, start = self.server.transactions.submit(request)
-                # Start independently of whether the caller receives this reply.
-                if start:
-                    self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)
-                    self.server.worker.start()
+            elif operation in ("install", "repair-current"):
+                with self.server.transactions.mutex:
+                    if getattr(self.server, "retire_enabled", False): self.server.reject_retiring()
+                    record, start = self.server.transactions.submit(request, operation)
+                    # Start independently of whether the caller receives this reply.
+                    if start:
+                        self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)
+                        self.server.worker.start()
                 result = {"transaction": record}
             elif operation == "restore" and uid == 0 and set(request) == {"updateId"}:
+                if getattr(self.server, "retire_enabled", False):
+                    with self.server.transactions.mutex:
+                        self.server.reject_retiring()
                 result = {"transaction": restore(self.server.transactions, request["updateId"])}
                 if result["transaction"]["phase"] != "restored":
                     raise Rejected(result["transaction"].get("error") or "Restoration did not finish. Inspect the retained transaction through SSH.")
@@ -81,15 +86,23 @@ class Server(socketserver.ThreadingUnixStreamServer):
 
     def __init__(self, *args, **kwargs):
         self.slots = threading.BoundedSemaphore(self.max_handlers)
+        self.handlers = 0
+        self.retiring = False
+        self.retire_enabled = False
+        self.drain = threading.Lock()
         super().__init__(*args, **kwargs)
 
     def process_request(self, request, client_address):
         if not self.slots.acquire(blocking=False):
             self.shutdown_request(request)
             return
+        with self.drain:
+            self.handlers += 1
         try:
             super().process_request(request, client_address)
         except BaseException:
+            with self.drain:
+                self.handlers -= 1
             self.slots.release()
             raise
 
@@ -97,7 +110,36 @@ class Server(socketserver.ThreadingUnixStreamServer):
         try:
             super().process_request_thread(request, client_address)
         finally:
+            with self.drain:
+                self.handlers -= 1
             self.slots.release()
+
+    def reject_retiring(self):
+        if self.transactions.record and self.transactions.record["phase"] in FINISHED:
+            self.retiring = True
+        if self.retiring:
+            raise Rejected("The completed worker is handing over to installed code. Read status and retry the same request.")
+
+    def serve_until_idle(self, finalize, retained_idle=False):
+        self.retire_enabled = True
+        self.retiring = retained_idle
+        self.timeout = 0.25
+        while True:
+            # Only this loop accepts new sockets. Once all replies and the
+            # transaction have drained, leave queued requests to socket activation.
+            with self.drain:
+                drained = not self.handlers and not (self.worker and self.worker.is_alive())
+            with self.transactions.mutex:
+                terminal = self.transactions.record and self.transactions.record["phase"] in FINISHED
+                self.retiring = self.retiring or bool(terminal)
+            if drained and self.retiring:
+                try:
+                    finalize()
+                except Exception:
+                    print("The idle updater could not hand over to its installed code. Inspect it through SSH.", flush=True)
+                    self.serve_forever()
+                return
+            self.handle_request()
 
 
 def main():
@@ -109,11 +151,7 @@ def main():
     # its root storage lock. systemd owns the sole listening socket.
     transactions = Transactions(storage, Ubuntu(storage.root))
     frozen = Path(__file__).resolve().parent
-    if not transactions.context() and frozen.parent == storage.root / "workers":
-        try:
-            transactions.platform.release_worker({"updateId": frozen.name})
-        except Exception:
-            print("The idle retained updater override needs SSH inspection.", flush=True)
+    retained_idle = not transactions.context() and frozen.parent == storage.root / "workers"
     with Server("/run/couch-updater/control.sock", Handler, bind_and_activate=False) as server:
         server.socket.close()
         server.socket = socket.socket(fileno=3)
@@ -122,7 +160,7 @@ def main():
         if transactions.record and transactions.record.get("recoveryPending"):
             server.worker = threading.Thread(target=transactions.recover, daemon=False)
             server.worker.start()
-        server.serve_forever()
+        server.serve_until_idle(lambda: transactions.platform.release_worker({"updateId": transactions.record["updateId"] if transactions.record else frozen.name}), retained_idle)
 
 
 if __name__ == "__main__":

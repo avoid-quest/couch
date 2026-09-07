@@ -37,6 +37,7 @@ const maintenance = activated ? createMaintenance({
   context: (): Promise<unknown> => updater!.request({ op: "context" }),
   player: () => hub.session.state.player.status,
   idle: () => hub.idleAdmission(),
+  tools: runtime => hub.verifyTools(runtime),
   observe: () => send({ type: "observe" }),
   quiesce: () => hub.quiesce(),
   database: async () => {

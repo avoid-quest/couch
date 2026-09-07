@@ -13,6 +13,7 @@ import uuid
 
 LIMIT = 65536
 TIMEOUT = 30
+WORKER_TIMEOUT = 8
 WORKER = "/run/couch-updater/control.sock"
 
 
@@ -54,8 +55,33 @@ class Bridge:
 
     def drop(self, token):
         item = self.connections.pop(token)
-        self.selector.unregister(item["socket"])
-        item["socket"].close()
+        if item["socket"] is not None:
+            self.selector.unregister(item["socket"])
+            item["socket"].close()
+
+    def reconnect_worker(self, token):
+        item = self.connections[token]
+        if item["socket"] is not None:
+            self.selector.unregister(item["socket"])
+            item["socket"].close()
+        item.update(socket=None, retry_at=time.monotonic() + 0.1)
+
+    def open_worker(self, token):
+        item = self.connections[token]
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            connection.settimeout(min(0.1, max(0.01, item["deadline"] - time.monotonic())))
+            connection.connect(WORKER)
+            peer(connection, 0)
+            connection.setblocking(False)
+            item.update(socket=connection, input=bytearray(), output=bytearray(item["request"]), waiting=False)
+            self.selector.register(connection, selectors.EVENT_WRITE, token)
+        except (ConnectionRefusedError, FileNotFoundError, ConnectionResetError, TimeoutError):
+            connection.close()
+            item["retry_at"] = time.monotonic() + 0.1
+        except Exception:
+            connection.close()
+            raise
 
     def connect(self, connection, token, kind, output=b""):
         if len(self.connections) >= 8 or token in self.connections:
@@ -76,17 +102,14 @@ class Bridge:
             item["output"] = bytearray(frame(payload))
             item["waiting"] = False
             self.selector.modify(item["socket"], selectors.EVENT_WRITE, token)
-        elif value["kind"] == "worker" and isinstance(payload, dict) and payload.get("op") in ("context", "status", "install"):
-            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            try:
-                # The root-owned listener already exists; bound even a full accept queue.
-                connection.settimeout(1)
-                connection.connect(WORKER)
-                peer(connection, 0)
-                self.connect(connection, token, "worker", frame(payload))
-            except Exception:
-                connection.close()
-                raise
+        elif value["kind"] == "worker" and isinstance(payload, dict) and payload.get("op") in ("context", "status", "install", "repair-current"):
+            if len(self.connections) >= 8 or token in self.connections:
+                raise ValueError("Private request limit")
+            # Worker handover may replace the listener or interrupt a response.
+            # Replay only this exact frame: reads are safe and mutations carry
+            # durable idempotency IDs. Never extend the original request budget.
+            self.connections[token] = {"kind": "worker", "socket": None, "request": frame(payload), "deadline": time.monotonic() + WORKER_TIMEOUT, "retry_at": time.monotonic()}
+            self.open_worker(token)
         else:
             raise ValueError("Unsupported private operation")
 
@@ -103,6 +126,8 @@ class Bridge:
                     self.drop(token)
                     # The app treats bridge loss as a closed maintenance gate.
                     raise TimeoutError("Private request deadline")
+                if item["socket"] is None and now >= item["retry_at"]:
+                    self.open_worker(token)
             for key, events in self.selector.select(0.1):
                 token = key.data
                 if token == "listen":
@@ -135,16 +160,27 @@ class Bridge:
                 else:
                     item = self.connections[token]
                     if events & selectors.EVENT_WRITE:
-                        del item["output"][:item["socket"].send(item["output"])]
+                        try:
+                            del item["output"][:item["socket"].send(item["output"])]
+                        except (BrokenPipeError, ConnectionResetError):
+                            if item["kind"] != "worker": raise
+                            self.reconnect_worker(token)
+                            continue
                         if not item["output"]:
                             if item["kind"] == "maintenance":
                                 self.drop(token)
                             else:
                                 self.selector.modify(item["socket"], selectors.EVENT_READ, token)
                     else:
-                        block = item["socket"].recv(4096)
+                        try:
+                            block = item["socket"].recv(4096)
+                        except ConnectionResetError:
+                            if item["kind"] != "worker": raise
+                            self.reconnect_worker(token)
+                            continue
                         if not block:
-                            self.drop(token)
+                            if item["kind"] == "worker": self.reconnect_worker(token)
+                            else: self.drop(token)
                             continue
                         if item["waiting"]:
                             raise ValueError("Duplicate local request")

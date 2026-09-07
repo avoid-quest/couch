@@ -15,7 +15,8 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [retry, setRetry] = useState(() => readUpdateRequest(credentials.origin));
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<false | "install" | "repair">(false);
+  const [repairRuntime, setRepairRuntime] = useState(false);
   const [interrupt, setInterrupt] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const mutation = useRef<AbortController | null>(null);
@@ -42,7 +43,8 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [credentials.origin, credentials.token, connected, pending, refresh, retry?.requestId]);
   const update = async (path: string, body: unknown) => {
-    if ((!connected && path !== "install") || pending || mutation.current) return;
+    const maintenanceRequest = path === "install" || path === "repair";
+    if ((!connected && !maintenanceRequest) || pending || mutation.current) return;
     const controller = new AbortController(); mutation.current = controller;
     setPending(true); setError(null);
     try {
@@ -50,10 +52,10 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       const result = await response.json();
       if (controller.signal.aborted) return;
       if (!response.ok) {
-        if (path === "install" && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
+        if (maintenanceRequest && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
         setError(result.error || "Could not start the update operation. Refresh its status and retry."); return;
       }
-      if (path === "install") {
+      if (maintenanceRequest) {
         if (result.transaction?.requestId === retry?.requestId && ["succeeded", "failed", "restored"].includes(result.transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
         setState(current => current ? { ...current, installation: { enabled: true, transaction: result.transaction } } : current);
       }
@@ -65,11 +67,13 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const installing = !!transaction && !["succeeded", "failed", "restored"].includes(transaction.phase);
   const install = async () => {
     try {
-      const saved = retry ?? (state?.candidate ? saveUpdateRequest(credentials.origin, state.candidate, interrupt) : null);
+      const current = state?.installation?.current;
+      const saved = retry ?? (confirming === "repair" && current ? saveUpdateRequest(credentials.origin, { id: current.candidateId, version: current.version, revision: current.revision }, interrupt, repairRuntime) : state?.candidate ? saveUpdateRequest(credentials.origin, state.candidate, interrupt) : null);
       if (!saved) return;
       setRetry(saved); setConfirming(false);
       const { candidateId, requestId, confirmInterrupt } = saved;
-      await update("install", { install: { candidateId, requestId, confirmInterrupt } });
+      if (saved.intent === "repair-current") await update("repair", { repair: { expectedCurrentId: candidateId, requestId, confirmInterrupt, repairRuntime: saved.repairRuntime } });
+      else await update("install", { install: { candidateId, requestId, confirmInterrupt } });
     } catch { setError("Could not save this update's retry identity. Allow local storage before installing."); }
   };
   if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to the TV to check updates.</p>;
@@ -80,7 +84,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   return <div className="min-w-0 space-y-4">
     <p className="text-muted-foreground">Release settings apply to this TV installation. Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">
-      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? "Update installed and running" : "Update committed. Waiting for the matching running build." : transaction?.phase === "restored" ? "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? "Update stopped before installation" : "Updating the TV"}</p>
+      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. Waiting for the matching running build." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating the TV"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       <p>{transaction?.phase || "Waiting for the TV to confirm this request"}</p>
       {transaction?.error && <p>{transaction.error}</p>}
@@ -131,15 +135,28 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       {problem && <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Refresh status</Button>}
     </div>
     {state?.installation?.enabled && state.status === "ready" && !retry && !installing && <div className="space-y-2">
-      {confirming ? <>
+      {confirming === "install" ? <>
         <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before package installation. Other remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
-      </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming(true)}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
+      </> : <Button className="min-h-11" disabled={busy || state.installation.repairAvailable === false} onClick={() => setConfirming("install")}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
     </div>}
     <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
     {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
-    <ToolsSettings credentials={credentials} connected={connected} />
+    <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
+      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The update worker needs a one-time SSH refresh after this upgrade. After maintenance finishes, the administrator can run <code>sudo couch-update refresh-worker</code>. This keeps TV playback running.</p>}
+      {state?.installation?.enabled && state.installation.repairAvailable !== false && state.installation.current && !retry && !installing && <div className="space-y-2">
+        <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
+        {confirming === "repair" ? <>
+          <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
+          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
+          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={repairRuntime} onChange={event => setRepairRuntime(event.target.checked)} /> Also reinstall Ubuntu's ffprobe media runtime</Label>
+          <p className="text-muted-foreground">Runtime repair uses Ubuntu's ffmpeg package at its installed version, or its Ubuntu candidate if absent. The exact archive must be available. Other runtime failures remain visible for system administration.</p>
+          <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button>
+          <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
+        </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button>}
+      </div>}
+    </ToolsSettings>
   </div>;
 }

@@ -1,4 +1,6 @@
 """Ubuntu operations with fixed service, package and credential boundaries."""
+import json
+import re
 import os
 import fcntl
 from contextlib import contextmanager
@@ -44,10 +46,29 @@ class Ubuntu:
     def systemctl(self, *arguments):
         return run("/usr/sbin/runuser", "-u", "couch-tv", "--", "/usr/bin/env", f"XDG_RUNTIME_DIR={self.runtime}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={self.runtime}/bus", "/usr/bin/systemctl", "--user", *arguments).decode().strip()
 
+    def system_status(self, runtime=False):
+        try:
+            output = subprocess.check_output(["/usr/bin/python3", "-I", str(Path(__file__).with_name("system_packages.py")), *(["runtime"] if runtime else [])], env=ENV, stderr=subprocess.DEVNULL, timeout=5)
+            if len(output) > 16384:
+                raise ValueError()
+            result = json.loads(output)
+            if not isinstance(result, dict):
+                raise ValueError()
+            return result
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return {"ok": False, "error": "Ubuntu package status did not finish. Check the package manager through system administration."}
+
+    def runtime_arguments(self, record):
+        return ["ffmpeg=" + record["runtimeVersion"]] if record.get("repairRuntime") else []
+
     def verify_current(self, record):
         current = installed()
         if any(current.get(key) != record["previous"].get(key) for key in ("version", "revision", "dataFormat")):
             raise Rejected("The installed release changed after its receipt was enrolled.")
+        if record.get("repairRuntime") and "runtimePrevious" in record:
+            info = self.system_status(True)
+            if info.get("ok") is not True or info.get("installed") != record["runtimePrevious"]:
+                raise Rejected("The Ubuntu media runtime changed before maintenance. Refresh Tools and retry.")
         return current
 
     def preflight(self, record, manifest, packages):
@@ -60,10 +81,18 @@ class Ubuntu:
             raise IdleDeferred("Couch became active. Wait for five continuous idle minutes.")
         if result.get("nativeReadiness") != "libmpv-v1" or result.get("build") != {key: current[key] for key in ("version", "revision", "dataFormat")}:
             raise Rejected("This app cannot provide the required native startup trial.")
+        repairing = record.get("intent") == "repair-current"
+        if repairing and result.get("toolRepair") != "package-smoke-v1":
+            raise Rejected("This installed release cannot verify tool repair. Install a newer qualified Couch release first.")
         try:
-            run("/usr/bin/dpkg", "--compare-versions", record["version"], "gt", current["version"])
+            run("/usr/bin/dpkg", "--compare-versions", record["version"], "eq" if repairing else "gt", current["version"])
         except Rejected as error:
-            raise Rejected("Only a newer verified Couch release can be installed.") from error
+            raise Rejected("Repair must match the installed release exactly." if repairing else "Only a newer verified Couch release can be installed.") from error
+        if record.get("repairRuntime"):
+            info = self.system_status(True)
+            if info.get("ok") is not True or not isinstance(info.get("version"), str) or not re.fullmatch(r"[0-9][A-Za-z0-9.+:~\-]{0,150}", info["version"]):
+                raise Rejected(info.get("error") or "The exact Ubuntu media runtime archive is unavailable.")
+            record.update(runtimeVersion=info["version"], runtimePrevious=info.get("installed"))
         if run("/usr/bin/dpkg", "--audit").strip():
             raise Rejected("Repair the interrupted package operation through SSH before updating Couch.")
         try:
@@ -77,8 +106,9 @@ class Ubuntu:
         if shutil.disk_usage(self.root).free < backup_size:
             raise Rejected("The TV needs more data-backup storage before updating.")
         # Download and dependency errors are resolved while the app is still running.
-        self.apt(record, ["--simulate", "install", *map(str, packages)])
-        self.apt(record, ["--download-only", "install", *map(str, packages)])
+        arguments = [*(["--reinstall"] if repairing else []), "install", *map(str, packages), *self.runtime_arguments(record)]
+        self.apt(record, ["--simulate", *arguments])
+        self.apt(record, ["--download-only", *arguments])
 
     def apt(self, record, arguments, hook=None):
         options = ["/usr/bin/apt-get", "-y", "--no-remove", "--no-install-recommends", "-o", "APT::Get::Fix-Missing=false", "-o", "DPkg::Lock::Timeout=30", "-o", "DPkg::Options::=--force-confold"]
@@ -129,7 +159,7 @@ class Ubuntu:
             stream.flush()
             os.fsync(stream.fileno())
         sync_directory(hooks)
-        self.apt(record, ["install", *map(str, packages)], hook)
+        self.apt(record, [*(["--reinstall"] if record.get("intent") == "repair-current" else []), "install", *map(str, packages), *self.runtime_arguments(record)], hook)
 
     def quiesce(self, record):
         response = self.coordinator("quiesce", record, 30)
@@ -165,8 +195,16 @@ class Ubuntu:
         deadline = time.monotonic() + 90
         while (remaining := deadline - time.monotonic()) > 0:
             try:
-                result = self.coordinator("readiness", record, min(5, remaining))
-                if all(result.get(key) == expected for key in ("build", "nativeBuild", "frontendBuild")) and result.get("database") == "ok" and result.get("nativeReadiness") == "libmpv-v1" and result.get("frontendReady") is True:
+                # Repair adds fresh hashing and bounded helper smoke after native
+                # initialization. Keep its reply inside the 30-second bridge bound.
+                request_budget = 25 if record.get("intent") == "repair-current" and record.get("phase") != "restoring" else 5
+                result = self.coordinator("readiness", record, min(request_budget, remaining))
+                repair_verified = record.get("intent") != "repair-current" or record.get("phase") == "restoring" or result.get("toolRepair") == "verified-v1"
+                if repair_verified and all(result.get(key) == expected for key in ("build", "nativeBuild", "frontendBuild")) and result.get("database") == "ok" and result.get("nativeReadiness") == "libmpv-v1" and result.get("frontendReady") is True:
+                    if record.get("repairRuntime") and record.get("phase") != "restoring":
+                        version = run("/usr/bin/dpkg-query", "-W", "-f=${Version}", "ffmpeg").decode().strip()
+                        if version != record["runtimeVersion"] or run("/usr/bin/dpkg", "--verify", "ffmpeg").strip():
+                            raise Rejected("Ubuntu's ffmpeg package did not pass post-repair ownership/integrity verification.")
                     return
             except Rejected:
                 pass
@@ -218,7 +256,7 @@ class Ubuntu:
         # fail configuration; retained previous archives then replace it through APT.
         self.package_command(record, ["/usr/bin/dpkg", "--audit"], tolerate_failure=True)
         self.package_command(record, ["/usr/bin/dpkg", "--force-confold", "--configure", "--pending"], tolerate_failure=True)
-        self.apt(record, ["--fix-broken", "--allow-downgrades", "install", *map(str, packages)])
+        self.apt(record, ["--fix-broken", "--allow-downgrades", *(["--reinstall"] if record.get("intent") == "repair-current" else []), "install", *map(str, packages)])
         self.package_health()
 
     def restore_data(self, backup, state, persist):

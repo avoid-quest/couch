@@ -417,7 +417,7 @@ class RetainedWorkerTests(unittest.TestCase):
                 worker.preserve(state, "a" * 32)
                 frozen = state / "workers" / ("a" * 32)
                 shutil.rmtree(source)
-                script = "import pathlib,sys; sys.path.insert(0,sys.argv[1]); import serve,recovery,transactions; assert all(pathlib.Path(module.__file__).resolve().parent == pathlib.Path(sys.argv[1]).resolve() for module in (serve,recovery,transactions))"
+                script = "import pathlib,sys; sys.path.insert(0,sys.argv[1]); import serve,recovery,transactions,system_packages; assert all(pathlib.Path(module.__file__).resolve().parent == pathlib.Path(sys.argv[1]).resolve() for module in (serve,recovery,transactions,system_packages))"
                 subprocess.run([os.sys.executable, "-I", "-c", script, str(frozen)], check=True, timeout=5)
                 self.assertIn(str(frozen / "serve.py"), override.read_text())
                 self.assertEqual(systemctl.call_args.args, ("/usr/bin/systemctl", "daemon-reload"))

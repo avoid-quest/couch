@@ -136,6 +136,59 @@ test("a lost install reply keeps its retry identity through disconnect without r
   expect(installed[0]).toEqual(installed[1]);
 });
 
+test("repair warns before exact-current reinstall and preserves its intent after a lost reply", async () => {
+  report.status = "ready";
+  const current = { candidateId: "f".repeat(64), version: report.running.version, revision: "abc123" };
+  report.installation = { enabled: true, transaction: null, current };
+  const sent: unknown[] = [];
+  request.mockImplementation((async (input, init) => {
+    if (String(input).includes("/api/tools")) return Response.json({}, { status: 503 });
+    if (String(input).endsWith("/repair")) { sent.push(JSON.parse(String(init?.body))); throw new Error("lost reply"); }
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Repair current release").click());
+  expect(sent).toHaveLength(0);
+  expect(document.body.textContent).toContain("Other remotes will disconnect");
+  expect(document.body.textContent).toContain("Missing authenticated current archives cause a failure");
+  await act(async () => {
+    for (const checkbox of document.querySelectorAll('input[type="checkbox"]')) (checkbox as HTMLInputElement).click();
+    button("Repair and restart").click();
+  });
+  const saved = JSON.parse(window.localStorage.getItem("couch.update-request:http://localhost")!);
+  expect(saved).toMatchObject({ candidateId: current.candidateId, intent: "repair-current", repairRuntime: true, confirmInterrupt: true });
+  expect(sent).toEqual([{ repair: { expectedCurrentId: current.candidateId, requestId: saved.requestId, confirmInterrupt: true, repairRuntime: true } }]);
+  expect(document.body.textContent).toContain(report.candidate!.version);
+  expect(document.body.textContent).toContain("Verified download ready");
+  await render(false); await render(true);
+  expect(sent).toHaveLength(1);
+  await act(async () => button("Retry same request").click());
+  expect(sent[1]).toEqual(sent[0]);
+});
+
+test("repair archive rejection clears its saved request and leaves the staged update available", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null, current: { candidateId: "f".repeat(64), version: report.running.version, revision: "abc123" } };
+  request.mockImplementation((async (input, init) => String(input).endsWith("/repair") && init?.method === "POST" ? Response.json({ accepted: false, error: "The enrolled release changed. Refresh Tools." }, { status: 409 }) : String(input).includes("/api/tools") ? Response.json({}, { status: 503 }) : Response.json(report)) as typeof fetch);
+  await render();
+  await act(async () => button("Repair current release").click());
+  await act(async () => button("Repair and restart").click());
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  expect(document.body.textContent).toContain("The enrolled release changed");
+  expect(button("Install update").disabled).toBe(false);
+  expect(button("Check now").disabled).toBe(false);
+});
+
+test("an older live worker shows the fixed SSH transition instead of silently hiding repair", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null, repairAvailable: false };
+  await render();
+  expect(document.body.textContent).toContain("sudo couch-update refresh-worker");
+  expect(document.body.textContent).toContain("keeps TV playback running");
+  expect(button("Repair current release")).toBeUndefined();
+  expect(button("Install update").disabled).toBe(true);
+});
+
 
 test("an older finished transaction cannot erase a newly saved request whose delivery is unknown", async () => {
   const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };

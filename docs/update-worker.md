@@ -141,9 +141,9 @@ bytes. Quiescing and backup retain their separate hook execution deadline.
 The app coordinator implements this protocol behind the persistent root-owned
 `/etc/couch/manual-updates.enabled` flag. No package script creates that flag or
 enables the worker units. An administrator enables phone installation explicitly
-through SSH after appliance qualification. Idle scheduling and tool repair remain
-separate work. Source and fixture verification alone
-do not report issue 7 complete.
+through SSH after appliance qualification. Idle scheduling and exact-current tool
+repair use this same activation and maintenance protocol. Source and fixture
+verification alone do not report issue 7 complete.
 
 On activated Linux startup, one unprivileged Python bridge runs from the fixed
 installed script with an isolated Python environment. It checks root Unix peer
@@ -359,6 +359,97 @@ commit boundary and bounded automatic recovery as manual updates. Installation s
 ships disabled. Full supervised phone updates and physical appliance acceptance
 remain requirements before activation on the TV.
 
+## Exact-current tool repair
+
+An administrator can choose **Repair current release** under Updates → Tools.
+After upgrading from a release whose worker stays in memory, Tools asks for the
+one-time SSH command `sudo couch-update refresh-worker`. Run it after maintenance
+finishes. It requires existing activation, authenticated matching installed/current
+identities, clean package health and both updater/package locks. It refuses active
+or unresolved transactions. It temporarily stops only the existing updater socket
+and service, removes only a matching terminal frozen override, reloads units, then
+reopens that socket after releasing the locks. It leaves the TV app running and
+does not enable any unit. An unknown override needs administrator inspection.
+The upgraded app defers new manual or automatic transactions until this handover,
+so an old loaded worker cannot freeze new source using its old module list.
+Existing durable request status and retries remain available.
+
+New workers retire after the terminal transaction thread and all replies drain.
+Retirement is latched as soon as the transaction becomes terminal. Another
+installation or repair cannot replace that record while earlier replies drain.
+Their systemd-owned socket keeps pending requests for a fresh packaged process.
+A terminal frozen worker also hands over on startup when active.json was already
+cleared, including a crash between override removal and daemon-reload. An
+unresolved transaction keeps its frozen code; no package script restarts it.
+During the explicit old-worker handover, the private bridge tolerates a replaced
+listener or interrupted worker response within one eight-second total budget.
+It rechecks root peer credentials and resends only the same frame and durable
+request ID. This keeps an in-flight status request from killing the app's private
+bridge. A prolonged outage, unauthenticated peer, complete malformed response or
+private-pipe failure still closes the maintenance gate.
+
+The warning identifies the enrolled current release and requires explicit consent
+to stop any playing media. The browser sends only the current receipt ID, its
+saved request ID, playback consent and the optional Ubuntu runtime repair flag.
+The worker checks that receipt ID against its enrolled current release; it never
+uses the newer staged candidate for repair. Ambiguous replies retain the same
+request identity. A definitive rejection or completed receipt permits another
+explicit attempt.
+
+The worker authenticates the retained current manifest and both Debian archives
+again before any disruption. Expired channel metadata is allowed only for this
+already enrolled current release. Missing or corrupt retained archives fail
+before maintenance. The same APT preflight, authenticated final hook, required
+checkpoint, stopped-service verification and snapshot apply to repair. APT uses
+`--reinstall` with the exact retained package paths, so an equal version still
+replaces damaged package files. It retains modified configuration files with
+`--force-confold`; custom executable overrides and newer staged downloads remain
+untouched. See [Ubuntu's APT install and reinstall options](https://manpages.ubuntu.com/manpages/noble/man8/apt-get.8.html).
+
+A repair trial freshly verifies the package-owned yt-dlp and Deno hashes and
+versions, independently of the Tools cache and effective overrides. It runs a
+bounded local WAV extraction with the packaged yt-dlp and JavaScript evaluation
+with the packaged Deno, using [`eval --no-config --no-lock`](https://docs.deno.com/runtime/reference/cli/eval/) to skip local project configuration.
+This requires no media source credentials or external
+network. The root worker holds the package locks through matching native,
+frontend, database and tool readiness and the durable commit. Only that result
+reports **Current release repaired and verified**.
+Repair readiness allows up to 25 seconds per private exchange for native startup,
+fresh hashes and helper smoke, always capped by the remaining 90-second trial.
+It stays inside the bridge's 30-second maintenance-response deadline.
+
+The optional ffprobe runtime repair selects the fixed Ubuntu `ffmpeg` package at
+its installed version, or its Ubuntu candidate when absent. The exact archive
+must remain downloadable from trusted Ubuntu package indexes. The browser cannot
+choose a package or version. APT simulates and downloads it while Couch remains
+running, then reinstalls it under the same final maintenance hook. Readiness also
+requires a fixed `/usr/bin/ffprobe` WAV probe, matching installed package version
+and clean `dpkg --verify ffmpeg`. Missing unrelated libraries and pre-existing
+interrupted package operations remain explicit system-administration failures.
+The package-manager interruption recovery described above still applies if this
+repair's own APT transaction fails.
+Recovery restores the authenticated Couch packages and Couch data. It does not
+remove Ubuntu dependencies installed by the optional runtime repair.
+
+An uncommitted failure uses the existing bounded automatic recovery and SSH
+fallback. A restored previous app has its own authenticated startup readiness;
+it does not claim successful tool repair. This lets a failed checkpoint resume
+the unchanged app even if its original tools were damaged. Committed data is
+never rolled back. The transaction and its repair error remain visible after
+recovery.
+
+Tools also shows a separate, read-only Ubuntu package status. The fixed
+unprivileged `python3-apt` helper counts installed packages with newer trusted
+Ubuntu candidates, identifies candidates in a `-security` pocket and reports
+broken package states. These are cached local-index facts, not a live security
+assessment or an Ubuntu Pro/ESM entitlement check. The last automated index-refresh
+timestamp may be unknown. Reading the full package inventory has a fixed five-second
+deadline and 4 KiB output limit; helper version probes keep their 1.5-second limit.
+Results are cached for 30 seconds. The status endpoint never refreshes APT indexes,
+installs updates or starts an OS release upgrade. The companion package declares
+`python3-apt`; failures remain visible if its runtime is unavailable. See the
+[python-apt package origin and version API](https://apt-team.pages.debian.net/python-apt/library/apt.package.html).
+
 ## Inspection and verification
 
 `sudo couch-update status` exposes the current receipt and active transaction.
@@ -388,7 +479,13 @@ phone updates.
 
 `python3 scripts/test-update-transactions.py` checks durable state, retries,
 failure boundaries and SQLite backup without installing packages. It also loads
-the recovery suite through the existing CI entry point.
+the recovery and repair suites through the existing CI entry point.
+`python3 scripts/test-update-repair.py` checks exact-current retention, stale and
+invalid requests, missing/corrupt archives, current-only expiry handling, repair
+verification under package locks and a distinct restored outcome. Its signing,
+APT and service operations are doubles. App and UI tests separately cover fresh
+package smoke, private readiness, playback consent, offline retries and the
+Ubuntu status view.
 `python3 scripts/test-update-recovery.py` checks automatic recovery, restart
 budgets, snapshot corruption, missing staged downloads and commit boundaries with
 package, supervisor and readiness doubles. On Linux it also runs the real
@@ -401,7 +498,12 @@ acquisition and the frozen hook, disconnects the initiating client and checks
 readiness failure, automatic and explicit previous-package/data restoration,
 a killed dummy-package dpkg process followed by real package-manager repair,
 unchanged-app resume after a failed checkpoint with no snapshot, and new activity
-during the final APT lock wait without stopping the app or changing packages. Its session, native and browser operations are explicit
+during the final APT lock wait without stopping the app or changing packages.
+It also removes one package-owned dummy helper, corrupts another, then proves
+same-version real APT reinstall with fresh dummy-helper hashes and smoke while
+preserving saved data, an override and a newer staged release. These tiny helpers
+do not qualify the release's actual yt-dlp or Deno. That requires the exact-final
+Package artifacts and installed native trial. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
 watchdog, or on the dedicated disposable Ubuntu runner in
