@@ -52,7 +52,7 @@ jobs:
               - '!tests/{linux,preview}/**/*.md'
             native:
               - *non-docs
-              - '!{src,tests}/**/*.{ts,tsx,css,html,m3u}'
+              - '{src-tauri/**,rust-toolchain.toml,package.json,bun.lock,scripts/{build,release-version}.ts,.github/workflows/check.yml}'
             releases:
               - '{scripts/*release*,install-couch,.github/workflows/check.yml,.github/workflows/releases.yml}'
       - name: Verify private artifact origin and attempt checks
