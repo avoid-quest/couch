@@ -1,10 +1,10 @@
 # Private releases and the LAN feed
 
-`main` is the Preview integration branch in `.github/workflows/package.yml`. Package runs qualify the native `.deb` on clean Ubuntu before uploading `couch-release-RUN.ATTEMPT`. Pull-request artifacts remain qualification evidence and cannot enter the feed. An explicit workflow dispatch on `main` accepts release notes. Automatic builds use their exact source revision as notes.
+`main` is the Preview integration branch in `.github/workflows/package.yml`. Package runs qualify the native `.deb` on clean Ubuntu before uploading `couch-release-RUN.ATTEMPT`. Pull-request artifacts remain qualification evidence and cannot enter the feed. Packaging is explicit: dispatch on `main` with release notes. Main pushes do not build packages.
 
 Each release contains `couch` and `couch-appliance` at `PRODUCT+build.RUN.ATTEMPT`. The run and attempt are positive decimal integers, so later attempts and runs sort forward under Debian version comparison. The application product version must also never decrease. Source revision remains separate from the Debian version. A changed package or manifest cannot replace an existing release identity. Stable promotion does not rebuild, rename, or repack either package.
 
-`release.json` records the exact source, Debian version, CI attempt, Ubuntu 24.04/amd64 compatibility, helper versions and hashes, package sizes and hashes, qualification checks, display limitations, data-preservation requirements, and notes. GitHub keeps qualified artifacts for 90 days; retain downloaded release directories and the feed in backed-up administrator storage before that expiry.
+`release.json` records the exact source, Debian version, CI attempt, Ubuntu 24.04/amd64 compatibility, helper versions and hashes, package sizes and hashes, qualification checks, display limitations, data-preservation requirements, and notes. GitHub keeps qualified artifacts for 30 days; retain downloaded release directories and the feed in backed-up administrator storage before that expiry.
 
 ## Download through the authenticated Mac
 
@@ -15,7 +15,7 @@ gh api repos/avoid-quest/couch/actions/runs/RUN_ID/artifacts --jq '.artifacts[] 
 python3 scripts/download-release.py ARTIFACT_ID /absolute/private-releases/RUN.ATTEMPT
 ```
 
-The downloader checks the successful `main` Package run, GitHub's archive SHA256, exact source identity, every package hash, and the archive file list. It refuses to overwrite an existing destination. The uploader produces immutable attempt-specific artifacts; a rerun gets a new attempt and version.
+The downloader checks the successful `main` Package run, GitHub's archive SHA256, exact source identity, every package hash, and the archive file list. It refuses to overwrite an existing destination. A new build gets a new attempt and version. Retrying only qualification preserves the original build identity; the downloader requires the latest overall run attempt to succeed. Qualification-only dispatch against saved binaries produces evidence without publishing a release.
 
 ## Provision the private signer once
 
