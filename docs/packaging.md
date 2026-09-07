@@ -107,3 +107,13 @@ earlier logs without reusing readiness, failure or result markers.
 The display smoke uses software rendering and silent audio. Physical video,
 sound and boot-session results must be recorded separately on their owning
 issues.
+
+## AppImage qualification
+
+The Package workflow also builds an AppImage from the same committed source and pinned helpers. Its separate `couch-appimage-RUN.ATTEMPT` artifact is uploaded only after the exact AppImage passes clean Ubuntu 24.04 qualification. It contains the AppImage, matching source/build identity, SHA-256 hashes and runtime evidence. Redistribution notices are inside `/usr/share/doc/couch` in the bundle.
+
+Run `bun tests/package/qualify.ts path/to/Couch.AppImage` on an Ubuntu 24.04 x86_64 Docker host with Bun, ffmpeg and tauri-driver 2.0.6 installed. The runtime container has no development tools. The test uses AppImage's extract-and-run mode because Docker does not provide a FUSE mount. It checks the native host/sidecar identity, pinned helper discovery, existing library scan, native video/audio and subtitle pixels, real browser pairing and retained authorization/data after restart without autoplay.
+
+The Ubuntu runtime still supplies ffmpeg/ffprobe, GL and VA-API drivers, CA certificates and fonts. Xvfb, the browser driver and PulseAudio's null sink are test fixtures. Software rendering verifies bundle behavior, not T480 hardware decoding, audible output or physical subtitle geometry. Those remain installed-device acceptance requirements. Tauri's [AppImage guidance](https://v2.tauri.app/distribute/appimage/) describes the build-host compatibility boundary; this artifact targets Ubuntu 24.04.
+
+This qualification increment does not enroll an update key or migrate an installed appliance. Keep the current Debian session and updater until signed AppImage updates, installed migration and operator SSH recovery qualify. Keep user data outside the bundle at the existing absolute `COUCH_DATA_DIR` with its current account and permissions.

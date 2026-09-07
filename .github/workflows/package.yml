@@ -39,7 +39,7 @@ jobs:
         run: |
           snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
           sudo apt-get update --snapshot "$snapshot"
-          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip
+          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64
           rustup show active-toolchain
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
@@ -50,11 +50,11 @@ jobs:
           key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', '.github/workflows/package.yml', 'src-tauri/vendor/**') }}
       - run: bun install --frozen-lockfile
       - run: bun run package:prepare
-      - name: Build the native TV and Debian package
+      - name: Build the native TV, Debian package and AppImage
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
           tauriScript: bun scripts/desktop.ts
-          args: --bundles deb --config .artifacts/tauri-release.conf.json -- --locked
+          args: --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
       - name: Preserve the exact artifact and matching source
         run: |
           mkdir -p .artifacts/package-release
@@ -68,6 +68,22 @@ jobs:
         run: cargo install tauri-driver --version 2.0.6 --locked
       - name: Qualify the exact Debian package on clean Ubuntu
         run: bun tests/package/qualify.ts .artifacts/package-release/*.deb
+      - name: Qualify the exact AppImage on clean Ubuntu
+        run: bun tests/package/qualify.ts src-tauri/target/release/bundle/appimage/*.AppImage
+      - name: Preserve the qualified AppImage and evidence
+        run: |
+          mkdir -p .artifacts/qualified-appimage
+          cp src-tauri/target/release/bundle/appimage/*.AppImage .artifacts/qualified-appimage/
+          cp -r .artifacts/appimage-qualification .artifacts/qualified-appimage/
+          cp .artifacts/package-release/couch-source.tar.gz src-tauri/build-info.json .artifacts/qualified-appimage/
+          cd .artifacts/qualified-appimage
+          sha256sum *.AppImage *.json *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: couch-appimage-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/qualified-appimage/
+          if-no-files-found: error
+          retention-days: 90
       - name: Assemble the qualified release and matching appliance package
         run: bun scripts/package-release.ts
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -83,5 +99,6 @@ jobs:
           path: |
             .artifacts/package-release/
             .artifacts/package-qualification/
+            .artifacts/appimage-qualification/
           if-no-files-found: error
           retention-days: 30
