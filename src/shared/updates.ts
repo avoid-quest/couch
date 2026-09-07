@@ -8,8 +8,8 @@ export type UpdateTransaction = {
   error: string | null;
   createdAt: number;
   updatedAt: number;
-  restoredVersion?: string;
-  restoredRevision?: string;
+  restoredVersion?: string | null;
+  restoredRevision?: string | null;
 };
 export type ReleaseChannel = "stable" | "preview";
 export type UpdateCandidate = { id: string; releaseId: string; version: string; revision: string; notes: string; bytes: number; publishedAt: number; expiresAt: number };

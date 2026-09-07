@@ -20,7 +20,7 @@ async function setup(feed?: UpdateFeed) {
 }
 const request = (path = "", body?: unknown) => new Request(`http://localhost/api/updates${path}`, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const state = async (updates: ReturnType<typeof createUpdates>) => (await updates.handle(request(), admin)).json();
-async function settled(updates: ReturnType<typeof createUpdates>) { for (let i = 0; i < 50; i++) { const value = await state(updates); if (!["checking", "downloading"].includes(value.status)) return value; await Bun.sleep(5); } throw new Error("job never settled"); }
+async function settled(updates: ReturnType<typeof createUpdates>, ready: (value: any) => boolean = value => !["checking", "downloading"].includes(value.status)) { for (let i = 0; i < 50; i++) { const value = await state(updates); if (ready(value)) return value; await Bun.sleep(5); } throw new Error("job never settled"); }
 
 test("defaults stable/manual, accepts only admin commands and bounded fields", async () => {
   const { updates } = await setup({ check: async () => candidate, stage: async () => {} });
@@ -76,7 +76,7 @@ test("trial startup does not run background update producers until admission ope
     expect(checks).toBe(0);
     expect((await updates.handle(request("/check", {}), admin)).status).toBe(503);
     open = true;
-    await Bun.sleep(20);
+    await settled(updates, () => checks > 0);
     expect(checks).toBeGreaterThan(0);
   } finally { await updates.close(); await rm(directory, { recursive: true, force: true }); }
 });

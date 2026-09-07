@@ -38,7 +38,20 @@ def request(payload):
         value = load_json(data)
         if value.get("ok") is not True:
             raise Rejected(value.get("error", "The update worker rejected this recovery request."))
-        return value["transaction"]
+        transaction = value["transaction"]
+        if payload.get("op") == "restore" and (transaction.get("phase") != "restored" or transaction.get("updateId") != payload["updateId"]):
+            raise Rejected("Restoration did not return the matching completed transaction. Inspect status through SSH.")
+        return transaction
+
+
+def activation_status():
+    try:
+        FLAG.lstat()
+    except FileNotFoundError:
+        return "disabled"
+    if load_json(trusted_file(FLAG)) != {"protocol": "maintenance-v1"}:
+        raise Rejected("The phone-update activation flag is invalid.")
+    return "enabled"
 
 
 def enable(storage):
@@ -47,7 +60,7 @@ def enable(storage):
             raise Rejected("Resolve the active transaction before enabling phone updates.")
         current = storage.current(enrolled_key())
         build = installed()
-        if build.get("maintenanceProtocol") != "maintenance-v1" or build.get("dataFormat") != 1 or any(build.get(key) != current[key] for key in ("version", "revision", "dataFormat")):
+        if build.get("maintenanceProtocol") != "maintenance-v1" or type(build.get("dataFormat")) is not int or type(current.get("dataFormat")) is not int or build.get("dataFormat") != 1 or any(build.get(key) != current[key] for key in ("version", "revision", "dataFormat")):
             raise Rejected("Enroll the installed manual-update-capable release before activation.")
         if run("/usr/bin/dpkg", "--audit").strip():
             raise Rejected("Repair the package manager before enabling updates.")

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Transaction and backup checks without system services or package mutations."""
 import hashlib
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext, redirect_stderr
 import importlib.util
+from importlib.machinery import SourceFileLoader
+import io
 import json
 import os
 import select
@@ -116,11 +118,27 @@ class TransactionTests(unittest.TestCase):
         self.platform.failure = None
         self.platform.stop_for_restore = lambda: self.platform.calls.append("restore-stop")
         self.platform.unchanged_previous = lambda previous: failure == "snapshot"
-        self.platform.package_lock = nullcontext
-        self.platform.package_health = lambda: None
+        locked = False
+        @contextmanager
+        def package_lock():
+            nonlocal locked
+            self.assertFalse(locked)
+            locked = True
+            try:
+                yield
+            finally:
+                locked = False
+        def require_lock():
+            self.assertTrue(locked, "Restoration work must retain the final package locks")
+        self.platform.package_lock = package_lock
+        self.platform.package_health = require_lock
+        original_ready, original_commit = self.platform.ready, self.platform.commit
+        self.platform.ready = lambda record: (require_lock(), original_ready(record))
+        self.platform.commit = lambda record: (require_lock(), original_commit(record))
         self.platform.restore_packages = lambda record, packages: self.platform.calls.append("restore-apt")
         self.platform.restore_data = lambda backup: self.platform.calls.append("restore-data") or "/fixture/failed-trial"
         def start(record):
+            require_lock()
             context = self.engine.context()
             self.assertEqual(context["phase"], "trial")
             self.assertEqual(context["version"], self.previous["version"])
@@ -128,7 +146,7 @@ class TransactionTests(unittest.TestCase):
             self.assertNotEqual(context["nonce"], self.engine.record["nonce"])
             self.platform.calls.append("restore-trial")
         self.platform.start_restored_trial = start
-        patch.object(recovery, "installed", return_value=self.previous).start()
+        patch.object(recovery, "installed", side_effect=lambda: (require_lock(), self.previous)[1]).start()
         return self.engine.record["updateId"]
 
     def test_checkpoint_failure_without_backup_can_resume_verified_unchanged_previous(self):
@@ -189,6 +207,13 @@ class TransactionTests(unittest.TestCase):
                 operator_client.enable(self.storage)
             self.assertEqual(calls, [])
             build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1"}
+            for value in (True, 1.0):
+                build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1", "dataFormat": value}
+                with self.assertRaisesRegex(receipt.Rejected, "manual-update-capable"):
+                    operator_client.enable(self.storage)
+                build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1"}
+                with patch.object(self.storage, "current", return_value={**self.previous, "dataFormat": value}), self.assertRaisesRegex(receipt.Rejected, "manual-update-capable"):
+                    operator_client.enable(self.storage)
             self.engine.submit(self.request)
             with self.assertRaisesRegex(receipt.Rejected, "active transaction"):
                 operator_client.enable(self.storage)
@@ -197,6 +222,53 @@ class TransactionTests(unittest.TestCase):
             self.assertEqual(operator_client.enable(self.storage)["phoneUpdates"], "enabled")
             self.assertEqual(calls, [("/usr/bin/dpkg", "--audit"), ("flag",), ("/usr/bin/systemctl", "enable", "--now", "couch-updater.socket")])
             platform.return_value.systemctl.assert_called_once_with("restart", "couch-tv.service")
+
+    def test_failed_restore_rpc_and_cli_report_failure_with_durable_state(self):
+        update_id = self.prepare_recovery("snapshot")
+        self.platform.unchanged_previous = lambda previous: False
+        replies = []
+        peer = SimpleNamespace(
+            getsockopt=lambda *args: struct.pack("3i", 1, 0, 0), settimeout=lambda value: None,
+            recv=lambda count: json.dumps({"op": "restore", "updateId": update_id}).encode() + b"\n",
+            sendall=lambda data: replies.append(json.loads(data)),
+        )
+        with patch.object(serve.socket, "SO_PEERCRED", 17, create=True):
+            serve.Handler(peer, "fixture", SimpleNamespace(app_uid=0, transactions=self.engine))
+        self.assertFalse(replies[0]["ok"])
+        self.assertEqual(self.storage.read("active.json")["phase"], "operator-required")
+        path = Path(__file__).resolve().parents[1] / "packaging/appliance/root/usr/sbin/couch-update"
+        cli_spec = importlib.util.spec_from_loader("operator_cli", SourceFileLoader("operator_cli", str(path)))
+        cli = importlib.util.module_from_spec(cli_spec)
+        cli_spec.loader.exec_module(cli)
+        with patch.object(cli.os, "geteuid", return_value=0), patch.object(cli, "Retention", return_value=self.storage), patch.object(cli, "request", side_effect=receipt.Rejected(replies[0]["error"])), patch.object(cli.sys, "argv", ["couch-update", "restore", update_id]), redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(), 1)
+
+    def test_operator_client_rejects_incomplete_or_mismatched_success_receipts(self):
+        for transaction in ({"phase": "operator-required", "updateId": "a" * 32}, {"phase": "restored", "updateId": "b" * 32}):
+            with self.subTest(transaction=transaction), patch.object(operator_client, "run"), patch.object(operator_client.socket, "SO_PEERCRED", 17, create=True), patch.object(operator_client.socket, "socket") as connect:
+                peer = connect.return_value.__enter__.return_value
+                peer.getsockopt.return_value = struct.pack("3i", 1, 0, 0)
+                peer.recv.return_value = json.dumps({"ok": True, "transaction": transaction}).encode() + b"\n"
+                with self.assertRaisesRegex(receipt.Rejected, "matching completed"):
+                    operator_client.request({"op": "restore", "updateId": "a" * 32})
+
+    def test_activation_status_rejects_unsafe_or_invalid_flags(self):
+        flag = self.root / "enabled"
+        with patch.object(operator_client, "FLAG", flag):
+            self.assertEqual(operator_client.activation_status(), "disabled")
+            flag.symlink_to(self.root / "missing")
+            with self.assertRaises(OSError):
+                operator_client.activation_status()
+            flag.unlink()
+            save(flag, {"protocol": "maintenance-v1"})
+            for uid, mode in ((1000, 0o100644), (0, 0o100666), (0, 0o040755)):
+                with patch.object(receipt.os, "fstat", return_value=SimpleNamespace(st_uid=uid, st_mode=mode)), self.assertRaises(receipt.Rejected):
+                    operator_client.activation_status()
+            with patch.object(receipt.os, "fstat", return_value=SimpleNamespace(st_uid=0, st_mode=0o100644)):
+                self.assertEqual(operator_client.activation_status(), "enabled")
+                save(flag, {"protocol": "unsupported"})
+                with self.assertRaisesRegex(receipt.Rejected, "activation flag"):
+                    operator_client.activation_status()
 
     def test_private_context_contains_nonce_but_public_status_never_does(self):
         self.assertIsNone(self.engine.context())
@@ -297,6 +369,41 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.platform.calls, [])
         with self.assertRaises(receipt.Rejected):
             restarted.submit({**self.request, "requestId": "b" * 32})
+
+    def test_restart_preserves_terminal_journal_before_active_marker_cleanup(self):
+        for phase in ("succeeded", "restored", "failed"):
+            for stale in (False, True):
+                with self.subTest(phase=phase, stale_marker=stale):
+                    self.engine.record = {**self.request, "updateId": "c" * 32, "phase": "trial", "committed": False}
+                    self.engine.persist()
+                    marker = self.storage.read("active.json")
+                    self.engine.transition(phase, committed=phase != "failed")
+                    if stale:
+                        save(self.storage.root / "active.json", marker)
+                    journal = (self.engine.directory / (self.request["requestId"] + ".json")).read_bytes()
+                    restarted = Transactions(self.storage, self.platform)
+                    self.assertEqual(restarted.status()["phase"], phase)
+                    self.assertIsNone(restarted.context())
+                    self.assertIsNone(self.storage.read("active.json"))
+                    self.assertEqual((self.engine.directory / (self.request["requestId"] + ".json")).read_bytes(), journal)
+
+    def test_restart_uses_journal_commit_boundary_even_when_marker_is_stale(self):
+        self.engine.submit(self.request)
+        marker = self.storage.read("active.json")
+        self.engine.transition("committing", committed=True, disrupted=True)
+        save(self.storage.root / "active.json", marker)
+        restarted = Transactions(self.storage, self.platform)
+        self.assertEqual(restarted.status()["phase"], "operator-required")
+        self.assertTrue(restarted.record["committed"])
+        with self.assertRaisesRegex(receipt.Rejected, "Committed data"):
+            recovery.restore(restarted, restarted.record["updateId"])
+
+    def test_restart_recovers_journal_written_before_first_active_marker(self):
+        self.engine.submit(self.request)
+        self.engine.clear_active()
+        restarted = Transactions(self.storage, self.platform)
+        self.assertEqual(restarted.status()["phase"], "failed")
+        self.assertIsNone(self.storage.read("active.json"))
 
     def test_hook_requires_exact_active_transaction(self):
         with self.assertRaises(receipt.Rejected):

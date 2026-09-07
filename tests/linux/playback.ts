@@ -131,7 +131,7 @@ class Remote {
   socket!: WebSocket;
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 
-  constructor(readonly token: string) { this.connect(); }
+  constructor(readonly token: string) {}
 
   async connect() {
     this.state = null;
@@ -191,7 +191,9 @@ try {
       method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ code }),
     });
     assert.equal(paired.status, 200);
-    clients.push(new Remote((await paired.json() as { token: string }).token));
+    const remote = new Remote((await paired.json() as { token: string }).token);
+    clients.push(remote);
+    await remote.connect();
   }
   await until("two paired remotes receive authoritative snapshots", () => all(state => state.player.status === "idle"));
   await resources("idle");
@@ -341,7 +343,7 @@ try {
   clients[1]!.socket.close();
   await until("second remote disconnects", () => clients[1]!.socket.readyState === WebSocket.CLOSED);
   await clients[0]!.command({ type: "volume", volume: 43 });
-  clients[1]!.connect();
+  await clients[1]!.connect();
   await until("reconnected remote receives current native state", () => all(state => state.player.volume === 43 && state.player.status === "paused"));
   await clients[1]!.command({ type: "seek", playbackId, position: 18 });
   await clients[1]!.command({ type: "pause", playbackId, paused: false });
@@ -598,7 +600,7 @@ try {
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
   await startShutdownPlayback?.();
-  clients.forEach(client => client.socket.close());
+  clients.forEach(client => client.socket?.close());
   const exitStarted = performance.now();
   await webdriver(`/session/${sessionId}`, undefined, "DELETE");
   sessionId = "";
@@ -623,7 +625,7 @@ try {
   } } })).sessionId;
   await until("desktop restarts with current persistent state", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   await assertTvFullscreen(ui, until, "desktop restart");
-  clients.forEach(client => client.connect());
+  await Promise.all(clients.map(client => client.connect()));
   await until("paired remotes, queue and volume survive desktop restart without autoplay", () => all(state =>
     state.player.status === "idle" && state.player.volume === 43 &&
     JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueBeforeRestart),
@@ -659,7 +661,7 @@ try {
 
   const publicConnection = await preparePublicConnection(connectionContext, secondHttpRemote);
   await radioAcceptance.prepareShutdown();
-  clients.forEach(client => client.socket.close());
+  clients.forEach(client => client.socket?.close());
   const radioExitStarted = performance.now();
   await webdriver(`/session/${sessionId}`, undefined, "DELETE");
   sessionId = "";
@@ -673,7 +675,7 @@ try {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
   await until("desktop reconnects after shutdown during radio backoff", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
-  clients.forEach(client => client.connect());
+  await Promise.all(clients.map(client => client.connect()));
   await radioAcceptance.assertAfterRestart();
   await publicConnection.assertAfterRestart();
 
@@ -697,7 +699,7 @@ try {
 } finally {
   await secondHttpRemote?.close();
   await httpRemote?.close();
-  clients.forEach(client => client.socket.close());
+  clients.forEach(client => client.socket?.close());
   if (sessionId) await webdriver(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});
   driver.kill();
   await media.stop(true);

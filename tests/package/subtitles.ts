@@ -44,7 +44,7 @@ class Remote {
   state: SessionState | null = null;
   socket!: WebSocket;
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
-  constructor(readonly token: string) { this.connect(); }
+  constructor(readonly token: string) {}
   async connect() {
     this.state = null;
     const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
@@ -307,11 +307,11 @@ async function preferencesAndRestart(token: string) {
   await stop();
   await api(`/api/profiles/${household.id}/select`, token, {});
   await until("Household retains its independent Off default", () => all(s => s.activeProfile.id === household.id && s.preferences?.profile.subtitles === "off"));
-  for (const remote of remotes) remote.socket.close();
+  for (const remote of remotes) remote.socket?.close();
   await driver(45344, `/session/${native}`, undefined, "DELETE");
   native = "";
   token = (await start()).token;
-  for (const remote of remotes) remote.connect();
+  await Promise.all(remotes.map(remote => remote.connect()));
   await until("restart preserves pairing/profile/Off without autoplay", () => all(s => s.player.status === "idle" && s.activeProfile.id === household.id && s.preferences?.profile.subtitles === "off"));
   await load("text");
   assert.ok(!first().player.tracks?.some(t => t.kind === "subtitle" && t.selected));
@@ -340,7 +340,11 @@ try {
   assert.equal(identity.packaged, true);
   assert.equal(identity.target, "x86_64-unknown-linux-gnu");
   await Bun.write(`${artifacts}/identity.json`, JSON.stringify({ build: identity, binaries: exec("sha256sum", "/usr/bin/couch", "/usr/bin/couch-server").toString(), packages: exec("dpkg-query", "-W", "couch", "libmpv2", "libass9", "libwebkit2gtk-4.1-0").toString(), runtime: "Ubuntu amd64 under Docker Desktop emulation, Xvfb 1600x1000, basic rendering, null audio" }, null, 2));
-  for (const name of ["Subtitle controller one", "Subtitle controller two"]) remotes.push(new Remote((await api("/api/pair", "", { code: connection.pairingCode, name })).token));
+  for (const name of ["Subtitle controller one", "Subtitle controller two"]) {
+    const remote = new Remote((await api("/api/pair", "", { code: connection.pairingCode, name })).token);
+    remotes.push(remote);
+    await remote.connect();
+  }
   await until("two remotes connect to the packaged coordinator", () => all(state => state.player.status === "idle"));
   if (phase === "all" || phase === "rendering") {
   await load("text");
@@ -378,7 +382,7 @@ try {
   await Bun.write(`${artifacts}/failure.json`, JSON.stringify({ error: String(error), checks, measurements, state: remotes[0]?.state?.player }, null, 2));
   throw error;
 } finally {
-  for (const remote of remotes) remote.socket.close();
+  for (const remote of remotes) remote.socket?.close();
   if (browser) await driver(45345, `/session/${browser}`, undefined, "DELETE").catch(() => {});
   if (native) await driver(45344, `/session/${native}`, undefined, "DELETE").catch(() => {});
   await media.stop(true);

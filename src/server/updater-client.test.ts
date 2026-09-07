@@ -16,7 +16,7 @@ function fixture(handle: (value: unknown) => Promise<unknown> = async () => ({})
   const client = connectUpdater(child, handle, () => lost++);
   const emit = (value: unknown) => output.enqueue(Buffer.from(JSON.stringify(value) + "\n"));
   emit({ kind: "ready" });
-  return { client, emit, written, available: available.promise, lost: () => lost, exit: () => child.kill() };
+  return { client, emit, written, available: available.promise, lost: () => lost, exit: () => child.kill(), failFlush: () => { child.stdin.flush = () => Promise.reject(new Error("pipe closed")); } };
 }
 
 test("private worker replies must match the exact outstanding request", async () => {
@@ -60,4 +60,15 @@ test("bridge loss while maintenance runs prevents a late reply", async () => {
     expect(f.written).toEqual([]);
     expect(f.lost()).toBe(1);
   } finally { completed.resolve({}); await f.client.close(); }
+});
+
+
+test("a rejected asynchronous bridge flush closes admission and rejects pending work", async () => {
+  const f = fixture();
+  try {
+    await f.client.ready;
+    f.failFlush();
+    expect(await f.client.request({ op: "context" }).catch(error => error)).toBeInstanceOf(Error);
+    expect(f.lost()).toBe(1);
+  } finally { await f.client.close(); }
 });

@@ -34,7 +34,7 @@ export function connectUpdater(child: Pick<Subprocess<"pipe", "pipe", "ignore">,
     const data = JSON.stringify(value) + "\n";
     if (Buffer.byteLength(data) > limit) throw failure();
     child.stdin.write(data);
-    child.stdin.flush();
+    void Promise.resolve(child.stdin.flush()).catch(() => stop(true));
   };
   const receive = (value: unknown) => {
     if (!value || typeof value !== "object" || !("kind" in value)) throw failure();

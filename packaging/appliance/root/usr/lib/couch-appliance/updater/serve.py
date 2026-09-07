@@ -54,6 +54,8 @@ class Handler(socketserver.BaseRequestHandler):
                 result = {"transaction": record}
             elif operation == "restore" and uid == 0 and set(request) == {"updateId"}:
                 result = {"transaction": restore(self.server.transactions, request["updateId"])}
+                if result["transaction"]["phase"] != "restored":
+                    raise Rejected(result["transaction"].get("error") or "Restoration did not finish. Inspect the retained transaction through SSH.")
             elif operation == "hook" and uid == 0 and set(request) == {"updateId"}:
                 result = self.server.transactions.hook(request["updateId"], pid)
             else:

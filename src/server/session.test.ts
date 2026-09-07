@@ -208,10 +208,12 @@ test("a source resolution finishing after maintenance cannot persist metadata or
     session.observe(idle);
     session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "https://example.com/one" }, playNow: true });
     session.quiesce();
+    let writes = 0;
+    store.saveQueue = () => { writes++; };
     source.resolve({ source: "https://example.com/resolved", metadata: { duration: 123 } });
     await source.promise;
     await Promise.resolve();
     expect(commands.filter(command => command.type === "load")).toEqual([]);
-    expect(store.queue[0]?.duration).toBeUndefined();
+    expect(writes).toBe(0);
   } finally { session.close(); store.close(); }
 });

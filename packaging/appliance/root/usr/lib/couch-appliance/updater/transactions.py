@@ -21,22 +21,37 @@ class Transactions:
         self.directory = storage.root / "transactions"
         self.directory.mkdir(mode=0o700, exist_ok=True)
         self.mutex = threading.RLock()
-        self.record = storage.read("active.json")
-        if not self.record:
-            pending = [load_json(path.read_bytes()) for path in self.directory.glob("*.json")]
-            pending = [value for value in pending if value["phase"] not in FINISHED]
-            if len(pending) > 1:
-                raise Rejected("Multiple unfinished transactions require administrator inspection.")
-            self.record = pending[0] if pending else None
-        if self.record:
-            with storage.lock():
-                # Interrupted mutation needs explicit SSH restoration or
-                # inspection. Never guess success or restart an install loop.
-                interrupted = self.record["phase"] not in ("accepted", "preflight")
-                self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
-                self.persist()
-                if not interrupted:
+        with storage.lock():
+            self.record = storage.read("active.json")
+            if self.record:
+                request_id = self.record.get("requestId")
+                if not isinstance(request_id, str) or not TOKEN.fullmatch(request_id):
+                    raise Rejected("The active transaction identity needs administrator inspection.")
+                journal = self.directory / (request_id + ".json")
+                if not journal.exists():
+                    raise Rejected("The active transaction journal is missing.")
+                latest = load_json(journal.read_bytes())
+                if latest.get("requestId") != request_id or latest.get("updateId") != self.record.get("updateId"):
+                    raise Rejected("The active transaction journal identity does not match.")
+                # persist writes the journal first. Its durable outcome and
+                # commit boundary take precedence over an older active marker.
+                self.record = latest
+            else:
+                pending = [load_json(path.read_bytes()) for path in self.directory.glob("*.json")]
+                pending = [value for value in pending if value["phase"] not in FINISHED]
+                if len(pending) > 1:
+                    raise Rejected("Multiple unfinished transactions require administrator inspection.")
+                self.record = pending[0] if pending else None
+            if self.record:
+                if self.record["phase"] in FINISHED:
                     self.clear_active()
+                else:
+                    # Never guess success or restart an interrupted install.
+                    interrupted = self.record["phase"] not in ("accepted", "preflight")
+                    self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
+                    self.persist()
+                    if not interrupted:
+                        self.clear_active()
 
     def persist(self):
         self.record["updatedAt"] = int(time.time() * 1000)
