@@ -126,13 +126,14 @@ jobs:
         with:
           name: couch-${{ matrix.format == 'deb' && 'release' || 'appimage' }}-${{ needs.build.outputs.release-id }}
           path: .artifacts/qualified-release/
+          overwrite: true
           compression-level: 0
           if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: qualification-${{ matrix.format }}-${{ needs.build.outputs.release-id }}
+          name: qualification-${{ matrix.format }}-${{ github.run_id }}.${{ github.run_attempt }}
           path: |
             .artifacts/package-qualification/
             .artifacts/appimage-qualification/
