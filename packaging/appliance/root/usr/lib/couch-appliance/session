@@ -10,8 +10,8 @@ xset -dpms
 # Start on the attached TV when available, with the laptop panel as a fallback.
 output=$(xrandr --query | awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}')
 if [ -n "$output" ]; then
-    xrandr --output "$output" --mode 1920x1080 --primary || xrandr --output "$output" --auto --primary
-    while read -r panel; do xrandr --output "$panel" --off; done < <(xrandr --query | awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}')
+    xrandr --output "$output" --mode 1920x1080 || xrandr --output "$output" --auto
+    while read -r panel; do xrandr --output "$panel" --auto --left-of "$output"; done < <(xrandr --query | awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}')
 fi
 
 openbox --config-file /usr/share/couch-appliance/openbox.xml &

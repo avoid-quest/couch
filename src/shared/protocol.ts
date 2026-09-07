@@ -105,8 +105,9 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
+export type HostMessage = { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
 export type SidecarMessage =
+  | { type: "display"; requestId: string; action: import("./display").DisplayAction }
   | ({ type: "ready" } & ConnectionInfo)
   | { type: "playback"; command: PlaybackCommand }
   | { type: "diagnostics"; requestId: string }
