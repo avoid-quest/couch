@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const repository = 'avoid-quest/couch';
 const sha256 = (data: Uint8Array) => new Bun.CryptoHasher('sha256').update(data).digest('hex');
@@ -49,6 +49,7 @@ export function download(artifactId: string, destination: string, request = api)
       const data = files.get(p.filename)!;
       if (data.length !== p.size || sha256(data) !== p.sha256) throw Error('Package SHA256 mismatch');
     }
+    mkdirSync(dirname(destination), { recursive: true });
     mkdirSync(destination); // Never overwrite an existing downloaded release.
     for (const [name, data] of files) writeFileSync(join(destination, name), data);
     console.log(`Verified artifact ${artifactId}, release ${identity}, source ${run.head_sha}`);
