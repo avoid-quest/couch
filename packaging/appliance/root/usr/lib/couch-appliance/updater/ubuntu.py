@@ -27,6 +27,14 @@ class Ubuntu:
             raise Rejected("The appliance needs one absolute data directory in its root-owned configuration.")
         return Path(values[0])
 
+    def preserve_worker(self, record):
+        import worker
+        worker.preserve(self.root, record["updateId"])
+
+    def release_worker(self, record):
+        import worker
+        worker.release(self.root, record["updateId"])
+
     def staging(self):
         return self.data() / "updates/staged"
 
@@ -62,6 +70,7 @@ class Ubuntu:
             raise Rejected("The release's unpacked installation size could not be verified.") from error
         if shutil.disk_usage("/usr").free < unpacked + 256 * 1024 * 1024:
             raise Rejected("The TV needs more installation storage before updating.")
+        record["dataPath"] = str(self.data())
         _, backup_size = maintenance.inventory(self.data())
         if shutil.disk_usage(self.root).free < backup_size:
             raise Rejected("The TV needs more data-backup storage before updating.")
@@ -70,14 +79,17 @@ class Ubuntu:
         self.apt(record, ["--download-only", "install", *map(str, packages)])
 
     def apt(self, record, arguments, hook=None):
-        directory = self.root / "logs"
-        directory.mkdir(mode=0o700, exist_ok=True)
         options = ["/usr/bin/apt-get", "-y", "--no-remove", "--no-install-recommends", "-o", "APT::Get::Fix-Missing=false", "-o", "DPkg::Lock::Timeout=30", "-o", "DPkg::Options::=--force-confold"]
         if hook:
             options += ["-o", f"DPkg::Pre-Invoke::=/usr/bin/python3 -I {hook} {record['updateId']}"]
+        self.package_command(record, options + arguments, hook=bool(hook))
+
+    def package_command(self, record, command, hook=False, tolerate_failure=False):
+        directory = self.root / "logs"
+        directory.mkdir(mode=0o700, exist_ok=True)
         with (directory / (record["updateId"] + ".log")).open("ab") as log:
             try:
-                with subprocess.Popen(options + arguments, env={**ENV, "DEBIAN_FRONTEND": "noninteractive"}, stdout=log, stderr=subprocess.STDOUT, start_new_session=True) as process:
+                with subprocess.Popen(command, env={**ENV, "DEBIAN_FRONTEND": "noninteractive"}, stdout=log, stderr=subprocess.STDOUT, start_new_session=True) as process:
                     self.apt_pid = process.pid if hook else None
                     try:
                         process.wait(timeout=30 * 60)
@@ -86,11 +98,11 @@ class Ubuntu:
                         process.wait()
                         raise
             except subprocess.TimeoutExpired as error:
-                raise Rejected("APT exceeded its update deadline. Inspect the retained transaction through SSH.") from error
+                raise Rejected("The package manager exceeded its deadline. Inspect the retained transaction through SSH.") from error
             finally:
                 self.apt_pid = None
-        if process.returncode != 0:
-            raise Rejected("APT could not finish this update. Its log is retained for the administrator.")
+        if process.returncode != 0 and not tolerate_failure:
+            raise Rejected("The package manager could not finish. Its log is retained for the administrator.")
 
     def authorize_hook(self, peer_pid):
         # A root peer and matching update ID alone are insufficient: the hook
@@ -198,12 +210,18 @@ class Ubuntu:
             raise Rejected("Repair the package manager through SSH before continuing restoration.")
 
     def restore_packages(self, record, packages):
-        self.apt(record, ["--allow-downgrades", "install", *map(str, packages)])
+        # dpkg owns interruption repair. A failed candidate postinst may still
+        # fail configuration; retained previous archives then replace it through APT.
+        self.package_command(record, ["/usr/bin/dpkg", "--audit"], tolerate_failure=True)
+        self.package_command(record, ["/usr/bin/dpkg", "--force-confold", "--configure", "--pending"], tolerate_failure=True)
+        self.apt(record, ["--fix-broken", "--allow-downgrades", "install", *map(str, packages)])
         self.package_health()
 
-    def restore_data(self, backup):
+    def restore_data(self, backup, state, persist):
         from recovery import restore_data
-        return restore_data(self.data(), backup)
+        if state["dataPath"] != str(self.data()):
+            raise Rejected("The configured data directory changed during this update.")
+        return restore_data(self.data(), backup, state, persist)
 
     def start_restored_trial(self, record):
         self.systemctl("unmask", "--runtime", "couch-tv.service")

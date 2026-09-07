@@ -52,6 +52,14 @@ class CoordinatorFixture(Ubuntu):
         self.child = None
         self.apt_pid = None
         self.missing_dependency = None
+        self.interruption_marker = None
+        self.interrupted_audit = None
+
+    def preserve_worker(self, record):
+        pass
+
+    def release_worker(self, record):
+        pass
 
     def data(self):
         return self.data_path
@@ -108,7 +116,18 @@ class CoordinatorFixture(Ubuntu):
             self.missing_dependency.unlink()
             for path in Path("/var/cache/apt/archives").glob("couch-fixture-dependency*.deb"):
                 path.unlink()
-        return super().install(record, packages)
+        try:
+            return super().install(record, packages)
+        except Rejected:
+            if self.interruption_marker and self.interruption_marker.exists():
+                # Recovery must use root retention even after staged downloads vanish.
+                shutil.rmtree(self.data() / "updates/staged")
+            raise
+
+    def package_command(self, record, command, **options):
+        if command[:2] == ["/usr/bin/dpkg", "--audit"] and self.interruption_marker:
+            self.interrupted_audit = run("/usr/bin/dpkg", "--audit").decode()
+        return super().package_command(record, command, **options)
 
 
 class RealTransactions(unittest.TestCase):
@@ -217,7 +236,9 @@ class RealTransactions(unittest.TestCase):
                     self.assertEqual(engine.status()["phase"], "operator-required")
                     self.assertFalse(storage.read("active.json")["committed"])
                     self.assertEqual(storage.current(public_key)["version"], "0.1.0+build.2.1")
-                    self.assertEqual(installed()["version"], "0.1.0+build.3.1")
+                    self.assertEqual(installed()["version"], "0.1.0+build.2.1")
+                    self.assertEqual(engine.record["automaticStarts"], 1)
+                    self.assertTrue(engine.record["automaticFailed"])
                     print("Verified lock, frozen hook, disconnected caller, WAL backup and failed trial:", engine.status(), flush=True)
                     server.worker.join()
                     failed_id = engine.record["updateId"]
@@ -236,6 +257,7 @@ class RealTransactions(unittest.TestCase):
                     self.assertEqual((failed_data / "preferences.json").read_text(), '{"failedTrial":true}')
                     self.assertFalse(call({"op": "restore", "updateId": failed_id})["ok"])
                     platform.bad_checkpoint = True
+                    platform.bad_readiness = True
                     candidate = self.stage(receipts[2], data)
                     call({"op": "install", "candidateId": candidate, "requestId": "e" * 32, "confirmInterrupt": True})
                     self.until(lambda: engine.status()["phase"] == "operator-required", 30)
@@ -245,10 +267,29 @@ class RealTransactions(unittest.TestCase):
                     self.assertFalse((storage.root / "backups" / checkpoint_id).exists())
                     self.assertEqual(installed()["version"], "0.1.0+build.2.1")
                     platform.bad_checkpoint = False
+                    platform.bad_readiness = False
                     resumed = call({"op": "restore", "updateId": checkpoint_id})
                     self.assertEqual(resumed["transaction"]["phase"], "restored", resumed)
                     self.assertIsNone(storage.read("active.json"))
                     print("Verified authenticated package downgrade, saved data restoration, retained failed data, and unchanged-app resume without a snapshot.", flush=True)
+                    platform.interruption_marker = root / "interrupted-dpkg-once"
+                    interrupted_receipt = self.receipt(root, keys, 5, interrupt=platform.interruption_marker)
+                    candidate = self.stage(interrupted_receipt, data)
+                    call({"op": "install", "candidateId": candidate, "requestId": "f" * 32, "confirmInterrupt": True})
+                    self.until(lambda: engine.status()["phase"] in ("restored", "operator-required", "failed", "succeeded"), 60)
+                    server.worker.join()
+                    self.assertEqual(engine.status()["phase"], "restored", engine.status())
+                    self.assertTrue(platform.interruption_marker.exists())
+                    self.assertTrue(platform.interrupted_audit, "Real interrupted dpkg must leave audited unfinished work")
+                    self.assertEqual(engine.record["automaticStarts"], 1)
+                    self.assertEqual(run("dpkg", "--audit").strip(), b"")
+                    self.assertEqual(installed()["version"], "0.1.0+build.2.1")
+                    self.assertFalse((data / "updates/staged").exists())
+                    with sqlite3.connect(data / "couch.sqlite") as previous:
+                        self.assertEqual(previous.execute("SELECT position FROM progress").fetchall(), [(99,)])
+                    self.assertEqual((data / "preferences.json").read_text(), '{"pairing":"fixture-only","preserved":true}')
+                    print("Verified real dpkg interruption, package-manager repair and automatic retained-package/snapshot recovery without staged downloads.", flush=True)
+
                 except Exception:
                     print("Fixture worker state:", engine.status(), flush=True)
                     for log in (storage.root / "logs").glob("*.log"):
@@ -275,7 +316,7 @@ class RealTransactions(unittest.TestCase):
         run("apt-get", "-o", f"Dir::Etc::sourcelist={source}", "-o", "Dir::Etc::sourceparts=-", "update")
         return archive
 
-    def receipt(self, root, keys, number, dependency=None):
+    def receipt(self, root, keys, number, dependency=None, interrupt=None):
         directory = root / f"receipt-{number}"
         manifest = fixtures.fixture(directory, number)
         for package in manifest["packages"]:
@@ -285,6 +326,10 @@ class RealTransactions(unittest.TestCase):
             if dependency and package["name"] == "couch":
                 with (stage / "DEBIAN/control").open("a") as control:
                     control.write(f"Depends: {dependency}\n")
+            if interrupt and package["name"] == "couch":
+                postinst = stage / "DEBIAN/postinst"
+                postinst.write_text('#!/bin/sh\nset -eu\nif [ ! -e "' + str(interrupt) + '" ]; then\n  touch "' + str(interrupt) + '"\n  kill -KILL "$PPID"\nfi\n')
+                postinst.chmod(0o755)
             document = stage / "usr/share/doc" / package["name"] / "build-info.json"
             document.parent.mkdir(parents=True)
             document.write_text(json.dumps(manifest["build"] if package["name"] == "couch" else {"package": "couch-appliance", "version": package["version"], "sourceCommit": manifest["build"]["revision"]}))

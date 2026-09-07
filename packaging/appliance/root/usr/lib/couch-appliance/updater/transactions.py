@@ -4,15 +4,19 @@ import threading
 import time
 import uuid
 
-from receipt import Rejected, SHA, enrolled_key, load_json
+from receipt import Rejected, SHA, copy_receipt, enrolled_key, load_json
 from retention import identity, require_format, save, sync_directory
 
 TOKEN = re.compile(r"[a-f0-9]{32}\Z")
 FINISHED = {"succeeded", "failed", "restored"}
+HOOK_DRAIN_SECONDS = 330
 
 
 def public(record):
-    return {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision")}
+    value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision")}
+    if record.get("recoveryPending") and not record.get("committed"):
+        value["phase"] = "restoring"
+    return value
 
 
 class Transactions:
@@ -21,6 +25,8 @@ class Transactions:
         self.directory = storage.root / "transactions"
         self.directory.mkdir(mode=0o700, exist_ok=True)
         self.mutex = threading.RLock()
+        self.hook_idle = threading.Event()
+        self.hook_idle.set()
         with storage.lock():
             self.record = storage.read("active.json")
             if self.record:
@@ -44,11 +50,23 @@ class Transactions:
                 self.record = pending[0] if pending else None
             if self.record:
                 if self.record["phase"] in FINISHED:
+                    self.record["recoveryPending"] = False
                     self.clear_active()
                 else:
-                    # Never guess success or restart an interrupted install.
-                    interrupted = self.record["phase"] not in ("accepted", "preflight")
-                    self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
+                    prehook = self.record["phase"] == "installing" and not self.record.get("disrupted")
+                    interrupted = self.record.get("disrupted", False) or self.record["phase"] not in ("accepted", "preflight")
+                    if prehook:
+                        # APT cannot mutate packages before this hook durably
+                        # closes admission. Verify that boundary without stopping playback.
+                        try:
+                            interrupted = not self.platform.unchanged_previous(self.record["previous"])
+                        except (Rejected, KeyError):
+                            interrupted = True
+                    pending = interrupted and not prehook and not self.record.get("committed") and not self.record.get("automaticFailed")
+                    if self.record["phase"] == "operator-required" and not self.record.get("recoveryPending"):
+                        pending = False
+                    self.record.update(phase="operator-required" if interrupted else "failed", recoveryPending=pending,
+                                       error="The update worker restarted before this transaction finished.")
                     self.persist()
                     if not interrupted:
                         self.clear_active()
@@ -113,12 +131,15 @@ class Transactions:
                 self.transition("preflight")
                 key = self.key()
                 current = self.storage.current(key)
+                _, previous_manifest = copy_receipt(self.storage.receipts / current["candidateId"], None, key, False, current["candidateId"])
+                require_format(previous_manifest, current)
                 candidate_id = self.record["candidateId"]
                 _, manifest = self.storage.retain(self.platform.staging() / candidate_id, key, True, candidate_id)
                 require_format(manifest, current)
                 self.transition("preflight", **identity(manifest), previous=current)
                 packages = [self.storage.receipts / candidate_id / package["filename"] for package in manifest["packages"]]
                 self.platform.preflight(self.record, manifest, packages)
+                self.platform.preserve_worker(self.record)
                 self.transition("installing")
                 self.platform.install(self.record, packages)
                 if not self.record["hookComplete"]:
@@ -136,9 +157,30 @@ class Transactions:
             except Exception as error:
                 message = str(error) if isinstance(error, Rejected) else "The update could not finish. Inspect its retained log through SSH."
                 phase = "operator-required" if self.record["disrupted"] or self.record["committed"] else "failed"
-                self.transition(phase, error=message)
+                self.transition(phase, error=message, updateError=message, recoveryPending=phase == "operator-required" and not self.record["committed"])
                 if phase == "failed":
                     self.clear_active()
+
+        if self.record.get("recoveryPending"):
+            self.recover()
+        if self.record["phase"] in FINISHED:
+            self.release_worker()
+
+    def release_worker(self):
+        try:
+            self.platform.release_worker(self.record)
+        except Exception:
+            # Package/data acceptance is already durable. Keep the frozen worker
+            # usable and report cleanup through the root service journal.
+            print("The retained updater service override needs SSH inspection.", flush=True)
+
+    def recover(self):
+        from recovery import restore
+        if not self.hook_idle.wait(HOOK_DRAIN_SECONDS):
+            self.transition("operator-required", recoveryPending=False, automaticFailed=True,
+                            error="The previous maintenance hook did not stop. Inspect the worker through SSH.")
+            return
+        restore(self, self.record["updateId"], automatic=True)
 
     def hook(self, update_id, peer_pid=None):
         with self.mutex:
@@ -152,10 +194,14 @@ class Transactions:
             self.platform.verify_current(self.record)
             record = self.record
             self.transition("quiescing", disrupted=True)
-        self.platform.quiesce(record)
-        with self.mutex:
-            if self.record is not record or self.record["phase"] != "quiescing":
-                raise Rejected("This maintenance transaction ended while the app was stopping.")
-            self.platform.authorize_hook(peer_pid)
-            self.transition("installing", hookComplete=True)
-        return {"ok": True}
+            self.hook_idle.clear()
+        try:
+            self.platform.quiesce(record)
+            with self.mutex:
+                if self.record is not record or self.record["phase"] != "quiescing":
+                    raise Rejected("This maintenance transaction ended while the app was stopping.")
+                self.platform.authorize_hook(peer_pid)
+                self.transition("installing", hookComplete=True)
+            return {"ok": True}
+        finally:
+            self.hook_idle.set()
