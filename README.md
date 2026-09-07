@@ -11,7 +11,9 @@ queue together. Movies, music, radio, and online video play on the same screen.
 - **Bring your library.** Play files from local disks or mounted NAS folders,
   browse music by artist and album, or connect Jellyfin.
 - **Pick something online.** Browse YouTube, Twitch, and RaiPlay, open Bandcamp
-  albums and tracks, or play supported website links through yt-dlp.
+  albums and tracks, or play supported website links through yt-dlp. Automatic
+  quality defaults to up to 1080p; choose Unrestricted quality to request the
+  highest available format. Existing explicit browser choices are retained.
 - **Tune in.** Add avoid radio in one click, import a radio M3U playlist, or find
   stations through Radio Browser.
 - **Share the controls.** Pair a browser with the TV's six-digit code. Everyone

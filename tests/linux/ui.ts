@@ -146,7 +146,7 @@ export class UiDriver {
   }
 }
 
-export const qualityLabel = (value: string) => value === "best" ? "Best available" : `Up to ${value}`;
+export const qualityLabel = (value: string) => value === "auto" ? "Automatic (up to 1080p)" : value === "best" ? "Unrestricted quality" : `Up to ${value}`;
 
 async function settlePortals(ui: UiDriver) {
   const deadline = Date.now() + 5_000;

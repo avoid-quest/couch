@@ -9,7 +9,7 @@
     },
     "linux": {
       "deb": {
-        "depends": ["gpgv", "dpkg", "libmpv2", "libgl1", "ffmpeg", "ca-certificates", "fonts-dejavu-core", "libxdo3"],
+        "depends": ["gpgv", "dpkg", "libmpv2", "libgl1", "va-driver-all", "ffmpeg", "ca-certificates", "fonts-dejavu-core", "libxdo3"],
         "files": {
           "/usr/share/doc/couch": "resources/notices/",
           "/usr/share/doc/couch/build-info.json": "build-info.json"

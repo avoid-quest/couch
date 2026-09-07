@@ -1,5 +1,5 @@
 export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp";
-export type VideoQuality = "best" | "1080p" | "720p" | "480p";
+export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {
   id: string;

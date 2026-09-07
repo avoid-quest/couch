@@ -28,9 +28,27 @@ test("uses safe argv, ignores user configuration, and resolves only selected med
   const args = await Bun.file(join(directory, "args.json")).json() as string[];
   expect(args.slice(-2)).toEqual(["--", url]);
   for (const option of ["--ignore-config", "--no-plugin-dirs", "--no-playlist", "--dump-single-json", "--skip-download", "--no-cache-dir", "--no-remote-components"]) expect(args).toContain(option);
-  expect(args[args.indexOf("--format") + 1]).toBe("bv*+ba/b");
+  expect(args[args.indexOf("--format") + 1]).toBe("bv*[height<=?1080]+ba/b[height<=?1080]");
   expect(args).not.toContain("--cookies-from-browser");
   if (!process.env.COUCH_DENO) expect(args).not.toContain("--js-runtimes");
+});
+
+test("automatic YouTube playback caps resolution and prefers a compatible codec without changing overrides", async () => {
+  const { directory, resolve } = await fixture(`await Bun.write(import.meta.dir + '/args.json', JSON.stringify(process.argv.slice(2)));\n${output(combined)}`);
+  for (const url of ["https://www.youtube.com/watch?v=123", "https://youtu.be/123"]) {
+    await resolve(url);
+    const args = await Bun.file(join(directory, "args.json")).json() as string[];
+    expect(args[args.indexOf("--format") + 1]).toBe("bv*[height<=?1080]+ba/b[height<=?1080]");
+    expect(args[args.indexOf("--format-sort") + 1]).toBe("res,fps,vcodec:vp9");
+  }
+  for (const quality of ["best", "1080p", "720p"] as const) {
+    await resolve("https://www.youtube.com/watch?v=123", undefined, quality);
+    const args = await Bun.file(join(directory, "args.json")).json() as string[];
+    expect(args).not.toContain("--format-sort");
+    if (quality === "best") expect(args[args.indexOf("--format") + 1]).toBe("bv*+ba/b");
+  }
+  await resolve("https://youtube.com.example/watch?v=123");
+  expect(await Bun.file(join(directory, "args.json")).json()).not.toContain("--format-sort");
 });
 
 test("caps both split and combined video formats while retaining audio and unknown-height sources", async () => {
@@ -107,7 +125,7 @@ test("opens audio-only and HLS sources and gives DASH manifests to the native de
     { url: "https://cdn.example/fragments/", manifest_url: manifest, vcodec: "av1", acodec: "none", protocol: "http_dash_segments" },
     { url: "https://cdn.example/fragments/", manifest_url: manifest, vcodec: "none", acodec: "opus", protocol: "http_dash_segments" },
   ] }));
-  expect(await resolve(page)).toEqual({ source: manifest });
+  expect(await resolve(page)).toEqual({ source: manifest, maxVideoHeight: 1080 });
 });
 
 test("carries DASH height limits separately from public metadata regardless of representation order", async () => {
@@ -119,7 +137,8 @@ test("carries DASH height limits separately from public metadata regardless of r
   for (const requested_formats of [streams, streams.toReversed()]) {
     const { resolve, inspect } = await fixture(output({ requested_formats, manifest_stream_number: 9, title: "DASH movie" }));
     for (const quality of ["1080p", "720p", "480p"] as const) expect(await resolve(page, undefined, quality)).toEqual({ source: manifest, maxVideoHeight: Number(quality.slice(0, -1)), metadata: { title: "DASH movie" } });
-    expect(await resolve(page)).toEqual({ source: manifest, metadata: { title: "DASH movie" } });
+    expect(await resolve(page, undefined, "best")).toEqual({ source: manifest, metadata: { title: "DASH movie" } });
+    expect(await resolve(page, undefined, "auto")).toEqual({ source: manifest, maxVideoHeight: 1080, metadata: { title: "DASH movie" } });
     expect(await inspect(page)).toEqual({ title: "DASH movie" });
   }
   const audio = await fixture(output(streams[0]));
@@ -131,7 +150,7 @@ test("DASH caps do not depend on extractor stream numbering and direct sources n
   for (const manifest_stream_number of [undefined, null, "0", -1, 1.5, 1025]) {
     const { resolve } = await fixture(output({ url: manifest, manifest_url: manifest, protocol: "http_dash_segments", vcodec: "av1", manifest_stream_number }));
     expect(await resolve(page, undefined, "480p")).toEqual({ source: manifest, maxVideoHeight: 480 });
-    expect(await resolve(page)).toEqual({ source: manifest });
+    expect(await resolve(page)).toEqual({ source: manifest, maxVideoHeight: 1080 });
   }
   const direct = await fixture(output({ ...combined, manifest_stream_number: 2 }));
   expect(await direct.resolve(page, undefined, "480p")).toEqual({ source: combined.url });
@@ -222,7 +241,7 @@ test.skipIf(!Bun.which("yt-dlp"))("actual yt-dlp selects audio-only HTML sources
       : new Response('<!doctype html><title>Audio fixture</title><audio controls><source src="/tone.wav" type="audio/wav"></audio>', { headers: { "Content-Type": "text/html" } });
   } });
   try {
-    for (const quality of ["best", "1080p", "720p", "480p"] as const) {
+    for (const quality of ["auto", "best", "1080p", "720p", "480p"] as const) {
       const media = await createWebMediaResolver()(`http://127.0.0.1:${server.port}/`, undefined, quality);
       expect(media.source).toBe(`http://127.0.0.1:${server.port}/tone.wav`);
       expect(media.audioSource).toBeUndefined();
@@ -238,7 +257,7 @@ test.skipIf(!Bun.which("yt-dlp"))("actual yt-dlp respects quality caps when sele
     return new Response(path === "/master.m3u8" ? master : "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10,\n/segment.ts\n#EXT-X-ENDLIST\n", { headers: { "Content-Type": "application/vnd.apple.mpegurl" } });
   } });
   try {
-    for (const [quality, height] of [["best", 2160], ["1080p", 1080], ["720p", 720], ["480p", 360]] as const) {
+    for (const [quality, height] of [["auto", 1080], ["best", 2160], ["1080p", 1080], ["720p", 720], ["480p", 360]] as const) {
       const media = await createWebMediaResolver()(`http://127.0.0.1:${server.port}/`, undefined, quality);
       expect(media.source).toBe(`http://127.0.0.1:${server.port}/${height}.m3u8`);
       expect(media.audioSource).toBeUndefined();
@@ -259,7 +278,7 @@ test.skipIf(!Bun.which("yt-dlp"))("actual yt-dlp passes DASH height limits to na
       : new Response(manifest, { headers: { "Content-Type": "application/dash+xml" } });
   } });
   try {
-    for (const [quality, maxVideoHeight] of [["best", undefined], ["1080p", 1080], ["720p", 720], ["480p", 480]] as const) {
+    for (const [quality, maxVideoHeight] of [["auto", 1080], ["best", undefined], ["1080p", 1080], ["720p", 720], ["480p", 480]] as const) {
       const media = await createWebMediaResolver()(`http://127.0.0.1:${server.port}/`, undefined, quality);
       expect(media.source).toBe(`http://127.0.0.1:${server.port}/manifest.mpd`);
       expect(media.maxVideoHeight).toBe(maxVideoHeight);

@@ -1965,8 +1965,15 @@ mod linux_mpv {
             player.last_sample_at = now;
             if std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some() {
                 eprintln!(
-                    "mpv telemetry: presented={rendered} dropped={dropped} fps={:.2} position={position:.2}s",
+                    "mpv telemetry: presented={rendered} dropped={dropped} fps={:.2} position={position:.2}s codec={:?} hwdec={:?} size={}x{} source_fps={:?} buffered={:.2}s cache_wait={:?}",
                     player.measured_fps,
+                    property::<String>(&player.mpv, "video-codec"),
+                    property::<String>(&player.mpv, "hwdec-current"),
+                    property::<i64>(&player.mpv, "video-params/w").unwrap_or(0),
+                    property::<i64>(&player.mpv, "video-params/h").unwrap_or(0),
+                    property::<f64>(&player.mpv, "container-fps"),
+                    buffered - position,
+                    property::<bool>(&player.mpv, "paused-for-cache"),
                 );
             }
         }
