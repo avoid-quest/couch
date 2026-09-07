@@ -179,12 +179,12 @@ test("repair archive rejection clears its saved request and leaves the staged up
   expect(button("Check for updates").disabled).toBe(false);
 });
 
-test("an older live worker shows the fixed SSH transition instead of silently hiding repair", async () => {
+test("unenrolled AppImage explains installation requirements instead of hiding repair", async () => {
   report.status = "ready";
   report.installation = { enabled: true, transaction: null, repairAvailable: false };
   await render();
-  expect(document.body.textContent).toContain("sudo couch-update refresh-worker");
-  expect(document.body.textContent).toContain("keeps TV playback running");
+  expect(document.body.textContent).toContain("release feed is not enrolled");
+  expect(document.body.textContent).toContain("signing key and endpoint");
   expect(button("Repair current release")).toBeUndefined();
   expect(button("Install update").disabled).toBe(true);
 });
@@ -305,7 +305,7 @@ test("manual installation stays discoverable when maintenance support is disable
   expect(button("Install update")).toBeDefined();
   expect(button("Install update").disabled).toBe(true);
   expect(document.body.textContent).toContain("Manual installation is not enabled");
-  expect(document.body.textContent).toContain("sudo couch-update enable");
+  expect(document.body.textContent).toContain("supported AppImage installation procedure");
   expect(button("Check for updates").disabled).toBe(false);
 });
 

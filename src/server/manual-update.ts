@@ -43,7 +43,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     busy = true;
     const result = await worker.request(repairing ? { op: "repair-current", ...body } : { op: "install", ...body, ...(whenIdle ? { whenIdle: true as const } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction; error?: string };
     guard();
-    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The worker could not accept this update. Refresh its status.", 409);
+    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The native updater could not accept this update. Refresh its status.", 409);
     busy = !finished.has(result.transaction.phase);
     return result.transaction;
   };

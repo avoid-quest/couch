@@ -34,7 +34,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         if (!controller.signal.aborted) {
           setState(result); setLoadError(null);
           const transaction = result.installation?.requestedTransaction ?? result.installation?.transaction;
-          if (transaction && retry?.requestId === transaction.requestId && ["succeeded", "failed", "restored"].includes(transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
+          if (transaction && retry?.requestId === transaction.requestId && ["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
         }
       } catch { if (!controller.signal.aborted) setLoadError("Could not load update status. Check the TV connection and try again."); }
       finally { if (!controller.signal.aborted) timer = setTimeout(() => void load(), 2_000); }
@@ -56,7 +56,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         setError(result.error || "Could not start the update operation. Refresh its status and retry."); return;
       }
       if (maintenanceRequest) {
-        if (result.transaction?.requestId === retry?.requestId && ["succeeded", "failed", "restored"].includes(result.transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
+        if (result.transaction?.requestId === retry?.requestId && ["succeeded", "failed", "restored", "operator-required"].includes(result.transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
         setState(current => current ? { ...current, installation: { enabled: true, transaction: result.transaction } } : current);
       }
       else setState(result);
@@ -64,7 +64,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } if (mutation.current === controller) mutation.current = null; }
   };
   const transaction = state?.installation?.transaction;
-  const installing = !!transaction && !["succeeded", "failed", "restored"].includes(transaction.phase);
+  const installing = !!transaction && !["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase);
   const install = async () => {
     try {
       const current = state?.installation?.current;
@@ -88,10 +88,10 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. Waiting for the matching running build." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating the TV"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       <p>{transaction?.phase || "Waiting for the TV to confirm this request"}</p>
-      {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB verified repair download</p>}
+      {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
       {transaction?.error && <p>{transaction.error}</p>}
       {!connected && <p>The TV is restarting or offline. This page will reconnect; keep it open.</p>}
-      {transaction?.phase === "operator-required" && <p>From the administrator's SSH account, inspect <code>sudo couch-update status</code> and use the documented restoration command. Do not reinstall or delete the data directory.</p>}
+      {transaction?.phase === "operator-required" && <p>From the administrator's SSH account, inspect <code>sudo couch-session status</code> and use the documented <code>couch-recover</code> procedure. Do not reinstall or delete the data directory.</p>}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button>}
     </div>}
     {state && <>
@@ -121,7 +121,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     </div>
     {state && !retry && !installing && <div className="space-y-2">
       {confirming === "install" ? <>
-        <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before package installation. Other remotes will disconnect.</p>
+        <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before AppImage replacement. Other remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
@@ -130,10 +130,8 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
       <p className="font-medium">Manual installation is not enabled on this TV.</p>
-      <p>Manual updates work independently of Auto when idle. The supported path needs the Ubuntu Couch appliance, a signed release feed and an enrolled current release.</p>
-      <p>From the administrator's SSH account, install a signed release that includes maintenance support if this is an older installation. Verify that Couch starts correctly, then enroll that installed release's signed receipt with <code className="break-words">sudo couch-update enroll-current /path/to/current-signed-receipt</code>.</p>
-      <p>When the TV can restart, run <code>sudo couch-update enable</code>, then <code>sudo couch-update status</code>. Enabling restarts Couch. Reopen this page after it reconnects.</p>
-      <p>The receipt must match the installed release. If the command is missing or enrollment fails, complete the signed appliance installation first. Keep SSH available for recovery.</p>
+      <p>Manual updates work independently of Auto when idle. This TV needs the signed AppImage appliance installation and an enrolled release feed.</p>
+      <p>From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects. Keep SSH available for recovery.</p>
     </div>}
     {state?.installation?.enabled && !installing && state.status !== "ready" && <p className="text-muted-foreground">Check for updates, then download and verify an available release to enable Install update. You can install manually with either installation policy.</p>}
     <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
@@ -158,7 +156,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       </div>
     </>}
     <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
-      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The update worker needs a one-time SSH refresh after this upgrade. After maintenance finishes, the administrator can run <code>sudo couch-update refresh-worker</code>. This keeps TV playback running.</p>}
+      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The AppImage release feed is not enrolled for installation. Use the supported appliance installer through SSH to enroll its signing key and endpoint.</p>}
       {state?.installation?.enabled && state.installation.repairAvailable !== false && state.installation.current && !retry && !installing && <div className="space-y-2">
         <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
         {confirming === "repair" ? <>

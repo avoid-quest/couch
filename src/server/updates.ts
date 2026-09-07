@@ -134,7 +134,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (busy()) throw new ControllerError("An update operation is already running. Wait for it to finish.", 409);
         if (field === "policy") {
           if (value !== "manual" && value !== "idle") throw new ControllerError("Choose Manual or Auto when idle.");
-          if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Activate the qualified update worker through SSH before enabling automatic installation.", 409);
+          if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Complete the signed AppImage appliance installation before enabling automatic installation.", 409);
           const previous = state.policy;
           changing = true; state.policy = value;
           try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and five idle minutes." : null; }
