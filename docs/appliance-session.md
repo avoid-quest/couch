@@ -1,8 +1,7 @@
 # Ubuntu TV session
 
 `couch-appliance` supplies the production session for Ubuntu 24.04 x86_64. It
-depends on the separately versioned `couch` package. The release manifest records
-both versions and hashes. Install through the documented `install-couch` entry
+installs the OS runtime dependencies separately from the Tauri AppImage. Install through the documented `install-couch` entry
 point so APT finishes before LightDM starts.
 
 LightDM logs the locked `couch-tv` account into the Couch Xorg session on `seat0`.
@@ -11,8 +10,8 @@ its groups remain unchanged. PAM starts its systemd user manager and grants the
 active seat access to display/audio devices. Openbox supplies window management;
 PipeWire, its PulseAudio compatibility server and WirePlumber supply user audio.
 
-The user unit `couch-tv.service` starts `/usr/bin/couch`. That native process owns
-one `/usr/bin/couch-server` and exits nonzero when the coordinator dies. Systemd
+The user unit `couch-tv.service` starts `/var/lib/couch/application/Couch.AppImage`. That native process owns
+one bundled `couch-server` and exits nonzero when the coordinator dies. Systemd
 restarts the complete control group after five seconds, up to five starts within
 120 seconds. A deliberate `couch-session stop` stays stopped. The surrounding
 LightDM session remains alive after exhaustion and shows recovery instructions,
