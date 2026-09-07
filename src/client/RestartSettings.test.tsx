@@ -30,7 +30,11 @@ test("General requires explicit interruption confirmation and keeps a checkpoint
     expect(document.body.textContent).toContain("Could not save viewing progress");
     expect(button("Restart Couch").disabled).toBe(false);
   } finally {
-    await act(async () => root.unmount());
+    await act(async () => {
+      root.unmount();
+      // Radix restores focus in a timer that still needs this window's Event constructors.
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
     request.mockRestore(); window.happyDOM.abort();
     for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   }
