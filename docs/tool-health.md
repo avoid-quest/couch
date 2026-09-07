@@ -33,3 +33,5 @@ exact-current authenticated release reinstall through the completed manual
 maintenance mechanism in issue #7. APT remains the installed-file owner. No
 repair control is offered until that mechanism can provide progress, preserve
 user data, and verify the repaired release. Automatic rollback remains issue #8.
+
+Ubuntu status uses bounded native APT simulation and dependency checks. Counts describe actionable Ubuntu upgrades in the resolver plan, including security-pocket upgrades; held or unresolvable candidates and newly required dependencies are excluded. A successful dependency check reports zero broken packages. Failed checks leave unknown counts and show an error instead of inventing a total. The owner accepted this diagnostic change when removing Python. No repository refresh or installation occurs during Check tools.

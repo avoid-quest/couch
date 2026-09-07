@@ -58,7 +58,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
     {connected && <div className="space-y-2 rounded-lg border p-3">
       <h4 className="font-medium">Ubuntu packages and security</h4>
       {ubuntu && typeof ubuntu.available === "number" ? <>
-        <p>{ubuntu.available} available Ubuntu package updates in cached indexes; {ubuntu.security} from the security pocket.</p>
+        <p>{ubuntu.available} actionable Ubuntu upgrades in APT’s current plan; {ubuntu.security} from the security pocket.</p>
         <p>Packages with broken dependencies: {ubuntu.broken}.</p>
         <p className="text-muted-foreground">Last automated index refresh: {ubuntu.indexUpdatedAt ? new Date(ubuntu.indexUpdatedAt).toLocaleString() : "Unknown"}.</p>
       </> : <p>{ubuntu?.error || "Ubuntu package status is unavailable."}</p>}

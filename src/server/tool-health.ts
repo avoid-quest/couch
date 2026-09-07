@@ -1,3 +1,4 @@
+import { readUbuntuPackageStatus } from "./ubuntu-package-status";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
@@ -10,7 +11,7 @@ const cacheSeconds = 10;
 const checkMilliseconds = 10_000;
 const maximumBytes = 256 * 1024 * 1024;
 const managedTools = [{ name: "yt-dlp", file: "yt-dlp", variable: "COUCH_YT_DLP" }, { name: "Deno", file: "deno", variable: "COUCH_DENO" }] as const;
-type Options = { packaged: boolean; helpers: unknown; env?: NodeJS.ProcessEnv; directory?: string; command?: typeof runDiagnosticCommand };
+type Options = { packaged: boolean; helpers: unknown; env?: NodeJS.ProcessEnv; directory?: string; command?: typeof runDiagnosticCommand; ubuntuStatus?: typeof readUbuntuPackageStatus };
 const observation = (status: ToolObservation["status"], error: string | null, version: string | null = null): ToolObservation => ({ status, version, error });
 const unknown = () => observation("unknown", "The local check did not finish. Try again after the TV responds.");
 
@@ -62,11 +63,7 @@ export function createToolHealth(options: Options) {
     return systemPending ??= (async (): Promise<UbuntuPackageStatus> => {
       const value: UbuntuPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "Ubuntu package status is unavailable for this installation." };
       if (!options.packaged) return value;
-      try {
-        const result = JSON.parse(await (options.command ?? runDiagnosticCommand)("/usr/bin/python3", ["-I", "/usr/lib/couch-appliance/updater/system_packages.py"], { PATH: "/usr/bin:/bin", LC_ALL: "C" }, 5_000));
-        if (result.ok !== true || [result.available, result.security, result.broken].some(number => !Number.isSafeInteger(number) || number < 0 || number > 1_000_000) || result.indexUpdatedAt !== null && !Number.isSafeInteger(result.indexUpdatedAt)) throw new Error();
-        return { ...value, available: result.available, security: result.security, broken: result.broken, indexUpdatedAt: result.indexUpdatedAt, error: null };
-      } catch { return { ...value, error: "Ubuntu package indexes or the package-status runtime are unavailable. Check through system administration; Couch releases are separate." }; }
+      return (options.ubuntuStatus ?? readUbuntuPackageStatus)();
     })().then(result => { systemCached = result; return result; }).finally(() => { systemPending = null; });
   };
 
