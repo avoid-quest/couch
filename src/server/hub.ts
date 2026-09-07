@@ -36,6 +36,7 @@ import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
+import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
@@ -89,8 +90,10 @@ export function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  let sound: ReturnType<typeof createSound> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
+    sound?.interrupt();
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
@@ -148,6 +151,7 @@ export function createHub(options: HubOptions) {
     }
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
+  sound = createSound({ available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const idleReason = () => {
@@ -280,6 +284,7 @@ export function createHub(options: HubOptions) {
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
         if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
         if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
@@ -408,6 +413,7 @@ export function createHub(options: HubOptions) {
     try { if (requiredProgress) session.quiesce(); else session.close(); }
     catch (error) { progressError = error; }
     const toolsStopped = toolHealth.close();
+    sound?.close();
     appearance.close();
     guide.close();
     providers.close();
