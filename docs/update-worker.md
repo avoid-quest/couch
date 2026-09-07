@@ -317,6 +317,48 @@ SSH data rollback, even if the final success message was lost. Such an incomplet
 commit remains `operator-required` for inspection; the worker does not infer
 success or discard possibly accepted writes.
 
+## Auto when idle
+
+An administrator can select Manual or Auto when idle independently of Stable or
+Preview. Manual is the default. Auto uses the existing background check and
+verified staging operation, then considers installation every five seconds.
+A failed or offline check invalidates current readiness and leaves playback running.
+
+Installation requires five continuous minutes of stopped playback, no controller
+input and no active scan, import or controller command. Pointer and keyboard input
+from either connected remote resets the coordinator's monotonic clock; status
+polling does not. Playing, paused, loading, native disconnection and radio reconnect
+attempts defer installation. Active recordings, due pending recordings and uncertain
+backend jobs also defer it. Confirmed future jobs belong to the external recording
+backend. Its periodic status reconciliation is drained by existing maintenance
+shutdown without continually resetting the idle clock.
+
+Updates displays its waiting reason. Install now uses the existing restart warning
+and explicit playback interruption choice. Changing the policy back to Manual stops
+new automatic requests. It does not cancel a transaction already accepted by root.
+
+The coordinator persists and syncs an automatic candidate/request identity before
+sending it to the same external worker as manual installation. Transport failures
+reuse that identity. A completed attempt, including a restored failed trial, blocks
+another unattended attempt for that candidate across app restarts. The administrator
+can explicitly retry with Install now, or wait for a new candidate. The restored
+result shows the previous version rather than calling the failed candidate installed.
+
+Only the private app-to-root request may add `whenIdle: true`, with playback
+interruption forbidden. The authenticated APT hook asks the app to recheck the
+policy, clock, playback and background work after APT acquires its final lock.
+The app checks after reading the root context, then closes admission synchronously
+before starting shutdown. New playback and background writes share this admission
+check. If Couch became active, the app confirms that admission stayed open; root
+aborts the hook before dpkg, clears the disruption marker and records `idleDeferred`.
+That specific refusal may retry after another full idle interval. Unknown replies
+and actual checkpoint failures retain the existing recovery rules.
+
+Idle updates use the same package verification, backups, native and frontend trial,
+commit boundary and bounded automatic recovery as manual updates. Installation still
+ships disabled. Full supervised phone updates and physical appliance acceptance
+remain requirements before activation on the TV.
+
 ## Inspection and verification
 
 `sudo couch-update status` exposes the current receipt and active transaction.
@@ -329,6 +371,12 @@ package lock leaves maintenance fenced for inspection and does not start recover
 A failed recovery or incomplete commit remains
 `operator-required`; it does not clear ambiguous state.
 Preserve this evidence when investigating or restoring a failed trial.
+
+`bun test src/server/update-idle.test.ts src/server/updates.test.ts
+src/server/maintenance.test.ts src/server/hub.test.ts src/client/UpdatesSettings.test.tsx`
+checks idle timing, either remote, active recordings, atomic admission, persisted
+automatic attempts and the visible restored outcome. These checks use simulated
+clocks and worker/native doubles.
 
 Run `python3 scripts/test-update-retention.py` for descriptor, content,
 identity and retention checks. The Ubuntu-only test
@@ -352,7 +400,8 @@ packages in a disposable Ubuntu 24.04 container, exercises real APT locks,
 acquisition and the frozen hook, disconnects the initiating client and checks
 readiness failure, automatic and explicit previous-package/data restoration,
 a killed dummy-package dpkg process followed by real package-manager repair,
-and unchanged-app resume after a failed checkpoint with no snapshot. Its session, native and browser operations are explicit
+unchanged-app resume after a failed checkpoint with no snapshot, and new activity
+during the final APT lock wait without stopping the app or changing packages. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
 watchdog, or on the dedicated disposable Ubuntu runner in

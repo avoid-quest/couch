@@ -2,11 +2,12 @@ import { lstatSync } from "node:fs";
 
 export type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 type Candidate = MaintenanceBuild & { candidateId: string };
-type Context = Partial<Candidate> & { updateId: string; nonce: string; phase: string; disrupted: boolean; committed: boolean; confirmInterrupt: boolean };
+type Context = Partial<Candidate> & { updateId: string; nonce: string; phase: string; disrupted: boolean; committed: boolean; confirmInterrupt: boolean; whenIdle?: boolean };
 type Options = {
   build: MaintenanceBuild;
   context: () => Promise<unknown>;
   player: () => string;
+  idle?: () => string | null;
   observe: () => void;
   quiesce: () => Promise<{ progressSaved: boolean; admissionClosed: boolean }>;
   database: () => Promise<void>;
@@ -58,8 +59,9 @@ export function createMaintenance(options: Options) {
     async handle(raw: unknown) {
       let nonce: string | undefined;
       try {
-        if (!raw || typeof raw !== "object" || Object.keys(raw).sort().join(",") !== "candidate,confirmInterrupt,nonce,op,protocol,updateId") throw error();
-        const request = raw as { op: string; protocol: string; updateId: string; nonce: string; candidate: Candidate; confirmInterrupt: boolean };
+        if (!raw || typeof raw !== "object" || Object.keys(raw).filter(key => key !== "whenIdle").sort().join(",") !== "candidate,confirmInterrupt,nonce,op,protocol,updateId") throw error();
+        const request = raw as { op: string; protocol: string; updateId: string; nonce: string; candidate: Candidate; confirmInterrupt: boolean; whenIdle?: boolean };
+        if (request.whenIdle !== undefined && request.whenIdle !== true) throw error();
         if (request.protocol !== "maintenance-v1" || !["capabilities", "quiesce", "readiness", "commit"].includes(request.op) || !token(request.nonce)) throw error();
         const active = await context();
         if (!active || active.updateId !== request.updateId || active.nonce !== request.nonce || active.confirmInterrupt !== request.confirmInterrupt || !request.candidate || Object.keys(request.candidate).sort().join(",") !== "candidateId,dataFormat,revision,version" || ["candidateId", "version", "revision", "dataFormat"].some(key => active[key as keyof Candidate] !== request.candidate[key as keyof Candidate])) throw error();
@@ -67,12 +69,14 @@ export function createMaintenance(options: Options) {
         if (mode === "failed" || mode === "starting") throw error();
         let result: object;
         if (request.op === "capabilities" || request.op === "quiesce") {
+          if (mode !== "open" || request.op === "capabilities" && (active.phase !== "preflight" || active.disrupted) || request.op === "quiesce" && (active.phase !== "quiescing" || !active.disrupted)) throw error();
+          if ((active.whenIdle === true) !== (request.whenIdle === true)) throw error();
+          const waiting = request.whenIdle ? options.idle ? options.idle() : "Idle installation is unavailable." : null;
+          if (waiting) return { protocol: "maintenance-v1", nonce, ok: true, idleDeferred: true, admissionClosed: false };
           if (!request.confirmInterrupt && ["loading", "playing", "paused"].includes(options.player())) throw new Error("Confirm interruption of the current playback before installing.");
           if (request.op === "capabilities") {
-            if (active.phase !== "preflight" || active.disrupted) throw error();
             result = { build: options.build, nativeReadiness: "libmpv-v1" };
           } else {
-            if (active.phase !== "quiescing" || !active.disrupted) throw error();
             mode = "quiescing";
             result = await options.quiesce();
           }

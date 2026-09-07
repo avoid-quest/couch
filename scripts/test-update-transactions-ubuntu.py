@@ -54,6 +54,9 @@ class CoordinatorFixture(Ubuntu):
         self.missing_dependency = None
         self.interruption_marker = None
         self.interrupted_audit = None
+        self.defer_idle = False
+        self.idle_install = threading.Event()
+        self.idle_lock = threading.Event()
 
     def preserve_worker(self, record):
         pass
@@ -66,6 +69,8 @@ class CoordinatorFixture(Ubuntu):
 
     def coordinator(self, operation, record, timeout=5):
         self.calls.append(operation)
+        if record.get("whenIdle") and self.defer_idle and operation in ("capabilities", "quiesce"):
+            return {"idleDeferred": True, "admissionClosed": False}
         build = {key: installed()[key] for key in ("version", "revision", "dataFormat")}
         if operation == "capabilities":
             return {"nativeReadiness": "libmpv-v1", "build": build}
@@ -111,6 +116,10 @@ class CoordinatorFixture(Ubuntu):
         return super().ready(record)
 
     def install(self, record, packages):
+        if record.get("whenIdle"):
+            self.idle_install.set()
+            if not self.idle_lock.wait(10):
+                raise AssertionError("Fixture did not acquire the final APT lock")
         if self.missing_dependency:
             # Remove a dependency after real simulate/download-only succeeded.
             self.missing_dependency.unlink()
@@ -289,6 +298,41 @@ class RealTransactions(unittest.TestCase):
                         self.assertEqual(previous.execute("SELECT position FROM progress").fetchall(), [(99,)])
                     self.assertEqual((data / "preferences.json").read_text(), '{"pairing":"fixture-only","preserved":true}')
                     print("Verified real dpkg interruption, package-manager repair and automatic retained-package/snapshot recovery without staged downloads.", flush=True)
+                    platform.interruption_marker = None
+                    candidate = self.stage(receipts[2], data)
+                    calls_before = len(platform.calls)
+                    platform.child = subprocess.Popen(["/bin/sleep", "30"])
+                    try:
+                        call({"op": "install", "candidateId": candidate, "requestId": "0" * 32, "confirmInterrupt": False, "whenIdle": True})
+                        self.assertTrue(platform.idle_install.wait(10))
+                        with open("/var/lib/dpkg/lock-frontend", "w") as lock:
+                            fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            platform.idle_lock.set()
+                            self.until(lambda: platform.apt_pid is not None)
+                            time.sleep(1)
+                            self.assertNotIn("quiesce", platform.calls[calls_before:])
+                            self.assertIsNone(platform.child.poll())
+                            # New controller activity arrives after preflight,
+                            # while the final real APT process waits for its lock.
+                            platform.defer_idle = True
+                        self.until(lambda: engine.status()["phase"] in ("failed", "operator-required", "succeeded", "restored"), 30)
+                        server.worker.join()
+                        self.assertEqual(engine.status()["phase"], "failed", engine.status())
+                        self.assertTrue(engine.status()["idleDeferred"])
+                        self.assertFalse(engine.record["disrupted"])
+                        self.assertFalse(engine.record["hookComplete"])
+                        self.assertNotIn("automaticStarts", engine.record)
+                        self.assertIn("quiesce", platform.calls[calls_before:])
+                        self.assertNotIn("stop-fixture", platform.calls[calls_before:])
+                        self.assertIsNone(platform.child.poll())
+                        self.assertEqual(installed()["version"], "0.1.0+build.2.1")
+                        self.assertIsNone(storage.read("active.json"))
+                        print("Verified new activity during the actual APT lock wait defers without service stop, dpkg mutation or recovery.", flush=True)
+                    finally:
+                        platform.idle_lock.set()
+                        if platform.child:
+                            platform.child.terminate(); platform.child.wait(timeout=5); platform.child = None
+
 
                 except Exception:
                     print("Fixture worker state:", engine.status(), flush=True)

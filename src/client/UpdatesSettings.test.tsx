@@ -200,3 +200,46 @@ test("a terminal install retry receipt clears its saved identity even when lates
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
   expect(button("Check now").disabled).toBe(false);
 });
+
+test("Auto when idle persists separately from the release channel", async () => {
+  report.installation = { enabled: true, transaction: null };
+  await render();
+  await act(async () => document.querySelector("#update-policy")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" })));
+  const auto = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent === "Auto when idle")!;
+  await act(async () => { auto.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); auto.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(calls.find(call => call.url.endsWith("/policy"))?.body).toEqual({ policy: "idle" });
+  expect(calls.some(call => call.url.endsWith("/channel") || call.url.endsWith("/install"))).toBe(false);
+});
+
+test("idle waiting keeps Install now behind the restart and playback warning", async () => {
+  report.status = "ready"; report.policy = "idle";
+  report.waiting = "Waiting for playback to stop. Paused playback is still active.";
+  report.installation = { enabled: true, transaction: null };
+  await render();
+  expect(document.body.textContent).toContain(report.waiting);
+  await act(async () => button("Install now").click());
+  expect(document.body.textContent).toContain("Other remotes will disconnect");
+  expect(document.body.textContent).toContain("Stop playback if it is running");
+  expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
+});
+
+test("an unattended failed trial displays the authenticated restored release", async () => {
+  report.policy = "idle";
+  report.installation = { enabled: true, transaction: { updateId: "c".repeat(32), requestId: "d".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase: "restored", restoredVersion: "0.1.0+build.1.1", restoredRevision: "abc123", error: "The trial failed; previous release restored.", createdAt: 1, updatedAt: 1 } };
+  await render();
+  const outcome = [...document.querySelectorAll("p")].find(node => node.textContent === "Previous release restored")!;
+  expect(outcome.nextElementSibling!.textContent).toBe("0.1.0+build.1.1");
+});
+
+test("controller pointer and keyboard input report activity, with no idle heartbeat", async () => {
+  const { useUpdateActivity } = await import("./update-activity");
+  const Activity = () => { useUpdateActivity({ origin: "http://localhost", token: "admin" }, true); return null; };
+  await act(async () => root.render(<Activity />));
+  expect(calls).toHaveLength(0);
+  await act(async () => document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+  await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" })));
+  expect(calls.map(call => [call.url, call.body])).toEqual(Array(2).fill(["http://localhost/api/activity", { activity: true }]));
+  await act(async () => root.render(null));
+  document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+  expect(calls).toHaveLength(2);
+});

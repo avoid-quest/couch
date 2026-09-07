@@ -1,3 +1,4 @@
+import { createUpdateIdle } from "./update-idle";
 import { expect, test } from "bun:test";
 import { createMaintenance, type MaintenanceBuild } from "./maintenance";
 import { createSession } from "./session";
@@ -146,4 +147,39 @@ test("a failed post-commit observation request fails admission closed", async ()
   f.setActive({ ...transaction, phase: "committing", committed: true });
   expect(await f.request("commit")).toMatchObject({ ok: false });
   expect(f.maintenance.admitted()).toBe(false);
+});
+
+test("idle is rechecked after private context awaits and admission closes atomically", async () => {
+  let now = 0, stopped = true, calls = 0;
+  let active: object | null = null;
+  let lookup: Promise<unknown> | null = null;
+  const idleClock = createUpdateIdle(() => now);
+  idleClock.playback("idle", false);
+  const store = openStore(":memory:");
+  const maintenance = createMaintenance({
+    build, context: async () => lookup ?? { ok: true, context: active }, player: () => stopped ? "idle" : "playing",
+    idle: () => idleClock.reason(), observe: () => {}, database: async () => {}, native: async () => build, frontend: () => build,
+    quiesce: async () => {
+      expect(maintenance.admitted()).toBe(false);
+      expect(() => session.command({ type: "volume", volume: 13 })).toThrow("update");
+      calls++; return { progressSaved: true, admissionClosed: true };
+    },
+  });
+  const session = createSession(store, () => {}, () => {}, { admitted: maintenance.admitted });
+  try {
+    await maintenance.initialize();
+    now = 300_000; expect(idleClock.reason()).toBeNull();
+    active = { ...transaction, phase: "quiescing", confirmInterrupt: false, whenIdle: true };
+    const request = { op: "quiesce", protocol: "maintenance-v1", updateId: transaction.updateId, nonce: transaction.nonce, candidate: { candidateId: transaction.candidateId, ...build }, confirmInterrupt: false, whenIdle: true };
+    const context = Promise.withResolvers<unknown>(); lookup = context.promise;
+    const pending = maintenance.handle(request);
+    idleClock.activity(); stopped = false; idleClock.playback("playing", false);
+    context.resolve({ ok: true, context: active });
+    expect(await pending).toMatchObject({ ok: true, idleDeferred: true, admissionClosed: false });
+    expect(maintenance.admitted()).toBe(true); expect(calls).toBe(0);
+    stopped = true; idleClock.playback("idle", false); idleClock.reason(); now += 300_000;
+    lookup = null;
+    expect(await maintenance.handle(request)).toMatchObject({ ok: true, progressSaved: true, admissionClosed: true });
+    expect(calls).toBe(1);
+  } finally { store.close(); }
 });

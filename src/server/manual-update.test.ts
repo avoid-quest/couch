@@ -14,7 +14,7 @@ test("only an administrator's exact staged candidate reaches the fixed worker op
   expect((await manual.install(request(), () => null)).status).toBe(401);
   expect((await manual.install(request(), () => ({ authority: "host", controller: null, claimAvailable: false }))).status).toBe(403);
   expect(calls).toEqual([]);
-  for (const bad of [{ ...payload, path: "/tmp/package.deb" }, { ...payload, candidateId: "https://feed.example/release" }, { ...payload, confirmInterrupt: "yes" }]) expect((await manual.install(request(bad), admin)).status).toBe(400);
+  for (const bad of [{ ...payload, path: "/tmp/package.deb" }, { ...payload, whenIdle: true }, { ...payload, candidateId: "https://feed.example/release" }, { ...payload, confirmInterrupt: "yes" }]) expect((await manual.install(request(bad), admin)).status).toBe(400);
   expect(calls).toEqual([]);
   expect((await manual.install(request(), admin)).status).toBe(202);
   expect(calls.at(-1)).toEqual({ op: "install", ...payload });
@@ -62,4 +62,19 @@ test("request-specific status retains a completed receipt superseded by another 
   const manual = createManualUpdate({ request: async value => ({ ok: true, transaction: value.op === "status" && value.requestId === payload.requestId ? previous : latest }) }, () => true, () => true);
   expect(await manual.read(admin, payload.requestId)).toMatchObject({ transaction: latest, requestedTransaction: previous });
   expect(manual.busy()).toBe(false);
+});
+
+
+test("automatic requests recheck new input after worker lookup and retain the private idle constraint", async () => {
+  const gate = Promise.withResolvers<unknown>(), calls: unknown[] = [];
+  let idle = true;
+  const manual = createManualUpdate({ request: async value => { calls.push(value); return value.op === "status" ? gate.promise : { ok: true, transaction }; } }, () => true, () => true);
+  const guard = () => { if (!idle) throw new Error("New controller input"); };
+  const pending = manual.automatic(payload.candidateId, payload.requestId, guard);
+  idle = false; gate.resolve({ ok: true, transaction: null });
+  await expect(pending).rejects.toThrow("New controller input");
+  expect(calls).toEqual([{ op: "status", requestId: payload.requestId }]);
+  idle = true;
+  await manual.automatic(payload.candidateId, payload.requestId, guard);
+  expect(calls.at(-1)).toEqual({ op: "install", candidateId: payload.candidateId, requestId: payload.requestId, confirmInterrupt: false, whenIdle: true });
 });

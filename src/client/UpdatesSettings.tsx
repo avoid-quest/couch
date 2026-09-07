@@ -81,7 +81,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     <p className="text-muted-foreground">Release settings apply to this TV installation. Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">
       <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? "Update installed and running" : "Update committed. Waiting for the matching running build." : transaction?.phase === "restored" ? "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? "Update stopped before installation" : "Updating the TV"}</p>
-      <p>{transaction?.version || retry?.version}</p>
+      <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       <p>{transaction?.phase || "Waiting for the TV to confirm this request"}</p>
       {transaction?.error && <p>{transaction.error}</p>}
       {!connected && <p>The TV is restarting or offline. This page will reconnect; keep it open.</p>}
@@ -92,7 +92,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
         <dt>Running version</dt><dd className="break-all">{state.running.version}</dd>
         <dt>Running commit</dt><dd className="break-all font-mono text-xs">{state.running.revision || "Unknown for this build"}</dd>
-        <dt>Installation</dt><dd>Manual</dd>
+        <dt>Installation</dt><dd>{state.policy === "idle" ? "Auto when idle" : "Manual"}</dd>
         <dt>Last successful check</dt><dd>{state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "No successful check yet"}</dd>
       </dl>
       <div className="space-y-2">
@@ -101,7 +101,17 @@ export function UpdatesSettings({ credentials, connected }: Props) {
           <SelectTrigger id="release-channel" className="min-h-11 w-full"><SelectValue>{state.channel === "stable" ? "Stable" : "Preview"}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
         </Select>
-        <p className="text-muted-foreground">Changing channels checks for a newer release. It does not install or downgrade Couch.</p>
+        <p className="text-muted-foreground">Changing channels checks for a newer release. Installation follows the policy below; switching to Stable cannot downgrade Couch.</p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="update-policy">Install updates</Label>
+        <Select value={state.policy} disabled={busy || state.status === "unavailable"} onValueChange={policy => void update("policy", { policy })}>
+          <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
+        </Select>
+        <p className="text-muted-foreground">Auto downloads verified updates on the selected channel, then waits for five continuous minutes of stopped playback, no controller input and no active scans or imports. Pausing and radio reconnects keep waiting.</p>
+        {!state.installation?.enabled && <p className="text-muted-foreground">Automatic installation requires the qualified update worker to be activated through SSH.</p>}
+        {state.policy === "idle" && <p role="status">{state.waiting || "Waiting for five continuous idle minutes."}</p>}
       </div>
       <p role="status">{state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status]}</p>
       {candidate && <div className="space-y-2 rounded-lg border p-3">
@@ -126,7 +136,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
-      </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming(true)}>Install update</Button>}
+      </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming(true)}>{state.policy === "idle" ? "Install now" : "Install update"}</Button>}
     </div>}
     <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
     {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}

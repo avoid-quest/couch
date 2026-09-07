@@ -151,7 +151,9 @@ test("scans coalesce per folder and queue across folders", async () => {
   expect(library.scan(one.id)).toBe(firstScan);
   const secondScan = library.scan(two.id);
   expect(library.listSources().every(source => source.status === "scanning")).toBe(true);
+  expect(library.scanning()).toBe(true);
   const [firstResult, secondResult] = await Promise.all([firstScan, secondScan]);
+  expect(library.scanning()).toBe(false);
   expect(firstResult.status).toBe("ready");
   expect(secondResult.status).toBe("ready");
   expect(library.search().total).toBe(2);

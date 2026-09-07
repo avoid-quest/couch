@@ -24,6 +24,10 @@ class Rejected(Exception):
     """A safe error that may be shown to an administrator remote."""
 
 
+class IdleDeferred(Rejected):
+    """Authenticated refusal that confirms application admission stayed open."""
+
+
 def run(*args, pass_fds=()):
     try:
         return subprocess.check_output(args, env=ENV, stderr=subprocess.DEVNULL, timeout=30, pass_fds=pass_fds)

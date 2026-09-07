@@ -80,3 +80,79 @@ test("trial startup does not run background update producers until admission ope
     expect(checks).toBeGreaterThan(0);
   } finally { await updates.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+async function automaticSetup() {
+  let waiting: string | null = "Waiting for stopped playback";
+  const records = new Map<string, import("../shared/updates").UpdateTransaction>();
+  const installations: { candidateId: string; requestId: string }[] = [];
+  let stages = 0, offline = false, lostReply = false;
+  const directory = await mkdtemp(join(tmpdir(), "couch-auto-updates-"));
+  cleanup.push(() => rm(directory, { recursive: true, force: true }));
+  const feed: UpdateFeed = { check: async () => { if (offline) throw new UpdateError("Feed offline"); return candidate; }, stage: async () => { stages++; } };
+  const automation = {
+    busy: () => false, idle: () => waiting,
+    status: async (id?: string) => id ? records.get(id) ?? null : [...records.values()].at(-1) ?? null,
+    install: async (candidateId: string, requestId: string, guard: () => void) => {
+      guard(); installations.push({ candidateId, requestId });
+      const result: import("../shared/updates").UpdateTransaction = { candidateId, requestId, updateId: "c".repeat(32), version: candidate.summary.version, revision: candidate.summary.revision, createdAt: 1, updatedAt: 1, phase: "accepted", error: null };
+      records.set(requestId, result);
+      if (lostReply) throw new Error("Reply disconnected");
+      return result;
+    },
+  };
+  const open = () => { const updates = createUpdates(directory, { version: "1", revision: null }, feed, undefined, undefined, automation); cleanup.push(() => updates.close()); return updates; };
+  const updates = open();
+  return { updates, directory, open, records, installations, stages: () => stages, idle: (value: string | null) => waiting = value, offline: () => offline = true, loseReply: () => lostReply = true };
+}
+
+test("auto policy persists independently of either channel and stages without interrupting busy playback", async () => {
+  const f = await automaticSetup();
+  await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
+  await f.updates.automatic(); expect(f.stages()).toBe(0);
+  expect((await f.updates.handle(request("/policy", { policy: "idle" }), admin)).status).toBe(202);
+  await f.updates.automatic(); await settled(f.updates);
+  expect(f.stages()).toBe(1); expect(f.installations).toEqual([]);
+  await f.updates.automatic(); expect(f.updates.state.waiting).toContain("stopped playback");
+  await f.updates.handle(request("/channel", { channel: "preview" }), admin); await settled(f.updates);
+  expect(f.updates.state.policy).toBe("idle");
+  await f.updates.close();
+  expect(f.open().state).toMatchObject({ policy: "idle", channel: "preview", currentCheck: false });
+});
+
+test("automatic attempts retain identity after lost reply and never repeat a restored failed candidate", async () => {
+  const f = await automaticSetup();
+  await f.updates.handle(request("/policy", { policy: "idle" }), admin);
+  await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
+  await f.updates.automatic(); await settled(f.updates);
+  f.idle(null); f.loseReply(); await f.updates.automatic();
+  expect(f.installations).toHaveLength(1);
+  const attempted = f.installations[0]!;
+  expect(JSON.parse(await readFile(join(f.directory, "settings.json"), "utf8")).attempt).toEqual(attempted);
+  await f.updates.automatic(); expect(f.installations).toHaveLength(1);
+  f.records.set(attempted.requestId, { ...f.records.get(attempted.requestId)!, phase: "restored", restoredVersion: "1", restoredRevision: "previous" });
+  await f.updates.automatic(); expect(f.installations).toHaveLength(1);
+  expect(f.updates.state.waiting).toContain("already had an automatic attempt");
+  await f.updates.close();
+  const restarted = f.open();
+  await restarted.handle(request("/check", { check: true }), admin); await settled(restarted);
+  await restarted.automatic(); expect(f.installations).toHaveLength(1);
+  expect((await f.records.get(attempted.requestId))?.restoredVersion).toBe("1");
+});
+
+test("an idle refusal can retry after a fresh idle interval, while offline checks never install", async () => {
+  const f = await automaticSetup();
+  await f.updates.handle(request("/policy", { policy: "idle" }), admin);
+  await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
+  await f.updates.automatic(); await settled(f.updates);
+  f.idle(null); await f.updates.automatic();
+  const attempted = f.installations[0]!;
+  f.records.set(attempted.requestId, { ...f.records.get(attempted.requestId)!, phase: "failed", idleDeferred: true });
+  f.idle("New remote activity. Waiting five minutes.");
+  await f.updates.automatic(); expect(f.installations).toHaveLength(1);
+  f.idle(null); await f.updates.automatic();
+  expect(f.installations).toHaveLength(2); expect(f.installations[1]!.requestId).not.toBe(attempted.requestId);
+  f.records.clear(); f.offline();
+  await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
+  await f.updates.automatic();
+  expect(f.updates.state.currentCheck).toBe(false); expect(f.installations).toHaveLength(2);
+});

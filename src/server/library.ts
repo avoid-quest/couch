@@ -331,6 +331,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
 
   return {
     metadata: corrections,
+    scanning: () => scans.size > 0,
     listSources(): LibrarySource[] { return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all(); },
     managedSources(): ManagedFolder[] {
       return db.query<SourceRow, []>(`${sourceQuery} ORDER BY s.name COLLATE NOCASE, s.id`).all().map(source => ({ ...source,

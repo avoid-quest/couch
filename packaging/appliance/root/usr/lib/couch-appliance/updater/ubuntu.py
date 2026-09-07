@@ -10,7 +10,7 @@ import subprocess
 import time
 
 import maintenance
-from receipt import ENV, Rejected, run, trusted_file
+from receipt import ENV, IdleDeferred, Rejected, run, trusted_file
 from retention import installed, sync_directory
 
 class Ubuntu:
@@ -39,7 +39,7 @@ class Ubuntu:
         return self.data() / "updates/staged"
 
     def coordinator(self, operation, record, timeout=5):
-        return maintenance.request({"op": operation, "protocol": "maintenance-v1", "updateId": record["updateId"], "nonce": record["nonce"], "candidate": {key: record[key] for key in ("candidateId", "version", "revision", "dataFormat")}, "confirmInterrupt": record["confirmInterrupt"]}, str(self.runtime / "couch-maintenance.sock"), timeout, self.uid)
+        return maintenance.request({"op": operation, "protocol": "maintenance-v1", "updateId": record["updateId"], "nonce": record["nonce"], "candidate": {key: record[key] for key in ("candidateId", "version", "revision", "dataFormat")}, "confirmInterrupt": record["confirmInterrupt"], **({"whenIdle": True} if record.get("whenIdle") and operation in ("capabilities", "quiesce") else {})}, str(self.runtime / "couch-maintenance.sock"), timeout, self.uid)
 
     def systemctl(self, *arguments):
         return run("/usr/sbin/runuser", "-u", "couch-tv", "--", "/usr/bin/env", f"XDG_RUNTIME_DIR={self.runtime}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={self.runtime}/bus", "/usr/bin/systemctl", "--user", *arguments).decode().strip()
@@ -56,6 +56,8 @@ class Ubuntu:
             raise Rejected("This worker requires Ubuntu 24.04 amd64.")
         current = self.verify_current(record)
         result = self.coordinator("capabilities", record)
+        if record.get("whenIdle") and result.get("idleDeferred") is True and result.get("admissionClosed") is False:
+            raise IdleDeferred("Couch became active. Wait for five continuous idle minutes.")
         if result.get("nativeReadiness") != "libmpv-v1" or result.get("build") != {key: current[key] for key in ("version", "revision", "dataFormat")}:
             raise Rejected("This app cannot provide the required native startup trial.")
         try:
@@ -131,6 +133,8 @@ class Ubuntu:
 
     def quiesce(self, record):
         response = self.coordinator("quiesce", record, 30)
+        if record.get("whenIdle") and response.get("idleDeferred") is True and response.get("admissionClosed") is False:
+            raise IdleDeferred("Couch became active. Wait for five continuous idle minutes.")
         if response.get("progressSaved") is not True or response.get("admissionClosed") is not True:
             raise Rejected("Couch did not confirm saved progress and maintenance admission.")
         self.systemctl("stop", "couch-tv.service")

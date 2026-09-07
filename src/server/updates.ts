@@ -1,18 +1,28 @@
 import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, rename } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { UpdateState } from "../shared/updates";
+import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
 import { UpdateError, type UpdateFeed, type VerifiedRelease } from "./update-feed";
 
+type Automation = {
+  busy: () => boolean;
+  idle: () => string | null;
+  status: (requestId?: string) => Promise<UpdateTransaction | null>;
+  install: (candidateId: string, requestId: string, guard: () => void) => Promise<UpdateTransaction>;
+};
+type Attempt = { candidateId: string; requestId: string };
+const finished = new Set(["succeeded", "failed", "restored"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000, admitted = () => true) {
+export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
   const state: UpdateState = { running, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
+  let attempt: Attempt | null = null;
   try {
     const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
-    if (!["stable", "preview"].includes(saved.channel) || saved.policy !== "manual") throw new Error();
-    state.channel = saved.channel;
+    if (!["stable", "preview"].includes(saved.channel) || !["manual", "idle"].includes(saved.policy)) throw new Error();
+    state.channel = saved.channel; state.policy = saved.policy;
+    if (saved.attempt && /^[a-f0-9]{64}$/.test(saved.attempt.candidateId) && /^[a-f0-9]{32}$/.test(saved.attempt.requestId)) attempt = saved.attempt;
     state.lastSuccessfulCheck = typeof saved.lastSuccessfulCheck === "number" ? saved.lastSuccessfulCheck : null;
     const c = saved.candidate;
     if (c && /^[a-f0-9]{64}$/.test(c.id) && typeof c.notes === "string" && typeof c.version === "string" && typeof c.revision === "string" && typeof c.releaseId === "string" && [c.bytes, c.publishedAt, c.expiresAt].every(Number.isSafeInteger)) state.candidate = c;
@@ -26,10 +36,14 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   const shutdown = new AbortController();
   const persist = async () => {
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await writeFile(join(directory, "settings.json.tmp"), JSON.stringify({ channel: state.channel, policy: state.policy, candidate: state.candidate, lastSuccessfulCheck: state.lastSuccessfulCheck }), { mode: 0o600 });
+    const file = await open(join(directory, "settings.json.tmp"), "w", 0o600);
+    try { await file.writeFile(JSON.stringify({ channel: state.channel, policy: state.policy, candidate: state.candidate, attempt, lastSuccessfulCheck: state.lastSuccessfulCheck })); await file.sync(); }
+    finally { await file.close(); }
     await rename(join(directory, "settings.json.tmp"), join(directory, "settings.json"));
+    const folder = await open(directory, "r");
+    try { await folder.sync(); } finally { await folder.close(); }
   };
-  const busy = () => !!job || changing || closed || !admitted();
+  const busy = () => !!job || changing || closed || !admitted() || !!automation?.busy();
   const start = (kind: "checking" | "downloading") => {
     if (!feed || busy()) return;
     const wasReady = state.status === "ready", previousId = candidate?.summary.id;
@@ -55,10 +69,49 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       }
     }).finally(() => { job = undefined; });
   };
+  let polling: Promise<void> | undefined;
+  const automatic = () => polling ??= (async () => {
+    if (!automation || closed || !admitted()) return;
+    try {
+      await automation.status();
+      if (state.policy !== "idle") { state.waiting = null; return; }
+      if (busy()) { state.waiting = "Waiting for the current update operation."; return; }
+      const id = candidate?.summary.id;
+      if (attempt && attempt.candidateId === id) {
+        const previous = await automation.status(attempt.requestId);
+        if (previous && (!finished.has(previous.phase) || !previous.idleDeferred)) {
+          state.waiting = finished.has(previous.phase) ? "This release already had an automatic attempt. Review its result or use Install now." : "Waiting for the accepted update transaction.";
+          return;
+        }
+        if (previous?.idleDeferred) attempt = null;
+      }
+      if (state.policy !== "idle" || busy()) return;
+      if (state.status === "available" && state.currentCheck && candidate && candidate.summary.expiresAt > Date.now()) start("downloading");
+      if (state.status !== "ready" || !state.currentCheck || !id || candidate!.summary.expiresAt <= Date.now()) { state.waiting = "Waiting for a current verified download."; return; }
+      state.waiting = automation.idle();
+      if (state.waiting) return;
+      if (!attempt || attempt.candidateId !== id) {
+        const previous = attempt;
+        changing = true; attempt = { candidateId: id, requestId: crypto.randomUUID().replaceAll("-", "") };
+        try { saving = persist(); await saving; }
+        catch (error) { attempt = previous; throw error; }
+        finally { changing = false; saving = undefined; }
+      }
+      const guard = () => {
+        if (closed || !admitted() || state.policy !== "idle" || automation.idle()) throw new ControllerError("Waiting for Couch to become idle again.", 409);
+      };
+      guard();
+      await automation.install(id, attempt!.requestId, guard);
+      state.waiting = "The external updater accepted the idle installation.";
+    } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and the TV connection."; }
+  })().finally(() => { polling = undefined; });
+  const automaticTimer = automation ? setInterval(() => void automatic(), Math.min(interval, 5_000)) : undefined;
+  automaticTimer?.unref();
   const startup = feed ? setTimeout(() => start("checking"), 1_000) : undefined;
   const timer = feed ? setInterval(() => start("checking"), interval) : undefined;
   return {
     get state() { return structuredClone(state); },
+    automatic,
     candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && candidate.summary.expiresAt > Date.now(),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
@@ -71,14 +124,22 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         authorize();
         const path = new URL(request.url).pathname;
         if (path === "/api/updates" && request.method === "GET") return json(state);
-        if (!["/api/updates/channel", "/api/updates/check", "/api/updates/stage"].includes(path)) return json({ error: "Not found." }, 404);
+        if (!["/api/updates/channel", "/api/updates/policy", "/api/updates/check", "/api/updates/stage"].includes(path)) return json({ error: "Not found." }, 404);
         if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
         if (!feed) throw new ControllerError("Updates require the packaged Ubuntu TV installation.", 409);
-        const field = path.endsWith("/channel") ? "channel" : path.endsWith("/check") ? "check" : "candidateId";
+        const field = path.endsWith("/channel") ? "channel" : path.endsWith("/policy") ? "policy" : path.endsWith("/check") ? "check" : "candidateId";
         const value = await settingField(request, field);
         authorize();
         if (busy()) throw new ControllerError("An update operation is already running. Wait for it to finish.", 409);
-        if (field === "channel") {
+        if (field === "policy") {
+          if (value !== "manual" && value !== "idle") throw new ControllerError("Choose Manual or Auto when idle.");
+          if (value === "idle" && !automation) throw new ControllerError("Activate the qualified update worker through SSH before enabling automatic installation.", 409);
+          const previous = state.policy;
+          changing = true; state.policy = value;
+          try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and five idle minutes." : null; }
+          catch (error) { state.policy = previous; throw error; }
+          finally { changing = false; saving = undefined; }
+        } else if (field === "channel") {
           if (value !== "stable" && value !== "preview") throw new ControllerError("Choose Stable or Preview.");
           const previous = { ...state };
           changing = true;
@@ -101,6 +162,6 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         return json({ error: error instanceof ControllerError ? error.message : "Could not save update settings. Check the TV's storage and retry." }, error instanceof ControllerError ? error.status : 500);
       }
     },
-    async close() { closed = true; clearTimeout(startup); clearInterval(timer); shutdown.abort(); await Promise.allSettled([job, saving]); },
+    async close() { closed = true; clearTimeout(startup); clearInterval(timer); clearInterval(automaticTimer); shutdown.abort(); await Promise.allSettled([job, saving, polling]); },
   };
 }

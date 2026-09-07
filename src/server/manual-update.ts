@@ -20,8 +20,25 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     if (!requestId) busy = !!result.transaction && !finished.has(result.transaction.phase);
     return result.transaction;
   };
+  const submit = async (body: { candidateId: string; requestId: string; confirmInterrupt: boolean }, guard: () => void, whenIdle = false, onUnaccepted = () => {}) => {
+    guard();
+    const previous = await status(body.requestId);
+    guard();
+    if (!previous && (!admitted() || busy || !candidateReady(body.candidateId))) {
+      if (admitted() && !busy) onUnaccepted();
+      throw new ControllerError("Use a current verified download after the active operation finishes.", 409);
+    }
+    busy = true;
+    const result = await worker.request({ op: "install", ...body, ...(whenIdle ? { whenIdle: true } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction; error?: string };
+    guard();
+    if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The worker could not accept this update. Refresh its status.", 409);
+    busy = !finished.has(result.transaction.phase);
+    return result.transaction;
+  };
   return {
     busy: () => busy,
+    status,
+    automatic: (candidateId: string, requestId: string, guard: () => void) => submit({ candidateId, requestId, confirmInterrupt: false }, guard, true),
     async read(identity: () => ControllerIdentity | null, requestId?: string) {
       authorize(identity);
       if (requestId !== undefined && !/^[a-f0-9]{32}$/.test(requestId)) throw new ControllerError("Use the saved update request identity.");
@@ -37,20 +54,8 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
         const body = await settingField(request, "install") as { candidateId: string; requestId: string; confirmInterrupt: boolean };
         if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== "candidateId,confirmInterrupt,requestId" || typeof body.candidateId !== "string" || !/^[a-f0-9]{64}$/.test(body.candidateId) || typeof body.requestId !== "string" || !/^[a-f0-9]{32}$/.test(body.requestId) || typeof body.confirmInterrupt !== "boolean") throw new ControllerError("Choose the verified candidate and confirm whether playback may stop.");
         authorize(identity);
-        const previous = await status(body.requestId);
-        authorize(identity);
-        if (!previous && (!admitted() || busy || !candidateReady(body.candidateId))) {
-          unaccepted = admitted() && !busy;
-          throw new ControllerError("Use a current verified download after the active operation finishes.", 409);
-        }
-        // Retries still reach the worker, which checks every field against its
-        // durable receipt. No browser path, command or release URL is accepted.
-        busy = true;
-        const result = await worker.request({ op: "install", ...body }) as { ok?: boolean; transaction?: UpdateTransaction; error?: string };
-        authorize(identity);
-        if (result?.ok !== true || !result.transaction) throw new ControllerError(result?.error || "The worker could not accept this update. Refresh its status.", 409);
-        busy = !finished.has(result.transaction.phase);
-        return json({ transaction: result.transaction }, 202);
+        const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });
+        return json({ transaction }, 202);
       } catch (error) {
         return json({ error: error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying.", ...(unaccepted ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : 400);
       }
