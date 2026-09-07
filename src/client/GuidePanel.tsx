@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ListVideo, Play, Plus, Radio, Tv } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleDot, ListVideo, Play, Plus, Radio, Tv } from "lucide-react";
 import type { GuideChannel, GuidePage, GuideProgram } from "../shared/iptv";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GuideSources, type GuideRequest } from "./GuideSources";
 import "./guide.css";
+import { RecordingsPanel, useRecordings } from "./RecordingsPanel";
 
-type Props = { origin: string; token: string; connected: boolean; canPlay: boolean; host: boolean; version: number; controllerVersion: number; currentSource?: string; onGoLive: () => void; active: boolean };
+type Props = { origin: string; token: string; connected: boolean; canPlay: boolean; host: boolean; version: number; recordingsVersion?: number; controllerVersion: number; currentSource?: string; onGoLive: () => void; active: boolean };
 const time = (value: number) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
 const range = (program: GuideProgram) => `${time(program.start)} – ${time(program.end)}`;
 
@@ -30,7 +31,9 @@ function GuideLogo({ channel, request, version }: { channel: GuideChannel; reque
   return <span className="guide-logo" aria-hidden="true">{url ? <img src={url} alt="" onError={() => setUrl(null)} /> : <Tv />}</span>;
 }
 
-export function GuidePanel({ origin, token, connected, canPlay, host, version, controllerVersion, currentSource, onGoLive, active }: Props) {
+export function GuidePanel({ origin, token, connected, canPlay, host, version, recordingsVersion = 0, controllerVersion, currentSource, onGoLive, active }: Props) {
+  const recordings = useRecordings({ origin, token, connected, active, version: recordingsVersion });
+  const [recordingPending, setRecordingPending] = useState<string | null>(null);
   const [page, setPage] = useState<GuidePage | null>(null);
   const [query, setQuery] = useState(""); const [group, setGroup] = useState(""); const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<GuideChannel | null>(null);
@@ -86,8 +89,17 @@ export function GuidePanel({ origin, token, connected, canPlay, host, version, c
       if (playAttempt.current === attempt) setNotice(playNow ? `Starting ${channel.name} on the TV.` : `${channel.name} is in the shared queue.`);
     } catch (reason) { if (playAttempt.current === attempt) setError(reason instanceof Error ? reason.message : "Could not play this channel."); }
   }
+  async function record(program: GuideProgram) {
+    setRecordingPending(program.id); setError(null); setNotice("");
+    try {
+      const response = await recordings.request("schedule", { method: "POST", body: JSON.stringify({ revision: recordings.page?.revision, programId: program.id, start: program.start, end: program.end, title: program.title }) });
+      const value = await response.json();
+      setNotice(value.existing ? `${value.job.title} already has a recording job. Open Recordings to see its state.` : `${value.job.title} was submitted. Open Recordings to follow its backend state.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not schedule this programme."); }
+    finally { setRecordingPending(null); recordings.reload(); }
+  }
   return <section className="guide-panel catalog-panel" aria-labelledby="guide-title">
-    <div className="guide-heading"><div><h2 id="guide-title">TV guide</h2><p className="text-sm text-muted-foreground">Choose a channel to watch on the TV.</p></div><GuideSources {...{ request, origin, token, host, connected, controllerVersion }} sources={page?.sources ?? []} /></div>
+    <div className="guide-heading"><div><h2 id="guide-title">TV guide</h2><p className="text-sm text-muted-foreground">Choose a channel to watch on the TV.</p></div><div className="flex flex-wrap gap-2"><RecordingsPanel remote={recordings} channels={page?.channels ?? []} {...{ connected, canPlay, host, origin, token, controllerVersion }} /><GuideSources {...{ request, origin, token, host, connected, controllerVersion }} sources={page?.sources ?? []} /></div></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
     {page?.sources.some(source => source.error) && <p className="text-sm text-muted-foreground">A source refresh failed. Showing its saved guide.</p>}
@@ -102,11 +114,12 @@ export function GuidePanel({ origin, token, connected, canPlay, host, version, c
       {!loading && page?.total === 0 && <p className="guide-empty">No channels match this search.</p>}
       {!!page && page.total > 50 && <nav className="flex items-center justify-between gap-3" aria-label="Guide pages"><Button variant="outline" disabled={offset === 0} onClick={() => setOffset(value => Math.max(0, value - 50))}><ChevronLeft />Previous</Button><span className="text-sm">{offset + 1}–{Math.min(offset + 50, page.total)}</span><Button variant="outline" disabled={offset + 50 >= page.total} onClick={() => setOffset(value => value + 50)}>Next<ChevronRight /></Button></nav>}
     </>}
-    <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }}><DialogContent className="guide-program-dialog max-h-[85dvh] overflow-y-auto sm:max-w-2xl" onCloseAutoFocus={event => { event.preventDefault(); returnFocus.current?.focus(); }}><DialogHeader><DialogTitle>{selected?.name} programs</DialogTitle><DialogDescription>Times in {Intl.DateTimeFormat().resolvedOptions().timeZone}. Programs are listings; Play starts the live channel.</DialogDescription></DialogHeader>
+    <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }}><DialogContent className="guide-program-dialog max-h-[85dvh] overflow-y-auto sm:max-w-2xl" onCloseAutoFocus={event => { event.preventDefault(); returnFocus.current?.focus(); }}><DialogHeader><DialogTitle>{selected?.name} programs</DialogTitle><DialogDescription>Times in {Intl.DateTimeFormat().resolvedOptions().timeZone}. Play starts the live channel. Record schedules a future programme on the configured recording backend.</DialogDescription></DialogHeader>
       <div className="guide-day"><Button variant="outline" size="icon" aria-label="Previous day" disabled={day <= -1} onClick={() => setDay(value => value - 1)}><ChevronLeft /></Button><h3>{date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</h3><Button variant="outline" size="icon" aria-label="Next day" disabled={day >= 6} onClick={() => setDay(value => value + 1)}><ChevronRight /></Button></div>
       <Button disabled={!connected || !canPlay || !selected} onClick={() => selected && void enqueue(selected, true)}><Play />Play {selected?.name} live</Button>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      <ol className="guide-program-list">{programs.map(program => <li key={program.id} data-program-id={program.id}><time>{range(program)}</time><h3>{program.title}{program.start <= Date.now() && program.end > Date.now() && <Badge variant="secondary">Now</Badge>}</h3>{program.description && <p>{program.description}</p>}</li>)}</ol>
+      <ol className="guide-program-list">{programs.map(program => <li key={program.id} data-program-id={program.id}><time>{range(program)}</time><h3>{program.title}{program.start <= Date.now() && program.end > Date.now() && <Badge variant="secondary">Now</Badge>}</h3>{program.description && <p>{program.description}</p>}{program.start > Date.now() && <Button variant="outline" disabled={!connected || !!recordingPending || !recordings.page?.configured} onClick={() => void record(program)}><CircleDot aria-hidden="true" />{recordingPending === program.id ? "Submitting…" : "Record programme"}</Button>}</li>)}</ol>
+      {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
       {!programs.length && <p className="text-sm text-muted-foreground">{programLoading ? "Loading programs…" : "No cached programs for this day."}</p>}{truncated && <p className="text-sm text-muted-foreground">Showing the first 500 programs for this day.</p>}
     </DialogContent></Dialog>
   </section>;
