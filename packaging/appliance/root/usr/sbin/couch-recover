@@ -6,6 +6,7 @@ fail() { echo "couch-recover: $*" >&2; exit 1; }
 backup=$(realpath "$1")
 [[ -f $backup/Couch.AppImage && -f $backup/build.json && -f $backup/SHA256SUMS ]] || fail 'Expected a retained AppImage, build.json and SHA256SUMS.'
 application=/var/lib/couch/application
+[[ ! -L $application ]] || fail 'The application directory is a symbolic link; inspect it through SSH.'
 exec 9>/run/couch-install.lock
 flock -n 9 || fail 'Another installation or recovery is running.'
 # The checksum is pinned when the known-good bundle is backed up, not downloaded
@@ -23,12 +24,12 @@ install -d -m 0700 "$failed"
 cp -a "$data" "$failed/data"
 cp -a "$application/Couch.AppImage" "$application/build.json" "$failed/"
 sync -f "$failed"
-install -o couch-tv -g couch-tv -m 0700 "$backup/Couch.AppImage" "$application/Couch.AppImage.new"
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/Couch.AppImage.new; chmod 0700 /var/lib/couch/application/Couch.AppImage.new' < "$backup/Couch.AppImage"
 runuser -u couch-tv -- "$application/Couch.AppImage.new" --version > "$failed/recovery-build.json"
 jq -e --slurpfile expected "$backup/build.json" '.version == $expected[0].version and .revision == $expected[0].revision and .dataFormat == $expected[0].dataFormat' "$failed/recovery-build.json" >/dev/null || fail 'The retained AppImage does not match its recorded build.'
 jq --arg hash "$(sha256sum "$application/Couch.AppImage.new" | cut -d ' ' -f1)" '. + {archiveSha256:$hash}' "$failed/recovery-build.json" > "$failed/recovery-with-hash.json"
-install -o couch-tv -g couch-tv -m 0600 "$failed/recovery-with-hash.json" "$application/build.json"
-mv -f "$application/Couch.AppImage.new" "$application/Couch.AppImage"
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/build.json' < "$failed/recovery-with-hash.json"
+runuser -u couch-tv -- mv -f "$application/Couch.AppImage.new" "$application/Couch.AppImage"
 sync -f "$application"
 couch-session restart
 echo "Known-good application restored; current user data retained. Failed data saved in $failed."

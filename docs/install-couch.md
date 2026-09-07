@@ -67,7 +67,7 @@ Enroll the Tauri public key through the authenticated administrator channel:
 ```sh
 sudo bash install-couch /absolute/Couch.AppImage /absolute/couch-appliance.deb \
   --release-key /absolute/couch.pub --release-key-sha256 TRUSTED_SHA256 \
-  --release-feed 'https://releases.example/couch/{channel}/latest.json'
+  --release-feed 'https://releases.example/tauri/'
 ```
 
 The hash must come from the trusted publisher, not the feed being enrolled.

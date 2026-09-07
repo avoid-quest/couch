@@ -47,15 +47,15 @@ printf '#!/bin/sh\nexit 0\n' > "$fixture/commands/udevadm"
 chmod 755 "$fixture/commands/"*
 export FIXTURE="$fixture" PATH="$fixture/commands:$PATH"
 keyhash=$(sha256sum "$fixture/couch.pub" | cut -d ' ' -f1)
-if bash install-couch "$fixture/Couch.AppImage" "$package" --release-key "$fixture/couch.pub" --release-key-sha256 "$(printf '0%.0s' {1..64})" --release-feed 'https://example.test/{channel}/latest.json' 2> "$fixture/error"; then exit 1; fi
+if bash install-couch "$fixture/Couch.AppImage" "$package" --release-key "$fixture/couch.pub" --release-key-sha256 "$(printf '0%.0s' {1..64})" --release-feed 'https://example.test/tauri/' 2> "$fixture/error"; then exit 1; fi
 grep -q 'SHA256 mismatch' "$fixture/error"
 if FAIL_APT=1 bash install-couch "$fixture/Couch.AppImage" "$package"; then exit 1; else [[ $? = 73 ]]; fi
 cmp "$fixture/policy" /usr/sbin/policy-rc.d
 cmp "$fixture/config" /etc/couch/appliance.env
-bash install-couch "$fixture/Couch.AppImage" "$package" --release-key "$fixture/couch.pub" --release-key-sha256 "$keyhash" --release-feed 'https://example.test/{channel}/latest.json'
+bash install-couch "$fixture/Couch.AppImage" "$package" --release-key "$fixture/couch.pub" --release-key-sha256 "$keyhash" --release-feed 'https://example.test/tauri/'
 cmp "$fixture/config" /etc/couch/appliance.env
 cmp "$fixture/policy" /usr/sbin/policy-rc.d
-jq -e '.endpoint == "https://example.test/{channel}/latest.json" and .pubkey == "trusted-public-key"' /etc/couch/appimage-update.json >/dev/null
+jq -e '.endpoint == "https://example.test/tauri/" and .pubkey == "trusted-public-key"' /etc/couch/appimage-update.json >/dev/null
 [[ $(stat -c '%U:%a' /etc/couch/appimage-update.json) = root:644 ]]
 [[ $(stat -c '%U:%a' /var/lib/couch/application/Couch.AppImage) = couch-tv:700 ]]
 backup=/var/lib/couch/application/backups/fixture
@@ -84,4 +84,12 @@ printf 'corrupt\n' >> "$backup/Couch.AppImage"
 if couch-recover "$backup" 2> "$fixture/error"; then exit 1; fi
 grep -q 'checksum mismatch' "$fixture/error"
 cmp "$fixture/newer-data" /var/lib/couch-test-data/keep.txt
+mv /var/lib/couch/application /var/lib/couch/application-kept
+ln -s /etc /var/lib/couch/application
+permissions=$(stat -c '%U:%a' /etc)
+if bash install-couch "$fixture/Couch.AppImage" "$package" 2> "$fixture/error"; then exit 1; fi
+grep -q 'symbolic link' "$fixture/error"
+[[ $(stat -c '%U:%a' /etc) = "$permissions" ]]
+rm /var/lib/couch/application
+mv /var/lib/couch/application-kept /var/lib/couch/application
 echo 'PASS: AppImage migration, Tauri trust/hash, companion closure, policy/profile/data preservation, compatible recovery, retained newer writes, corrupt/incompatible rejection'

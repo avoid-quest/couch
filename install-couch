@@ -26,11 +26,12 @@ if [[ -n $release_key$release_key_sha256$release_feed ]]; then
         command -v jq >/dev/null || fail 'Install jq before changing existing updater trust.'
         jq -e --rawfile pubkey "$release_key" '.pubkey == ($pubkey|rtrimstr("\n"))' /etc/couch/appimage-update.json >/dev/null || fail 'Existing updater signing key differs. Rotate it deliberately through SSH.'
     fi
-    [[ $release_feed =~ ^https?://[A-Za-z0-9.:_-]+(/[A-Za-z0-9._~/{}/-]*)?$ ]] || fail 'Supply the LAN/HTTPS feed endpoint (use {channel} for the selected channel).'
+    [[ $release_feed =~ ^https?://[A-Za-z0-9.:_-]+(/[A-Za-z0-9._~/-]*)?$ && $release_feed = */ ]] || fail 'Supply the LAN/HTTPS feed base URL ending in /.'
 fi
 . /etc/os-release
 [[ $ID = ubuntu && $VERSION_ID = 24.04 && $(dpkg --print-architecture) = amd64 ]] || fail 'Ubuntu 24.04 amd64 is required.'
 [[ -d /run/systemd/system ]] || fail 'Boot Ubuntu with systemd before running the installer.'
+[[ ! -L /var/lib/couch/application ]] || fail 'The application directory is a symbolic link; inspect it through SSH.'
 exec 9>/run/couch-install.lock
 flock -n 9 || fail 'Another Couch installation is running.'
 state=/var/lib/couch-installer
@@ -127,8 +128,10 @@ sync -f "$migration"
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends -o Dpkg::Options::=--force-confold "$session"
 
-install -d -o couch-tv -g couch-tv -m 0700 /var/lib/couch/application
-install -o couch-tv -g couch-tv -m 0700 "$app" /var/lib/couch/application/Couch.AppImage.new
+runuser -u couch-tv -- install -d -m 0700 /var/lib/couch/application
+# The runtime account owns this tree: perform every write as that account so a
+# substituted link can never make root overwrite or change ownership elsewhere.
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/Couch.AppImage.new; chmod 0700 /var/lib/couch/application/Couch.AppImage.new' < "$app"
 # Probe as the runtime account: AppImage extraction caches must not be root-owned.
 runuser -u couch-tv -- /var/lib/couch/application/Couch.AppImage.new --version > "$state/build.json"
 jq -e '.version | type == "string"' "$state/build.json" >/dev/null
@@ -142,8 +145,8 @@ if dpkg-query -W -f='${db:Status-Status}' couch 2>/dev/null | grep -qx installed
 fi
 rm -f /etc/apt/sources.list.d/couch.sources
 rm -f /etc/systemd/system/couch-updater.service.d/90-transaction.conf
-install -o couch-tv -g couch-tv -m 0600 "$state/build.json" /var/lib/couch/application/build.json
-mv -f /var/lib/couch/application/Couch.AppImage.new /var/lib/couch/application/Couch.AppImage
+runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/build.json' < "$state/build.json"
+runuser -u couch-tv -- mv -f /var/lib/couch/application/Couch.AppImage.new /var/lib/couch/application/Couch.AppImage
 sync -f /var/lib/couch/application
 if [[ -n $release_key ]]; then
     jq -n --arg endpoint "$release_feed" --rawfile pubkey "$release_key" '{endpoint:$endpoint,pubkey:($pubkey|rtrimstr("\n"))}' > "$state/appimage-update.json"
