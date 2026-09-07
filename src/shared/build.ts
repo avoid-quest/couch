@@ -7,3 +7,5 @@ export const loadedBuild = { version: buildInfo.version, revision: buildInfo.rev
 export function buildKey(build: { version: string; revision: string | null; dataFormat: number }) {
   return build.revision ? `${build.version}:${build.revision}:${build.dataFormat}` : null;
 }
+
+export type MaintenanceBuild = { version: string; revision: string; dataFormat: number };

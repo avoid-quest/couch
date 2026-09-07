@@ -509,21 +509,15 @@ Settings > Updates is visible on the TV and remote. Use an administrator remote
 for Check for updates, Download update, and Install update. Other controllers
 and the TV explain where to administer updates without granting update access.
 The page shows the running version/commit and available signed release. Download
-verifies the packages before Install update becomes available. Manual installation
+verifies the AppImage before Install update becomes available. Manual installation
 works with either Manual or Auto when idle selected.
 
 Install update asks before restarting and offers explicit playback interruption.
 Keep the remote open to reconnect and check the durable result. Success requires
 the requested version and commit to match the running app; an old build reconnecting
-is not success. A failed trial can show the restored version or the need for SSH
-recovery.
+is not success. A failed trial reports the need for SSH recovery. Data is never automatically restored from an older snapshot.
 
-A disabled Install update stays visible. When maintenance is not enabled, the page
-explains signed appliance installation, current receipt enrollment and the
-restart required by `sudo couch-update enable`. Older installed releases may lack
-these commands even when a newer release is published. Follow the
-[activation and recovery procedure](update-worker.md#explicit-ssh-activation-and-trial-restoration).
-The publishing Mac must remain reachable for feed checks and downloads.
+Installation requires the signed AppImage enrollment and fixed systemd installation. Follow the [installation and operator recovery procedure](update-worker.md). Keep the publishing host reachable for checks and downloads. Ubuntu runtime repair remains a separate fixed systemd operation; it does not upgrade Ubuntu or select arbitrary packages.
 
 ### Interface size
 

@@ -3,14 +3,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { UpdateFeed, VerifiedRelease } from "./update-feed";
+import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { UpdateError } from "./update-feed";
 import { createUpdates } from "./updates";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const admin = (): ControllerIdentity => ({ authority: "administrator", controller: null, claimAvailable: false });
-const candidate = { summary: { id: "a".repeat(64), releaseId: "2.1", version: "0.1.0+build.2.1", revision: "b".repeat(40), notes: "new", bytes: 50, publishedAt: Date.now(), expiresAt: Date.now() + 60_000 } } as VerifiedRelease;
+const candidate = { summary: { id: "a".repeat(64), releaseId: "2.1", version: "0.1.0+build.2.1", revision: "b".repeat(40), notes: "new", bytes: 50, publishedAt: Date.now(), expiresAt: Date.now() + 60_000 } } as UpdateRelease;
 async function setup(feed?: UpdateFeed) {
   const directory = await mkdtemp(join(tmpdir(), "couch-updates-state-"));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
@@ -32,7 +32,7 @@ test("defaults stable/manual, accepts only admin commands and bounded fields", a
 });
 
 test("channel persists separately, checks asynchronously, stages only its exact candidate", async () => {
-  const gate = Promise.withResolvers<VerifiedRelease | null>(), calls: string[] = [];
+  const gate = Promise.withResolvers<UpdateRelease | null>(), calls: string[] = [];
   const { updates, directory } = await setup({ check: async channel => { calls.push(channel); return gate.promise; }, stage: async value => { expect(value).toBe(candidate); } });
   expect((await updates.handle(request("/channel", { channel: "preview" }), admin)).status).toBe(202);
   expect(await state(updates)).toMatchObject({ channel: "preview", policy: "manual", status: "checking", currentCheck: false });

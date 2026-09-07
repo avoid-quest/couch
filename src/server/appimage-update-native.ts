@@ -1,4 +1,4 @@
-import type { AppImageUpdateAction, AppImageUpdateReply } from "../shared/updates";
+import type { AppImageUpdateAction, AppImageUpdateReply, UpdateRequest } from "../shared/updates";
 import { UpdateError, type UpdateFeed, type UpdateRelease } from "./update-feed";
 
 export function createNativeAppImageUpdates(send: (requestId: string, action: AppImageUpdateAction) => void) {
@@ -15,7 +15,6 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
     });
   };
   const feed: UpdateFeed<UpdateRelease> = {
-    installationUnavailable: "Signed AppImage downloads are available. Installation is not enabled for this AppImage yet; keep SSH available for recovery.",
     async check(channel, signal) { return (await request({ type: "check", channel }, signal)).candidate ?? null; },
     async stage(candidate, signal, progress) {
       if (!(await request({ type: "stage", candidateId: candidate.summary.id }, signal, progress)).staged) throw new UpdateError("The native updater did not confirm a verified download.");
@@ -23,6 +22,12 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
   };
   return {
     feed,
+    async request(value: UpdateRequest) {
+      const signal = AbortSignal.timeout(35_000);
+      if (value.op === "status") return request({ type: "status", ...(value.requestId ? { requestId: value.requestId } : {}) }, signal);
+      return request({ type: "install", requestId: value.requestId, candidateId: value.op === "install" ? value.candidateId : value.expectedCurrentId, confirmInterrupt: value.confirmInterrupt, whenIdle: value.op === "install" && value.whenIdle === true, repair: value.op === "repair-current", repairRuntime: value.op === "repair-current" && value.repairRuntime }, signal);
+    },
+    complete(error: string | null) { return request({ type: "complete", error }, AbortSignal.timeout(10_000)); },
     // Reserved for the qualified repair installer. No browser can select a URL or expected version.
     async checkRepair(signal: AbortSignal) { return (await request({ type: "checkRepair" }, signal)).candidate ?? null; },
     receive(reply: AppImageUpdateReply) {

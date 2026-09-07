@@ -1,4 +1,4 @@
-import type { MaintenanceBuild } from "./maintenance";
+import type { MaintenanceBuild } from "../shared/build";
 
 export function createNativeReadiness(send: (nonce: string) => void, timeout = 2_500) {
   let pending: { nonce: string; resolve: (build: MaintenanceBuild) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;

@@ -1,8 +1,8 @@
+import { checkpointAppImage } from "./server/appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./server/appimage-update-native";
 import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
-import { createMaintenance, manualUpdatesEnabled, type MaintenanceBuild } from "./server/maintenance";
-import { createUpdaterClient } from "./server/updater-client";
+type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 import { createNativeReadiness } from "./server/readiness-native";
 import { loadedBuild } from "./shared/build";
 import { chmod, mkdir } from "node:fs/promises";
@@ -36,40 +36,16 @@ const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ t
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
 let hub: Hub;
-const activated = !appimage && native && buildInfo.packaged && process.platform === "linux" && manualUpdatesEnabled();
-const maintenance = activated ? createMaintenance({
-  build: loadedBuild,
-  context: (): Promise<unknown> => updater!.request({ op: "context" }),
-  player: () => hub.session.state.player.status,
-  idle: () => hub.idleAdmission(),
-  tools: runtime => hub.verifyTools(runtime),
-  observe: () => send({ type: "observe" }),
-  quiesce: () => hub.quiesce(),
-  database: async () => {
-    const db = new Database(join(dataDir, "couch.sqlite"), { readonly: true });
-    try {
-      const results = db.query<{ quick_check: string }, []>("PRAGMA quick_check").all();
-      if (results.length !== 1 || results[0]?.quick_check !== "ok") throw new Error("The trial database failed its integrity check.");
-    } finally { db.close(); }
-  },
-  native: () => nativeReadiness.collect(),
-  frontend: () => frontendBuild,
-}) : undefined;
-const updater = maintenance ? createUpdaterClient(request => maintenance.handle(request), () => {
-  maintenance.fail();
-  if (hub) void hub.quiesce().then(() => process.exit(1), () => process.exit(1));
-  else process.exit(1);
-}) : undefined;
-// Read root transaction authority before opening/migrating any application DB.
-if (updater) { await updater.ready; await maintenance!.initialize(); }
+let admission = !appimage;
+const updater = appimage ? appimageUpdates : undefined;
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.platform !== "win32") await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
   ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
   nativeDisplay: nativeDisplay.request,
-  ...(maintenance ? {
-    admitted: maintenance.admitted,
+  ...(appimage ? {
+    admitted: () => admission,
     frontendReady: (value: unknown) => {
       const build = value as MaintenanceBuild;
       if (!build || Object.keys(build).sort().join(",") !== "dataFormat,revision,version" || build.version !== loadedBuild.version || build.revision !== loadedBuild.revision || build.dataFormat !== loadedBuild.dataFormat) return false;
@@ -113,11 +89,28 @@ async function close() {
   nativeDisplay.close();
   appimageUpdates.close();
   nativeReadiness.close();
-  await updater?.close();
   try { await hub.close(); } finally { process.exit(0); }
 }
 process.on("SIGINT", close);
 process.on("SIGTERM", close);
+
+if (appimage) void (async () => {
+  try {
+    const status = await appimageUpdates.request({ op: "status" });
+    if (status.transaction?.phase === "trial") {
+      const deadline = Date.now() + 30_000;
+      while (!frontendBuild && Date.now() < deadline) await Bun.sleep(100);
+      if (!frontendBuild) throw new Error("The frontend did not acknowledge the running build.");
+      const running = await nativeReadiness.collect();
+      if (JSON.stringify(running) !== JSON.stringify(loadedBuild)) throw new Error("The native and server builds do not match.");
+      const db = new Database(join(dataDir, "couch.sqlite"), { readonly: true });
+      try { if (db.query<{ quick_check: string }, []>("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error("The database integrity check failed."); } finally { db.close(); }
+      await hub.verifyTools(status.transaction.repairRuntime === true);
+      await appimageUpdates.complete(null);
+    }
+  } catch (error) { await appimageUpdates.complete(error instanceof Error ? error.message : "Startup verification failed.").catch(() => {}); }
+  finally { admission = true; }
+})();
 
 if (native) {
   // The sidecar's only playback authority is its owning Rust process.
@@ -134,6 +127,14 @@ if (native) {
         const message: HostMessage = JSON.parse(line);
         if (message.type === "player") hub.session.observe(message.state);
         else if (message.type === "readiness") nativeReadiness.receive(message.nonce, message.ok, message.build);
+        else if (message.type === "appimageQuiesce") {
+          void (async () => {
+            // Let the accepted HTTP response leave before closing its listener.
+            await Bun.sleep(250);
+            const result = await checkpointAppImage({ ...message, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
+            send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
+          })();
+        }
         else if (message.type === "appimageUpdate") appimageUpdates.receive(message);
         else if (message.type === "display") nativeDisplay.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);

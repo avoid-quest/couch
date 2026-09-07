@@ -31,5 +31,6 @@ export type UpdateState = {
   installation?: { current?: { candidateId: string; version: string; revision: string } | null; repairAvailable?: boolean; enabled: boolean; transaction: UpdateTransaction | null; requestedTransaction?: UpdateTransaction | null };
 };
 
-export type AppImageUpdateAction = { type: "check"; channel: ReleaseChannel } | { type: "checkRepair" } | { type: "stage"; candidateId: string };
-export type AppImageUpdateReply = { requestId: string; candidate?: { summary: UpdateCandidate; staged: boolean } | null; staged?: boolean; progress?: { received: number; total: number }; error?: string };
+export type UpdateRequest = { op: "status"; requestId?: string } | { op: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean; whenIdle?: true } | { op: "repair-current"; expectedCurrentId: string; requestId: string; confirmInterrupt: boolean; repairRuntime: boolean };
+export type AppImageUpdateAction = { type: "status"; requestId?: string } | { type: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean; whenIdle: boolean; repair: boolean; repairRuntime: boolean } | { type: "complete"; error: string | null } | { type: "check"; channel: ReleaseChannel } | { type: "checkRepair" } | { type: "stage"; candidateId: string };
+export type AppImageUpdateReply = { requestId: string; ok?: boolean; transaction?: UpdateTransaction | null; current?: { candidateId: string; version: string; revision: string }; repairCurrent?: boolean; candidate?: { summary: UpdateCandidate; staged: boolean } | null; staged?: boolean; progress?: { received: number; total: number }; error?: string };

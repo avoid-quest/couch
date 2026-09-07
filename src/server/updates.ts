@@ -13,7 +13,7 @@ type Automation = {
   install: (candidateId: string, requestId: string, guard: () => void) => Promise<UpdateTransaction>;
 };
 type Attempt = { candidateId: string; requestId: string };
-const finished = new Set(["succeeded", "failed", "restored"]);
+const finished = new Set(["succeeded", "failed", "restored", "operator-required"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed<UpdateRelease>, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
   const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
@@ -102,7 +102,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       };
       guard();
       await automation.install(id, attempt!.requestId, guard);
-      state.waiting = "The external updater accepted the idle installation.";
+      state.waiting = "The native updater accepted the idle installation.";
     } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and the TV connection."; }
   })().finally(() => { polling = undefined; });
   const automaticTimer = automation ? setInterval(() => void automatic(), Math.min(interval, 5_000)) : undefined;

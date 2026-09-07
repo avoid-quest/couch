@@ -19,9 +19,27 @@ use tauri_plugin_updater::{Update, UpdaterExt};
     deny_unknown_fields
 )]
 pub enum Action {
-    Check { channel: Channel },
+    Status {
+        request_id: Option<String>,
+    },
+    Complete {
+        error: Option<String>,
+    },
+    Install {
+        candidate_id: String,
+        request_id: String,
+        confirm_interrupt: bool,
+        when_idle: bool,
+        repair: bool,
+        repair_runtime: bool,
+    },
+    Check {
+        channel: Channel,
+    },
     CheckRepair {},
-    Stage { candidate_id: String },
+    Stage {
+        candidate_id: String,
+    },
 }
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -58,6 +76,7 @@ struct Metadata {
     release_id: String,
     revision: String,
     bytes: u64,
+    data_format: u64,
     expires_at: i64,
 }
 fn error(value: impl std::fmt::Display) -> String {
@@ -204,6 +223,7 @@ fn validate_metadata(
         || release_id(&metadata.version)? != metadata.release_id
         || metadata.revision.len() != 40
         || !metadata.revision.bytes().all(|b| b.is_ascii_hexdigit())
+        || metadata.data_format == 0
         || metadata.bytes == 0
         || metadata.bytes > 2 * 1024 * 1024 * 1024
         || published_at > at + 60_000
@@ -290,11 +310,187 @@ fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     result
 }
+const APPLICATION: &str = "/var/lib/couch/application";
+fn build() -> serde_json::Value {
+    serde_json::from_str(option_env!("COUCH_BUILD_INFO").unwrap_or("{}")).unwrap_or_default()
+}
+pub fn status(
+    app: &tauri::AppHandle,
+    saved_id: Option<&str>,
+    request_id: &str,
+) -> serde_json::Value {
+    let result = app
+        .path()
+        .app_data_dir()
+        .map_err(error)
+        .and_then(|fallback| {
+            let data = std::env::var_os("COUCH_DATA_DIR")
+                .map(PathBuf::from)
+                .unwrap_or(fallback);
+            read_transaction(&data.join("updates/appimage"), saved_id)
+        });
+    match result {
+        Ok(transaction) => {
+            serde_json::json!({"type":"appimageUpdate","requestId":request_id,"ok":true,"transaction":transaction,"current":current_identity(),"repairCurrent":running(app) && enrollment().is_ok()})
+        }
+        Err(message) => {
+            serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":message})
+        }
+    }
+}
+fn current_identity() -> serde_json::Value {
+    let build = build();
+    serde_json::json!({"candidateId":format!("{:x}", Sha256::digest(format!("{}:{}", build["version"], build["revision"]))),"version":build["version"],"revision":build["revision"]})
+}
+fn read_transaction(
+    directory: &Path,
+    request_id: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    if request_id.is_some_and(|id| id.len() != 32 || !id.bytes().all(|c| c.is_ascii_hexdigit())) {
+        return Err("Invalid saved update request identity.".into());
+    }
+    let path = request_id.map_or_else(
+        || directory.join("transaction.json"),
+        |id| directory.join("requests").join(format!("{id}.json")),
+    );
+    match fs::read(path) {
+        Ok(bytes) if bytes.len() <= 64 * 1024 => serde_json::from_slice(&bytes).map_err(error),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Value::Null),
+        _ => Err("Cannot read the durable update request. Check storage through SSH.".into()),
+    }
+}
+fn journal(
+    directory: &Path,
+    transaction: &mut serde_json::Value,
+    phase: &str,
+    message: Option<String>,
+) -> Result<(), String> {
+    transaction["phase"] = phase.into();
+    transaction["error"] = message.into();
+    transaction["updatedAt"] = now().into();
+    let bytes = serde_json::to_vec(transaction).map_err(error)?;
+    save(
+        &directory.join("requests").join(format!(
+            "{}.json",
+            transaction["requestId"]
+                .as_str()
+                .ok_or("Missing request identity")?
+        )),
+        &bytes,
+    )?;
+    save(&directory.join("transaction.json"), &bytes)
+}
+async fn copy(source: &Path, destination: &Path) -> Result<(), String> {
+    let mut child = std::process::Command::new("/usr/bin/cp")
+        .arg("-a")
+        .arg("--")
+        .arg(source)
+        .arg(destination)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(error)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    loop {
+        if let Some(status) = child.try_wait().map_err(error)? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(
+                    "The recovery backup failed. Check free storage and permissions through SSH."
+                        .into(),
+                )
+            };
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("The recovery backup timed out; the application was not replaced.".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+async fn runtime_repair() -> Result<(), String> {
+    let mut child = std::process::Command::new("/usr/bin/systemctl")
+        .args(["--no-ask-password", "start", "couch-runtime-repair.service"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(error)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(310);
+    loop {
+        if let Some(status) = child.try_wait().map_err(error)? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err("Ubuntu runtime repair failed. Inspect couch-runtime-repair.service through SSH.".into())
+            };
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Ubuntu runtime repair did not finish within its deadline. Check its systemd service through SSH before retrying.".into());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn backup(directory: &Path, request_id: &str) -> Result<(), String> {
+    let destination = Path::new(APPLICATION).join("backups").join(request_id);
+    fs::create_dir_all(destination.parent().unwrap()).map_err(error)?;
+    fs::create_dir(&destination).map_err(error)?;
+    crate::prepare_data_dir(&destination).map_err(error)?;
+    copy(
+        &Path::new(APPLICATION).join("Couch.AppImage"),
+        &destination.join("Couch.AppImage"),
+    )
+    .await?;
+    copy(
+        directory
+            .parent()
+            .and_then(Path::parent)
+            .ok_or("Invalid data directory")?,
+        &destination.join("data"),
+    )
+    .await?;
+    save(
+        &destination.join("build.json"),
+        &serde_json::to_vec(&build()).map_err(error)?,
+    )?;
+    let archive = fs::read(destination.join("Couch.AppImage")).map_err(error)?;
+    save(
+        &destination.join("SHA256SUMS"),
+        format!("{:x}  Couch.AppImage\n", Sha256::digest(archive)).as_bytes(),
+    )?;
+    // cp has completed; flush the filesystem before replacement can begin.
+    let status = std::process::Command::new("/usr/bin/sync")
+        .arg("-f")
+        .arg(&destination)
+        .status()
+        .map_err(error)?;
+    if !status.success() {
+        return Err("Could not flush the recovery backup.".into());
+    }
+    Ok(())
+}
+
 pub async fn run(
     app: tauri::AppHandle,
     directory: PathBuf,
     mut requests: tokio::sync::mpsc::Receiver<Request>,
 ) {
+    if let Ok(mut transaction) = read_transaction(&directory, None) {
+        if !transaction.is_null()
+            && !matches!(
+                transaction["phase"].as_str(),
+                Some("succeeded" | "failed" | "operator-required" | "trial")
+            )
+        {
+            let _ = journal(&directory, &mut transaction, "operator-required", Some("The update was interrupted. Inspect the retained application and data through SSH.".into()));
+        }
+    }
     let mut selected: Option<(Option<Channel>, Update, Candidate)> = None;
     while let Some(request) = requests.recv().await {
         let report = |value: serde_json::Value| {
@@ -309,9 +505,33 @@ pub async fn run(
                     "Signed AppImage updates require the running AppImage installation.".into(),
                 );
             }
+            if let Action::Status { ref request_id } = request.action {
+                return Ok(
+                    serde_json::json!({"ok":true,"transaction":read_transaction(&directory, request_id.as_deref())?,"current":current_identity(),"repairCurrent":enrollment().is_ok()}),
+                );
+            }
+            if let Action::Complete { ref error } = request.action {
+                let mut transaction = read_transaction(&directory, None)?;
+                if transaction["phase"] == "trial" {
+                    let current = build();
+                    let failure = error.clone().or_else(|| (transaction["version"] != current["version"] || transaction["revision"] != current["revision"]).then(|| "The running build does not match the requested update. Recover through SSH.".into()));
+                    journal(
+                        &directory,
+                        &mut transaction,
+                        if failure.is_none() {
+                            "succeeded"
+                        } else {
+                            "operator-required"
+                        },
+                        failure,
+                    )?;
+                }
+                return Ok(serde_json::json!({"ok":true}));
+            }
             let trust = enrollment()?;
             let path = directory.join("candidate.AppImage");
             match request.action {
+                Action::Status { .. } | Action::Complete { .. } => unreachable!(),
                 Action::Check { .. } | Action::CheckRepair {} => {
                     let channel = match request.action {
                         Action::Check { channel } => Some(channel),
@@ -327,6 +547,103 @@ pub async fn run(
                         }
                         None => Ok(serde_json::json!({"candidate":null})),
                     }
+                }
+                Action::Install {
+                    ref candidate_id,
+                    ref request_id,
+                    confirm_interrupt,
+                    when_idle,
+                    repair,
+                    repair_runtime,
+                } => {
+                    let previous = read_transaction(&directory, Some(request_id))?;
+                    if !previous.is_null() {
+                        return Ok(serde_json::json!({"ok":true,"transaction":previous}));
+                    }
+                    #[cfg(target_os = "linux")]
+                    if app.env().appimage.as_deref()
+                        != Some(Path::new(APPLICATION).join("Couch.AppImage").as_path())
+                    {
+                        return Err(
+                            "Installation requires the enrolled systemd AppImage path.".into()
+                        );
+                    }
+                    let (mut update, summary) = if repair {
+                        if current_identity()["candidateId"] != *candidate_id {
+                            return Err("Refresh the running release before repair.".into());
+                        }
+                        check(&app, &trust, None)
+                            .await?
+                            .ok_or("The exact current archive is missing.")?
+                    } else {
+                        let (channel, _, candidate) = selected
+                            .as_ref()
+                            .filter(|(_, _, c)| &c.id == candidate_id)
+                            .ok_or("Use a current verified download.")?;
+                        check(&app, &trust, *channel)
+                            .await?
+                            .filter(|(_, c)| c.id == candidate.id)
+                            .ok_or("The candidate changed; use Check now.")?
+                    };
+                    let mut transaction = serde_json::json!({"updateId":request_id,"requestId":request_id,"candidateId":candidate_id,"version":summary.version,"revision":summary.revision,"createdAt":now(),"repairRuntime":repair_runtime,"intent":if repair {"repair-current"} else {"install"}});
+                    if !repair && !retained(&path, &update, &summary, &trust) {
+                        return Err(
+                            "The saved download failed verification. Download it again.".into()
+                        );
+                    }
+                    journal(&directory, &mut transaction, "accepted", None)?;
+                    report(serde_json::json!({"ok":true,"transaction":transaction}));
+                    let mut disrupted = false;
+                    let installation = async {
+                        let bytes = if repair {
+                            update.timeout = Some(Duration::from_secs(30 * 60));
+                            let mut received = 0u64;
+                            let (limit, mut exceeded) = tokio::sync::watch::channel(false);
+                            let download = update.download(|size, total| { received += size as u64; if received > summary.bytes || total.is_some_and(|value| value != summary.bytes) { let _ = limit.send(true); } }, || {});
+                            tokio::select! { value = download => value.map_err(error)?, _ = exceeded.changed() => return Err("Repair exceeds its signed size.".into()) }
+                        } else { fs::read(&path).map_err(error)? };
+                        if bytes.len() as u64 != summary.bytes || summary.expires_at <= now() { return Err("The archive size or expiry is invalid; check again.".into()); }
+                        verify(&bytes, &update.signature, &trust.pubkey)?;
+                        journal(&directory, &mut transaction, "quiescing", None)?;
+                        let nonce = uuid::Uuid::new_v4().to_string();
+                        let (sender, receiver) = tokio::sync::oneshot::channel();
+                        *app.state::<crate::Host>().update_checkpoint.lock().expect("checkpoint lock poisoned") = Some((nonce.clone(), sender));
+                        app.state::<crate::Host>().report_message(serde_json::json!({"type":"appimageQuiesce","nonce":nonce,"confirmInterrupt":confirm_interrupt,"whenIdle":when_idle}));
+                        disrupted = true;
+                        let (closed, result) = tokio::time::timeout(Duration::from_secs(30), receiver).await.map_err(|_| "The stopped-writer checkpoint timed out.")?.map_err(error)?;
+                        disrupted = closed;
+                        if when_idle && !closed { transaction["idleDeferred"] = true.into(); }
+                        result?;
+                        if !closed { return Err("The data writers did not stop.".into()); }
+                        backup(&directory, request_id).await?;
+                        if repair_runtime { runtime_repair().await?; }
+                        journal(&directory, &mut transaction, "installing", None)?;
+                        update.install(&bytes).map_err(error)?;
+                        save(&Path::new(APPLICATION).join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":summary.revision,"dataFormat":update.raw_json["dataFormat"]})).map_err(error)?)?;
+                        journal(&directory, &mut transaction, "trial", None)?;
+                        Ok::<(), String>(())
+                    }.await;
+                    if let Err(message) = installation {
+                        if let Err(storage) = journal(
+                            &directory,
+                            &mut transaction,
+                            if disrupted {
+                                "operator-required"
+                            } else {
+                                "failed"
+                            },
+                            Some(message),
+                        ) {
+                            if disrupted {
+                                app.exit(1);
+                            }
+                            return Err(storage);
+                        }
+                    }
+                    if disrupted {
+                        app.exit(0);
+                    }
+                    Ok(serde_json::json!({"ok":true,"transaction":transaction}))
                 }
                 Action::Stage { ref candidate_id } => {
                     let (channel, _, summary) = selected
@@ -388,6 +705,7 @@ mod tests {
             release_id: "2.1".into(),
             revision: "a".repeat(40),
             bytes: 50,
+            data_format: 1,
             expires_at: 200_000,
         };
         let valid = |value: &Metadata, current: &str, repair| {
@@ -465,6 +783,39 @@ mod tests {
         fs::write(&path, b"corrupted after restart").unwrap();
         assert!(verify(&fs::read(&path).unwrap(), SIGNATURE, KEY).is_err());
         fs::remove_dir_all(directory).unwrap();
+    }
+    #[test]
+    fn durable_requests_survive_replacement_and_keep_older_phone_receipts() {
+        let directory =
+            std::env::temp_dir().join(format!("couch-journal-{}", uuid::Uuid::new_v4()));
+        let first = "a".repeat(32);
+        let mut transaction =
+            serde_json::json!({"requestId":first,"version":"1","revision":"a".repeat(40)});
+        journal(&directory, &mut transaction, "accepted", None).unwrap();
+        journal(&directory, &mut transaction, "succeeded", None).unwrap();
+        transaction["requestId"] = "b".repeat(32).into();
+        journal(&directory, &mut transaction, "trial", None).unwrap();
+        assert_eq!(
+            read_transaction(&directory, Some(&first)).unwrap()["phase"],
+            "succeeded"
+        );
+        assert_eq!(
+            read_transaction(&directory, None).unwrap()["phase"],
+            "trial"
+        );
+        assert!(read_transaction(&directory, Some("../escape")).is_err());
+        fs::write(directory.join("transaction.json"), b"interrupted").unwrap();
+        assert!(read_transaction(&directory, None).is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+    #[test]
+    fn storage_failure_never_records_a_successful_transaction() {
+        let path = std::env::temp_dir().join(format!("couch-full-{}", uuid::Uuid::new_v4()));
+        fs::write(&path, b"not a directory").unwrap();
+        let mut transaction = serde_json::json!({"requestId":"a".repeat(32)});
+        assert!(journal(&path, &mut transaction, "accepted", None).is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"not a directory");
+        fs::remove_file(path).unwrap();
     }
     #[test]
     fn private_contract_rejects_urls_paths_and_supplied_trust() {

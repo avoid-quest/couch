@@ -50,9 +50,8 @@ async function verifyPackage(path: string, expected: string, signal: AbortSignal
 
 export function createToolHealth(options: Options) {
   const env = options.env ?? process.env;
-  // This is the declared Ubuntu package resource location, independent of the
-  // native host's fallback or effective COUCH_* overrides. No HTTP input sets it.
-  const directory = options.directory ?? "/usr/lib/Couch/tools";
+  // The native owner supplies its actual bundle location independently of effective tool overrides.
+  const directory = options.directory ?? env.COUCH_BUNDLED_TOOLS ?? "/usr/lib/Couch/tools";
   const shutdown = new AbortController();
   let cached: ToolHealth | null = null;
   let pending: Promise<ToolHealth> | null = null;

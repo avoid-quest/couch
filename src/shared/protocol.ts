@@ -105,8 +105,9 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = ({ type: "appimageUpdate" } & import("./updates").AppImageUpdateReply) | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
+export type HostMessage = { type: "appimageQuiesce"; nonce: string; confirmInterrupt: boolean; whenIdle: boolean } | ({ type: "appimageUpdate" } & import("./updates").AppImageUpdateReply) | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
 export type SidecarMessage =
+  | { type: "appimageQuiesced"; nonce: string; closed: boolean; error: string | null }
   | { type: "appimageUpdate"; requestId: string; action: import("./updates").AppImageUpdateAction }
   | { type: "display"; requestId: string; action: import("./display").DisplayAction }
   | ({ type: "ready" } & ConnectionInfo)
