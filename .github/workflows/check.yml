@@ -13,7 +13,7 @@ jobs:
   linux:
     # Retargeting a PR changes its merge result; editing its title or body does not.
     if: github.event.action != 'edited' || github.event.changes.base
-    name: linux
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'linux' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
