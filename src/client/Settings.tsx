@@ -1,3 +1,4 @@
+import { StartupSettings } from "./StartupSettings";
 import { RestartSettings } from "./RestartSettings";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
@@ -200,12 +201,14 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>
-            <p id="tv-name-help" className="text-muted-foreground">Shown on the TV and every connected remote.</p>
+            <p id="tv-name-help" className="text-muted-foreground">Applies now to the TV and every connected remote.</p>
             <Button type="submit" className="min-h-11" disabled={!canWrite || !draftName.trim() || draftName.trim() === savedName}>{pending ? "Saving…" : "Save name"}</Button>
           </form> : <div className="space-y-1">
             <p className="font-medium">TV name</p><p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
             <p className="text-muted-foreground">{host ? "Use an administrator remote to change this TV's settings." : credentials ? "An administrator can change this TV's name." : "Pair this browser to control the TV."}</p>
           </div>}
+          {administrator && credentials && open && section === "general" && <StartupSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
+          <div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={() => setSection("connection")}>Pair again / manage remotes</Button>{administrator && <Button variant="outline" className="min-h-11" onClick={() => setSection("advanced")}>Effective overrides</Button>}</div>
           {administrator && credentials && <RestartSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
           {host && !administratorClaimed && identity?.claimAvailable && <>
             <Separator />

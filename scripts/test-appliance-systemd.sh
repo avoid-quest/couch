@@ -109,6 +109,20 @@ runuser -u couch-tv -- systemctl --no-ask-password start couch-runtime-repair.se
 [[ $(systemctl show couch-runtime-repair.service -p Result --value) = success ]]
 if runuser -u couch-tv -- systemctl --no-ask-password stop couch-runtime-repair.service; then exit 1; fi
 if runuser -u couch-tv -- systemctl --no-ask-password restart dbus.service; then exit 1; fi
+# Real Polkit startup writes leave the current application and session alone.
+startup_pid=$(service show couch-tv.service -p MainPID --value)
+for mode in disable enable; do
+    runuser -u couch-tv -- systemctl --no-ask-password start "couch-autostart@$mode.service"
+    [[ $(systemctl show "couch-autostart@$mode.service" -p Result --value) = success ]]
+    [[ $(service show couch-tv.service -p MainPID --value) = "$startup_pid" ]]
+done
+[[ $(stat -c '%U:%a' /etc/lightdm/lightdm.conf.d/90-couch-autostart.conf) = root:644 ]]
+runuser -u couch-tv -- /usr/sbin/lightdm --show-config 2> /fixture/lightdm-config
+grep -q 'autologin-user=couch-tv' /fixture/lightdm-config
+if runuser -u couch-tv -- systemctl --no-ask-password stop couch-autostart@enable.service; then exit 1; fi
+if runuser -u couch-tv -- systemctl --no-ask-password start couch-autostart@unexpected.service; then exit 1; fi
+if runuser -u nobody -- systemctl --no-ask-password start couch-autostart@disable.service; then exit 1; fi
+if runuser -u couch-tv -- /usr/lib/couch-appliance/set-autostart disable; then exit 1; fi
 backup=/var/lib/couch/application/backups/fixture
 mkdir -p "$backup"
 cp /var/lib/couch/application/{Couch.AppImage,build.json} "$backup/"
@@ -124,4 +138,4 @@ couch-recover "$backup"
 service is-active couch-tv.service
 [[ $(pgrep -u couch-tv -x couch | wc -l) = 1 ]]
 cmp /fixture/newer-data /var/lib/couch-test-data/keep.txt
-echo 'PASS: real Ubuntu systemd/APT installation, single owner restart, fixed Polkit repair, unrelated privilege rejection, bounded failed starts and SSH recovery preserving newer data'
+echo 'PASS: real Ubuntu systemd/APT installation, single owner restart, fixed Polkit repair/startup, unchanged live session, unrelated privilege rejection, bounded failed starts and SSH recovery preserving newer data'

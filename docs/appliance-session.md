@@ -4,7 +4,7 @@
 installs the OS runtime dependencies separately from the Tauri AppImage. Install through the documented `install-couch` entry
 point so APT finishes before LightDM starts.
 
-LightDM logs the locked `couch-tv` account into the Couch Xorg session on `seat0`.
+By default, LightDM logs the locked `couch-tv` account into the Couch Xorg session on `seat0`.
 Its home is `/var/lib/couch`. It has no sudo access; the existing SSH account and
 its groups remain unchanged. PAM starts its systemd user manager and grants the
 active seat access to display/audio devices. Openbox supplies window management;
@@ -17,6 +17,33 @@ restarts the complete control group after five seconds, up to five starts within
 LightDM session remains alive after exhaustion and shows recovery instructions,
 so another login cannot silently reset the restart budget. Native and coordinator
 output goes to the persistent journal.
+
+General on an administrator phone shows the effective LightDM startup setting,
+boot-service configuration and current native fullscreen readback. Its passwordless
+startup control writes only `/etc/lightdm/lightdm.conf.d/90-couch-autostart.conf`
+through `couch-autostart@enable.service` or `couch-autostart@disable.service`.
+Polkit permits only starting those two units as `couch-tv`; it grants no general
+service management. LightDM's merged `--show-config` output supplies readback,
+including ordered matching seat overrides. A conflicting override or failed OS
+operation returns an error with SSH inspection commands.
+
+The change applies at the next boot or graphical session, without interrupting
+current playback. Disabling shows the login screen on the next boot. The locked
+TV account has no login password. To launch Couch again, use the SSH administrator:
+
+```sh
+sudo couch-session autostart enable
+sudo lightdm --show-config
+sudo systemctl restart lightdm
+```
+
+Inspect the effective `seat0` settings before the last command. Restarting LightDM
+ends the current graphical session. Reinstallation preserves this startup override;
+Tauri application updates never change it. The SSH administrator password is unchanged.
+
+Configuration behavior follows [LightDM's standard configuration locations](https://github.com/canonical/lightdm/blob/main/README.md)
+and [seat section precedence](https://github.com/canonical/lightdm/blob/main/src/lightdm.c).
+Physical cold boot and fullscreen observations remain separate acceptance checks.
 
 From the SSH administrator or a local console reached with Ctrl+Alt+F3:
 
@@ -43,7 +70,8 @@ reboot. This command preserves profiles, pairings, settings and media state.
 inspect `sudo journalctl -b -u lightdm` and `/var/log/lightdm/`. To recover to a
 console on every boot, run `sudo systemctl disable --now lightdm` and
 `sudo systemctl set-default multi-user.target`. SSH and the reserved recovery VT
-remain available. Re-running the installer restores the appliance startup.
+remain available. Re-running the installer restores LightDM boot enablement and
+retains the saved passwordless startup choice.
 
 The package conffile `/etc/couch/appliance.env` sets the absolute `COUCH_DATA_DIR`.
 The fresh default is `/var/lib/couch/.local/share/quest.avoid.couch`. Keep an
