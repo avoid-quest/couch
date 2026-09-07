@@ -54,41 +54,6 @@ precedence still applies outside this unit: explicit `COUCH_DATA_DIR`, then
 Package upgrades do not move or remove data, profiles, pairings, sources or media.
 WirePlumber's saved routes and volume stay under the same runtime home.
 
-### T480 playback profile
-
-On the measured ThinkPad T480 with Intel UHD 620, Ubuntu 24.04, Xorg and a
-1920×1080 HDMI output, the following optional settings in
-`/etc/couch/appliance.env` reduced the cost of composing the TV interface over
-native video:
-
-```ini
-GDK_RENDERING=image
-COUCH_BASIC_RENDERING=1
-```
-
-Back up the existing file before editing it, retain `COUCH_DATA_DIR` and all
-other settings, then run `sudo couch-session restart` during an idle window.
-The supported installer preserves this administrator-edited conffile across
-updates. Remove these two settings and restart to return to normal rendering.
-
-GTK's [image-surface mode](https://github.com/GNOME/gtk/blob/3.24.41/gdk/gdkwindow.c#L10179)
-avoids the X-server surface copies observed in this setup. Couch's existing
-basic-rendering switch enables mpv's
-[`gpu-dumb-mode`](https://mpv.io/manual/stable/#options-gpu-dumb-mode), which
-reduces rendering work but disables extended features such as high-quality
-scalers and custom shaders. This is a device-specific tradeoff, not the default
-for every GPU. It does not disable hardware video decoding.
-
-Use Automatic up to 1080p for online video. Unrestricted quality and previously
-queued explicit choices can still select formats beyond this device's smooth
-playback capability. Installing VA-API drivers alone does not solve the
-compositing cost. Record actual codec, decoder, frame drops, buffering and TV
-acceptance when qualifying another device; software-rendered tests cannot
-establish these results. Measurements and remaining acceptance are tracked in
-[YouTube performance #150](https://github.com/avoid-quest/couch/issues/150).
-
-### Initial audio setup
-
 When the package creates the runtime account, it marks one initial audio setup
 attempt. After PipeWire starts, Couch selects the first available HDMI stereo
 profile and its output sink. Each discovery wait is limited to ten seconds. The
@@ -121,6 +86,39 @@ standalone builds and does not guarantee upgrade ordering.
 The contracts above require separate qualification of a real LightDM boot,
 coordinator/native failures, and physical picture/audio. Xvfb and a software
 audio sink cannot establish those hardware results.
+
+### T480 playback profile
+
+On the measured ThinkPad T480 with Intel UHD 620, Ubuntu 24.04, Xorg and a
+1920×1080 HDMI output, the following optional settings in
+`/etc/couch/appliance.env` reduced the cost of composing the TV interface over
+native video:
+
+```ini
+GDK_RENDERING=image
+COUCH_BASIC_RENDERING=1
+```
+
+Back up the existing file before editing it, retain `COUCH_DATA_DIR` and all
+other settings, then run `sudo couch-session restart` during an idle window.
+The supported installer preserves this administrator-edited conffile across
+updates. Remove these two settings and restart to return to normal rendering.
+
+GTK's [image-surface mode](https://github.com/GNOME/gtk/blob/3.24.41/gdk/gdkwindow.c#L10179)
+avoids the X-server surface copies observed in this setup. Couch's existing
+basic-rendering switch enables mpv's
+[`gpu-dumb-mode`](https://mpv.io/manual/stable/#options-gpu-dumb-mode), which
+reduces rendering work but disables extended features such as high-quality
+scalers and custom shaders. This is a device-specific tradeoff, not the default
+for every GPU. It does not disable hardware video decoding.
+
+Use Automatic up to 1080p for online video. Unrestricted quality and previously
+queued explicit choices can still select formats beyond this device's smooth
+playback capability. Installing VA-API drivers alone does not solve the
+compositing cost. Record actual codec, decoder, frame drops, buffering and TV
+acceptance when qualifying another device; software-rendered tests cannot
+establish these results. Measurements and remaining acceptance are tracked in
+[YouTube performance #150](https://github.com/avoid-quest/couch/issues/150).
 
 References: [LightDM configuration](https://github.com/canonical/lightdm/blob/main/data/lightdm.conf),
 [Ubuntu 24.04 logind policy](https://manpages.ubuntu.com/manpages/noble/man5/logind.conf.5.html),
