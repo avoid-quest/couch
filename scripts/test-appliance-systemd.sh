@@ -5,7 +5,7 @@ set -euo pipefail
 if [[ ${1:-} != --inside ]]; then
     cd "$(dirname "$0")/.."
     name="couch-appliance-systemd-${GITHUB_RUN_ID:-local}-$$"
-    trap 'docker rm -f "$name" >/dev/null 2>&1 || true; docker image rm "$name" >/dev/null 2>&1 || true' EXIT
+    trap 'result=$?; if [[ $result != 0 ]]; then docker exec "$name" journalctl -b --no-pager -n 150 || true; fi; docker rm -f "$name" >/dev/null 2>&1 || true; docker image rm "$name" >/dev/null 2>&1 || true' EXIT
     docker build -t "$name" - <<'DOCKER'
 FROM ubuntu:24.04
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus git jq acl procps

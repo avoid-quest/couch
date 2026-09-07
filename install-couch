@@ -178,7 +178,10 @@ fi
 restore_policy
 trap - EXIT
 systemctl unmask lightdm.service
+# Package service starts were suppressed; activate the newly installed OS authorization.
 systemctl daemon-reload
+systemctl reload dbus.service
+systemctl start polkit.service
 systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
 systemctl restart systemd-journald.service
 udevadm trigger --subsystem-match=input --action=change
