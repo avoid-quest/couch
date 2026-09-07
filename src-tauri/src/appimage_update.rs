@@ -140,6 +140,8 @@ fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
         })
 }
 async fn metadata_bytes(url: &str, limit: usize) -> Result<Vec<u8>, String> {
+    // Metadata is fetched before Tauri initializes the same provider in its update check.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut response = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
@@ -837,6 +839,24 @@ mod tests {
     const KEY: &str = include_str!("../tests/fixtures/update/public.key");
     const SIGNATURE: &str = include_str!("../tests/fixtures/update/archive.sig");
     const ARCHIVE: &[u8] = include_bytes!("../tests/fixtures/update/archive");
+    #[tokio::test]
+    async fn metadata_client_works_before_the_updater_initializes_tls() {
+        let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/release.json", server.local_addr().unwrap());
+        let response = std::thread::spawn(move || {
+            let (mut stream, _) = server.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .unwrap();
+        });
+        assert_eq!(metadata_bytes(&url, 64 * 1024).await.unwrap(), b"{}");
+        response.join().unwrap();
+    }
     #[test]
     fn metadata_rejects_expiry_relabeling_and_non_exact_repair() {
         let mut metadata = Metadata {
