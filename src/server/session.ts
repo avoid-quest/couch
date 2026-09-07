@@ -248,6 +248,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       play(entryId, fromStart, false, authorize);
     },
     close() { if (!quiescing) end(false); },
+    checkpoint() { persistProgress(progress.checkpoint, true); },
     quiesce() { end(true); },
     invalidate,
     createProfile(name: unknown) {

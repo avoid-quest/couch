@@ -48,6 +48,7 @@ type HubOptions = {
   pairingCode?: string;
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
+  restart?: (confirmInterrupt: boolean) => Promise<unknown>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
   frontend?: HTMLBundle;
@@ -86,7 +87,9 @@ export function createHub(options: HubOptions) {
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
   const idle = createUpdateIdle(options.idleNow);
   let closed = false;
-  const admitted = () => !closed && (options.admitted?.() ?? true);
+  let restarting = false;
+  const instanceId = crypto.randomUUID();
+  const admitted = () => !closed && !restarting && (options.admitted?.() ?? true);
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
@@ -265,6 +268,18 @@ export function createHub(options: HubOptions) {
         try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
+      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority === "administrator" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: "An administrator remote is required." }, 403));
+      if (url.pathname === "/api/settings/restart" && request.method === "POST") {
+        if (caller.authority !== "administrator") return cors(request, json({ error: "An administrator remote is required." }, 403));
+        try {
+          const confirmed = await settingField(request, "confirmInterrupt");
+          if (confirmed !== true) return cors(request, json({ error: "Confirm interruption before restarting Couch." }, 400));
+          if (identity()?.authority !== "administrator") return cors(request, json({ error: "Administrator access changed." }, 403));
+          if (!options.restart) return cors(request, json({ error: "Restart requires the installed systemd application." }, 409));
+          await options.restart(true);
+          return cors(request, json({ ok: true, instanceId }, 202));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Restart failed." }, 409)); }
+      }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
       if (manual && url.pathname === "/api/updates/repair" && request.method === "POST") return cors(request, await manual.repair(request, identity));
       if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
@@ -433,6 +448,15 @@ export function createHub(options: HubOptions) {
   return {
     server, session, pairingCode, urls, origin, idleReason, idleAdmission, verifyTools: toolHealth.verify,
     close: () => close(),
+    prepareRestart: () => {
+      if (!admitted()) throw new Error("The TV is already preparing an update or restart.");
+      // The strict write happens before any irreversible shutdown. On failure the
+      // authenticated listener and playback remain usable and the dirty save is retained.
+      session.checkpoint();
+      session.quiesce();
+      restarting = true;
+      return { progressSaved: true, admissionClosed: true };
+    },
     quiesce: async () => {
       if (closing && !requiredCheckpoint) throw new Error("The TV was stopped without an update checkpoint.");
       await close(true);

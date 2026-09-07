@@ -27,6 +27,7 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
   };
   return {
     feed,
+    restart(confirmInterrupt: boolean) { return request({ type: "restart", confirmInterrupt }, AbortSignal.timeout(35_000)); },
     async request(value: UpdateRequest) {
       const signal = AbortSignal.timeout(35_000);
       if (value.op === "status") return request({ type: "status", ...(value.requestId ? { requestId: value.requestId } : {}) }, signal);
@@ -37,8 +38,9 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
     async checkRepair(signal: AbortSignal) { return (await request({ type: "checkRepair" }, signal)).candidate ?? null; },
     receive(reply: AppImageUpdateReply) {
       const current = pending.get(reply.requestId);
-      if (!current) return;
+      if (!current) { if (mutation === reply.requestId && !reply.accepted && !reply.progress) mutation = undefined; return; }
       if (reply.progress) { current.progress?.(reply.progress); return; }
+      if (reply.accepted) { current.resolve(reply); mutation = reply.requestId; return; }
       if (reply.error) current.reject(new UpdateError(reply.error)); else current.resolve(reply);
     },
     close() { for (const current of pending.values()) current.reject(new UpdateError("The native connection closed.")); },

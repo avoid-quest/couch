@@ -27,6 +27,7 @@ struct Host {
     player: mpsc::Sender<player::Request>,
     display: mpsc::Sender<display::Request>,
     updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
+    update_busy: AtomicBool,
     update_checkpoint: Mutex<Option<(String, tokio::sync::oneshot::Sender<(bool, Result<(), String>)>)>>,
     shutting_down: AtomicBool,
     child_exited: watch::Sender<bool>,
@@ -240,6 +241,7 @@ pub fn run() {
                 player: player_sender,
                 display: display_sender,
                 updates: update_sender,
+                update_busy: AtomicBool::new(false),
                 update_checkpoint: Mutex::new(None),
                 shutting_down: AtomicBool::new(false),
                 child_exited,
@@ -288,7 +290,10 @@ pub fn run() {
                                     if uuid::Uuid::parse_str(&request_id).is_ok() {
                                         if let crate::appimage_update::Action::Status { request_id: ref saved_id } = action {
                                             host.report_message(appimage_update::status(&handle, saved_id.as_deref(), &request_id));
+                                        } else if host.update_busy.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                                            host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update or restart operation is already running."}));
                                         } else if host.updates.try_send(appimage_update::Request { id: request_id.clone(), action }).is_err() {
+                                            host.update_busy.store(false, std::sync::atomic::Ordering::SeqCst);
                                             host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
                                         }
                                     }

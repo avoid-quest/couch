@@ -1,3 +1,4 @@
+import { RestartSettings } from "./RestartSettings";
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Settings2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -205,6 +206,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
             <p className="font-medium">TV name</p><p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
             <p className="text-muted-foreground">{host ? "Use an administrator remote to change this TV's settings." : credentials ? "An administrator can change this TV's name." : "Pair this browser to control the TV."}</p>
           </div>}
+          {administrator && credentials && <RestartSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
           {host && !administratorClaimed && identity?.claimAvailable && <>
             <Separator />
             <div className="space-y-3">
