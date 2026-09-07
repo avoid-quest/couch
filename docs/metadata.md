@@ -104,3 +104,25 @@ The browser's isolated download destination is `/artifacts/downloads`; the drive
 reads the archive that the browser actually wrote. Results and screenshots remain
 under `/artifacts`, including failed phases. Passing this software fixture would
 still leave live TMDB and physical-device qualification unclaimed.
+
+The 2026-09-07 software qualification passed at source
+`b36c8f36512d10ad4530eaaaf3234181f55f40df`, using image
+`sha256:979fbf19f90e61d22a6c37704755a8a5f9cc53d3cca3261a88d23ed106a1829e`.
+The run exercised the controls and checks above, including an actual administrator
+browser download, NFO/artwork reimport and an offline application restart. Native
+video and UI pixel checks passed. The source suite passed 558 tests with eight
+existing service/tool skips. A later test-only correction replaces the cue
+restart fixture's fixed 20 ms waits with actual load events; an injected 80 ms
+resolver delay reproduces the old CI failure and passes with the corrected wait.
+
+Local evidence is retained under
+`.artifacts/metadata-admission/attempt-metadata-b36c8f3-a3/`, including
+`evidence/metadata-results.json`, screenshots, source/binary hashes and the
+browser-downloaded archive. The complete evidence TAR has SHA256
+`6edd9e04e67eb8da84888e621e06a4dd75b2cc6537fd07d808e115259f4e2d9e`.
+The launcher recorded 52.39 seconds, successful owner-checked removal and confirmed
+container absence. Its 4 CPU/6 GiB limit included shared memory and bounded
+artifact storage; networking was disabled. Earlier failed setup attempts remain
+in separate directories. Existing preview and subtitle containers were preserved.
+Live TMDB matching remains unqualified because the owner has no authorized API
+access. Physical GPU, display and audio behavior also remain outside this fixture.
