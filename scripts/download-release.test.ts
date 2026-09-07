@@ -19,11 +19,11 @@ function fixture() {
   const request = (path: string) => {
     if (path === 'actions/runs/42') return Buffer.from(JSON.stringify(run));
     if (!archive) {
-    writeFileSync(join(root, 'release.json'), JSON.stringify(manifest));
-    writeFileSync(join(root, 'couch.deb'), 'test');
-    rmSync(join(root, 'artifact.zip'), { force: true });
-    execFileSync('zip', ['-q', 'artifact.zip', 'release.json', 'couch.deb'], { cwd: root });
-    archive = readFileSync(join(root, 'artifact.zip'));
+      writeFileSync(join(root, 'release.json'), JSON.stringify(manifest));
+      writeFileSync(join(root, 'couch.deb'), 'test');
+      rmSync(join(root, 'artifact.zip'), { force: true });
+      execFileSync('zip', ['-q', 'artifact.zip', 'release.json', 'couch.deb'], { cwd: root });
+      archive = readFileSync(join(root, 'artifact.zip'));
     }
     const zip = archive;
     if (path.endsWith('/zip')) return zip;
