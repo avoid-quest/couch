@@ -7,6 +7,7 @@ type Options = {
   build: MaintenanceBuild;
   context: () => Promise<unknown>;
   player: () => string;
+  observe: () => void;
   quiesce: () => Promise<{ progressSaved: boolean; admissionClosed: boolean }>;
   database: () => Promise<void>;
   native: (nonce: string) => Promise<MaintenanceBuild>;
@@ -89,6 +90,8 @@ export function createMaintenance(options: Options) {
         } else {
           if (mode !== "trial" || active.phase !== "committing" || !active.committed || verified?.updateId !== active.updateId || verified.nonce !== nonce || !sameBuild(options.build, request.candidate)) throw error();
           mode = "open";
+          // Trial observations were fenced off; ask the native owner for fresh state.
+          try { options.observe(); } catch { fail(); throw error(); }
           result = { admissionOpen: true };
         }
         return { protocol: "maintenance-v1", nonce, ok: true, ...result };

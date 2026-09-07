@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test";
 import { createMaintenance, type MaintenanceBuild } from "./maintenance";
+import { createSession } from "./session";
+import { openStore } from "./store";
+import type { PlayerState } from "../shared/protocol";
 
 const build: MaintenanceBuild = { version: "2", revision: "b".repeat(40), dataFormat: 1 };
 const transaction = { updateId: "a".repeat(32), nonce: "b".repeat(32), candidateId: "c".repeat(64), ...build, phase: "trial", disrupted: true, committed: false, confirmInterrupt: true };
-function fixture() {
+function fixture(observe = () => {}) {
   let active: typeof transaction | null = { ...transaction };
   let player = "idle", checkpoints = 0, checkpointFailure = false;
   let native = async () => build;
   let frontend: MaintenanceBuild | null = build;
   const maintenance = createMaintenance({
-    build, context: async () => ({ ok: true, context: active }), player: () => player,
+    build, observe, context: async () => ({ ok: true, context: active }), player: () => player,
     quiesce: async () => { checkpoints++; if (checkpointFailure) throw new Error("disk full"); return { progressSaved: true, admissionClosed: true }; },
     database: async () => {}, native: () => native(), frontend: () => frontend,
   });
@@ -105,4 +108,42 @@ test("startup rejects another candidate build and permits the root's authenticat
   await restored.maintenance.initialize();
   expect(restored.maintenance.admitted()).toBe(false);
   expect(await restored.request("readiness", { nonce: "d".repeat(32) })).toMatchObject({ ok: true });
+});
+
+
+test("commit requests fresh native state after trial observations were fenced off", async () => {
+  const store = openStore(":memory:");
+  const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
+  let observations = 0, publications = 0;
+  const f = fixture(() => {
+    expect(f.maintenance.admitted()).toBe(true);
+    observations++;
+    session.observe(idle);
+  });
+  const session = createSession(store, () => {}, () => publications++, { admitted: f.maintenance.admitted });
+  try {
+    await f.maintenance.initialize();
+    session.observe(idle);
+    expect(session.state.player.status).toBe("unavailable");
+    expect(publications).toBe(0);
+    expect(await f.request("readiness")).toMatchObject({ ok: true });
+    f.setActive({ ...transaction, phase: "committing", committed: true });
+    expect(await f.request("commit", { nonce: "d".repeat(32) })).toMatchObject({ ok: false });
+    expect(observations).toBe(0);
+    expect(await f.request("commit")).toMatchObject({ ok: true, admissionOpen: true });
+    expect(observations).toBe(1);
+    expect(session.state.player.status).toBe("idle");
+    expect(publications).toBe(1);
+    expect(await f.request("commit")).toMatchObject({ ok: false });
+    expect(observations).toBe(1);
+  } finally { store.close(); }
+});
+
+test("a failed post-commit observation request fails admission closed", async () => {
+  const f = fixture(() => { throw new Error("native pipe closed"); });
+  await f.maintenance.initialize();
+  expect(await f.request("readiness")).toMatchObject({ ok: true });
+  f.setActive({ ...transaction, phase: "committing", committed: true });
+  expect(await f.request("commit")).toMatchObject({ ok: false });
+  expect(f.maintenance.admitted()).toBe(false);
 });

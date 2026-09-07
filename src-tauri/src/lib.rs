@@ -245,6 +245,9 @@ pub fn run() {
                                     host.connection.send_replace(Some(Ok(connection)));
                                     let _ = host.player.send(player::Request::Observe);
                                 }
+                                Ok(SidecarMessage::Observe) => {
+                                    let _ = host.player.send(player::Request::Observe);
+                                }
                                 Ok(SidecarMessage::Playback { command }) => {
                                     let _ = host.player.send(player::Request::Command(command));
                                 }

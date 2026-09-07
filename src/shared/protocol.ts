@@ -110,4 +110,5 @@ export type SidecarMessage =
   | ({ type: "ready" } & ConnectionInfo)
   | { type: "playback"; command: PlaybackCommand }
   | { type: "diagnostics"; requestId: string }
-  | { type: "readiness"; nonce: string };
+  | { type: "readiness"; nonce: string }
+  | { type: "observe" };

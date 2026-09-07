@@ -36,6 +36,7 @@ const maintenance = activated ? createMaintenance({
   build: loadedBuild,
   context: (): Promise<unknown> => updater!.request({ op: "context" }),
   player: () => hub.session.state.player.status,
+  observe: () => send({ type: "observe" }),
   quiesce: () => hub.quiesce(),
   database: async () => {
     const db = new Database(join(dataDir, "couch.sqlite"), { readonly: true });
