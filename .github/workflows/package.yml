@@ -54,16 +54,17 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
           tauriScript: bun scripts/desktop.ts
-          args: --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
+          args: --verbose --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
       - name: Preserve the exact artifact and matching source
+        if: success() || failure() && hashFiles('src-tauri/build-info.json') != ''
         run: |
           mkdir -p .artifacts/package-release
-          cp src-tauri/target/release/bundle/deb/*.deb .artifacts/package-release/
+          find src-tauri/target/release/bundle -maxdepth 2 -type f -name '*.deb' -exec cp {} .artifacts/package-release/ \;
           cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
           git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
-          stat --printf='%n %s bytes\n' .artifacts/package-release/*.deb > .artifacts/package-release/size.txt
+          find .artifacts/package-release -name '*.deb' -printf '%p %s bytes\n' > .artifacts/package-release/size.txt
           cd .artifacts/package-release
-          sha256sum *.deb *.json *.tar.gz > SHA256SUMS
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
       - name: Install the official qualification driver
         run: cargo install tauri-driver --version 2.0.6 --locked
       - name: Qualify the exact Debian package on clean Ubuntu
