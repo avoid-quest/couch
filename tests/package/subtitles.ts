@@ -7,7 +7,7 @@ import type { Action, SessionState } from "../../src/shared/protocol";
 
 // Run outside the destination. Only /usr/bin/couch and its packaged child play media.
 const container = process.env.SUBTITLE_CONTAINER ?? "couch-wave-subtitle-package";
-const corpus = resolve(process.env.SUBTITLE_CORPUS!);
+const corpus = resolve(process.env.SUBTITLE_CORPUS ?? `${import.meta.dir}/../fixtures/subtitles`);
 const artifacts = resolve(process.env.SUBTITLE_EVIDENCE!);
 const origin = "http://127.0.0.1:45300";
 const checks: string[] = [];

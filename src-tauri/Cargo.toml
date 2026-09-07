@@ -21,7 +21,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
 uuid = { version = "1", features = ["v4"] }
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "macros"] }
+tauri-plugin-updater = "=2.11.0"
+minisign-verify = "=0.2.5"
+base64 = "0.22"
+sha2 = "0.10"
+semver = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+time = { version = "0.3", features = ["parsing"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }

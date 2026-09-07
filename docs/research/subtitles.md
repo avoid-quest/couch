@@ -1,54 +1,36 @@
 # Subtitle corpus and qualification
 
-This is corpus preparation for [Qualify styled and image subtitle playback in
-the packaged native app](https://github.com/avoid-quest/couch/issues/33), checked
-2026-09-06. The initial source base is
-`b7031b9258b385371e1f09df0f325a19c3e2c093`.
-The [CI gate is closed](https://github.com/avoid-quest/couch/issues/43#issuecomment-5555040631)
-and [that base passed Check](https://github.com/avoid-quest/couch/actions/runs/33996451171).
-[Production packaging](https://github.com/avoid-quest/couch/issues/2) remains an
-open native blocker. No packaged app, Docker, HTTP remote, native screenshot,
-physical display or audio test ran for this corpus slice.
+The three accepted media files are checked in beside their font, license and
+caption sources. They are the exact bytes used for
+[issue 33's completed software qualification](https://github.com/avoid-quest/couch/issues/33#issuecomment-5561973033).
+No generation, font tooling or Python environment is needed to replay them.
 
-## Reproduce the inputs
+## Use the accepted inputs
 
-Run from the repository root. Python 3.12, the pinned dependencies below and an
-FFmpeg build with libx264, libass, PGS decoding and DVD subtitle encoding are
-required. The imageio wheel supplies a local FFmpeg executable when the host has
-none. Dependencies and generated outputs stay under the ignored artifact path.
-The committed subset font makes normal generation offline after tool setup.
+From the repository root, verify the fixtures with the existing Bun test runner:
 
 ```sh
-python3 -m venv .artifacts/subtitles/venv
-.artifacts/subtitles/venv/bin/python -m pip install -r tests/fixtures/subtitles/requirements.txt
-SUBTITLE_FFMPEG=$(.artifacts/subtitles/venv/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
-curl -fL https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-sans-ttf-2.37.zip -o .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
-.artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/generate.py .artifacts/subtitles/corpus --ffmpeg "$SUBTITLE_FFMPEG"
-.artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/verify.py .artifacts/subtitles/corpus --ffmpeg "$SUBTITLE_FFMPEG" --font-archive .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
-.artifacts/subtitles/venv/bin/python tests/fixtures/subtitles/negative-controls.py .artifacts/subtitles/negative-controls --ffmpeg "$SUBTITLE_FFMPEG" --font-archive .artifacts/subtitles/dejavu-sans-ttf-2.37.zip
+bun test scripts/subtitle-fixtures.test.ts
 ```
 
-To rebuild the committed font, run `prepare-font.py` with the downloaded ZIP as
-its single argument, then regenerate and verify the corpus. The script checks
-the archive SHA before opening it. Preserve the archive and complete license
-when moving reference artifacts. Generator commands, source hashes, tool version
-and every generated input hash are in `corpus/manifest.json`. Decoder results,
-comparison frames and libass logs are in `corpus/verification/`. These images
-are 640×360 FFmpeg reference composites, not Couch screenshots.
+The test compares the media and retained font/caption sources against the
+historical SHA-256 record. The [packaged native runner](subtitle-package.md#replaying-the-focused-check)
+uses `tests/fixtures/subtitles` as its default corpus and verifies each media hash
+before playback. It retains the actual native pixel, selection, timing, seek,
+replacement, upload and restart checks.
 
-The scripts are opt-in. Existing runners, application source, native helpers,
-upload paths and dependency manifests are unchanged. Each generation overwrites
-its named output files, so give it a dedicated artifact directory.
-Negative controls require a new output directory and mutate only their own
-copied sources and media. They refresh manifest hashes before invoking the real
-verifier, so rejection must come from a semantic assertion.
+The one-off generator, font subsetter and local reference verifier were removed
+under [issue 177](https://github.com/avoid-quest/couch/issues/177). Their old commands
+in `local-result.json` describe historical execution, not current setup steps.
+The following format and reference observations preserve that history. Changing
+the corpus requires new native qualification; updating a hash alone is insufficient.
 
 ## Exact corpus subset
 
 All video backgrounds, captions and the diagnostic marker are authored for this
 test. No movie, provider or disc sample is redistributed. All three playable
 MKVs contain 14 seconds of silent 640×360 H.264 at 24 fps. There is no audio track.
-Generated MKVs stay out of Git; sources and the 44,240-byte subset font are kept.
+The three checked-in MKVs total 111,589 bytes; the subset font is 44,240 bytes.
 
 | Input | Tracks and visible reference |
 | --- | --- |
@@ -149,30 +131,19 @@ presence cannot excuse fallback in a subset reference.
 [DVD display-control dates](https://github.com/FFmpeg/FFmpeg/blob/n7.1/libavcodec/dvdsubdec.c),
 [libass fallback selection](https://github.com/libass/libass/blob/0.17.1/libass/ass_fontselect.c).
 
-`negative-controls.py --verifier path/to/old/verify.py` replays the counterexamples
-against a saved verifier and exits nonzero when corrupt inputs pass. The current
+The removed negative-control tool replayed these counterexamples against the
+saved verifier and rejected corrupt inputs. The historical
 [local result](../../tests/fixtures/subtitles/local-result.json) records the red
 and green commands, semantic failures, timing/composite measurements and artifact
-hashes. These corrections strengthen local evidence; packaged acceptance is
-still pending.
+hashes. These corrections strengthened the local reference evidence before the later
+packaged qualification.
 
-## Remaining qualification
+## Qualification limits
 
-| Issue 33 criterion | Current evidence and remaining work |
-| --- | --- |
-| Corpus, fonts, scripts and flags | Authored sources, licensed derived font, decoded streams/display times, attachment hashes, full bitmap composites and exclusive-font reference comparisons. |
-| Selection, Off, timing, seek, source replacement, profile language, portals | Pending in Couch. Reference frames and container flags do not exercise TV/phone selectors or native controls. |
-| Packaged Ubuntu player and exact unsupported formats/fonts | Blocked by issue 2 and a coordinated native run. Every corpus sample remains unqualified in the packaged app. |
-| Bounded private text uploads, cleanup and restart defaults | Existing checks in `tests/linux/subtitles.ts` are preserved, with no new run claimed. Rerun them alongside this corpus after saved-preference integration. |
-
-The future qualification layer must record app/package/source/binary versions,
-the active renderer and actual screenshots. Preserve the native test's hardcoded
-1600×1000 capture size and report it separately from the 640×360 input. Observe
-the TV selector and portals over video, two controllers, reconnect snapshots,
-profile-language defaults, Off, delayed cues, forward/backward seeks, replacement
-and stopped restart. Capture HTTP widths 320, 375, 390, 768, 1024, 1440 and 1920,
-plus the packaged Ubuntu app and real TV pixels. Keep native dependencies open
-until those observations pass.
+The [packaged execution report](subtitle-package.md) and
+[issue 33 acceptance record](https://github.com/avoid-quest/couch/issues/33#issuecomment-5561973033)
+identify the tested package and combined phases. Preserving these fixture bytes
+does not claim a new package run or physical display/audio acceptance.
 
 This subset excludes other font families/code points, CJK/Indic/emoji coverage,
 ASS inline `[Fonts]`, animation/karaoke and complex positioning, multiple PGS

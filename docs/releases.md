@@ -12,14 +12,14 @@ Keep the source repository private. The TV never receives GitHub authentication 
 
 ```sh
 gh api repos/avoid-quest/couch/actions/runs/RUN_ID/artifacts --jq '.artifacts[] | {id,name,digest,expired}'
-python3 scripts/download-release.py ARTIFACT_ID /absolute/private-releases/RUN.ATTEMPT
+bun scripts/download-release.ts ARTIFACT_ID /absolute/private-releases/RUN.ATTEMPT
 ```
 
 The downloader checks the successful `main` Package run, GitHub's archive SHA256, exact source identity, every package hash, and the archive file list. It refuses to overwrite an existing destination. A new build gets a new attempt and version. Retrying only qualification preserves the original build identity; the downloader requires the latest overall run attempt to succeed. Qualification-only dispatch against saved binaries produces evidence without publishing a release.
 
 ## Provision the private signer once
 
-The publisher needs Python 3.9+, Debian `dpkg`/`dpkg-deb`, and GnuPG. Run it on Ubuntu, including a dedicated Ubuntu container on the Mac. Keep release storage and the signing directory on separate persistent Mac bind mounts. Do not use the project's native build cache or preview container. A suitable dedicated tools image can install only `python3 gnupg` on Ubuntu 24.04; `dpkg` is already present.
+The publisher needs Bun 1.4.2, Debian `apt-utils` (`apt-ftparchive`), `dpkg`/`dpkg-deb`, util-linux (`flock`), and GnuPG. Run it on Ubuntu, including a dedicated Ubuntu container on the Mac. Keep release storage and the signing directory on separate persistent Mac bind mounts. Do not use the project's native build cache or preview container. Install `apt-utils gnupg` on Ubuntu 24.04 and the pinned Bun runtime; `dpkg` and `flock` are already present. APT generates Packages and Release indexes, while Bun retains release identity and atomic promotion policy.
 
 Use a persistent private directory such as `$HOME/Library/Application Support/Couch/releases`. Set its mode and the `gnupg` subdirectory to `0700`. Keep `gnupg` outside the HTTP-served `feed` directory and outside any source checkout. Create the key from an interactive terminal so its passphrase remains private:
 
@@ -64,13 +64,13 @@ Use `stable` for Stable installations. Enroll one channel, since enrolling both 
 Run the publisher with the verified artifact directory, persistent feed directory, channel, and full signing fingerprint:
 
 ```sh
-python3 scripts/publish-release.py /private-release-storage/RUN.ATTEMPT /private-release-storage/feed preview --key FULL_FINGERPRINT
-python3 scripts/publish-release.py /private-release-storage/RUN.ATTEMPT /private-release-storage/feed stable --key FULL_FINGERPRINT
+bun scripts/publish-release.ts /private-release-storage/RUN.ATTEMPT /private-release-storage/feed preview --key FULL_FINGERPRINT
+bun scripts/publish-release.ts /private-release-storage/RUN.ATTEMPT /private-release-storage/feed stable --key FULL_FINGERPRINT
 ```
 
 Stable requires a successful prior Preview publication. A feed-wide file lock serializes all publishers. Inside that lock the publisher validates the artifact, rejects backwards channel movement using `dpkg --compare-versions`, writes immutable packages, prepares and verifies the signed index, then atomically replaces the channel symlink. Older jobs cannot undo a newer publication. A failed publication may leave an unadvertised immutable release directory, which is safe to retain and retry.
 
-Serve only `feed`, for example with `python3 -m http.server 8765 --bind MAC_LAN_ADDRESS --directory /private-release-storage/feed`. The HTTP server must follow the relative channel symlinks. The publisher retains old snapshots, packages, and by-hash indexes so clients can finish requests begun before a channel switch. Do not garbage-collect them during the private development phase.
+Serve only `feed`, for example with Caddy’s `caddy file-server --listen MAC_LAN_ADDRESS:8765 --root /private-release-storage/feed`. The HTTP server must follow the relative channel symlinks. The publisher retains old snapshots, packages, and by-hash indexes so clients can finish requests begun before a channel switch. Do not garbage-collect them during the private development phase.
 
 Metadata expires after seven days. Re-publish the same immutable release to renew the signature and expiry without changing the package. When the Mac sleeps or leaves the LAN, the feed is unavailable. Failed or missed APT checks leave the installed Couch package running. Expired metadata also fails closed. This publisher installs no timer or updater; channel selection and update policy belong to the later appliance tickets.
 
@@ -87,10 +87,10 @@ Retain an existing custom data directory according to `docs/install-couch.md`. T
 
 For real acceptance, qualify and download two distinct successful CI attempts, publish the first to Preview, install it, then publish and install the second. Record both artifact IDs, archive/package hashes, source commits, selected channel, installed `dpkg-query` versions, running `/api/build` identity, preserved profile/pairing/data, and the Package workflow elapsed time plus local publication elapsed time. Promote the second to Stable and show that its hashes stay unchanged. Coordinate all T480 changes with its current owner. Do not substitute repacked or fixture packages for this real-build evidence.
 
-Run the disposable integration test only inside a throwaway Ubuntu container with `python3 gnupg`; it installs dummy packages named `couch` and `couch-appliance`:
+Run the disposable integration test only inside a throwaway Ubuntu container with Bun, `apt-utils gnupg`; it installs dummy packages named `couch` and `couch-appliance`:
 
 ```sh
-python3 scripts/test-publish-release.py
+bun scripts/test-publish-release.ts
 ```
 
 It exercises signed APT installation of two fixture builds, exact-byte promotion, publication failure and tamper rejection, monotonic versions, and retained by-hash indexes. It is software evidence, not real-device acceptance.
@@ -101,4 +101,4 @@ Keep the signing identity, packages, manifest format, `dists` paths, and by-hash
 
 Move the source URL to the public HTTPS feed through an authenticated configuration update while preserving `Signed-By`. Making GitHub source public does not create an APT repository. Key rotation requires the already trusted path to deliver the replacement key before switching signers.
 
-The implementation follows [APT archive authentication](https://manpages.debian.org/bookworm/apt/apt-secure.8.en.html), [immutable GitHub artifacts](https://github.com/actions/upload-artifact), and [GitHub artifact metadata and downloads](https://docs.github.com/en/rest/actions/artifacts).
+APT owns index generation through [apt-ftparchive](https://manpages.ubuntu.com/manpages/noble/man1/apt-ftparchive.1.html). The optional LAN server uses [Caddy’s static file command](https://caddyserver.com/docs/command-line#caddy-file-server). The implementation follows [APT archive authentication](https://manpages.debian.org/bookworm/apt/apt-secure.8.en.html), [immutable GitHub artifacts](https://github.com/actions/upload-artifact), and [GitHub artifact metadata and downloads](https://docs.github.com/en/rest/actions/artifacts).
