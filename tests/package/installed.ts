@@ -125,7 +125,10 @@ try {
     inside("apt-get", "install", "-y", "--no-install-recommends", "sqlite3");
     inside("mkdir", "-p", "/media/couch-restart");
     inside("ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "120", "/media/couch-restart/Restart.flac");
-    await api("/api/library/sources", { path: "/media/couch-restart" });
+    const { sources } = await api("/api/library/sources", { path: "/media/couch-restart" });
+    const source = sources.find((source: any) => source.path === "/media/couch-restart");
+    assert.ok(source, "The generated media folder was registered");
+    await api(`/api/library/sources/${source.id}/scan`, {});
     let local: any;
     await until("Installed folder scan indexes resumable local media", async () => {
       local = (await api("/api/library/items?q=Restart")).items[0];
