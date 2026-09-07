@@ -73,7 +73,7 @@ been demonstrated in these exact samples so far.
 
 Use a disposable Ubuntu 24.04 amd64 container with the exact `.deb` installed
 through APT. Keep a new private data directory. Mount the checkout read-only at
-`/qualification`, the generated corpus read-only at `/corpus`, and a writable
+`/qualification`, `tests/fixtures/subtitles` read-only at `/corpus`, and a writable
 artifact directory at `/evidence`. Publish container ports 45300, 45344 and
 45345 only on host loopback. The destination must resolve
 `host.docker.internal` to the external controller's generated-media server.
@@ -94,11 +94,11 @@ docker exec -d -u subtitle couch-wave-subtitle-package env \
   WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
   dbus-run-session -- bash /qualification/tests/package/subtitle-display.sh
 
-SUBTITLE_CORPUS=/absolute/path/to/corpus \
 SUBTITLE_EVIDENCE=/absolute/path/to/mounted/evidence \
   bun tests/package/subtitles.ts
 ```
 
+`SUBTITLE_CORPUS` overrides the checked-in fixture directory.
 `SUBTITLE_CONTAINER` overrides the disposable container name.
 `SUBTITLE_PHASE=rendering`, `controls`, `profiles`, or `replacement` resumes a relevant subset
 while keeping previous evidence; the default runs all phases. The full run

@@ -1,0 +1,17 @@
+{
+  "scope": "Exact accepted corpus, preserved without regeneration. See local-result.json and issue 33 for historical qualification and limits.",
+  "files": {
+    "text.mkv": {
+      "bytes": 72061,
+      "sha256": "62865e042134d39fca2963a5e5fdd33b3a74323b8f5309fdbd5e3c19bfcc4f6b"
+    },
+    "bitmap.mkv": {
+      "bytes": 22403,
+      "sha256": "e4f70e8986447658080b93d436a806861cdd58c25c9aa6f79b85fb38dcbe71c9"
+    },
+    "replacement.mkv": {
+      "bytes": 17125,
+      "sha256": "5fc64d1a30f3d7f331b0dd6fd0325f76229b3fb9e33ae94a281f001d336edf1b"
+    }
+  }
+}
