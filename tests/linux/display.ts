@@ -39,7 +39,7 @@ try {
  await until(async () => (await api("/api/display")).current === target.id);
  state = await api("/api/display/confirm", { token: state.preview.token });
  assert.equal(state.saved, target.id); assert.equal(state.current, target.id); evidence.push({ step: "confirmed", state });
- assert.equal(await Bun.file("/work/display-data/display-output").text(), target.id);
+ assert.equal(await Bun.file(`${process.env.COUCH_DATA_DIR}/display-output`).text(), target.id);
  const geometry = await new Response(Bun.spawn(["xdotool", "getactivewindow", "getwindowgeometry", "--shell"], { stdout: "pipe" }).stdout).text();
  assert.ok(geometry.includes(`X=${target.x}\n`) && geometry.includes(`WIDTH=${target.width}\n`), geometry);
  state = await api("/api/display/preview", { output: previous });

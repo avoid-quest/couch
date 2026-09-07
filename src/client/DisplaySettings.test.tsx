@@ -7,7 +7,7 @@ let DisplaySettings: typeof import("./DisplaySettings")["DisplaySettings"];
 let root: Root, window: Window, request: ReturnType<typeof spyOn>, state: DisplayState;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: { url: string; body: unknown }[] = [];
-const render = async () => act(async () => root.render(<DisplaySettings credentials={{ origin: "http://localhost", token: "admin" }} connected />));
+const render = async (connected = true) => act(async () => root.render(<DisplaySettings credentials={{ origin: "http://localhost", token: "admin" }} connected={connected} />));
 beforeEach(async () => {
   state = { outputs: [
     { id: "panel", name: "eDP-1", connected: true, width: 1366, height: 768, x: 0, y: 0, refresh: 60 },
@@ -49,4 +49,25 @@ test("preview supplies physical identity and confirm uses the native preview tok
   expect(document.body.textContent).toContain("seconds remaining");
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Keep this screen")!.click());
   expect(calls.find(call => call.url.endsWith("/confirm"))!.body).toBe(JSON.stringify({ token: "current-preview" }));
+});
+test("a native mutation failure remains visible after polling succeeds", async () => {
+  await render();
+  request.mockImplementation((async (input) => String(input).endsWith("/preview") ? Response.json({ error: "That screen disappeared." }, { status: 503 }) : Response.json(state)) as typeof fetch);
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Preview on HDMI-1")!.click());
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe("That screen disappeared.");
+});
+test("disconnect aborts the pending mutation and ignores a late response", async () => {
+  await render();
+  const gate = Promise.withResolvers<Response>();
+  let signal: AbortSignal | undefined;
+  request.mockImplementation((async (input, init) => {
+    if (String(input).endsWith("/preview")) { signal = init?.signal as AbortSignal; return gate.promise; }
+    return Response.json(state);
+  }) as typeof fetch);
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Preview on HDMI-1")!.click());
+  await render(false);
+  expect(signal!.aborted).toBe(true);
+  await act(async () => gate.resolve(Response.json({ ...state, notice: "Stale response must be ignored." })));
+  expect(document.body.textContent).not.toContain("Stale response");
+  expect(document.body.textContent).toContain("Reconnect to read");
 });

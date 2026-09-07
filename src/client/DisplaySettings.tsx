@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { DisplayState } from "../shared/display";
 
 export function DisplaySettings({ credentials, connected }: { credentials: { origin: string; token: string }; connected: boolean }) {
   const [state, setState] = useState<DisplayState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readError, setReadError] = useState<string | null>(null);
+  const mutation = useRef<AbortController | null>(null);
   const [pending, setPending] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [refresh, setRefresh] = useState(0);
   const { origin, token } = credentials;
-  useEffect(() => { setState(null); setError(null); }, [origin, token]);
+  useEffect(() => {
+    setState(null); setError(null); setReadError(null); setPending(false);
+    return () => mutation.current?.abort();
+  }, [origin, token, connected]);
   useEffect(() => {
     if (!connected) { setState(null); return; }
     const controller = new AbortController();
@@ -22,8 +27,8 @@ export function DisplaySettings({ credentials, connected }: { credentials: { ori
         const response = await fetch(`${origin}/api/display`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6_000)]) });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error);
-        if (!controller.signal.aborted) { setState(body); setError(null); }
-      } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Cannot read displays."); }
+        if (!controller.signal.aborted) { setState(body); setReadError(null); }
+      } catch (reason) { if (!controller.signal.aborted) setReadError(reason instanceof Error ? reason.message : "Cannot read displays."); }
       finally { running = false; }
     };
     void read();
@@ -31,19 +36,22 @@ export function DisplaySettings({ credentials, connected }: { credentials: { ori
     return () => { controller.abort(); clearInterval(timer); };
   }, [origin, token, connected, pending, refresh]);
   async function change(op: string, body: unknown) {
+    const controller = new AbortController();
+    mutation.current = controller;
     setPending(true); setError(null);
     try {
-      const response = await fetch(`${origin}/api/display/${op}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(6_000) });
+      const response = await fetch(`${origin}/api/display/${op}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(6_000)]) });
       const result = await response.json();
+      if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(result.error);
       setState(result);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Display change failed."); }
-    finally { setPending(false); setRefresh(value => value + 1); }
+    } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Display change failed."); }
+    finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } }
   }
   return <section className="space-y-4">
     <h3>TV screen</h3>
     <p>Move Couch to a connected physical screen. Confirm the picture within 20 seconds or the TV restores the previous usable screen.</p>
-    {error && <p role="alert">{error}</p>}
+    {(error || readError) && <p role="alert">{error || readError}</p>}
     {!connected && <p>Reconnect to read the TV's displays.</p>}
     {state?.notice && <p role="status">{state.notice}</p>}
     {state?.preview && <div role="status" className="space-y-2"><p>Confirm the picture: {Math.max(0, Math.ceil((state.preview.expiresAt - now) / 1_000))} seconds remaining.</p><Button disabled={pending || !connected} onClick={() => change("confirm", { token: state.preview!.token })}>Keep this screen</Button> <Button disabled={pending || !connected} onClick={() => change("cancel", { token: state.preview!.token })}>Restore previous screen</Button></div>}
