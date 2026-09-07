@@ -515,7 +515,7 @@ works with either Manual or Auto when idle selected.
 Install update asks before restarting and offers explicit playback interruption.
 Keep the remote open to reconnect and check the durable result. Success requires
 the requested version and commit to match the running app; an old build reconnecting
-is not success. A failed trial reports the need for SSH recovery. Data is never automatically restored from an older snapshot.
+is not success. A failed trial reports the need for SSH recovery. Data is never automatically restored from an older snapshot. The application database backup is consistent; auxiliary browser-profile copies have the documented [WebKit limitation](appimage-updates.md#backup-boundary-and-webkit-exception).
 
 Installation requires the signed AppImage enrollment and fixed systemd installation. Follow the [installation and operator recovery procedure](update-worker.md). Keep the publishing host reachable for checks and downloads. Ubuntu runtime repair remains a separate fixed systemd operation; it does not upgrade Ubuntu or select arbitrary packages.
 

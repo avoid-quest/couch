@@ -23,3 +23,11 @@ Versions retain `0.1.0+build.RUN.ATTEMPT`. Rust semver's total ordering compares
 Tauri's `install(bytes)` does not reverify persisted bytes. Couch repeats verification before replacement, checks backup/replacement storage, retains a consistent stopped-writer backup and known-good archive, leaves restart to systemd and verifies the resulting native/server/frontend build and bundled tools. Package and installed-device journeys remain separate from source tests.
 
 Official references: [Tauri updater](https://v2.tauri.app/plugin/updater/), [updater source](https://github.com/tauri-apps/plugins-workspace/tree/v2/plugins/updater).
+
+## Backup boundary and WebKit exception
+
+Couch checkpoints its authoritative application SQLite database and stops its Bun producers before copying data. Tauri's Linux WebKit profile can share that directory. Its auxiliary browser files are copied only as best-effort material: that copy is **not guaranteed consistent or crash-consistent**. Installation leaves the current profile in place, and operator recovery does not automatically restore the database or browser profile from this copy.
+
+The supported `WebviewWindow::destroy()` closes a window, but does not provide complete persistent-profile teardown while retaining the updater host. The [pinned Tauri runtime](https://github.com/tauri-apps/tauri/blob/tauri-v2.11.5/crates/tauri-runtime-wry/src/lib.rs) deliberately retains Linux WebContext for the application's lifetime because WebKitNetworkProcess survives closed WebViews; see [upstream issue 14626](https://github.com/tauri-apps/tauri/issues/14626). Closing only the window therefore would not establish a stopped-writer profile snapshot.
+
+This is the accepted documented exception where no supported replacement exists. External owner: Tauri/WebKit maintainers. Resume condition: a supported flush or full persistent-profile teardown API that keeps the updater host alive becomes available; qualify it against actual profile writes before strengthening the backup claim. Couch retains its consistent application database backup and current untouched browser profile without adding a runtime fork or snapshot framework.
