@@ -208,9 +208,10 @@ test("repair verification ignores the health cache and effective overrides, and 
 
 test("Ubuntu status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
-  const health = createToolHealth({ ...f.options, command: async (path, args) => {
+  const health = createToolHealth({ ...f.options, command: async (path, args, _env, timeout) => {
     calls++;
     expect(path).toBe("/usr/bin/python3"); expect(args).toEqual(["-I", "/usr/lib/couch-appliance/updater/system_packages.py"]);
+    expect(timeout).toBe(5_000);
     return JSON.stringify({ ok: true, available: 4, security: 2, broken: 0, indexUpdatedAt: null });
   } });
   try {
@@ -233,4 +234,10 @@ test("shutdown during Ubuntu inspection reports unavailable rather than revoked 
   gate.resolve(JSON.stringify({ ok: true, available: 0, security: 0, broken: 0, indexUpdatedAt: null }));
   expect((await response).status).toBe(503);
   await closing;
+});
+
+test("package inventory gets its fixed larger budget while version probes keep their short deadline", async () => {
+  const args = ["-e", "setTimeout(() => console.log('completed'), 1800)"];
+  await expect(runDiagnosticCommand(process.execPath, args, {})).rejects.toThrow("time / 4 KiB limit");
+  expect(await runDiagnosticCommand(process.execPath, args, {}, 5_000)).toBe("completed");
 });

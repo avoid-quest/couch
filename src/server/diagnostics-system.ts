@@ -11,9 +11,9 @@ export function diagnosticBuild(value: unknown): NativeDiagnostics["build"] {
   return { version: field("version", /^[\d][\dA-Za-z.+-]{0,100}$/), revision: field("revision", /^[a-f\d]{7,64}$/), target: field("target", /^[\w-]{1,80}$/), packaged: build.packaged === true };
 }
 
-export function runDiagnosticCommand(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<string> {
+export function runDiagnosticCommand(command: string, args: string[], env: NodeJS.ProcessEnv, timeout = 1_500): Promise<string> {
   // Only fixed read-only commands reach here; no credentials are inherited.
-  return new Promise((resolve, reject) => execFile(command, args, { timeout: 1_500, maxBuffer: 4096, env, encoding: "utf8", killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The command failed or exceeded its 1.5 second / 4 KiB limit.")) : resolve(stdout.trim())));
+  return new Promise((resolve, reject) => execFile(command, args, { timeout, maxBuffer: 4096, env, encoding: "utf8", killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The command failed or exceeded its time / 4 KiB limit.")) : resolve(stdout.trim())));
 }
 
 async function osName(): Promise<string> {

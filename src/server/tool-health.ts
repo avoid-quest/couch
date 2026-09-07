@@ -64,7 +64,7 @@ export function createToolHealth(options: Options) {
       const value: UbuntuPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "Ubuntu package status is unavailable for this installation." };
       if (!options.packaged) return value;
       try {
-        const result = JSON.parse(await (options.command ?? runDiagnosticCommand)("/usr/bin/python3", ["-I", "/usr/lib/couch-appliance/updater/system_packages.py"], { PATH: "/usr/bin:/bin", LC_ALL: "C" }));
+        const result = JSON.parse(await (options.command ?? runDiagnosticCommand)("/usr/bin/python3", ["-I", "/usr/lib/couch-appliance/updater/system_packages.py"], { PATH: "/usr/bin:/bin", LC_ALL: "C" }, 5_000));
         if (result.ok !== true || [result.available, result.security, result.broken].some(number => !Number.isSafeInteger(number) || number < 0 || number > 1_000_000) || result.indexUpdatedAt !== null && !Number.isSafeInteger(result.indexUpdatedAt)) throw new Error();
         return { ...value, available: result.available, security: result.security, broken: result.broken, indexUpdatedAt: result.indexUpdatedAt, error: null };
       } catch { return { ...value, error: "Ubuntu package indexes or the package-status runtime are unavailable. Check through system administration; Couch releases are separate." }; }

@@ -443,7 +443,9 @@ unprivileged `python3-apt` helper counts installed packages with newer trusted
 Ubuntu candidates, identifies candidates in a `-security` pocket and reports
 broken package states. These are cached local-index facts, not a live security
 assessment or an Ubuntu Pro/ESM entitlement check. The last automated index-refresh
-timestamp may be unknown. The status endpoint never refreshes APT indexes,
+timestamp may be unknown. Reading the full package inventory has a fixed five-second
+deadline and 4 KiB output limit; helper version probes keep their 1.5-second limit.
+Results are cached for 30 seconds. The status endpoint never refreshes APT indexes,
 installs updates or starts an OS release upgrade. The companion package declares
 `python3-apt`; failures remain visible if its runtime is unavailable. See the
 [python-apt package origin and version API](https://apt-team.pages.debian.net/python-apt/library/apt.package.html).
