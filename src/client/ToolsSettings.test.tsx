@@ -9,7 +9,7 @@ let root: Root, window: Window, request: ReturnType<typeof spyOn>, report: ToolH
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: { url: string; method: string | undefined; body: unknown; signal: AbortSignal }[] = [];
 const button = () => document.querySelector<HTMLButtonElement>("button")!;
-const render = async (connected = true, token = "admin") => act(async () => root.render(<ToolsSettings credentials={{ origin: "http://localhost", token }} connected={connected} />));
+const render = async (connected = true, token = "admin", revision?: string) => act(async () => root.render(<ToolsSettings credentials={{ origin: "http://localhost", token }} connected={connected} revision={revision} />));
 beforeEach(async () => {
   report = { checkedAt: "2026-09-06T22:00:00Z", cacheSeconds: 10, tools: [
     { name: "yt-dlp", expectedVersion: "2026.08.19", installed: { status: "ready", version: "2026.08.19", error: null }, effective: { source: "environment", status: "ready", version: "2026.01.01", error: null } },
@@ -96,4 +96,18 @@ test("Ubuntu cached security/package status is distinct from release updates and
   expect(document.body.textContent).toContain("broken dependencies: 1");
   expect(document.body.textContent).toContain("index refresh: Unknown");
   expect([...document.querySelectorAll("button")].some(button => /upgrade|install/i.test(button.textContent || ""))).toBe(false);
+});
+
+test("a completed repair clears prior tool and Ubuntu observations while its fresh check is pending", async () => {
+  request.mockImplementation((async input => Response.json(String(input).endsWith("/ubuntu") ? { available: 4, security: 2, broken: 0, indexUpdatedAt: null } : report)) as typeof fetch);
+  await render(true, "admin", "old");
+  expect(document.body.textContent).toContain("2026.08.19");
+  expect(document.body.textContent).toContain("4 available Ubuntu package updates");
+  const gate = Promise.withResolvers<Response>();
+  request.mockImplementation((async (_input, _init) => gate.promise.then(response => response.clone())) as typeof fetch);
+  await render(true, "admin", "repaired");
+  expect(document.body.textContent).not.toContain("2026.08.19");
+  expect(document.body.textContent).not.toContain("4 available Ubuntu package updates");
+  expect(document.body.textContent).toContain("Checking local media tools");
+  await act(async () => gate.resolve(Response.json(report)));
 });

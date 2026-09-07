@@ -22,7 +22,7 @@ def inspect(runtime=False):
         return {"version": available.version, "installed": package.installed.version if package.installed else None}
     packages = [package for package in cache if package.is_installed and package.is_upgradable and package.candidate and ubuntu(package.candidate)]
     security = sum(any(origin.origin == "Ubuntu" and origin.trusted and origin.archive.endswith("-security") for origin in package.candidate.origins) for package in packages)
-    stamp = Path("/var/lib/apt/periodic/update-success-stamp")
+    stamp = Path("/var/lib/apt/periodic/update-stamp")
     return {"available": len(packages), "security": security, "indexUpdatedAt": int(stamp.stat().st_mtime * 1000) if stamp.exists() else None, "broken": cache.broken_count}
 
 

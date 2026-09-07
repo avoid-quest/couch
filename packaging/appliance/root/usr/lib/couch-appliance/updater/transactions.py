@@ -17,6 +17,8 @@ def public(record):
     value = {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision", "idleDeferred", "intent", "repairRuntime")}
     if record.get("recoveryPending") and not record.get("committed"):
         value["phase"] = "restoring"
+    if value["phase"] == "restored":
+        value["error"] = record.get("updateError") or value["error"]
     return value
 
 

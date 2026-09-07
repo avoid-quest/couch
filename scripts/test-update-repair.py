@@ -119,11 +119,13 @@ class RepairRecoveryTests(unittest.TestCase):
         self.assertEqual(self.engine.status()["phase"], "restored")
         self.assertEqual(self.engine.record["automaticStarts"], 1)
         self.assertEqual(self.engine.record["updateError"], "Package tool smoke failed")
+        self.assertEqual(self.engine.status()["error"], "Package tool smoke failed")
         self.assertEqual(self.platform.restores, 1)
         fixtures.RecoveryTests.preserved(self)
         self.assertEqual({str(path): path.read_bytes() for path in self.stages.rglob("*") if path.is_file()}, staged)
         restarted = fixtures.transactions.Transactions(self.storage, self.platform, lambda: b"fixture")
         self.assertEqual(restarted.status()["phase"], "restored")
+        self.assertEqual(restarted.status()["error"], "Package tool smoke failed")
         self.assertFalse(restarted.submit(self.request, "repair-current")[1])
         with self.assertRaisesRegex(receipt.Rejected, "Committed data"):
             recovery.restore(self.engine, self.engine.record["updateId"])
@@ -218,6 +220,11 @@ class UbuntuRepairTests(unittest.TestCase):
         cache = Cache([package("Ubuntu", "noble-security"), package("Ubuntu", "noble-updates"), package("Third-party", "noble-security"), package("Ubuntu", "noble-security", False)])
         with patch.dict(sys.modules, {"apt": SimpleNamespace(Cache=lambda: cache)}), patch.object(system_packages.Path, "exists", return_value=False):
             self.assertEqual(system_packages.inspect(), {"available": 2, "security": 1, "broken": 1, "indexUpdatedAt": None})
+        with patch.dict(sys.modules, {"apt": SimpleNamespace(Cache=lambda: cache)}), patch.object(system_packages, "Path") as path:
+            path.return_value.exists.return_value = True
+            path.return_value.stat.return_value.st_mtime = 1234
+            self.assertEqual(system_packages.inspect()["indexUpdatedAt"], 1234000)
+            path.assert_called_once_with("/var/lib/apt/periodic/update-stamp")
 
 
 class WorkerLifetimeTests(unittest.TestCase):

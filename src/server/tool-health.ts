@@ -162,7 +162,8 @@ export function createToolHealth(options: Options) {
       if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
       if (url.pathname === "/api/tools/ubuntu") {
         const result = await systemStatus();
-        return !permitted() || shutdown.signal.aborted ? json({ error: "Administrator access is no longer available." }, 403) : json(result);
+        if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
+        return !permitted() ? json({ error: "Administrator access is no longer available." }, 403) : json(result);
       }
       if (!cached || Date.now() - Date.parse(cached.checkedAt) >= cacheSeconds * 1000) {
         // A timed-out filesystem probe remains the single pending collection;

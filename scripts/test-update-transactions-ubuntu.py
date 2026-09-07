@@ -216,6 +216,8 @@ class RealTransactions(unittest.TestCase):
                     platform.missing_dependency = dependency
                     call({"op": "install", "candidateId": missing, "requestId": "d" * 32, "confirmInterrupt": True})
                     self.until(lambda: engine.status() and engine.status()["phase"] in ("failed", "operator-required", "succeeded"), 30)
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(engine.status()["phase"], "failed", engine.status())
                     self.assertNotIn("quiesce", platform.calls)
                     self.assertIsNone(platform.child.poll())
@@ -238,6 +240,8 @@ class RealTransactions(unittest.TestCase):
                         self.assertNotIn("quiesce", platform.calls)
                         self.assertIsNone(platform.child.poll())
                     self.until(lambda: engine.status()["phase"] in ("succeeded", "failed", "operator-required"), 60)
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(engine.status()["phase"], "succeeded", engine.status())
                     self.assertEqual(installed()["version"], "0.1.0+build.2.1")
                     with sqlite3.connect(storage.root / "backups" / update_id / "data/couch.sqlite") as backup:
@@ -252,6 +256,8 @@ class RealTransactions(unittest.TestCase):
                     before = len(platform.calls)
                     call({"op": "install", "candidateId": second, "requestId": "b" * 32, "confirmInterrupt": True})
                     self.until(lambda: engine.status()["phase"] == "failed")
+                    server.worker.join(timeout=5)
+                    self.assertFalse(server.worker.is_alive())
                     self.assertEqual(len(platform.calls), before)
                     signed.write_bytes(original)
                     platform.bad_readiness = True

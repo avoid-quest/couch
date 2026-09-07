@@ -13,7 +13,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
-  useEffect(() => { setReport(null); setUbuntu(null); setError(null); }, [credentials.origin, credentials.token, connected]);
+  useEffect(() => { setReport(null); setUbuntu(null); setError(null); }, [credentials.origin, credentials.token, connected, revision]);
   useEffect(() => {
     if (!connected) { setLoading(false); return; }
     const controller = new AbortController();

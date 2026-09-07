@@ -428,6 +428,8 @@ and clean `dpkg --verify ffmpeg`. Missing unrelated libraries and pre-existing
 interrupted package operations remain explicit system-administration failures.
 The package-manager interruption recovery described above still applies if this
 repair's own APT transaction fails.
+Recovery restores the authenticated Couch packages and Couch data. It does not
+remove Ubuntu dependencies installed by the optional runtime repair.
 
 An uncommitted failure uses the existing bounded automatic recovery and SSH
 fallback. A restored previous app has its own authenticated startup readiness;

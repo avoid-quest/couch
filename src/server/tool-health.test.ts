@@ -223,3 +223,14 @@ test("Ubuntu status is a bounded fixed read, remains separate and never accepts 
     await health.handle(new Request(url), () => administrator); expect(calls).toBe(1);
   } finally { await health.close(); }
 });
+
+test("shutdown during Ubuntu inspection reports unavailable rather than revoked access", async () => {
+  const f = await fixture(), gate = Promise.withResolvers<string>(), started = Promise.withResolvers<void>();
+  const health = createToolHealth({ ...f.options, command: () => { started.resolve(); return gate.promise; } });
+  const response = health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator);
+  await started.promise;
+  const closing = health.close();
+  gate.resolve(JSON.stringify({ ok: true, available: 0, security: 0, broken: 0, indexUpdatedAt: null }));
+  expect((await response).status).toBe(503);
+  await closing;
+});
