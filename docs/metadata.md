@@ -1,6 +1,11 @@
 # Video metadata corrections and export
 
 The host API supports administrator corrections for local movies and episodes.
+Open a movie or episode in Library, then choose **Edit metadata**. On the TV,
+these controls accept local input; paired navigation cannot activate them.
+Administrator browsers use the same editor and download the export directly.
+The TV editor gives the exact browser navigation path for exporting.
+
 Existing libraries need one rescan to retain their import snapshot before the
 first correction. Corrections use each item's current revision; another edit or
 a changed scan makes an older edit fail with HTTP 409. Correction values, origin,
@@ -71,9 +76,53 @@ preservation. Export rejects an oversized or invalid resulting NFO. Export uses
 fixed archive entry names, so media filenames never become extraction paths.
 No source media, provider key or absolute host path enters the archive.
 
+The bundled TMDB logo is the unmodified blue_short SVG referenced by the
+official developer documentation, downloaded from
+`https://files.readme.io/29c6fee-blue_short.svg`. The Sources section displays
+TMDB credits and the required attribution notice.
+
 References checked 2026-09-06: [TMDB authentication](https://developer.themoviedb.org/docs/authentication-application),
 [movie search](https://developer.themoviedb.org/reference/search-movie),
 [series search](https://developer.themoviedb.org/reference/search-tv),
 [episode details](https://developer.themoviedb.org/reference/tv-episode-details),
 [image configuration](https://developer.themoviedb.org/docs/image-basics), and
 [Bun Archive](https://bun.sh/docs/runtime/archive).
+
+## Native and browser qualification driver
+
+`tests/linux/metadata-run.sh` builds the exact source in the existing Linux test
+image, records source and executable hashes, and runs `metadata.ts` with Xvfb,
+basic rendering and a null audio sink. It requires a separately approved bounded
+container/cache window. It has no live TMDB credential or service fixture.
+
+The driver uses actual native and HTTP browser inputs for corrections, artwork
+upload, metadata search without configured access, and archive download. It checks
+native video pixels, two controller invalidations, guest navigation denial, stale
+TV edits, invalid artwork with no partial update, export/reimport, episode order,
+320/375/390/768/1024/1440/1920-pixel editor widths, offline rescan and restart.
+The browser's isolated download destination is `/artifacts/downloads`; the driver
+reads the archive that the browser actually wrote. Results and screenshots remain
+under `/artifacts`, including failed phases. Passing this software fixture would
+still leave live TMDB and physical-device qualification unclaimed.
+
+The 2026-09-07 software qualification passed at source
+`b36c8f36512d10ad4530eaaaf3234181f55f40df`, using image
+`sha256:979fbf19f90e61d22a6c37704755a8a5f9cc53d3cca3261a88d23ed106a1829e`.
+The run exercised the controls and checks above, including an actual administrator
+browser download, NFO/artwork reimport and an offline application restart. Native
+video and UI pixel checks passed. The source suite passed 558 tests with eight
+existing service/tool skips. A later test-only correction replaces the cue
+restart fixture's fixed 20 ms waits with actual load events; an injected 80 ms
+resolver delay reproduces the old CI failure and passes with the corrected wait.
+
+Local evidence is retained under
+`.artifacts/metadata-admission/attempt-metadata-b36c8f3-a3/`, including
+`evidence/metadata-results.json`, screenshots, source/binary hashes and the
+browser-downloaded archive. The complete evidence TAR has SHA256
+`6edd9e04e67eb8da84888e621e06a4dd75b2cc6537fd07d808e115259f4e2d9e`.
+The launcher recorded 52.39 seconds, successful owner-checked removal and confirmed
+container absence. Its 4 CPU/6 GiB limit included shared memory and bounded
+artifact storage; networking was disabled. Earlier failed setup attempts remain
+in separate directories. Existing preview and subtitle containers were preserved.
+Live TMDB matching remains unqualified because the owner has no authorized API
+access. Physical GPU, display and audio behavior also remain outside this fixture.
