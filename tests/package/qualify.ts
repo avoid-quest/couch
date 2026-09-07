@@ -127,6 +127,8 @@ try {
   run(["docker", "exec", "-u", "qualifier", "-e", "DISPLAY=:99", container, "ffmpeg", "-v", "error", "-y", "-f", "x11grab", "-video_size", "1280x720", "-i", ":99", "-frames:v", "1", "/evidence/native-playing.png"]);
   await command({ type: "pause", playbackId: state.player.playbackId, paused: true });
   await until("Native video pauses for subtitle comparison", async () => state.player.status === "paused");
+  await driver(44444, `/session/${native}/execute/sync`, { script: "Array.from(document.querySelectorAll('button')).find(button => button.getAttribute('aria-label') === 'Hide playback controls')?.click(); return true", args: [] });
+  await until("Playback overlay is hidden for subtitle capture", async () => driver(44444, `/session/${native}/execute/sync`, { script: "return !!document.querySelector('.tv-browser[hidden]') && !!document.querySelector('.tv-playback-controls[hidden]')", args: [] }));
   const subtitle = state.player.tracks.find((track: any) => track.kind === "subtitle");
   assert.ok(subtitle, "Packaged libmpv discovers the embedded subtitle");
   const frame = (name: string) => {

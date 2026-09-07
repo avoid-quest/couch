@@ -5,7 +5,7 @@ export DEBIAN_FRONTEND=noninteractive
 dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/base-packages.tsv
 apt-get update
 # OS-owned tools and hardware drivers remain separate from the application bundle.
-apt-get install -y --no-install-recommends libgl1 va-driver-all ffmpeg ca-certificates fonts-dejavu-core libxdo3
+apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 libfuse2t64 libgl1 va-driver-all ffmpeg ca-certificates fonts-dejavu-core libxdo3
 install -m 755 /qualification/couch.AppImage /opt/couch.AppImage
 cd /opt
 ./couch.AppImage --appimage-extract > /evidence/appimage-files.txt
