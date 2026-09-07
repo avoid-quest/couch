@@ -1,9 +1,8 @@
 # External update worker
 
-The companion package provides root-only receipt enrollment for the external
-update worker. This layer does not enable a service or install releases from
-the browser. [Install an update from a phone and verify the running
-build](https://github.com/avoid-quest/couch/issues/7) owns that integration.
+The companion package supplies the root worker for [manual phone updates](https://github.com/avoid-quest/couch/issues/7),
+retained signed releases and explicit SSH trial restoration. Installation ships
+disabled; the administrator activates it after appliance qualification.
 
 A receipt contains the exact `InRelease`, `release.json`, `Packages` and both
 Debian archives from one signed publication. Keep the public key enrolled
@@ -22,7 +21,7 @@ sudo couch-update status
 The path is a root operator input. Browsers never receive this capability.
 Enrollment checks both configured package versions and their installed build
 identities. It works for any matching release, including the first release
-that will implement manual updates. Missing or mismatched evidence fails
+that implements manual updates. Missing or mismatched evidence fails
 without changing the running app.
 
 The worker keeps authenticated bytes under `/var/lib/couch-updater/receipts`,
@@ -49,13 +48,13 @@ that their builds support manual updates.
 
 The companion also ships disabled `couch-updater.socket` and
 `couch-updater.service` units. Nothing enables them during installation. The
-current app does not implement the required maintenance protocol, so this
-layer cannot perform a phone update on its own.
+activated app implements the private maintenance protocol and authenticates
+administrator requests before passing them to the worker.
 
 The root worker accepts newline-delimited JSON on
 `/run/couch-updater/control.sock`. Only root and the `couch-tv` account may
-connect. The future paired app coordinator must authenticate phone requests
-before forwarding these fixed operations:
+connect. The paired app coordinator authenticates phone requests before
+forwarding these fixed operations:
 
 ```json
 {"op":"install","candidateId":"<64 lowercase hex characters>","requestId":"<32 lowercase hex characters>","confirmInterrupt":true}
@@ -138,9 +137,114 @@ socket permits at most eight live request handlers and ten seconds to ingest
 one complete request, so clients cannot hold unlimited threads by dripping
 bytes. Quiescing and backup retain their separate hook execution deadline.
 
-The app implementation, paired phone controls, asset reconnect behavior,
-automatic recovery and idle scheduling are later joins. This layer does not
-enable those paths or report issue 7 complete.
+The app coordinator implements this protocol behind the persistent root-owned
+`/etc/couch/manual-updates.enabled` flag. No package script creates that flag or
+enables the worker units. An administrator enables phone installation explicitly
+through SSH after appliance qualification. Automatic recovery, idle scheduling
+and tool repair remain separate work. Source and fixture verification alone
+do not report issue 7 complete.
+
+On activated Linux startup, one unprivileged Python bridge runs from the fixed
+installed script with an isolated Python environment. It checks root Unix peer
+credentials and carries private bounded frames over inherited pipes. It allows
+eight live exchanges, bounds input and output deadlines, and rejects unmatched
+or late replies. Bridge loss closes admission. The root worker's private
+`context` operation supplies the active transaction's nonce and phase only to
+root or the runtime account. Public transaction status never includes them.
+
+Startup reads that context before opening the application's databases. It permits
+normal startup only with no active transaction, or a trial whose exact build
+matches the running app. Installing, quiescing, operator-required and pretrial
+restoration refuse startup before any database opens or migrates. A trial
+blocks pairing, controller last-seen writes, commands, delayed request writes
+and background update checks. Quiesce stops observations, radio reconnect and
+source resolutions, then requires the last observed local progress write to
+succeed. It waits for database owners and local producers to close before
+acknowledging. Failed checkpoints do not return `progressSaved: true`.
+
+Native readiness uses a separate fresh nonce on the host pipe. The existing
+GTK-owned libmpv singleton initializes without loading media, remains hidden
+with an empty session key, and is reused by the next ordinary Load. An active
+playback ID rejects readiness. Queued work expires after two seconds; once
+initialization starts, an independent three-second watchdog terminates a hung
+native process. The worst-case bound from receipt is about five seconds.
+The normal playback state and media start/end conversions are unchanged.
+
+The release builder embeds the same integer data format and build identity in
+the native host, coordinator and loaded frontend bundles. Only the trusted
+native frontend may acknowledge its compiled asset identity through the
+maintenance endpoint; it receives no root transaction nonce. The trial checks
+SQLite integrity, actual native initialization and that asset acknowledgment.
+The root commit must be durable before admission opens. Startup initialization
+alone does not qualify actual media decoding or rendering.
+
+## Phone installation and reconnect
+
+An administrator opens Settings → Updates, downloads a verified candidate,
+and chooses Install update. The confirmation explains the restart and asks
+whether current playback may stop. Ordinary paired remotes and the native host
+cannot install. The browser sends only the candidate ID, a random request ID
+and that interruption choice; the root worker revalidates the retained proof.
+
+The browser saves that request identity before sending it. If the reply or
+connection is lost, it polls public transaction status and offers an explicit
+retry of the same request; reconnect never starts another installation.
+Transaction status remains readable during the trial without controller
+last-seen writes. After loading new assets, the administrator's Settings
+reopens Updates while a saved request exists. Success identifies the committed
+version and revision and requires the running server identity to match.
+
+The frontend compares its compiled build with the authenticated server before
+connecting and refreshes once per changed build. Packaged control WebSockets
+require that matching identity, so an old page cannot control a newer server.
+Credentials remain stored through the refresh; a rejected credential returns
+the browser to pairing. Native asset readiness uses its separate host-only
+acknowledgment, never an ordinary phone's connection.
+
+## Explicit SSH activation and trial restoration
+
+After the actual installed manual-capable release and its native/Boot behavior
+are qualified, retain its signed receipt and activate from the administrator's
+SSH session:
+
+```sh
+sudo couch-update enroll-current /path/to/current-signed-receipt
+sudo couch-update enable
+sudo couch-update status
+```
+
+Enrollment verifies the receipt against the enrolled host key and installed
+packages. Activation refuses an active transaction, mismatched build, absent
+maintenance protocol or unhealthy package manager. It writes the persistent
+root-owned flag, enables the fixed root socket and restarts the user service.
+Package installation itself does not activate this feature. The release feed
+and signing credentials remain host configuration; the phone supplies neither.
+
+For an uncommitted `operator-required` transaction, use its exact `updateId`:
+
+```sh
+sudo couch-update restore <updateId>
+```
+
+This fixed root operation masks and stops the app service, verifies the accepted
+previous receipt, reinstalls its two retained packages and restores the verified
+pre-update data snapshot. It preserves the failed trial data in a sibling
+`.couch-failed-trial-*` directory and records that path in the root transaction.
+It preserves ownership and symlinks without following external media. Both
+package locks remain held while the restored data and previous build pass the
+same database, native and frontend trial before normal writes resume.
+
+A required checkpoint can fail before any snapshot exists. If the final hook
+never completed, the command may instead resume the unchanged authenticated
+previous build after stopping writers and checking installed identity and
+package health. It does not require or invent a missing snapshot in this case.
+If package identity changed, a verified snapshot is required before reinstalling.
+
+Once either trial has durably committed normal admission, this command refuses
+to restore old data. Interrupted or unsuccessful restoration remains
+`operator-required`; retained evidence and failed trial data are kept for SSH
+inspection. It never guesses that readiness succeeded or performs automatic
+rollback.
 
 ## Inspection and verification
 
@@ -150,7 +254,7 @@ Through SSH, root can inspect `/var/lib/couch-updater/transactions/<requestId>.j
 restart records a failure before package work or `operator-required` when the
 interruption may have changed packages or data. It does not guess success,
 automatically reinstall packages, or clear ambiguous maintenance state.
-Preserve this evidence for the later recovery procedure.
+Preserve this evidence when investigating or restoring a failed trial.
 
 Run `python3 scripts/test-update-retention.py` for descriptor, content,
 identity and retention checks. The Ubuntu-only test
@@ -165,7 +269,8 @@ failure boundaries and SQLite backup without installing packages.
 `python3 scripts/test-update-transactions-ubuntu.py` installs tiny dummy Debian
 packages in a disposable Ubuntu 24.04 container, exercises real APT locks,
 acquisition and the frozen hook, disconnects the initiating client and checks
-readiness failure. Its session, native and browser operations are explicit
+readiness failure, explicit previous-package/data restoration and unchanged-app
+resume after a failed checkpoint with no snapshot. Its session, native and browser operations are explicit
 test doubles. It prints the actual APT version. Run it only in a fresh root
 container with a read-only source mount, no network, and a bounded external
 watchdog, or on the dedicated disposable Ubuntu runner in

@@ -107,7 +107,9 @@ export function createToolHealth(options: Options) {
   }
 
   return {
-    close() { shutdown.abort(); },
+    // Filesystem reads may ignore cancellation. Root stops the service and
+    // verifies its empty cgroup before taking any maintenance snapshot.
+    async close() { shutdown.abort(); },
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers });

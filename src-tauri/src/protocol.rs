@@ -15,12 +15,16 @@ pub struct ConnectionInfo {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SidecarMessage {
+    Observe,
     Ready {
         #[serde(flatten)]
         connection: ConnectionInfo,
     },
     Playback {
         command: PlaybackCommand,
+    },
+    Readiness {
+        nonce: String,
     },
     Diagnostics {
         #[serde(rename = "requestId")]
@@ -307,6 +311,7 @@ mod tests {
 
     #[test]
     fn pipe_contract_accepts_typescript_commands_and_ready_message() {
+        assert!(matches!(serde_json::from_str::<SidecarMessage>(r#"{"type":"observe"}"#).unwrap(), SidecarMessage::Observe));
         let message: SidecarMessage = serde_json::from_str(
             r#"{"type":"playback","command":{"type":"pause","playbackId":"a","paused":true}}"#,
         )

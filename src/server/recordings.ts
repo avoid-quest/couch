@@ -18,7 +18,7 @@ const knownCauses = new Map([["No free adapter", "No free recording input."], ["
 const errorCauses = new Map([[200, "No free adapter"], [209, "No assigned adapters"], [402, "No input detected"], [403, "Not enough disk space"]]);
 const method = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
 
-export function createRecordings({ databasePath, selection, channel, onChange = () => {}, onConnectionChanged = () => {}, enqueue = () => {}, fetch: request = globalThis.fetch, pollMs = 10_000 }: {
+export function createRecordings({ databasePath, selection, channel, onChange = () => {}, onConnectionChanged = () => {}, enqueue = () => {}, fetch: request = globalThis.fetch, pollMs = 10_000, admitted = () => true }: {
   databasePath: string;
   selection: (programId: string) => Selection;
   channel: (channelId: string) => GuideChannel;
@@ -27,6 +27,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   enqueue?: (job: Recording, authorize: () => void) => void;
   fetch?: typeof fetch;
   pollMs?: number;
+  admitted?: () => boolean;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
@@ -38,7 +39,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   let connectionGeneration = new AbortController();
   let closed = false, checkedAt: number | null = null, error: string | null = null;
   let tail: Promise<unknown> = Promise.resolve();
-  const assertOpen = () => { if (closed) throw new RecordingError("Recordings are closing.", 503); };
+  const assertOpen = () => { if (!admitted()) throw new RecordingError("The TV is preparing an update. Controls are paused.", 503); if (closed) throw new RecordingError("Recordings are closing.", 503); };
   const setup = (): Setup | null => { const row = db.query<{ data: string }, []>("SELECT data FROM recording_setup WHERE id = 1").get(); return row ? JSON.parse(row.data) : null; };
   const jobs = (): Job[] => db.query<{ data: string }, []>("SELECT data FROM recording_jobs ORDER BY rowid DESC").all().map(row => JSON.parse(row.data));
   const get = (id: string): Job => { const row = jobs().find(job => job.id === id); if (!row) throw new RecordingError("Recording not found.", 404); return row; };
@@ -58,6 +59,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
     save({ ...next, revision: job.revision + 1 });
   }
   async function reconcile() {
+    assertOpen();
     if (!setup()) return;
     try {
       const rows = await backend().jobs();
@@ -92,7 +94,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
     }
   }
   let polling = false;
-  const timer = pollMs > 0 ? setInterval(() => { if (!polling && setup()) { polling = true; void serial(reconcile).catch(() => {}).finally(() => { polling = false; }); } }, pollMs) : undefined;
+  const timer = pollMs > 0 ? setInterval(() => { if (admitted() && !polling && setup()) { polling = true; void serial(reconcile).catch(() => {}).finally(() => { polling = false; }); } }, pollMs) : undefined;
   timer?.unref();
   async function body(req: Request) {
     if (req.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new RecordingError("Send a JSON object.", 415);

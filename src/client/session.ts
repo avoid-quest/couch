@@ -1,10 +1,11 @@
+import { buildKey, loadedBuild } from "../shared/build";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
 import type { ConnectionDetails, ControllerIdentity } from "../shared/controllers";
 import { knownConnection, rememberConnection } from "./connection";
 
 export type Credentials = { origin: string; token: string };
-export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected";
+export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
 // getRandomValues also works on the plain HTTP origins used by LAN remotes.
@@ -59,6 +60,27 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         try {
           const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
           if (authenticate && credentials) {
+            const asset = buildKey(loadedBuild);
+            if (asset) {
+              const response = await fetch(`${candidate}/api/build`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+              if (disposed) return;
+              if (response.status === 401) { pairingRequired(); return; }
+              if (response.status === 403) { setStatus("connection-rejected"); return; }
+              if (!response.ok) throw new Error("Server unavailable");
+              const current = buildKey(await response.json());
+              if (current !== asset) {
+                setStatus("build-mismatch");
+                try {
+                  const key = `couch.asset-refresh:${candidate}`;
+                  if (current && sessionStorage.getItem(key) !== current) {
+                    sessionStorage.setItem(key, current);
+                    location.reload();
+                  }
+                } catch { /* Keep the refresh prompt when browser storage is unavailable. */ }
+                return;
+              }
+              try { sessionStorage.removeItem(`couch.asset-refresh:${candidate}`); } catch { /* Storage is optional after the build matches. */ }
+            }
             const response = await fetch(`${candidate}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
             if (disposed) return;
             if (response.status === 401) { pairingRequired(); return; }
@@ -86,6 +108,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
+      const asset = buildKey(loadedBuild);
+      if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
       socket.current = connection;
       const isCurrent = () => !disposed && socket.current === connection;

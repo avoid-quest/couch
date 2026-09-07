@@ -9,4 +9,6 @@ SocketMode=0660
 DirectoryMode=0755
 RemoveOnStop=true
 
-# Intentionally no Install section. Activation joins the real maintenance app.
+# Enabled only by the administrator after enrollment and qualification.
+[Install]
+WantedBy=sockets.target

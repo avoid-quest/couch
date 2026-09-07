@@ -27,6 +27,8 @@ function fixture() {
   const databasePath = join(directory, "state.sqlite");
   let selected = { channel, program }, identity: ControllerIdentity | null = host;
   let fail = false, loseCreate = false, loseCancel = false, writeAllowed = false, missingChannel = false, incomplete = false, createCount = 0;
+  let admitted = true;
+  let blockJobs: Promise<void> | undefined, holdCreateResponse: Promise<void> | undefined;
   let blockCreate: Promise<void> | undefined;
   let blockChannels: Promise<void> | undefined;
   let backendTimeOffset = 0;
@@ -44,6 +46,7 @@ function fixture() {
     if (path === "/api/dvr/config/grid") return Response.json({ entries: [{ uuid: profileId }], total: 1 });
     if (path === "/api/channel/grid") { await blockChannels; return Response.json({ entries: missingChannel ? [] : [{ uuid: backendChannel, name: "Backend channel", enabled: true, services: ["service"] }], total: missingChannel ? 0 : 1 }); }
     if (path === "/api/dvr/entry/grid" || path === "/api/dvr/entry/grid_failed") {
+      await blockJobs;
       const filter = JSON.parse(body.get("filter") ?? "[]")[0];
       const matching = rows.filter(row => (!filter || new RegExp(filter.value, "i").test(String(row.owner))) && (path.endsWith("grid") || row.sched_status === "completedError"));
       const entries = matching.filter(row => !(account === "viewer" && hideViewer) && !(row.sched_status === "completedError" && (account === "viewer" ? hideFailedViewer : hideFailedRecorder)));
@@ -65,7 +68,12 @@ function fixture() {
   const endpoint = `http://127.0.0.1:${server.port}`;
   const input = { endpoint, username: "recorder", password: "private-recorder", playbackUsername: "viewer", playbackPassword: "private-viewer", profileId };
   let broadcasts = 0;
-  const make = () => createRecordings({ databasePath, selection: id => { if (missingGuide || id !== selected.program.id) throw new GuideError("This programme is no longer in the guide. Refresh the guide.", 404); return selected; }, channel: id => { if (missingGuide || id !== selected.channel.id) throw new GuideError("This channel is no longer in the guide. Refresh the guide.", 404); return selected.channel; }, pollMs: 0, onChange: () => { broadcasts++; } });
+  const request = Object.assign(async (...args: Parameters<typeof fetch>) => {
+    const response = await fetch(...args);
+    if (String(args[0]).endsWith("/api/dvr/entry/create")) await holdCreateResponse;
+    return response;
+  }, { preconnect: fetch.preconnect });
+  const make = () => createRecordings({ databasePath, selection: id => { if (missingGuide || id !== selected.program.id) throw new GuideError("This programme is no longer in the guide. Refresh the guide.", 404); return selected; }, channel: id => { if (missingGuide || id !== selected.channel.id) throw new GuideError("This channel is no longer in the guide. Refresh the guide.", 404); return selected.channel; }, admitted: () => admitted, pollMs: 0, fetch: request, onChange: () => { broadcasts++; } });
   let recordings = make(); cleanup.push(() => recordings.close());
   const api = (path = "", method = "GET", body?: unknown, signal?: AbortSignal) => recordings.handle(new Request(`http://localhost/api/recordings${path}`, { method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal }), () => identity);
   const setup = async () => {
@@ -74,6 +82,9 @@ function fixture() {
   };
   const schedule = () => api("/schedule", "POST", { programId: selected.program.id, start: selected.program.start, end: selected.program.end, title: selected.program.title, revision: 2 });
   return { api, setup, schedule, input, databasePath, calls, get recordings() { return recordings; }, get rows() { return rows; }, get createCount() { return createCount; }, get broadcasts() { return broadcasts; },
+    set admitted(value: boolean) { admitted = value; },
+    set blockJobs(value: Promise<void> | undefined) { blockJobs = value; },
+    set holdCreateResponse(value: Promise<void> | undefined) { holdCreateResponse = value; },
     set backendTimeOffset(value: number) { backendTimeOffset = value; },
     set missingGuide(value: boolean) { missingGuide = value; },
     set changeAfterWriteCheck(value: boolean) { changeAfterWriteCheck = value; },
@@ -419,4 +430,93 @@ test.each([
   expect(app.recordings.snapshot().jobs[0]).toMatchObject({ id: pending.id, status: "failed", cause });
   Object.assign(app.rows[0]!, { sched_status: "completedError", status: "File missing", errorcode: 0 }); await app.reopen(); await app.recordings.refresh();
   expect(app.recordings.snapshot().jobs[0]).toMatchObject({ id: pending.id, status: "failed", cause });
+});
+
+
+async function until(check: () => boolean) {
+  const deadline = Date.now() + 1000;
+  while (!check()) { expect(Date.now()).toBeLessThan(deadline); await Bun.sleep(1); }
+}
+
+test.each(["setup", "schedule"])("maintenance fences the last %s prerequisite before durable intent", async operation => {
+  const app = fixture();
+  if (operation === "schedule") await app.setup();
+  const gate = Promise.withResolvers<void>(), before = app.calls.length;
+  app.blockChannels = gate.promise;
+  const pending = operation === "setup" ? app.api("/setup", "POST", { ...app.input, revision: 0 }) : app.schedule();
+  try {
+    await until(() => app.calls.slice(before).some(call => call.path === "/api/channel/grid"));
+    app.admitted = false;
+  } finally { gate.resolve(); }
+  const response = await pending;
+  expect(response.status).toBe(503);
+  expect((await response.json()).error).toContain("preparing an update");
+  expect(app.createCount).toBe(0);
+  expect(app.recordings.snapshot().jobs).toEqual([]);
+  const database = new Database(app.databasePath);
+  try { expect(database.query("SELECT * FROM recording_qualification").all()).toEqual([]); }
+  finally { database.close(); }
+});
+
+test("closed maintenance admission skips polling and rejects explicit refresh before backend work", async () => {
+  const app = fixture(); await app.setup(); await app.schedule();
+  app.admitted = false;
+  await app.reopen();
+  const calls = app.calls.length, broadcasts = app.broadcasts, snapshot = app.recordings.snapshot();
+  let open = false, changes = 0;
+  const polling = createRecordings({ databasePath: app.databasePath, selection: () => ({ channel, program }), channel: () => channel, admitted: () => open, pollMs: 5, onChange: () => changes++ });
+  try {
+    await Bun.sleep(25);
+    expect(app.calls.length).toBe(calls);
+    expect(changes).toBe(0);
+    expect((await app.api("/refresh", "POST")).status).toBe(503);
+    await expect(app.recordings.refresh()).rejects.toThrow("preparing an update");
+    expect(app.calls.length).toBe(calls);
+    expect(app.recordings.snapshot()).toEqual(snapshot);
+    expect(app.broadcasts).toBe(broadcasts);
+    open = true;
+    await until(() => changes > 0);
+    expect(app.calls.length).toBeGreaterThan(calls);
+  } finally { await polling.close(); }
+});
+
+test("reconciliation released after admission closes cannot revise jobs or publish", async () => {
+  const app = fixture(); await app.setup(); await app.schedule();
+  Object.assign(app.rows[0]!, { sched_status: "completed", filesize: 188_000 });
+  const snapshot = app.recordings.snapshot(), broadcasts = app.broadcasts, calls = app.calls.length;
+  const gate = Promise.withResolvers<void>(); app.blockJobs = gate.promise;
+  const pending = app.api("/refresh", "POST");
+  try {
+    await until(() => app.calls.slice(calls).some(call => call.path === "/api/dvr/entry/grid"));
+    app.admitted = false;
+  } finally { gate.resolve(); }
+  expect((await pending).status).toBe(503);
+  expect(app.recordings.snapshot()).toEqual(snapshot);
+  expect(app.broadcasts).toBe(broadcasts);
+  const database = new Database(app.databasePath);
+  try { expect(JSON.parse(database.query<{ data: string }, []>("SELECT data FROM recording_jobs").get()!.data)).toMatchObject(snapshot.jobs[0]!); }
+  finally { database.close(); }
+});
+
+test("shutdown drains an admitted create and restart reconciles its UUID without another create", async () => {
+  const app = fixture(); await app.setup();
+  const gate = Promise.withResolvers<void>(); app.holdCreateResponse = gate.promise;
+  const pending = app.schedule();
+  await until(() => app.createCount === 1);
+  const snapshot = app.recordings.snapshot(), broadcasts = app.broadcasts;
+  app.admitted = false;
+  let finished = false;
+  const closing = app.recordings.close().then(() => { finished = true; });
+  try {
+    await Bun.sleep(0);
+    expect(finished).toBe(false);
+  } finally { gate.resolve(); }
+  expect((await pending).status).toBe(503);
+  await closing;
+  expect(app.broadcasts).toBe(broadcasts);
+  app.admitted = true; await app.reopen();
+  expect(app.recordings.snapshot().jobs).toEqual(snapshot.jobs);
+  await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]).toMatchObject({ id: snapshot.jobs[0]!.id, status: "pending" });
+  expect(app.createCount).toBe(1);
 });

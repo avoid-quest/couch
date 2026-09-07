@@ -7,7 +7,7 @@ import { ControllerError, settingField } from "./controllers";
 import { UpdateError, type UpdateFeed, type VerifiedRelease } from "./update-feed";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000) {
+export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed, interval = 15 * 60_000, admitted = () => true) {
   const state: UpdateState = { running, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
   try {
     const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
@@ -29,7 +29,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     await writeFile(join(directory, "settings.json.tmp"), JSON.stringify({ channel: state.channel, policy: state.policy, candidate: state.candidate, lastSuccessfulCheck: state.lastSuccessfulCheck }), { mode: 0o600 });
     await rename(join(directory, "settings.json.tmp"), join(directory, "settings.json"));
   };
-  const busy = () => !!job || changing || closed;
+  const busy = () => !!job || changing || closed || !admitted();
   const start = (kind: "checking" | "downloading") => {
     if (!feed || busy()) return;
     const wasReady = state.status === "ready", previousId = candidate?.summary.id;
@@ -58,8 +58,11 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   const startup = feed ? setTimeout(() => start("checking"), 1_000) : undefined;
   const timer = feed ? setInterval(() => start("checking"), interval) : undefined;
   return {
+    get state() { return structuredClone(state); },
+    candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && candidate.summary.expiresAt > Date.now(),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
+        if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
         if (caller.authority !== "administrator") throw new ControllerError("An administrator remote is required to manage updates.", 403);

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Transaction and backup checks without system services or package mutations."""
 import hashlib
+from contextlib import contextmanager, nullcontext, redirect_stderr
 import importlib.util
+from importlib.machinery import SourceFileLoader
+import io
 import json
+import os
+import select
 from pathlib import Path
 import shutil
 import sqlite3
@@ -26,6 +31,9 @@ from transactions import Transactions
 from ubuntu import Ubuntu
 import ubuntu
 import serve
+import bridge
+import recovery
+import operator_client
 
 
 class Platform:
@@ -101,6 +109,186 @@ class TransactionTests(unittest.TestCase):
         self.engine = Transactions(self.storage, self.platform, lambda: b"fixture")
         self.platform.engine = self.engine
         self.request = {"candidateId": self.candidate_id, "requestId": "a" * 32, "confirmInterrupt": True}
+
+    def prepare_recovery(self, failure):
+        self.platform.failure = failure
+        self.engine.submit(self.request)
+        self.engine.execute()
+        self.assertEqual(self.engine.record["phase"], "operator-required")
+        self.platform.failure = None
+        self.platform.stop_for_restore = lambda: self.platform.calls.append("restore-stop")
+        self.platform.unchanged_previous = lambda previous: failure == "snapshot"
+        locked = False
+        @contextmanager
+        def package_lock():
+            nonlocal locked
+            self.assertFalse(locked)
+            locked = True
+            try:
+                yield
+            finally:
+                locked = False
+        def require_lock():
+            self.assertTrue(locked, "Restoration work must retain the final package locks")
+        self.platform.package_lock = package_lock
+        self.platform.package_health = require_lock
+        original_ready, original_commit = self.platform.ready, self.platform.commit
+        self.platform.ready = lambda record: (require_lock(), original_ready(record))
+        self.platform.commit = lambda record: (require_lock(), original_commit(record))
+        self.platform.restore_packages = lambda record, packages: self.platform.calls.append("restore-apt")
+        self.platform.restore_data = lambda backup: self.platform.calls.append("restore-data") or "/fixture/failed-trial"
+        def start(record):
+            require_lock()
+            context = self.engine.context()
+            self.assertEqual(context["phase"], "trial")
+            self.assertEqual(context["version"], self.previous["version"])
+            self.assertEqual(context["nonce"], record["nonce"])
+            self.assertNotEqual(context["nonce"], self.engine.record["nonce"])
+            self.platform.calls.append("restore-trial")
+        self.platform.start_restored_trial = start
+        patch.object(recovery, "installed", side_effect=lambda: (require_lock(), self.previous)[1]).start()
+        return self.engine.record["updateId"]
+
+    def test_checkpoint_failure_without_backup_can_resume_verified_unchanged_previous(self):
+        update_id = self.prepare_recovery("snapshot")
+        self.assertFalse((self.storage.root / "backups").exists())
+        result = recovery.restore(self.engine, update_id)
+        self.assertEqual(result["phase"], "restored")
+        self.assertEqual(result["restoredVersion"], self.previous["version"])
+        self.assertNotIn("restore-apt", self.platform.calls)
+        self.assertNotIn("restore-data", self.platform.calls)
+        self.assertIsNone(self.storage.read("active.json"))
+        self.assertIsNone(self.engine.context())
+
+    def test_failed_trial_restores_packages_and_snapshot_before_previous_readiness(self):
+        update_id = self.prepare_recovery("readiness")
+        with patch.object(recovery, "verify_backup", return_value={}):
+            result = recovery.restore(self.engine, update_id)
+        self.assertEqual(result["phase"], "restored")
+        calls = self.platform.calls
+        self.assertLess(calls.index("restore-apt"), calls.index("restore-data"))
+        self.assertLess(calls.index("restore-data"), calls.index("restore-trial"))
+        self.assertTrue(self.engine.record["committed"])
+        self.assertEqual(self.storage.current(b"fixture"), self.previous)
+
+    def test_incomplete_snapshot_or_changed_pre_hook_installation_never_guesses_restoration(self):
+        update_id = self.prepare_recovery("snapshot")
+        self.platform.unchanged_previous = lambda previous: False
+        result = recovery.restore(self.engine, update_id)
+        self.assertEqual(result["phase"], "operator-required")
+        self.assertNotIn("restore-apt", self.platform.calls)
+        self.assertNotIn("restore-trial", self.platform.calls)
+
+    def test_committed_data_and_wrong_transaction_id_cannot_be_restored(self):
+        update_id = self.prepare_recovery("readiness")
+        with self.assertRaises(receipt.Rejected):
+            recovery.restore(self.engine, "0" * 32)
+        self.engine.record["committed"] = True
+        with self.assertRaisesRegex(receipt.Rejected, "Committed data"):
+            recovery.restore(self.engine, update_id)
+        self.assertNotIn("restore-stop", self.platform.calls)
+
+    def test_restoration_rechecks_identity_and_package_health_under_final_lock(self):
+        update_id = self.prepare_recovery("snapshot")
+        self.platform.package_health = lambda: (_ for _ in ()).throw(receipt.Rejected("unhealthy"))
+        self.assertEqual(recovery.restore(self.engine, update_id)["phase"], "operator-required")
+        self.assertNotIn("restore-trial", self.platform.calls)
+        self.platform.package_health = lambda: None
+        with patch.object(recovery, "installed", return_value={**self.previous, "revision": "0" * 40}):
+            self.assertEqual(recovery.restore(self.engine, update_id)["phase"], "operator-required")
+        self.assertNotIn("restore-trial", self.platform.calls)
+
+    def test_enable_requires_current_manual_capability_and_no_active_transaction(self):
+        calls = []
+        flag = SimpleNamespace(parent=SimpleNamespace(lstat=lambda: SimpleNamespace(st_mode=0o40755, st_uid=0)))
+        with patch.object(operator_client, "FLAG", flag), patch.object(operator_client, "enrolled_key", return_value=b"fixture"), patch.object(operator_client, "installed", return_value={**self.previous, "maintenanceProtocol": "maintenance-v1"}) as build, patch.object(operator_client, "run", side_effect=lambda *args: calls.append(args) or ""), patch.object(operator_client, "trusted_file", return_value=b"fixture"), patch.object(operator_client, "save", side_effect=lambda *args: calls.append(("flag",))), patch.object(operator_client, "Ubuntu") as platform:
+            build.return_value = self.previous
+            with self.assertRaisesRegex(receipt.Rejected, "manual-update-capable"):
+                operator_client.enable(self.storage)
+            self.assertEqual(calls, [])
+            build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1"}
+            for value in (True, 1.0):
+                build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1", "dataFormat": value}
+                with self.assertRaisesRegex(receipt.Rejected, "manual-update-capable"):
+                    operator_client.enable(self.storage)
+                build.return_value = {**self.previous, "maintenanceProtocol": "maintenance-v1"}
+                with patch.object(self.storage, "current", return_value={**self.previous, "dataFormat": value}), self.assertRaisesRegex(receipt.Rejected, "manual-update-capable"):
+                    operator_client.enable(self.storage)
+            self.engine.submit(self.request)
+            with self.assertRaisesRegex(receipt.Rejected, "active transaction"):
+                operator_client.enable(self.storage)
+            self.assertEqual(calls, [])
+            self.engine.clear_active()
+            self.assertEqual(operator_client.enable(self.storage)["phoneUpdates"], "enabled")
+            self.assertEqual(calls, [("/usr/bin/dpkg", "--audit"), ("flag",), ("/usr/bin/systemctl", "enable", "--now", "couch-updater.socket")])
+            platform.return_value.systemctl.assert_called_once_with("restart", "couch-tv.service")
+
+    def test_failed_restore_rpc_and_cli_report_failure_with_durable_state(self):
+        update_id = self.prepare_recovery("snapshot")
+        self.platform.unchanged_previous = lambda previous: False
+        replies = []
+        peer = SimpleNamespace(
+            getsockopt=lambda *args: struct.pack("3i", 1, 0, 0), settimeout=lambda value: None,
+            recv=lambda count: json.dumps({"op": "restore", "updateId": update_id}).encode() + b"\n",
+            sendall=lambda data: replies.append(json.loads(data)),
+        )
+        with patch.object(serve.socket, "SO_PEERCRED", 17, create=True):
+            serve.Handler(peer, "fixture", SimpleNamespace(app_uid=0, transactions=self.engine))
+        self.assertFalse(replies[0]["ok"])
+        self.assertEqual(self.storage.read("active.json")["phase"], "operator-required")
+        path = Path(__file__).resolve().parents[1] / "packaging/appliance/root/usr/sbin/couch-update"
+        cli_spec = importlib.util.spec_from_loader("operator_cli", SourceFileLoader("operator_cli", str(path)))
+        cli = importlib.util.module_from_spec(cli_spec)
+        cli_spec.loader.exec_module(cli)
+        with patch.object(cli.os, "geteuid", return_value=0), patch.object(cli, "Retention", return_value=self.storage), patch.object(cli, "request", side_effect=receipt.Rejected(replies[0]["error"])), patch.object(cli.sys, "argv", ["couch-update", "restore", update_id]), redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(), 1)
+
+    def test_operator_client_rejects_incomplete_or_mismatched_success_receipts(self):
+        for transaction in ({"phase": "operator-required", "updateId": "a" * 32}, {"phase": "restored", "updateId": "b" * 32}):
+            with self.subTest(transaction=transaction), patch.object(operator_client, "run"), patch.object(operator_client.socket, "SO_PEERCRED", 17, create=True), patch.object(operator_client.socket, "socket") as connect:
+                peer = connect.return_value.__enter__.return_value
+                peer.getsockopt.return_value = struct.pack("3i", 1, 0, 0)
+                peer.recv.return_value = json.dumps({"ok": True, "transaction": transaction}).encode() + b"\n"
+                with self.assertRaisesRegex(receipt.Rejected, "matching completed"):
+                    operator_client.request({"op": "restore", "updateId": "a" * 32})
+
+    def test_activation_status_rejects_unsafe_or_invalid_flags(self):
+        flag = self.root / "enabled"
+        lstat = Path.lstat
+        parent = SimpleNamespace(st_mode=0o40755, st_uid=0)
+        with patch.object(operator_client, "FLAG", flag), patch.object(Path, "lstat", autospec=True, side_effect=lambda path: parent if path == flag.parent else lstat(path)):
+            self.assertEqual(operator_client.activation_status(), "disabled")
+            flag.symlink_to(self.root / "missing")
+            with self.assertRaises(OSError):
+                operator_client.activation_status()
+            flag.unlink()
+            save(flag, {"protocol": "maintenance-v1"})
+            for uid, mode in ((1000, 0o100644), (0, 0o100666), (0, 0o040755)):
+                with patch.object(receipt.os, "fstat", return_value=SimpleNamespace(st_uid=uid, st_mode=mode)), self.assertRaises(receipt.Rejected):
+                    operator_client.activation_status()
+            with patch.object(receipt.os, "fstat", return_value=SimpleNamespace(st_uid=0, st_mode=0o100644)):
+                self.assertEqual(operator_client.activation_status(), "enabled")
+                for uid, mode in ((1000, 0o40755), (0, 0o40777), (0, 0o120755)):
+                    parent.st_uid, parent.st_mode = uid, mode
+                    with self.assertRaisesRegex(receipt.Rejected, "configuration directory"):
+                        operator_client.activation_status()
+                parent.st_uid, parent.st_mode = 0, 0o40755
+                save(flag, {"protocol": "unsupported"})
+                with self.assertRaisesRegex(receipt.Rejected, "activation flag"):
+                    operator_client.activation_status()
+
+    def test_private_context_contains_nonce_but_public_status_never_does(self):
+        self.assertIsNone(self.engine.context())
+        self.engine.submit(self.request)
+        context = self.engine.context()
+        self.assertEqual(context["nonce"], self.engine.record["nonce"])
+        self.assertEqual(context["updateId"], self.engine.record["updateId"])
+        self.assertNotIn("nonce", self.engine.status())
+        self.assertNotIn("nonce", self.engine.status(self.request["requestId"]))
+        context["nonce"] = "forged"
+        self.assertNotEqual(self.engine.context()["nonce"], "forged")
+        self.engine.execute()
+        self.assertIsNone(self.engine.context())
 
     def test_success_has_durable_identity_order_and_retained_previous(self):
         accepted, started = self.engine.submit(self.request)
@@ -188,6 +376,41 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.platform.calls, [])
         with self.assertRaises(receipt.Rejected):
             restarted.submit({**self.request, "requestId": "b" * 32})
+
+    def test_restart_preserves_terminal_journal_before_active_marker_cleanup(self):
+        for phase in ("succeeded", "restored", "failed"):
+            for stale in (False, True):
+                with self.subTest(phase=phase, stale_marker=stale):
+                    self.engine.record = {**self.request, "updateId": "c" * 32, "phase": "trial", "committed": False}
+                    self.engine.persist()
+                    marker = self.storage.read("active.json")
+                    self.engine.transition(phase, committed=phase != "failed")
+                    if stale:
+                        save(self.storage.root / "active.json", marker)
+                    journal = (self.engine.directory / (self.request["requestId"] + ".json")).read_bytes()
+                    restarted = Transactions(self.storage, self.platform)
+                    self.assertEqual(restarted.status()["phase"], phase)
+                    self.assertIsNone(restarted.context())
+                    self.assertIsNone(self.storage.read("active.json"))
+                    self.assertEqual((self.engine.directory / (self.request["requestId"] + ".json")).read_bytes(), journal)
+
+    def test_restart_uses_journal_commit_boundary_even_when_marker_is_stale(self):
+        self.engine.submit(self.request)
+        marker = self.storage.read("active.json")
+        self.engine.transition("committing", committed=True, disrupted=True)
+        save(self.storage.root / "active.json", marker)
+        restarted = Transactions(self.storage, self.platform)
+        self.assertEqual(restarted.status()["phase"], "operator-required")
+        self.assertTrue(restarted.record["committed"])
+        with self.assertRaisesRegex(receipt.Rejected, "Committed data"):
+            recovery.restore(restarted, restarted.record["updateId"])
+
+    def test_restart_recovers_journal_written_before_first_active_marker(self):
+        self.engine.submit(self.request)
+        self.engine.clear_active()
+        restarted = Transactions(self.storage, self.platform)
+        self.assertEqual(restarted.status()["phase"], "failed")
+        self.assertIsNone(self.storage.read("active.json"))
 
     def test_hook_requires_exact_active_transaction(self):
         with self.assertRaises(receipt.Rejected):
@@ -399,6 +622,69 @@ class SocketTests(unittest.TestCase):
                 thread.join(2)
 
 
+class BridgeTests(unittest.TestCase):
+    def test_forged_peer_and_oversized_frames_are_rejected(self):
+        connection = SimpleNamespace(getsockopt=lambda *args: struct.pack("3i", 10, 123, 123))
+        with patch.object(socket, "SO_PEERCRED", 17, create=True):
+            with self.assertRaisesRegex(ValueError, "Unexpected local peer"):
+                bridge.peer(connection, 0)
+        with self.assertRaisesRegex(ValueError, "Oversized"):
+            bridge.frame({"nonce": "a" * 65536})
+
+    @unittest.skipUnless(hasattr(socket, "SO_PEERCRED"), "Linux peer credentials")
+    def test_real_socket_peer_cannot_impersonate_another_uid(self):
+        first, second = socket.socketpair()
+        with first, second:
+            bridge.peer(first, os.getuid())
+            with self.assertRaisesRegex(ValueError, "Unexpected local peer"):
+                bridge.peer(first, os.getuid() + 1)
+
+    def test_private_bridge_correlates_replies_and_rejects_late_duplicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listener.bind(directory + "/bridge.sock")
+            listener.listen(1)
+            source, writer = os.pipe()
+            reader, sink = os.pipe()
+            instance = bridge.Bridge(listener, source, sink)
+            failures = []
+            def run():
+                try:
+                    instance.run()
+                except Exception as error:
+                    failures.append(error)
+                finally:
+                    instance.close()
+            def receive():
+                self.assertTrue(select.select([reader], [], [], 1)[0], "Bridge reply deadline")
+                return json.loads(os.read(reader, 65536))
+            thread = threading.Thread(target=run)
+            try:
+                with patch.object(bridge, "peer"):
+                    thread.start()
+                    self.assertEqual(receive(), {"kind": "ready"})
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as root:
+                        root.settimeout(1)
+                        root.connect(directory + "/bridge.sock")
+                        root.sendall(bridge.frame({"op": "readiness", "nonce": "private"}))
+                        request = receive()
+                        self.assertEqual(request["kind"], "request")
+                        reply = {"kind": "reply", "id": request["id"], "payload": {"ok": True, "nonce": "private"}}
+                        os.write(writer, bridge.frame(reply))
+                        self.assertEqual(json.loads(root.recv(65536)), reply["payload"])
+                        os.write(writer, bridge.frame(reply))
+                        thread.join(1)
+                        self.assertFalse(thread.is_alive())
+                        self.assertRegex(str(failures[0]), "Unmatched private reply")
+            finally:
+                os.close(writer)
+                thread.join(1)
+                listener.close()
+                for descriptor in (source, reader, sink):
+                    os.close(descriptor)
+                self.assertFalse(thread.is_alive())
+
+
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -440,6 +726,34 @@ class SnapshotTests(unittest.TestCase):
         maintenance.snapshot(self.data, self.root / "backup")
         self.assertTrue((self.root / "backup/data/media").is_symlink())
         self.assertNotIn("data/media/movie", json.loads((self.root / "backup/hashes.json").read_bytes()))
+
+    def test_modified_snapshot_is_rejected_before_restoration(self):
+        backup = self.root / "backup"
+        maintenance.snapshot(self.data, backup)
+        (backup / "data/preferences.json").write_text("modified")
+        with self.assertRaisesRegex(receipt.Rejected, "verification"):
+            recovery.verify_backup(backup)
+        self.assertEqual((self.data / "preferences.json").read_text(), '{"unchanged":true}')
+
+    @unittest.skipUnless(Path("/proc/self/fd").exists(), "Linux descriptor-pinned restoration")
+    def test_restoration_preserves_previous_data_ownership_and_external_media(self):
+        outside = self.root / "media"
+        outside.mkdir()
+        (outside / "movie").write_bytes(b"external media")
+        (self.data / "media").symlink_to(outside, target_is_directory=True)
+        backup = self.root / "backup"
+        maintenance.snapshot(self.data, backup)
+        self.database.close()
+        (self.data / "preferences.json").write_text("failed trial")
+        previous_mode = self.data.stat().st_mode & 0o777
+        failed = Path(recovery.restore_data(self.data, backup))
+        self.assertEqual((self.data / "preferences.json").read_text(), '{"unchanged":true}')
+        self.assertEqual((failed / "preferences.json").read_text(), "failed trial")
+        self.assertEqual(self.data.stat().st_mode & 0o777, previous_mode)
+        self.assertEqual(self.data.stat().st_uid, os.geteuid())
+        self.assertTrue((self.data / "media").is_symlink())
+        self.assertEqual((outside / "movie").read_bytes(), b"external media")
+        self.assertEqual(list(self.root.glob(".couch-restore-*")), [])
 
     def test_space_failure_does_not_touch_live_data_or_leave_partial_backup(self):
         with patch.object(maintenance.shutil, "disk_usage", return_value=shutil._ntuple_diskusage(100, 100, 0)), self.assertRaises(receipt.Rejected):

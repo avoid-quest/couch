@@ -8,11 +8,11 @@ from receipt import Rejected, SHA, enrolled_key, load_json
 from retention import identity, require_format, save, sync_directory
 
 TOKEN = re.compile(r"[a-f0-9]{32}\Z")
-FINISHED = {"succeeded", "failed"}
+FINISHED = {"succeeded", "failed", "restored"}
 
 
 def public(record):
-    return {key: record.get(key) for key in ("updateId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt")}
+    return {key: record.get(key) for key in ("updateId", "requestId", "candidateId", "version", "revision", "phase", "error", "createdAt", "updatedAt", "restoredVersion", "restoredRevision")}
 
 
 class Transactions:
@@ -21,22 +21,37 @@ class Transactions:
         self.directory = storage.root / "transactions"
         self.directory.mkdir(mode=0o700, exist_ok=True)
         self.mutex = threading.RLock()
-        self.record = storage.read("active.json")
-        if not self.record:
-            pending = [load_json(path.read_bytes()) for path in self.directory.glob("*.json")]
-            pending = [value for value in pending if value["phase"] not in FINISHED]
-            if len(pending) > 1:
-                raise Rejected("Multiple unfinished transactions require administrator inspection.")
-            self.record = pending[0] if pending else None
-        if self.record:
-            with storage.lock():
-                # Recovery after package mutation is intentionally owned by the
-                # later recovery layer. Never guess success or restart a loop.
-                interrupted = self.record["phase"] not in ("accepted", "preflight")
-                self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
-                self.persist()
-                if not interrupted:
+        with storage.lock():
+            self.record = storage.read("active.json")
+            if self.record:
+                request_id = self.record.get("requestId")
+                if not isinstance(request_id, str) or not TOKEN.fullmatch(request_id):
+                    raise Rejected("The active transaction identity needs administrator inspection.")
+                journal = self.directory / (request_id + ".json")
+                if not journal.exists():
+                    raise Rejected("The active transaction journal is missing.")
+                latest = load_json(journal.read_bytes())
+                if latest.get("requestId") != request_id or latest.get("updateId") != self.record.get("updateId"):
+                    raise Rejected("The active transaction journal identity does not match.")
+                # persist writes the journal first. Its durable outcome and
+                # commit boundary take precedence over an older active marker.
+                self.record = latest
+            else:
+                pending = [load_json(path.read_bytes()) for path in self.directory.glob("*.json")]
+                pending = [value for value in pending if value["phase"] not in FINISHED]
+                if len(pending) > 1:
+                    raise Rejected("Multiple unfinished transactions require administrator inspection.")
+                self.record = pending[0] if pending else None
+            if self.record:
+                if self.record["phase"] in FINISHED:
                     self.clear_active()
+                else:
+                    # Never guess success or restart an interrupted install.
+                    interrupted = self.record["phase"] not in ("accepted", "preflight")
+                    self.record.update(phase="operator-required" if interrupted else "failed", error="The update worker restarted. Inspect this transaction through SSH.")
+                    self.persist()
+                    if not interrupted:
+                        self.clear_active()
 
     def persist(self):
         self.record["updatedAt"] = int(time.time() * 1000)
@@ -63,6 +78,17 @@ class Transactions:
                 return public(self.record)
             files = list(self.directory.glob("*.json"))
             return public(load_json(max(files, key=lambda path: path.stat().st_mtime_ns).read_bytes())) if files else None
+
+    def context(self):
+        """Private startup authority for the app, never a phone status response."""
+        with self.mutex:
+            if not self.record or self.record["phase"] in FINISHED:
+                return None
+            value = dict(self.record)
+            if value["phase"] == "restoring":
+                value.update(value["restoration"])
+                value["phase"] = {"trial": "trial", "committing": "committing"}.get(value["stage"], "restoring")
+            return {key: value.get(key) for key in ("updateId", "nonce", "candidateId", "version", "revision", "dataFormat", "phase", "disrupted", "committed", "confirmInterrupt")}
 
     def submit(self, request):
         if not isinstance(request, dict) or set(request) != {"candidateId", "requestId", "confirmInterrupt"} or not isinstance(request["candidateId"], str) or not SHA.fullmatch(request["candidateId"]) or not isinstance(request["requestId"], str) or not TOKEN.fullmatch(request["requestId"]) or type(request["confirmInterrupt"]) is not bool:

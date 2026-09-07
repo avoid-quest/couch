@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { buildKey } from "../../src/shared/build";
 import { strict as assert } from "node:assert";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -36,9 +37,9 @@ class Remote {
   state: SessionState | null = null;
   socket: WebSocket;
   pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
-  constructor(readonly token: string) {
+  constructor(readonly token: string, build: string) {
     const Socket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-    this.socket = new Socket(`${endpoint.replace("http", "ws")}/api/ws?token=${token}`, { headers: { origin, host: new URL(origin).host } });
+    this.socket = new Socket(`${endpoint.replace("http", "ws")}/api/ws?token=${token}&build=${encodeURIComponent(build)}`, { headers: { origin, host: new URL(origin).host } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data));
       if (message.type === "state") this.state = message.state;
@@ -96,7 +97,12 @@ try {
   await until("packaged TV connects", () => tv.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   if (await tv.execute("return !!document.querySelector('[role=dialog]')")) await tv.key(keys.escape);
   const connection = await driver(nativePort, `/session/${native}/execute/async`, { script: "const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke('connection_info').then(done)", args: [] });
-  for (const name of ["PGS remote one", "PGS remote two"]) remotes.push(new Remote((await api("/api/pair", "", { code: connection.pairingCode, name })).token));
+  for (const name of ["PGS remote one", "PGS remote two"]) {
+    const { token } = await api("/api/pair", "", { code: connection.pairingCode, name });
+    const build = buildKey(await api("/api/build", token));
+    assert.ok(build, "The paired remote identifies the packaged server build");
+    remotes.push(new Remote(token, build));
+  }
   await until("two HTTP remotes receive stopped native state", () => all(state => state.player.status === "idle"));
   await api("/api/jellyfin", connection.token, { url: fixture.containerUrl, username: fixture.username, password: fixture.password });
   const build = await api("/api/build", connection.token);

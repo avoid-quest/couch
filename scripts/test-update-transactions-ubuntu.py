@@ -48,7 +48,7 @@ class CoordinatorFixture(Ubuntu):
     """Only session/native/browser operations are doubles; Ubuntu APT is real."""
     def __init__(self, root, data):
         self.root, self.data_path = root, data
-        self.calls, self.bad_readiness = [], False
+        self.calls, self.bad_readiness, self.bad_checkpoint = [], False, False
         self.child = None
         self.apt_pid = None
         self.missing_dependency = None
@@ -62,7 +62,7 @@ class CoordinatorFixture(Ubuntu):
         if operation == "capabilities":
             return {"nativeReadiness": "libmpv-v1", "build": build}
         if operation == "quiesce":
-            return {"progressSaved": True, "admissionClosed": True}
+            return {"progressSaved": not self.bad_checkpoint, "admissionClosed": True}
         if operation == "readiness":
             if self.bad_readiness:
                 # A valid response for an old build must never count as success.
@@ -80,7 +80,7 @@ class CoordinatorFixture(Ubuntu):
                 self.child.wait(timeout=5)
                 self.child = None
             return ""
-        if arguments[0] in ("start", "reset-failed"):
+        if arguments[0] in ("start", "reset-failed", "mask", "unmask"):
             self.calls.append(arguments[0] + "-fixture")
             return ""
         if "--property=MainPID" in arguments:
@@ -219,6 +219,36 @@ class RealTransactions(unittest.TestCase):
                     self.assertEqual(storage.current(public_key)["version"], "0.1.0+build.2.1")
                     self.assertEqual(installed()["version"], "0.1.0+build.3.1")
                     print("Verified lock, frozen hook, disconnected caller, WAL backup and failed trial:", engine.status(), flush=True)
+                    server.worker.join()
+                    failed_id = engine.record["updateId"]
+                    with sqlite3.connect(data / "couch.sqlite") as trial:
+                        trial.execute("UPDATE progress SET position = 1234")
+                    (data / "preferences.json").write_text('{"failedTrial":true}')
+                    platform.bad_readiness = False
+                    restored = call({"op": "restore", "updateId": failed_id})
+                    self.assertTrue(restored["ok"], restored)
+                    self.assertEqual(restored["transaction"]["phase"], "restored", restored)
+                    self.assertEqual(installed()["version"], "0.1.0+build.2.1")
+                    with sqlite3.connect(data / "couch.sqlite") as previous:
+                        self.assertEqual(previous.execute("SELECT position FROM progress").fetchall(), [(99,)])
+                    self.assertEqual((data / "preferences.json").read_text(), '{"pairing":"fixture-only","preserved":true}')
+                    failed_data = Path(engine.record["failedTrialData"])
+                    self.assertEqual((failed_data / "preferences.json").read_text(), '{"failedTrial":true}')
+                    self.assertFalse(call({"op": "restore", "updateId": failed_id})["ok"])
+                    platform.bad_checkpoint = True
+                    candidate = self.stage(receipts[2], data)
+                    call({"op": "install", "candidateId": candidate, "requestId": "e" * 32, "confirmInterrupt": True})
+                    self.until(lambda: engine.status()["phase"] == "operator-required", 30)
+                    server.worker.join()
+                    checkpoint_id = engine.record["updateId"]
+                    self.assertFalse(engine.record["hookComplete"])
+                    self.assertFalse((storage.root / "backups" / checkpoint_id).exists())
+                    self.assertEqual(installed()["version"], "0.1.0+build.2.1")
+                    platform.bad_checkpoint = False
+                    resumed = call({"op": "restore", "updateId": checkpoint_id})
+                    self.assertEqual(resumed["transaction"]["phase"], "restored", resumed)
+                    self.assertIsNone(storage.read("active.json"))
+                    print("Verified authenticated package downgrade, saved data restoration, retained failed data, and unchanged-app resume without a snapshot.", flush=True)
                 except Exception:
                     print("Fixture worker state:", engine.status(), flush=True)
                     for log in (storage.root / "logs").glob("*.log"):

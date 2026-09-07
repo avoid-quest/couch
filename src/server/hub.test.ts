@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,6 +6,9 @@ import { join } from "node:path";
 import type { Action, PlaybackCommand, PlayerState, ServerMessage, SessionState } from "../shared/protocol";
 import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
+import { buildInfo } from "./build-info";
+import { buildKey } from "../shared/build";
+import * as recordingsModule from "./recordings";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as bandcampModule from "./providers/bandcamp";
@@ -200,12 +204,12 @@ test("hub shutdown aborts pending Bandcamp extraction before a queue change", as
   } finally { album.mockRestore(); }
 });
 
-function fixture(databasePath?: string, advertisedUrls?: string[]) {
+function fixture(databasePath?: string, advertisedUrls?: string[], admitted?: () => boolean, extra: Partial<Parameters<typeof createHub>[0]> = {}) {
   const directory = mkdtempSync(join(tmpdir(), "couch-test-"));
   roots.push(directory);
   const commands: PlaybackCommand[] = [];
   const listeners = new Set<() => void>();
-  const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath: databasePath ?? join(directory, "state.sqlite"), pairingCode: "123456", hostToken, advertisedUrls, sendPlayer: command => { commands.push(command); for (const listener of listeners) listener(); } });
+  const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath: databasePath ?? join(directory, "state.sqlite"), pairingCode: "123456", hostToken, advertisedUrls, admitted, ...extra, sendPlayer: command => { commands.push(command); for (const listener of listeners) listener(); } });
   hubs.push(hub);
   const waitForCommand = (predicate: (command: PlaybackCommand) => boolean) => new Promise<PlaybackCommand>((resolve, reject) => {
     const timeout = setTimeout(() => { listeners.delete(check); reject(new Error("Timed out waiting for native command.")); }, 2000);
@@ -969,4 +973,154 @@ test("only a claimed administrator can read sanitized diagnostics through HTTP",
   expect(report.configuration.some((fact: { name: string; value: unknown }) => fact.name === "Listen port" && fact.value === hub.server.port)).toBe(true);
   expect((await api(guest, "/api/diagnostics/export")).status).toBe(403);
   expect(commands).toEqual(previousCommands);
+});
+
+
+test("trial admission blocks pairing and last-seen writes while keeping authenticated build identity readable", async () => {
+  let open = true;
+  const { hub, databasePath } = fixture(undefined, undefined, () => open);
+  const token = await pair(hub);
+  const db = new Database(databasePath);
+  try {
+    db.query("UPDATE devices SET lastSeenAt = NULL").run();
+    open = false;
+    expect((await controllerApi(hub, token, "/api/settings")).status).toBe(503);
+    expect((await controllerApi(hub, token, "/api/build")).status).toBe(200);
+    expect((await controllerApi(hub, token, "/api/controllers/me")).status).toBe(200);
+    expect(db.query<{ lastSeenAt: number | null }, []>("SELECT lastSeenAt FROM devices").get()?.lastSeenAt).toBeNull();
+    expect((await fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode }) })).status).toBe(503);
+    expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM devices").get()?.count).toBe(1);
+  } finally { db.close(); }
+});
+
+test("pairing admitted before maintenance cannot save after its request body arrives", async () => {
+  let open = true;
+  const { hub, databasePath } = fixture(undefined, undefined, () => open);
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const original = Request.prototype.json;
+  const body = spyOn(Request.prototype, "json").mockImplementation(async function(this: Request) { entered.resolve(); await release.promise; return original.call(this); });
+  try {
+    const response = fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode }) });
+    await entered.promise;
+    open = false;
+    release.resolve();
+    expect((await response).status).toBe(503);
+    const db = new Database(databasePath, { readonly: true });
+    try { expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM devices").get()?.count).toBe(0); }
+    finally { db.close(); }
+  } finally { release.resolve(); body.mockRestore(); }
+});
+
+test("maintenance admission cancels a delayed album before queue writes or native playback", async () => {
+  let open = true;
+  const entered = Promise.withResolvers<void>(), album = Promise.withResolvers<ProviderPage>();
+  const lookup = spyOn(bandcampModule, "loadBandcampAlbum").mockImplementation(async () => { entered.resolve(); return album.promise; });
+  try {
+    const { hub, commands } = fixture(undefined, undefined, () => open);
+    hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub));
+    await remote.ready();
+    const result = remote.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true });
+    await entered.promise;
+    open = false;
+    album.resolve(bandcampAlbum);
+    expect(await result).toMatchObject({ ok: false });
+    expect(hub.session.state.queue).toEqual([]);
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+  } finally { album.resolve(bandcampAlbum); lookup.mockRestore(); }
+});
+
+
+test.each([false, true])("hub maintenance checkpoint reports its actual SQLite save outcome, failing=%s", async failing => {
+  const { hub, databasePath } = fixture();
+  hub.session.observe(idle);
+  hub.session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "file:///one.mp4" }, playNow: true });
+  const player = { ...idle, playbackId: hub.session.state.player.playbackId, status: "playing" as const, position: 12, duration: 100 };
+  hub.session.observe(player);
+  hub.session.observe({ ...player, position: 17 });
+  const db = new Database(databasePath);
+  try {
+    if (failing) db.run("CREATE TRIGGER reject_progress BEFORE INSERT ON viewing_progress BEGIN SELECT RAISE(FAIL, 'fixture disk failure'); END");
+    const result = await hub.quiesce().catch(error => error);
+    if (failing) {
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toContain("Could not save viewing progress");
+      expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(12);
+      hubs.splice(hubs.indexOf(hub), 1);
+    } else {
+      expect(result).toEqual({ progressSaved: true, admissionClosed: true });
+      expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(17);
+    }
+    expect(() => hub.session.command({ type: "volume", volume: 10 })).toThrow("update");
+  } finally { db.close(); }
+});
+
+
+test("trial permits private native asset acknowledgment and administrator status without last-seen writes", async () => {
+  let open = true, acknowledgments = 0;
+  const { hub, databasePath } = fixture(undefined, undefined, () => open, {
+    frontendReady: build => { acknowledgments++; return (build as { revision?: string })?.revision === "current"; },
+    updater: { request: async () => ({ ok: true, transaction: null }) },
+  });
+  const owner = await pair(hub), guest = await pair(hub);
+  await claimAdministrator(hub, owner);
+  const db = new Database(databasePath);
+  try {
+    db.query("UPDATE devices SET lastSeenAt = NULL").run();
+    open = false;
+    expect((await controllerApi(hub, guest, "/api/maintenance/frontend", "POST", { build: { revision: "current" } })).status).toBe(403);
+    expect(acknowledgments).toBe(0);
+    expect((await controllerApi(hub, hostToken, "/api/maintenance/frontend", "POST", { build: { revision: "old" } })).status).toBe(409);
+    expect((await controllerApi(hub, hostToken, "/api/maintenance/frontend", "POST", { build: { revision: "current" } })).status).toBe(200);
+    expect((await controllerApi(hub, guest, "/api/updates")).status).toBe(403);
+    const status = await controllerApi(hub, owner, "/api/updates");
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ installation: { enabled: true, transaction: null } });
+    expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM devices WHERE lastSeenAt IS NOT NULL").get()?.count).toBe(0);
+  } finally { db.close(); }
+});
+
+
+test("packaged control connections reject missing or stale asset identity before controller writes", async () => {
+  const { hub, databasePath } = fixture();
+  const token = await pair(hub), previous = { ...buildInfo };
+  const db = new Database(databasePath);
+  try {
+    Object.assign(buildInfo, { packaged: true, version: "2", revision: "b".repeat(40), dataFormat: 1 });
+    db.query("UPDATE devices SET lastSeenAt = NULL").run();
+    for (const build of ["", "old"]) expect((await fetch(`${hub.origin}/api/ws?token=${token}&build=${build}`, { headers: { Origin: hub.origin } })).status).toBe(409);
+    expect(db.query<{ lastSeenAt: number | null }, []>("SELECT lastSeenAt FROM devices").get()?.lastSeenAt).toBeNull();
+    const socket = new BunWebSocket(`${hub.origin.replace("http", "ws")}/api/ws?token=${token}&build=${encodeURIComponent(buildKey(buildInfo)!)}`, { headers: { Origin: hub.origin } });
+    try { await new Promise<void>((resolve, reject) => { socket.onmessage = () => resolve(); socket.onerror = () => reject(new Error("Matching assets were rejected")); }); }
+    finally { socket.close(); }
+  } finally { Object.assign(buildInfo, previous); db.close(); }
+});
+
+
+test.each([false, true])("quiesce starts and awaits recording shutdown, propagating failure=%s", async failing => {
+  const create = recordingsModule.createRecordings, gate = Promise.withResolvers<void>();
+  let started = false, finished = false;
+  const mocked = spyOn(recordingsModule, "createRecordings").mockImplementation(options => {
+    const recordings = create(options);
+    return { ...recordings, close: async () => {
+      started = true;
+      expect(options.admitted?.()).toBe(false);
+      const closing = recordings.close();
+      await gate.promise; await closing;
+      if (failing) throw new Error("recording drain failed");
+    } };
+  });
+  const { hub } = fixture();
+  const pending = hub.quiesce().then(result => { finished = true; return result; }, error => { finished = true; return error; });
+  try {
+    expect(started).toBe(true);
+    await Bun.sleep(0);
+    expect(finished).toBe(false);
+  } finally { gate.resolve(); mocked.mockRestore(); }
+  const result = await pending;
+  if (failing) {
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toBe("recording drain failed");
+    hubs.splice(hubs.indexOf(hub), 1);
+  } else expect(result).toEqual({ progressSaved: true, admissionClosed: true });
 });

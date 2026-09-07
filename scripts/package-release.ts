@@ -12,6 +12,7 @@ const build = await Bun.file("src-tauri/build-info.json").json();
 assert.equal(build.version, releaseVersion(version, releaseId));
 assert.equal(build.dirty, false);
 assert.equal(build.packaged, true);
+assert.equal(build.dataFormat, 1);
 assert.match(build.revision, /^[a-f0-9]{40}$/);
 assert.equal(build.target, "x86_64-unknown-linux-gnu");
 const files = (await readdir(packageDirectory)).filter(file => file.endsWith(".deb"));
@@ -38,7 +39,7 @@ const manifest = {
   releaseId,
   build,
   ci: { repository: process.env.GITHUB_REPOSITORY, runId: process.env.GITHUB_RUN_ID, attempt: process.env.GITHUB_RUN_ATTEMPT, workflow: "Package", ref: process.env.GITHUB_REF_NAME },
-  compatibility: { os: "ubuntu", osVersion: "24.04", architecture: "amd64", data: "Preserve the existing absolute COUCH_DATA_DIR and its account permissions.", appliancePackage: "Install both packages at the exact listed version through the supported APT installer." },
+  compatibility: { dataFormat: 1, os: "ubuntu", osVersion: "24.04", architecture: "amd64", data: "Preserve the existing absolute COUCH_DATA_DIR and its account permissions.", appliancePackage: "Install both packages at the exact listed version through the supported APT installer." },
   releaseNotes: process.env.COUCH_RELEASE_NOTES?.trim() || `Qualified build of ${build.revision}.`,
   packages: [{ name: "couch", version: build.version, architecture: "amd64", filename: basename(packagePath), size: bytes.length, sha256 }, { name: "couch-appliance", version: build.version, architecture: "all", filename: companionFilename, size: companionBytes.length, sha256: new Bun.CryptoHasher("sha256").update(companionBytes).digest("hex") }],
   qualification: { checks: qualification.checks, display: qualification.display },

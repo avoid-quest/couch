@@ -171,6 +171,10 @@ test("a timed-out check stays the only unfinished job even after cache expiry", 
   setSystemTime(new Date(Date.now() + 11_000));
   const next = health.handle(request(), () => administrator);
   expect(calls).toBe(1);
-  health.close(); gate.resolve("2026.08.19");
+  let stopped = false;
+  const closing = health.close().then(() => stopped = true);
+  await closing;
+  expect(stopped).toBe(true);
+  gate.resolve("2026.08.19");
   expect((await next).status).toBe(503);
 }, 15_000);

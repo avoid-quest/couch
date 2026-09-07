@@ -1,6 +1,8 @@
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
+import { createManualUpdate } from "./manual-update";
+import type { createUpdaterClient } from "./updater-client";
 import { createUpdates } from "./updates";
 import { createUpdateFeed } from "./update-feed";
 import { createToolHealth } from "./tool-health";
@@ -24,11 +26,12 @@ import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
 import { createPlaylists } from "./playlists";
-import { ControllerError, createControllers } from "./controllers";
+import { ControllerError, createControllers, settingField } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
 import { createDiagnostics } from "./diagnostics";
 import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
+import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
@@ -44,6 +47,9 @@ type HubOptions = {
   frontend?: HTMLBundle;
   development?: boolean;
   advertisedUrls?: string[];
+  updater?: Pick<ReturnType<typeof createUpdaterClient>, "request">;
+  admitted?: () => boolean;
+  frontendReady?: (build: unknown) => boolean;
 };
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -71,6 +77,7 @@ export function createHub(options: HubOptions) {
   }
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
   let closed = false;
+  const admitted = () => !closed && (options.admitted?.() ?? true);
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
@@ -79,6 +86,7 @@ export function createHub(options: HubOptions) {
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
+    admitted,
     resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
@@ -115,7 +123,7 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
     },
   });
-  const recordings = createRecordings({ databasePath: options.databasePath, selection: guide.recordingSelection, channel: guide.recordingChannel,
+  const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
     onChange: () => session.invalidate("recordings"),
     onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
     enqueue: (job, authorize) => {
@@ -133,7 +141,9 @@ export function createHub(options: HubOptions) {
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
-  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined);
+  let manual: ReturnType<typeof createManualUpdate> | undefined;
+  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux" ? createUpdateFeed(join(updateDirectory, "staged"), buildInfo.version) : undefined, undefined, () => admitted() && !manual?.busy());
+  manual = options.updater ? createManualUpdate(options.updater, admitted, updates.candidateReady) : undefined;
   const appearance = createAppearance(store, value => session.updateAppearance(value));
   const catalog = createCatalog({ library, radio, jellyfin, viewing: { store, session } });
   const jellyfinSettings = createJellyfinSettings({ jellyfin, invalidate: () => {
@@ -185,11 +195,13 @@ export function createHub(options: HubOptions) {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
           const respond = (body: unknown, status = 200) => cors(request, json(body, status));
+          if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
           if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
           if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
           if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
           let body: unknown;
           try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
+          if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
           if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
           try {
             const token = store.pair("name" in body ? body.name : undefined);
@@ -217,19 +229,39 @@ export function createHub(options: HubOptions) {
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
-      const authorize = () => { if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401); };
+      if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
+        if (!trusted) return cors(request, json({ error: "The native frontend is required." }, 403));
+        try {
+          const build = await settingField(request, "build");
+          if (closed || !options.frontendReady(build)) return cors(request, json({ error: "The frontend build does not match this server." }, 409));
+          return cors(request, json({ ok: true }));
+        } catch { return cors(request, json({ error: "Invalid frontend build acknowledgment." }, 400)); }
+      }
+      if (url.pathname === "/api/controllers/me" && request.method === "GET") return cors(request, await controllers.handle(request, identity));
+      if (manual && url.pathname === "/api/updates" && request.method === "GET") {
+        try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
+        catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
+      }
+      if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
+      if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
+      const currentIdentity = () => admitted() ? identity() : null;
+      const authorize = () => {
+        if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+        if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
+      };
+      if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
       if (caller.controller) store.touchController(caller.controller.id);
-      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, identity));
-      if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, identity));
-      if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, identity));
-      if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, identity));
-      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, identity));
-      if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, identity));
-      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, identity));
-      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, identity));
-      if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, identity));
-      if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, identity));
-      if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, identity));
+      if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity));
+      if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || url.pathname === "/api/settings")) return cors(request, await controllers.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
+      if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
+      if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
       if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
       return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
     },
@@ -333,27 +365,40 @@ export function createHub(options: HubOptions) {
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
 
+  let closing: Promise<void> | undefined;
+  let requiredCheckpoint = false;
+  const close = (requiredProgress = false) => closing ??= (async () => {
+    requiredCheckpoint = requiredProgress;
+    closed = true;
+    shutdown.abort();
+    const recordingShutdown = recordings.close();
+    for (const controller of inspections.values()) controller.abort();
+    let progressError: unknown;
+    try { if (requiredProgress) session.quiesce(); else session.close(); }
+    catch (error) { progressError = error; }
+    const toolsStopped = toolHealth.close();
+    appearance.close();
+    guide.close();
+    providers.close();
+    subtitles.close();
+    playlists.close();
+    collections.close();
+    radio.close();
+    // Start every producer's shutdown before waiting for any one producer.
+    const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), server.stop(true)]);
+    store.close();
+    if (progressError) throw progressError;
+    const failed = results.find(result => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+  })();
+
   return {
     server, session, pairingCode, urls, origin,
-    async close() {
-      toolHealth.close();
-      if (closed) return;
-      closed = true;
-      shutdown.abort();
-      const recordingShutdown = recordings.close();
-      guide.close();
-      for (const controller of inspections.values()) controller.abort();
-      session.close();
-      appearance.close();
-      await updates.close();
-      providers.close();
-      await server.stop(true);
-      subtitles.close();
-      playlists.close();
-      collections.close();
-      await Promise.all([library.close(), jellyfin.close(), recordingShutdown]);
-      radio.close();
-      store.close();
+    close: () => close(),
+    quiesce: async () => {
+      if (closing && !requiredCheckpoint) throw new Error("The TV was stopped without an update checkpoint.");
+      await close(true);
+      return { progressSaved: true, admissionClosed: true };
     },
   };
 }
