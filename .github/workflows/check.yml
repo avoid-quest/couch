@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      # Keep the dev/test assertions and overflow checks; omit bulky debug symbols.
+      # Keep assertions and overflow checks without bulky debug symbols.
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
     concurrency:
@@ -26,21 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 2
       - name: Resolve the tested base
         id: base
         continue-on-error: true
         env:
           BEFORE: ${{ github.event.before }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        # Compare the actual PR merge tree to its first parent, or the push's prior tip.
         run: |
-          base="$BEFORE"
-          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
-            read -r base head extra <<< "$(git show -s --format=%P HEAD)"
-            [[ "$head" == "$PR_HEAD" && -z "$extra" ]] || exit 1
-          fi
-          [[ "$base" =~ ^[0-9a-f]{40}$ && "$(git rev-parse --is-shallow-repository)" == false ]] || exit 1
-          git cat-file -e "$base^{commit}"
+          base="${BEFORE:-$(git rev-parse HEAD^1)}"
           echo "sha=$base" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@v4
         id: paths
@@ -59,111 +53,53 @@ jobs:
             native:
               - *non-docs
               - '!{src,tests}/**/*.{ts,tsx,css,html,m3u}'
-              - '!{package.json,bun.lock}'
-            packages:
-              - '{package.json,bun.lock}'
+            releases:
+              - '{scripts/*release*,install-couch,.github/workflows/check.yml,.github/workflows/releases.yml}'
+      - name: Verify private artifact origin and attempt checks
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.releases != 'false'
+        run: python3 scripts/test-download-release.py
+      - name: Test signed releases and installer trust enrollment
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.releases != 'false'
+        run: sudo python3 scripts/test-publish-release.py
       - uses: oven-sh/setup-bun@v2
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
         with:
           bun-version: 1.4.2
-      - name: Compare native package inputs
-        id: packages
-        if: steps.paths.outputs.native == 'false' && steps.paths.outputs.packages == 'true'
-        continue-on-error: true
-        env:
-          TESTED_BASE: ${{ steps.base.outputs.sha }}
-        run: |
-          bun --eval '
-          import { isDeepStrictEqual } from "node:util";
-          const sensitive = name => /^(?:npm:)?(?:@tauri-apps\/|@oven\/bun-|bun(?:@|$))/.test(name);
-          const native = (entries = {}) => Object.fromEntries(Object.entries(entries).filter(([name, value]) => sensitive(name) || sensitive(Array.isArray(value) ? value[0] : value)));
-          const manifest = value => {
-            if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid package manifest");
-            const { dependencies, devDependencies, ...metadata } = value;
-            return { ...metadata, dependencies: native(dependencies), devDependencies: native(devDependencies) };
-          };
-          const read = (ref, file) => {
-            const result = Bun.spawnSync(["git", "show", `${ref}:${file}`]);
-            if (result.exitCode !== 0) throw new Error(`Cannot read ${ref}:${file}`);
-            return Bun.JSONC.parse(result.stdout.toString());
-          };
-          const inputs = ref => {
-            const lock = read(ref, "bun.lock");
-            if (lock.lockfileVersion !== 2 || lock.configVersion !== 1 || Object.keys(lock.workspaces).length !== 1 || !lock.workspaces[""] || !lock.packages) throw new Error("Unsupported Bun lock structure");
-            return [manifest(read(ref, "package.json")), { ...lock, workspaces: { "": manifest(lock.workspaces[""]) }, packages: native(lock.packages) }];
-          };
-          console.log(`native=${!isDeepStrictEqual(inputs(process.env.TESTED_BASE), inputs("HEAD"))}`);
-          ' >> "$GITHUB_OUTPUT"
-      - name: Install Linux dependencies
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' || (steps.paths.outputs.packages == 'true' && steps.packages.outputs.native != 'false')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg
-      - name: Set up Rust
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' || (steps.paths.outputs.packages == 'true' && steps.packages.outputs.native != 'false')
-        run: rustup show active-toolchain
-      - name: Reuse Cargo dependencies
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' || (steps.paths.outputs.packages == 'true' && steps.packages.outputs.native != 'false')
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-          cache-bin: false
-          # The action also keys compiler/host, Cargo env, manifests, and lockfiles.
-          key: ubuntu-24.04-default-test-${{ hashFiles('.github/workflows/check.yml', 'src-tauri/vendor/**', 'src-tauri/build.rs', 'src-tauri/tauri.conf.json', 'src-tauri/capabilities/**', 'src-tauri/icons/**', 'scripts/build.ts') }}
+      - run: bun install --frozen-lockfile
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - name: Install media test dependency
-        if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false' && (steps.paths.outputs.packages != 'true' || steps.packages.outputs.native == 'false')
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
         run: |
           if ! command -v ffmpeg; then
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends ffmpeg
           fi
-      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-      - name: Check application code
-        if: steps.paths.outcome == 'success' && steps.paths.outputs.code == 'true' && steps.paths.outputs.native == 'false' && (steps.paths.outputs.packages != 'true' || steps.packages.outputs.native == 'false')
-        run: |
-          # Track every command group so cancellation also stops its children.
-          set -m
-          pids=()
-          trap 'for pid in "${pids[@]}"; do kill -KILL -- -"$pid" 2>/dev/null || true; done' EXIT
-          trap 'exit 130' INT
-          trap 'exit 143' TERM
-          bun run typecheck & pids+=("$!")
-          wait "${pids[0]}"
-          # Isolate the real clock and its process-wide mocks from the remaining tests.
-          bun test ./tests/linux/iptv-clock.test.ts & pids+=("$!")
-          bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts' & pids+=("$!")
-          status=0
-          for pid in "${pids[@]:1}"; do
-            child_status=0
-            wait "$pid" || child_status=$?
-            echo "Check process $pid exit: $child_status"
-            if ((child_status != 0)); then status=1; fi
-          done
-          exit "$status"
+      # Isolate the real clock from process-wide mocks in the other tests.
+      - run: bun test ./tests/linux/iptv-clock.test.ts
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
+      - run: bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
+      # Tauri's build script requires the generated sidecar for native tests.
       - run: bun run build
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
-      - name: Check native and application code
-        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false' || (steps.paths.outputs.packages == 'true' && steps.packages.outputs.native != 'false')
+      - name: Install native dependencies
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
         run: |
-          # Track every command group so cancellation also stops its children.
-          set -m
-          pids=()
-          trap 'for pid in "${pids[@]}"; do kill -KILL -- -"$pid" 2>/dev/null || true; done' EXIT
-          trap 'exit 130' INT
-          trap 'exit 143' TERM
-          bun run typecheck & pids+=("$!")
-          wait "${pids[0]}"
-          # Isolate the real clock and its process-wide mocks from the remaining tests.
-          bun test ./tests/linux/iptv-clock.test.ts & pids+=("$!")
-          bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts' & pids+=("$!")
-          cargo test --manifest-path src-tauri/Cargo.toml --locked --verbose & pids+=("$!")
-          cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer & pids+=("$!")
-          status=0
-          for pid in "${pids[@]:1}"; do
-            child_status=0
-            wait "$pid" || child_status=$?
-            echo "Check process $pid exit: $child_status"
-            if ((child_status != 0)); then status=1; fi
-          done
-          exit "$status"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev
+      - name: Set up Rust
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
+        with:
+          workspaces: src-tauri
+          cache-bin: false
+          key: ubuntu-24.04-test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.native != 'false'
