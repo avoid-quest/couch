@@ -39,7 +39,8 @@ jobs:
         run: |
           snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
           sudo apt-get update --snapshot "$snapshot"
-          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64
+          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64 librsvg2-dev
+          pkg-config --variable=libdir librsvg-2.0
           rustup show active-toolchain
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
@@ -47,7 +48,7 @@ jobs:
           cache-bin: false
           # Keep compiled dependencies when a later runtime qualification fails.
           cache-on-failure: true
-          key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', '.github/workflows/package.yml', 'src-tauri/vendor/**') }}
+          key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', 'src-tauri/vendor/**') }}
       - run: bun install --frozen-lockfile
       - run: bun run package:prepare
       - name: Build the native TV, Debian package and AppImage
