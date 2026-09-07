@@ -43,7 +43,7 @@ dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/product
 cmp /evidence/native-build.json /evidence/server-build.json
 
 # Display and automation fixtures are installed only after recording production closure.
-apt-get install -y --no-install-recommends xvfb xauth dbus-x11 openbox webkit2gtk-driver pulseaudio libgl1-mesa-dri procps
+apt-get install -y --no-install-recommends xvfb xauth dbus-x11 openbox xdotool webkit2gtk-driver pulseaudio libgl1-mesa-dri procps
 dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' > /evidence/qualification-packages.tsv
 chown qualifier:qualifier /evidence
 touch /evidence/runtime-ready

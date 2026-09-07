@@ -1,7 +1,9 @@
 Couch is distributed privately by avoid-quest. This package does not grant a
 new license to Couch's application source. Third-party components retain their
-own licenses in this directory. Ubuntu supplies its libraries independently;
-their copyright notices are installed under /usr/share/doc/<package>/copyright.
+own licenses in this directory. Debian installations obtain Ubuntu libraries independently. AppImages also
+redistribute Ubuntu libraries; their copyright notices are retained in the
+ubuntu subdirectory. build-packages.tsv records the Ubuntu build package
+versions. Installed Ubuntu notices remain under /usr/share/doc/<package>/copyright.
 
 The exact Couch source, including modified libmpv2, tauri-plugin-video and
 tauri-runtime-wry, is supplied alongside each private CI package as

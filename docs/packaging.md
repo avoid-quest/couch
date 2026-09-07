@@ -49,19 +49,23 @@ Rust/Bun versions, helper checksums and the resolved Ubuntu build packages.
 ## Build and qualify
 
 The [Package workflow](../.github/workflows/package.yml) uses the pinned project
-Tauri CLI through the official Tauri action. It builds only Debian on Ubuntu
+Tauri CLI through the official Tauri action. It builds Debian and AppImage on Ubuntu
 24.04 x86_64. JavaScript and Rust dependencies stay locked; language tools,
 helper archives, notice downloads, action revisions, the Ubuntu snapshot and
 clean runtime image have explicit pins. Ubuntu's GitHub runner image metadata
 and resolved build package inventory remain part of each run's evidence.
 
 After ordinary checks, run Package manually on the intended revision. Before
-the workflow lands on main, add the `qualify-package` label to the reviewed draft
+the workflow lands on main, add the `qualify-package` label to the ready-for-review
 PR. The workflow checks out that event's exact PR head. It never publishes a
-release or uses signing credentials. Each artifact name includes that head.
+release or uses signing credentials. Artifact names identify the build run and attempt; build metadata records the exact source head.
 After a new commit, remove and reapply the label to request fresh qualification.
 A prior success does not qualify a changed head. Review `result.json`, the package
 hash and embedded source revision before consuming the artifact.
+
+Package runs only by manual dispatch or the explicit PR label, rather than on every main merge. It builds both formats once, then a two-format matrix qualifies the same binaries in separate clean Ubuntu containers. Re-running failed qualification jobs reuses that build and its identity. For a fixture fix, manual dispatch accepts `build-run` and `build-attempt` to qualify saved bytes with the current tests, skipping compilation and release output. Evidence keeps the original binary build identity; the run records the test revision. The private downloader requires the overall workflow's latest attempt to have succeeded. Build inputs and diagnostics are retained for seven days; qualified packages for thirty days.
+
+Check runs native tests for Tauri source/configuration, toolchain, dependency and build-script changes. Package fixtures run source checks and their explicit qualification instead of recompiling unchanged Rust tests. Signed APT and installer tests run within Check while the installed migration still needs them. Cargo caches use stable profile keys. Check writes only on main; explicit package qualification also saves its release cache so a packaging fix can reuse compiled dependencies. Workflow edits no longer create new copies of all compiled dependencies.
 
 The source archive shipped beside the package includes the modified native
 dependencies and rebuild instructions. Keep it accessible to the package's
@@ -107,3 +111,13 @@ earlier logs without reusing readiness, failure or result markers.
 The display smoke uses software rendering and silent audio. Physical video,
 sound and boot-session results must be recorded separately on their owning
 issues.
+
+## AppImage qualification
+
+The Package workflow also builds an AppImage from the same committed source and pinned helpers. Its separate `couch-appimage-RUN.ATTEMPT` artifact is uploaded only after the exact AppImage passes clean Ubuntu 24.04 qualification. It contains the AppImage, matching source/build identity, SHA-256 hashes and runtime evidence. Redistribution notices are inside `/usr/share/doc/couch` in the bundle.
+
+Run `bun tests/package/qualify.ts path/to/Couch.AppImage` on an Ubuntu 24.04 x86_64 Docker host with Bun, ffmpeg and tauri-driver 2.0.6 installed. The runtime container has no development tools. The test uses AppImage's extract-and-run mode because Docker does not provide a FUSE mount. It checks the native host/sidecar identity, pinned helper discovery, existing library scan, native video/audio and subtitle pixels, real browser pairing and retained authorization/data after restart without autoplay.
+
+The supported Ubuntu runtime supplies `libwebkit2gtk-4.1-0`, `libfuse2t64`, ffmpeg/ffprobe, GL and VA-API drivers, CA certificates and fonts. The qualification installs and records these explicit prerequisites before adding the browser driver, so its WebKit dependencies are not hidden test prerequisites. Normal `./Couch.AppImage` launch requires working FUSE; Docker qualification uses the documented `APPIMAGE_EXTRACT_AND_RUN=1` mode. Normal mounted launch remains an installed-system check. Xvfb, the browser driver and PulseAudio's null sink are test fixtures. Software rendering verifies bundle behavior, not T480 hardware decoding, audible output or physical subtitle geometry. Those remain installed-device acceptance requirements. Tauri's [AppImage guidance](https://v2.tauri.app/distribute/appimage/) describes the build-host compatibility boundary; this artifact targets Ubuntu 24.04.
+
+This qualification increment does not enroll an update key or migrate an installed appliance. Keep the current Debian session and updater until signed AppImage updates, installed migration and operator SSH recovery qualify. Keep user data outside the bundle at the existing absolute `COUCH_DATA_DIR` with its current account and permissions.

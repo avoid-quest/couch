@@ -24,11 +24,11 @@ def download(artifact_id, destination):
     run_id, attempt = identity.split('.')
     if str(artifact['workflow_run']['id']) != run_id:
         raise ValueError('Artifact run identity mismatch')
-    run = json.loads(api(f'actions/runs/{run_id}/attempts/{attempt}'))
+    run = json.loads(api(f'actions/runs/{run_id}'))
     if (run['conclusion'] != 'success' or run['event'] not in ['push', 'workflow_dispatch']
             or run['head_branch'] != 'main' or run['path'] != '.github/workflows/package.yml'
             or run['repository']['full_name'] != REPOSITORY or run['head_repository']['full_name'] != REPOSITORY
-            or str(run['id']) != run_id or str(run['run_attempt']) != attempt
+            or str(run['id']) != run_id or int(run['run_attempt']) < int(attempt)
             or artifact['workflow_run']['head_sha'] != run['head_sha']):
         raise ValueError('Artifact must come from a successful main Package push or manual run in the source repository')
     archive = api(f'actions/artifacts/{artifact_id}/zip')

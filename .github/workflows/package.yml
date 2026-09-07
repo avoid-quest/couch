@@ -7,26 +7,34 @@ on:
         description: Release notes for this build
         required: true
         type: string
-  push:
-    # main is the Preview integration branch.
-    branches: [main]
+      build-run:
+        description: Existing Package run to requalify without rebuilding or releasing (0 builds fresh)
+        type: number
+        default: 0
+      build-attempt:
+        description: Build attempt within that run
+        type: number
+        default: 1
   pull_request:
     types: [labeled]
 
 permissions:
   contents: read
 
+concurrency:
+  group: package-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name }}
+  cancel-in-progress: true
+
 jobs:
-  ubuntu-deb:
-    if: github.event_name != 'pull_request' || github.event.label.name == 'qualify-package'
+  build:
+    if: ${{ !inputs.build-run && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      release-id: ${{ github.run_id }}.${{ github.run_attempt }}
     env:
       COUCH_RELEASE_ID: ${{ github.run_id }}.${{ github.run_attempt }}
       COUCH_RELEASE_NOTES: ${{ inputs.notes }}
-    concurrency:
-      group: package-${{ github.event.pull_request.number || github.ref }}
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -39,7 +47,8 @@ jobs:
         run: |
           snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
           sudo apt-get update --snapshot "$snapshot"
-          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip
+          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64 librsvg2-dev
+          pkg-config --variable=libdir librsvg-2.0
           rustup show active-toolchain
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
@@ -47,41 +56,102 @@ jobs:
           cache-bin: false
           # Keep compiled dependencies when a later runtime qualification fails.
           cache-on-failure: true
-          key: ubuntu-24.04-release-deb-${{ hashFiles('packaging/inputs.json', '.github/workflows/package.yml', 'src-tauri/vendor/**') }}
+          key: ubuntu-24.04-release-${{ hashFiles('packaging/inputs.json') }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event.label.name == 'qualify-package' }}
       - run: bun install --frozen-lockfile
       - run: bun run package:prepare
-      - name: Build the native TV and Debian package
+      - name: Build the native TV, Debian package and AppImage
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
           tauriScript: bun scripts/desktop.ts
-          args: --bundles deb --config .artifacts/tauri-release.conf.json -- --locked
+          args: --verbose --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
       - name: Preserve the exact artifact and matching source
+        if: success() || failure() && hashFiles('src-tauri/build-info.json') != ''
         run: |
           mkdir -p .artifacts/package-release
-          cp src-tauri/target/release/bundle/deb/*.deb .artifacts/package-release/
+          find src-tauri/target/release/bundle -maxdepth 2 -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec cp {} .artifacts/package-release/ \;
           cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
           git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
-          stat --printf='%n %s bytes\n' .artifacts/package-release/*.deb > .artifacts/package-release/size.txt
           cd .artifacts/package-release
-          sha256sum *.deb *.json *.tar.gz > SHA256SUMS
-      - name: Install the official qualification driver
-        run: cargo install tauri-driver --version 2.0.6 --locked
-      - name: Qualify the exact Debian package on clean Ubuntu
-        run: bun tests/package/qualify.ts .artifacts/package-release/*.deb
-      - name: Assemble the qualified release and matching appliance package
-        run: bun scripts/package-release.ts
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
+      - name: Build the qualification driver once
+        run: |
+          cargo install tauri-driver --version 2.0.6 --locked
+          cp "$HOME/.cargo/bin/tauri-driver" .artifacts/package-release/
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: couch-release-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/qualified-release/
+          name: package-inputs-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/package-release/
+          compression-level: 0
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
+
+  qualify:
+    needs: build
+    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run) }}
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [deb, AppImage]
+    env:
+      COUCH_RELEASE_ID: ${{ inputs.build-run && format('{0}.{1}', inputs.build-run, inputs.build-attempt) || needs.build.outputs.release-id }}
+      COUCH_RELEASE_NOTES: ${{ inputs.notes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: package-inputs-${{ env.COUCH_RELEASE_ID }}
+          run-id: ${{ inputs.build-run || github.run_id }}
+          github-token: ${{ github.token }}
+          path: .artifacts/package-release
+      - name: Prepare qualification
+        run: |
+          if ! command -v ffmpeg; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          cp .artifacts/package-release/build-info.json src-tauri/build-info.json
+          chmod +x .artifacts/package-release/tauri-driver
+          echo "$PWD/.artifacts/package-release" >> "$GITHUB_PATH"
+          bun install --frozen-lockfile
+      - name: Qualify the built package on clean Ubuntu
+        run: bun tests/package/qualify.ts .artifacts/package-release/*.${{ matrix.format }}
+      - name: Assemble the qualified Debian release
+        if: ${{ !inputs.build-run && matrix.format == 'deb' }}
+        run: bun scripts/package-release.ts
+      - name: Assemble the qualified AppImage
+        if: ${{ !inputs.build-run && matrix.format == 'AppImage' }}
+        run: |
+          mkdir -p .artifacts/qualified-release
+          cp .artifacts/package-release/*.AppImage .artifacts/package-release/couch-source.tar.gz src-tauri/build-info.json .artifacts/qualified-release/
+          cp -r .artifacts/appimage-qualification .artifacts/qualified-release/
+          cd .artifacts/qualified-release
+          sha256sum *.AppImage *.json *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: ${{ !inputs.build-run }}
+        with:
+          name: couch-${{ matrix.format == 'deb' && 'release' || 'appimage' }}-${{ needs.build.outputs.release-id }}
+          path: .artifacts/qualified-release/
+          overwrite: true
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: couch-qualification-${{ github.run_id }}.${{ github.run_attempt }}
+          name: qualification-${{ matrix.format }}-${{ github.run_id }}.${{ github.run_attempt }}
           path: |
-            .artifacts/package-release/
             .artifacts/package-qualification/
-          if-no-files-found: error
-          retention-days: 30
+            .artifacts/appimage-qualification/
+          if-no-files-found: warn
+          retention-days: 7
