@@ -15,6 +15,10 @@ on:
         description: Build attempt within that run
         type: number
         default: 1
+      update-artifact:
+        description: Qualified main AppImage artifact ID for signed A to B and repair (requires build-run for A)
+        type: number
+        default: 0
   pull_request:
     types: [labeled]
 
@@ -27,7 +31,7 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ inputs.build-run == 0 && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
+    if: ${{ inputs.build-run == 0 && inputs.update-artifact == 0 && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     outputs:
@@ -88,7 +92,7 @@ jobs:
 
   qualify:
     needs: build
-    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run > 0) }}
+    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run > 0 || inputs.update-artifact > 0) }}
     permissions:
       contents: read
       actions: read
@@ -97,11 +101,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        format: [deb, AppImage]
+        format: ${{ fromJSON((inputs.build-run > 0 || inputs.update-artifact > 0) && '["AppImage"]' || '["deb", "AppImage"]') }}
     env:
       COUCH_RELEASE_ID: ${{ inputs.build-run > 0 && format('{0}.{1}', inputs.build-run, inputs.build-attempt) || needs.build.outputs.release-id }}
       COUCH_RELEASE_NOTES: ${{ inputs.notes }}
     steps:
+      - name: Validate signed qualification inputs
+        if: inputs.update-artifact > 0
+        env:
+          BUILD_RUN: ${{ inputs.build-run }}
+        run: test "$BUILD_RUN" -gt 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -128,7 +137,17 @@ jobs:
         run: bun tests/package/qualify.ts .artifacts/package-release/*.${{ matrix.format }}
       - name: Qualify installed AppImage restart and SSH recovery
         if: matrix.format == 'AppImage'
-        run: bash scripts/test-appliance-systemd.sh --appimage "$(realpath .artifacts/package-release/*.AppImage)" "$PWD/.artifacts/appimage-qualification/installed"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_ARTIFACT: ${{ inputs.update-artifact }}
+        run: |
+          appimage=$(realpath .artifacts/package-release/*.AppImage)
+          evidence="$PWD/.artifacts/appimage-qualification/installed"
+          if [[ -n "$UPDATE_ARTIFACT" && "$UPDATE_ARTIFACT" != 0 ]]; then
+            bun scripts/test-installed-update.ts "$appimage" "$UPDATE_ARTIFACT" "$evidence"
+          else
+            bash scripts/test-appliance-systemd.sh --appimage "$appimage" "$evidence"
+          fi
       - name: Assemble the qualified Debian release
         if: ${{ inputs.build-run == 0 && matrix.format == 'deb' }}
         run: bun scripts/package-release.ts
