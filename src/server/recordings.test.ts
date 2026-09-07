@@ -408,3 +408,15 @@ test("a restored cancelled entry clears its review warning after normal reconcil
   await app.recordings.refresh();
   expect(app.recordings.snapshot().jobs[0]).toMatchObject({ status: "pending", cause: null });
 });
+
+test.each([
+  [200, "Waiting for stream", "No free recording input."],
+  [200, "Adaptateur indisponible", "No free recording input."],
+  [402, "No input detected", "No recording input was detected."],
+])("backend error code %s preserves its cause independently of display status %s", async (errorcode, status, cause) => {
+  const app = fixture(); await app.setup(); const pending = await job(await app.schedule());
+  Object.assign(app.rows[0]!, { sched_status: "recordingError", status, errorcode }); await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]).toMatchObject({ id: pending.id, status: "failed", cause });
+  Object.assign(app.rows[0]!, { sched_status: "completedError", status: "File missing", errorcode: 0 }); await app.reopen(); await app.recordings.refresh();
+  expect(app.recordings.snapshot().jobs[0]).toMatchObject({ id: pending.id, status: "failed", cause });
+});

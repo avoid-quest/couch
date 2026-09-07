@@ -12,7 +12,10 @@ type Job = Recording & { sourceId: string; tvgId: string; backendChannel: string
 type Setup = { qualificationVersion?: number; revision: number; connection: RecordingConnection; mappings: RecordingMapping[] };
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
 const publicJob = ({ sourceId: _source, tvgId: _tvg, backendChannel: _channel, backendId: _backend, eventId: _event, backendCause: _cause, ...job }: Job): Recording => job;
-const knownCauses = new Map([["No free adapter", "No free recording input."], ["No assigned adapters", "No input is assigned to this channel."], ["File missing", "The recording file is missing."], ["Invalid", "The backend rejected this recording."], ["Not enough disk space", "The backend ran out of recording space."]]);
+const knownCauses = new Map([["No free adapter", "No free recording input."], ["No assigned adapters", "No input is assigned to this channel."], ["No input detected", "No recording input was detected."], ["File missing", "The recording file is missing."], ["Invalid", "The backend rejected this recording."], ["Not enough disk space", "The backend ran out of recording space."]]);
+// API errorcode is de_last_error; the localized status can already say
+// "Waiting for stream" while that original input error remains active.
+const errorCauses = new Map([[200, "No free adapter"], [209, "No assigned adapters"], [402, "No input detected"], [403, "Not enough disk space"]]);
 const method = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
 
 export function createRecordings({ databasePath, selection, channel, onChange = () => {}, onConnectionChanged = () => {}, enqueue = () => {}, fetch: request = globalThis.fetch, pollMs = 10_000 }: {
@@ -75,7 +78,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
           }
           const failed = /Error$/i.test(row.sched_status) || row.sched_status === "unknown" || row.errorcode > 0;
           const status = failed ? "failed" : row.sched_status === "scheduled" ? "pending" : row.sched_status === "recording" ? "running" : row.sched_status === "completed" && row.filesize > 0 ? "completed" : "failed";
-          const rawCause = failed ? `${row.status ?? ""}`.slice(0, 1000) : null;
+          const rawCause = failed ? errorCauses.get(row.errorcode) ?? `${row.status ?? ""}`.slice(0, 1000) : null;
           const backendCause = job.backendCause ?? rawCause;
           update(job, { backendId: row.uuid, status, backendCause, cause: backendCause !== null ? knownCauses.get(backendCause) ?? "The backend could not record this programme." : status === "failed" ? "The backend did not produce a completed recording." : null });
         }
