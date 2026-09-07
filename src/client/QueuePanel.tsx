@@ -11,7 +11,7 @@ import type { Action, SessionState, VideoQuality } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { QualitySelect } from "./QualitySelect";
-import { supportsWebVideoQuality, useEnqueueVideoQuality } from "./video-quality";
+import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityLabels } from "./video-quality";
 import { QueueActions } from "./QueueActions";
 import { SavedPlaylists } from "./SavedPlaylists";
 import { createId, type Credentials } from "./session";
@@ -148,7 +148,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
     {notice && <p className="queue-feedback queue-notice" role="status">{notice}</p>}
     {queue.length ? <ol className="queue-list" aria-label="Play queue">{queue.map((entry, index) => {
       const current = entry.id === state?.currentEntryId;
-      const label = [sourceLabel(entry.source), entry.live ? "LIVE" : entry.duration ? duration(entry.duration) : "", entry.quality && entry.quality !== "best" ? entry.quality : ""].filter(Boolean).join(" · ");
+      const label = [sourceLabel(entry.source), entry.live ? "LIVE" : entry.duration ? duration(entry.duration) : "", entry.quality ? videoQualityLabels[entry.quality] : ""].filter(Boolean).join(" · ");
       return <li className={`queue-entry ${current ? "current" : ""}`} key={entry.id} aria-current={current ? "true" : undefined}>
         <Button variant="ghost" size="icon" className="queue-play" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
         {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork" />}
