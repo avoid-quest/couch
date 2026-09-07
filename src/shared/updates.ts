@@ -22,9 +22,14 @@ export type UpdateState = {
   waiting?: string | null;
   running: { version: string; revision: string | null };
   status: "unavailable" | "idle" | "checking" | "available" | "downloading" | "ready" | "failed";
+  progress?: { received: number; total: number } | null;
   lastSuccessfulCheck: number | null;
   currentCheck: boolean;
   candidate: UpdateCandidate | null;
   error: string | null;
+  installationUnavailable?: string;
   installation?: { current?: { candidateId: string; version: string; revision: string } | null; repairAvailable?: boolean; enabled: boolean; transaction: UpdateTransaction | null; requestedTransaction?: UpdateTransaction | null };
 };
+
+export type AppImageUpdateAction = { type: "check"; channel: ReleaseChannel } | { type: "checkRepair" } | { type: "stage"; candidateId: string };
+export type AppImageUpdateReply = { requestId: string; candidate?: { summary: UpdateCandidate; staged: boolean } | null; staged?: boolean; progress?: { received: number; total: number }; error?: string };

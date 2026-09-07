@@ -156,3 +156,18 @@ test("an idle refusal can retry after a fresh idle interval, while offline check
   await f.updates.automatic();
   expect(f.updates.state.currentCheck).toBe(false); expect(f.installations).toHaveLength(2);
 });
+
+test("fresh native verification restores ready staging, corruption clears ready without losing preferences", async () => {
+  let staged = true;
+  const { updates, directory } = await setup({ check: async () => ({ ...candidate, staged }), stage: async () => {} });
+  await updates.handle(request("/channel", { channel: "preview" }), admin);
+  expect(await settled(updates)).toMatchObject({ status: "ready", currentCheck: true, channel: "preview", policy: "manual" });
+  staged = false;
+  await updates.handle(request("/check", { check: true }), admin);
+  expect(await settled(updates)).toMatchObject({ status: "available", currentCheck: true });
+  await updates.close();
+  const restarted = createUpdates(directory, { version: "0.1.0", revision: null }, { check: async () => ({ ...candidate, staged: true }), stage: async () => {} }); cleanup.push(() => restarted.close());
+  expect(await state(restarted)).toMatchObject({ status: "idle", currentCheck: false, channel: "preview", policy: "manual" });
+  await restarted.handle(request("/check", { check: true }), admin);
+  expect(await settled(restarted)).toMatchObject({ status: "ready", currentCheck: true });
+});

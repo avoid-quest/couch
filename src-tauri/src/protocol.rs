@@ -15,6 +15,11 @@ pub struct ConnectionInfo {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SidecarMessage {
+    AppimageUpdate {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        action: crate::appimage_update::Action,
+    },
     Display {
         #[serde(rename = "requestId")]
         request_id: String,

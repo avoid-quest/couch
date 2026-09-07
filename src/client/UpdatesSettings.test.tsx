@@ -330,3 +330,14 @@ for (const stale of ["expired", "not-current"]) test(`a ${stale} staged release 
   expect(button("Check for updates").disabled).toBe(false);
   expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
 });
+
+test("AppImage staging shows byte progress and never suggests enabling the Debian updater", async () => {
+  report.status = "downloading";
+  report.progress = { received: 2 * 1024 * 1024, total: 5 * 1024 * 1024 };
+  report.installationUnavailable = "Installation is not enabled for this AppImage yet.";
+  await render();
+  expect(document.body.textContent).toContain("2 / 5 MB downloaded");
+  expect(document.body.textContent).toContain(report.installationUnavailable);
+  expect(document.body.textContent).not.toContain("couch-update enable");
+  expect(button("Install update").disabled).toBe(true);
+});

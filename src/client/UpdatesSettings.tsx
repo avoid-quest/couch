@@ -101,13 +101,14 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <dt>Last successful check</dt><dd>{state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "No successful check yet"}</dd>
       </dl>
       <p role="status">{state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status]}</p>
+      {state.status === "downloading" && state.progress && <p role="status">{Math.floor(state.progress.received / 1024 / 1024)} / {Math.ceil(state.progress.total / 1024 / 1024)} MB downloaded</p>}
       {candidate && <div className="space-y-2 rounded-lg border p-3">
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="break-all font-mono text-xs">{candidate.revision}</p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
         <p className="text-muted-foreground">Download size: {(candidate.bytes / 1024 / 1024).toFixed(1)} MB</p>
         {!state.currentCheck && <p className="text-muted-foreground">This release has not been confirmed by a successful current check.</p>}
-        {state.status === "ready" && <p>The verified packages are ready on this TV.</p>}
+        {state.status === "ready" && <p>The verified download is ready on this TV.</p>}
       </div>}
       {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
     </>}
@@ -125,7 +126,8 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
       </> : <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update</Button>}
     </div>}
-    {state && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
+    {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
+    {state && !state.installationUnavailable && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
       <p className="font-medium">Manual installation is not enabled on this TV.</p>
       <p>Manual updates work independently of Auto when idle. The supported path needs the Ubuntu Couch appliance, a signed release feed and an enrolled current release.</p>
       <p>From the administrator's SSH account, install a signed release that includes maintenance support if this is an older installation. Verify that Couch starts correctly, then enroll that installed release's signed receipt with <code className="break-words">sudo couch-update enroll-current /path/to/current-signed-receipt</code>.</p>
