@@ -33,6 +33,7 @@ test("official signing, promotion and renewal preserve bytes; rollback and tampe
   const first = await fixture(9), second = await fixture(10);
   const metadata = await release(first);
   expect(metadata.version).toBe("0.1.0+build.9.1");
+  expect(metadata.dataFormat).toBe(1);
   const signature = await Bun.file(join(feed, "releases/9.1/Couch.AppImage.sig")).text();
   expect(metadata.platforms["linux-x86_64"].signature).toBe(signature.trim());
   await release(first, "stable");

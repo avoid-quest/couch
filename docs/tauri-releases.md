@@ -26,7 +26,7 @@ can use its enrolled HTTP address; moving hosting does not change the format.
 
 Publication retains immutable AppImage bytes and their original signature under
 `releases/RUN.ATTEMPT/`. It signs standard Tauri JSON plus Couch's exact revision,
-release ID, size and seven-day expiry. JSON and its adjacent `.sig` switch through
+data format, release ID, size and seven-day expiry. JSON and its adjacent `.sig` switch through
 one directory symlink. Separate HTTP requests can straddle publication; clients
 reject a JSON/signature mismatch and retry. Republishing renews metadata for the
 same archive; promoting to Stable reuses its bytes and signature. A lock serializes

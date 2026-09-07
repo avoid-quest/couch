@@ -93,7 +93,7 @@ export async function publish(artifact: string, feed: string, baseUrl: string, c
       } finally { await rm(staging, { recursive: true, force: true }); }
     }
     const signature = (await Bun.file(join(destination, `${name}.sig`)).text()).trim();
-    const metadata = { version: build.version, notes, pub_date: new Date().toISOString(), platforms: { "linux-x86_64": { url: `${base}releases/${releaseId}/${encodeURIComponent(name)}`, signature } }, revision: build.revision, releaseId, bytes: bytes.length, expiresAt: Date.now() + 7 * 86400_000 };
+    const metadata = { version: build.version, notes, pub_date: new Date().toISOString(), platforms: { "linux-x86_64": { url: `${base}releases/${releaseId}/${encodeURIComponent(name)}`, signature } }, revision: build.revision, dataFormat: build.dataFormat, releaseId, bytes: bytes.length, expiresAt: Date.now() + 7 * 86400_000 };
     await mkdir(join(feed, ".metadata"), { recursive: true });
     const snapshot = await mkdtemp(join(feed, ".metadata", `${releaseId}-`));
     await Bun.write(join(snapshot, "release.json"), JSON.stringify(metadata, null, 2));
