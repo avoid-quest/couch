@@ -37,6 +37,7 @@ jobs:
     outputs:
       release-id: ${{ github.run_id }}.${{ github.run_attempt }}
     env:
+      PATCHELF: /usr/bin/patchelf
       COUCH_RELEASE_ID: ${{ github.run_id }}.${{ github.run_attempt }}
       COUCH_RELEASE_NOTES: ${{ inputs.notes }}
     steps:
@@ -51,7 +52,7 @@ jobs:
         run: |
           snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
           sudo apt-get update --snapshot "$snapshot"
-          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64 librsvg2-dev
+          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64 librsvg2-dev patchelf
           pkg-config --variable=libdir librsvg-2.0
           rustup show active-toolchain
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
@@ -69,6 +70,8 @@ jobs:
         with:
           tauriScript: bun scripts/desktop.ts
           args: --verbose --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
+      - name: Verify final AppImage helper bytes
+        run: bun scripts/package-verify-helpers.ts
       - name: Preserve the exact artifact and matching source
         if: success() || failure() && hashFiles('src-tauri/build-info.json') != ''
         run: |

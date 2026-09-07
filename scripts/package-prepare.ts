@@ -34,6 +34,8 @@ await mkdir(notices, { recursive: true });
 await mkdir(staging, { recursive: true });
 await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, version: releaseVersion(version, process.env.COUCH_RELEASE_ID) }));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
+// linuxdeploy adds this RPATH to resources under usr/lib; hash its final bytes.
+for (const tool of mediaReleases()) run(["/usr/bin/patchelf", "--set-rpath", "$ORIGIN", join(resources, "tools", tool.name)]);
 const helpers = {} as Record<string, { version: string; sha256: string; archiveSha256: string }>;
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
 await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));

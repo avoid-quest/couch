@@ -28,6 +28,9 @@ Normal shutdown first closes the coordinator and its database. The compiled
 coordinator contains the real browser assets and serves the LAN remote on port
 4100. Packaged yt-dlp and Deno live in Tauri's resource directory under
 `/usr/lib/Couch/tools`. The host passes their absolute paths to its child.
+Package preparation uses Ubuntu's `patchelf` to set their `$ORIGIN` RPATH before
+recording release hashes. AppImage bundling uses the same `/usr/bin/patchelf`,
+and a final AppDir hash check rejects any subsequent helper modification.
 
 The data default remains `$XDG_DATA_HOME/quest.avoid.couch`, or
 `$HOME/.local/share/quest.avoid.couch` when XDG_DATA_HOME is unset. The native host
