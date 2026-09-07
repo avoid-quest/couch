@@ -36,7 +36,7 @@ install -d -o qualifier -g qualifier -m 700 /home/qualifier/legacy-data
 install -o qualifier -g qualifier -m 600 /qualification/couch.sqlite /home/qualifier/legacy-data/couch.sqlite
 install -o qualifier -g qualifier -m 600 /qualification/keep.txt /home/qualifier/legacy-data/keep.txt
 sha256sum /home/qualifier/legacy-data/* > /evidence/data-before-upgrade.sha256
-/opt/couch.AppImage --version > /evidence/native-build.json
+runuser -u qualifier -- /opt/couch.AppImage --version > /evidence/native-build.json
 LD_LIBRARY_PATH=/opt/squashfs-root/usr/lib /opt/squashfs-root/usr/bin/couch-server --version > /evidence/server-build.json
 cmp /evidence/native-build.json /evidence/server-build.json
 sha256sum -c /evidence/data-before-upgrade.sha256
