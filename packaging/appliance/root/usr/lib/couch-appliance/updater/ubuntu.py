@@ -3,7 +3,7 @@ import json
 import re
 import os
 import fcntl
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 import pwd
 import shutil
@@ -187,7 +187,9 @@ class Ubuntu:
             raise Rejected("APT did not install the requested build identity.")
         # The upper app protocol reads the root worker's active transaction
         # before constructing its hub. No client-controlled environment is used.
-        self.systemctl("reset-failed", "couch-tv.service")
+        # A stopped unit may have been unloaded; start remains authoritative.
+        with suppress(Rejected):
+            self.systemctl("reset-failed", "couch-tv.service")
         self.systemctl("start", "couch-tv.service")
 
     def ready(self, record):

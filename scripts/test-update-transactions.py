@@ -576,6 +576,30 @@ class TransactionTests(unittest.TestCase):
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_unloaded_service_reset_does_not_prevent_update_or_restoration_start(self):
+        record = {"version": "new", "revision": "a" * 40, "dataFormat": 1}
+        for method in ("start_trial", "start_restored_trial"):
+            platform = Ubuntu.__new__(Ubuntu)
+            calls = []
+            def systemctl(*args):
+                calls.append(args)
+                if args[0] == "reset-failed":
+                    raise receipt.Rejected("Unit couch-tv.service not loaded")
+            platform.systemctl = systemctl
+            with self.subTest(method=method), patch.object(ubuntu, "installed", return_value=record):
+                getattr(platform, method)(record)
+                self.assertEqual(calls, ([("unmask", "--runtime", "couch-tv.service")] if method == "start_restored_trial" else []) + [("reset-failed", "couch-tv.service"), ("start", "couch-tv.service")])
+
+    def test_trial_start_failure_is_still_rejected(self):
+        platform = Ubuntu.__new__(Ubuntu)
+        record = {"version": "new", "revision": "a" * 40, "dataFormat": 1}
+        def systemctl(*args):
+            if args[0] == "start":
+                raise receipt.Rejected("Start failed")
+        platform.systemctl = systemctl
+        with patch.object(ubuntu, "installed", return_value=record), self.assertRaisesRegex(receipt.Rejected, "Start failed"):
+            platform.start_trial(record)
+
     def test_wrong_identity_uses_local_clock_without_affecting_other_threads(self):
         platform = Ubuntu.__new__(Ubuntu)
         platform.coordinator = lambda *args: {"build": {"version": "old"}}
