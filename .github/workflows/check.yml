@@ -96,6 +96,8 @@ jobs:
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       - run: bun run typecheck
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
+      - run: bun run web:build
+        if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'
       # Isolate the real clock from process-wide mocks in the other tests.
       - run: bun test ./tests/linux/iptv-clock.test.ts
         if: steps.paths.outcome != 'success' || steps.paths.outputs.code != 'false'

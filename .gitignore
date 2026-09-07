@@ -9,3 +9,5 @@ src-tauri/binaries/*
 .artifacts/
 src-tauri/build-info.json
 src-tauri/resources/
+.astro/
+.wrangler/

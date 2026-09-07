@@ -1,0 +1,23 @@
+---
+import { Image } from "astro:assets";
+import couch from "../assets/couch.png";
+import "../styles.css";
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>couch.avoid.quest</title>
+    <meta name="description" content="A media player for your TV, controlled from your phone." />
+    <link rel="canonical" href={Astro.site} />
+    <link rel="icon" type="image/svg+xml" href="/avoid.svg" />
+  </head>
+  <body>
+    <main>
+      <Image src={couch} alt="An empty couch in the light of a television." widths={[640, 1024, 1536]} sizes="100vw" format="webp" loading="eager" />
+      <h1><a href="https://github.com/avoid-quest/couch#put-it-on-your-tv">couch.avoid.quest</a></h1>
+    </main>
+  </body>
+</html>
