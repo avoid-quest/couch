@@ -21,7 +21,10 @@
     "setup:media": "bun scripts/setup-media.ts",
     "preview:linux": "bun scripts/preview.ts",
     "preview:linux:stop": "bun scripts/preview.ts stop",
-    "check": "bun run typecheck && bun run test"
+    "check": "bun run typecheck && bun run test",
+    "web:dev": "bun run --cwd apps/web dev",
+    "web:build": "bun run --cwd apps/web build",
+    "web:deploy": "bun run --cwd apps/web deploy"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
@@ -53,5 +56,8 @@
     "happy-dom": "20.14.0",
     "shadcn": "4.21.0",
     "typescript": "7.0.2"
-  }
+  },
+  "workspaces": [
+    "apps/*"
+  ]
 }

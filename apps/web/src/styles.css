@@ -1,0 +1,9 @@
+@import "../../../src/client/theme.css";
+@source "./";
+
+body { background: #000; }
+main { min-height: 100svh; display: grid; place-items: center; position: relative; }
+img { width: min(100%, 96rem); height: 85svh; object-fit: contain; }
+h1 { position: absolute; right: 6vw; bottom: 7svh; margin: 0; font-size: clamp(1.25rem, 3vw, 2.5rem); font-weight: 400; letter-spacing: -0.06em; }
+a { cursor: pointer; text-underline-offset: 0.2em; }
+a:hover { text-decoration: underline; }

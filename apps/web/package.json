@@ -1,0 +1,20 @@
+{
+  "name": "@couch/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun astro dev",
+    "build": "bun --bun astro build",
+    "preview": "bun --bun astro preview",
+    "deploy": "bun run build && wrangler deploy"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "astro": "7.3.1",
+    "sharp": "0.35.4",
+    "tailwindcss": "4.3.3"
+  },
+  "devDependencies": {
+    "wrangler": "4.129.1"
+  }
+}
