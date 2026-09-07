@@ -8,6 +8,7 @@ import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
+import * as recordingsModule from "./recordings";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as bandcampModule from "./providers/bandcamp";
@@ -1093,4 +1094,33 @@ test("packaged control connections reject missing or stale asset identity before
     try { await new Promise<void>((resolve, reject) => { socket.onmessage = () => resolve(); socket.onerror = () => reject(new Error("Matching assets were rejected")); }); }
     finally { socket.close(); }
   } finally { Object.assign(buildInfo, previous); db.close(); }
+});
+
+
+test.each([false, true])("quiesce starts and awaits recording shutdown, propagating failure=%s", async failing => {
+  const create = recordingsModule.createRecordings, gate = Promise.withResolvers<void>();
+  let started = false, finished = false;
+  const mocked = spyOn(recordingsModule, "createRecordings").mockImplementation(options => {
+    const recordings = create(options);
+    return { ...recordings, close: async () => {
+      started = true;
+      expect(options.admitted?.()).toBe(false);
+      const closing = recordings.close();
+      await gate.promise; await closing;
+      if (failing) throw new Error("recording drain failed");
+    } };
+  });
+  const { hub } = fixture();
+  const pending = hub.quiesce().then(result => { finished = true; return result; }, error => { finished = true; return error; });
+  try {
+    expect(started).toBe(true);
+    await Bun.sleep(0);
+    expect(finished).toBe(false);
+  } finally { gate.resolve(); mocked.mockRestore(); }
+  const result = await pending;
+  if (failing) {
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toBe("recording drain failed");
+    hubs.splice(hubs.indexOf(hub), 1);
+  } else expect(result).toEqual({ progressSaved: true, admissionClosed: true });
 });

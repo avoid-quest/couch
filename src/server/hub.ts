@@ -123,7 +123,7 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
     },
   });
-  const recordings = createRecordings({ databasePath: options.databasePath, selection: guide.recordingSelection, channel: guide.recordingChannel,
+  const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
     onChange: () => session.invalidate("recordings"),
     onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
     enqueue: (job, authorize) => {
