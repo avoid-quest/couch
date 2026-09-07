@@ -49,8 +49,9 @@ installed rendering profile. Never restore an old database over newer writes.
 
 The administrator phone's Ubuntu runtime repair uses a separate fixed
 `couch-runtime-repair.service` oneshot. Systemd runs APT's update and reinstalls
-only the declared runtime packages. A narrow polkit rule lets `couch-tv` start
-that one unit; it grants no unit editing, arbitrary commands or package arguments.
+ffmpeg at its installed version (or the trusted Ubuntu candidate when absent). A narrow polkit rule lets `couch-tv` start
+that one unit; it grants no unit editing, arbitrary commands or package arguments. A missing installed-version archive is a truthful failure;
+it never silently upgrades ffmpeg during repair.
 The native updater waits for its result and checks the repaired tools. APT errors
 remain visible; package-lock contention never bypasses APT's own locks. The
 service has a five-minute timeout. If dependency repair is interrupted, inspect

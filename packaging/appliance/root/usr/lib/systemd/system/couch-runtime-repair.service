@@ -1,9 +1,7 @@
 [Unit]
-Description=Repair the fixed Couch Ubuntu runtime dependencies
+Description=Repair the Ubuntu ffmpeg runtime at its installed version
 
 [Service]
 Type=oneshot
-Environment=DEBIAN_FRONTEND=noninteractive
-ExecStart=/usr/bin/apt-get update
-ExecStart=/usr/bin/apt-get install --yes --no-install-recommends --reinstall libwebkit2gtk-4.1-0 libfuse2t64 libgl1 va-driver-all ffmpeg ca-certificates fonts-dejavu-core libxdo3
+ExecStart=/usr/lib/couch-appliance/repair-runtime
 TimeoutStartSec=300

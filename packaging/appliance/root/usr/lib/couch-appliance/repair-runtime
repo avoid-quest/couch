@@ -1,0 +1,20 @@
+#!/bin/bash
+# One fixed OS operation. Browser requests cannot select a package or version.
+set -euo pipefail
+export LC_ALL=C DEBIAN_FRONTEND=noninteractive
+apt-get -o APT::Update::Error-Mode=any update
+installed=$(dpkg-query -W -f='${db:Status-Status}|${Version}' ffmpeg 2>/dev/null || true)
+if [[ $installed = installed\|* ]]; then
+    version=${installed#*|}
+else
+    policy=$(apt-cache policy ffmpeg)
+    version=$(sed -n 's/^  Candidate: //p' <<< "$policy")
+    [[ -n $version && $version != '(none)' ]] || { echo 'No Ubuntu ffmpeg candidate is available.' >&2; exit 1; }
+    source=$(awk -v version="$version" '$1 == version {selected=1; next} selected && $5 == "Packages" {print $2 "|" $3 "|" $4; exit}' <<< "$policy")
+    # Reuse APT's signed index metadata rather than guessing a mirror hostname.
+    apt-get indextargets --format '$(ORIGIN)|$(TRUSTED)|$(SITE)|$(RELEASE)/$(COMPONENT)|$(ARCHITECTURE)' | grep -Fx "Ubuntu|yes|$source" >/dev/null || { echo 'The ffmpeg candidate is not from a trusted Ubuntu index.' >&2; exit 1; }
+fi
+apt-get install --yes --no-install-recommends --reinstall "ffmpeg=$version"
+[[ $(dpkg-query -W -f='${Version}' ffmpeg) = "$version" ]]
+verified=$(dpkg --verify ffmpeg)
+[[ -z $verified ]]
