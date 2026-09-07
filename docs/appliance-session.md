@@ -63,10 +63,14 @@ another initial setup by recreating
 `/var/lib/couch/.local/state/couch-appliance/initialize-audio` for `couch-tv` and
 restarting the TV service.
 
-At login the session disables X11 screensaver/DPMS blanking and selects the first
-connected external output as primary at 1920x1080 when supported, otherwise its
-preferred mode, falling back to the laptop panel. Logind
-ignores idle time. With an external display connected or the laptop docked, lid
+At login the session disables X11 screensaver/DPMS blanking and configures the first
+connected external output at 1920x1080 when supported, otherwise its preferred
+mode. It keeps connected laptop panels enabled to the left of that output for
+recovery and leaves the global primary output unchanged. Couch chooses its own
+fullscreen output using the confirmed [Display setting](display.md), with the
+laptop panel as its first recovery choice when the saved output is unavailable.
+With no saved choice, Couch prefers an enabled external output. Logind ignores
+idle time. With an external display connected or the laptop docked, lid
 closure leaves the TV running. With only the laptop display, lid closure suspends
 on AC and battery. The power button, suspend key and administrator power commands
 retain their normal behavior. No power targets are masked. Package defaults live

@@ -1,4 +1,5 @@
 mod diagnostics;
+mod display;
 mod player;
 mod protocol;
 
@@ -23,6 +24,7 @@ struct Host {
     connection: watch::Sender<Option<Result<ConnectionInfo, String>>>,
     child: Mutex<Option<CommandChild>>,
     player: mpsc::Sender<player::Request>,
+    display: mpsc::Sender<display::Request>,
     shutting_down: AtomicBool,
     child_exited: watch::Sender<bool>,
 }
@@ -192,6 +194,7 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             prepare_data_dir(&data_dir)?;
+            let (display_sender, display_receiver) = mpsc::channel();
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
             let (child_exited, _) = watch::channel(false);
@@ -225,9 +228,12 @@ pub fn run() {
                 connection,
                 child: Mutex::new(Some(child)),
                 player: player_sender,
+                display: display_sender,
                 shutting_down: AtomicBool::new(false),
                 child_exited,
             });
+            let display_handle = app.handle().clone();
+            std::thread::Builder::new().name("display".into()).spawn(move || display::run(display_handle, data_dir.join("display-output"), display_receiver))?;
             let handle = app.handle().clone();
             std::thread::Builder::new()
                 .name("native-player".into())
@@ -257,6 +263,11 @@ pub fn run() {
                                             nonce,
                                             deadline: std::time::Instant::now() + std::time::Duration::from_secs(2),
                                         });
+                                    }
+                                }
+                                Ok(SidecarMessage::Display { request_id, action }) => {
+                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                        let _ = host.display.send(display::Request { id: request_id, action });
                                     }
                                 }
                                 Ok(SidecarMessage::Diagnostics { request_id }) => {

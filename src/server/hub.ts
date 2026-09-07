@@ -36,6 +36,9 @@ import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
+import { displaySettings } from "./display-settings";
+import type { DisplayAction, DisplayState } from "../shared/display";
+
 type HubOptions = {
   hostname?: string;
   port?: number;
@@ -44,6 +47,7 @@ type HubOptions = {
   pairingCode?: string;
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
+  nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
   frontend?: HTMLBundle;
   development?: boolean;
@@ -276,6 +280,7 @@ export function createHub(options: HubOptions) {
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
         if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
         if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));

@@ -1,3 +1,4 @@
+import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
 import { createMaintenance, manualUpdatesEnabled, type MaintenanceBuild } from "./server/maintenance";
 import { createUpdaterClient } from "./server/updater-client";
@@ -27,6 +28,7 @@ function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
+const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
@@ -61,6 +63,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.platform !== "win32") await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
+  nativeDisplay: nativeDisplay.request,
   ...(maintenance ? {
     admitted: maintenance.admitted,
     frontendReady: (value: unknown) => {
@@ -103,6 +106,7 @@ async function close() {
   if (closing) return;
   closing = true;
   nativeDiagnostics.close();
+  nativeDisplay.close();
   nativeReadiness.close();
   await updater?.close();
   try { await hub.close(); } finally { process.exit(0); }
@@ -125,6 +129,7 @@ if (native) {
         const message: HostMessage = JSON.parse(line);
         if (message.type === "player") hub.session.observe(message.state);
         else if (message.type === "readiness") nativeReadiness.receive(message.nonce, message.ok, message.build);
+        else if (message.type === "display") nativeDisplay.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);
         else if (message.type === "shutdown") await close();
       }
