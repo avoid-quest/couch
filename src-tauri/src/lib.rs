@@ -62,8 +62,11 @@ fn prepare_data_dir(path: &std::path::Path) -> std::io::Result<()> {
     builder.create(path)?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        // Migrated data can belong to the administrator and grant us access by ACL.
+        if std::fs::metadata(path)?.uid() == unsafe { libc::geteuid() } {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        }
     }
     Ok(())
 }
