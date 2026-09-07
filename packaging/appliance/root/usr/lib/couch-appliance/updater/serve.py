@@ -47,13 +47,18 @@ class Handler(socketserver.BaseRequestHandler):
             elif operation == "context" and not request:
                 result = {"context": self.server.transactions.context()}
             elif operation in ("install", "repair-current"):
-                record, start = self.server.transactions.submit(request, operation)
-                # Start independently of whether the caller receives this reply.
-                if start:
-                    self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)
-                    self.server.worker.start()
+                with self.server.transactions.mutex:
+                    if getattr(self.server, "retire_enabled", False): self.server.reject_retiring()
+                    record, start = self.server.transactions.submit(request, operation)
+                    # Start independently of whether the caller receives this reply.
+                    if start:
+                        self.server.worker = threading.Thread(target=self.server.transactions.execute, daemon=False)
+                        self.server.worker.start()
                 result = {"transaction": record}
             elif operation == "restore" and uid == 0 and set(request) == {"updateId"}:
+                if getattr(self.server, "retire_enabled", False):
+                    with self.server.transactions.mutex:
+                        self.server.reject_retiring()
                 result = {"transaction": restore(self.server.transactions, request["updateId"])}
                 if result["transaction"]["phase"] != "restored":
                     raise Rejected(result["transaction"].get("error") or "Restoration did not finish. Inspect the retained transaction through SSH.")
@@ -82,6 +87,8 @@ class Server(socketserver.ThreadingUnixStreamServer):
     def __init__(self, *args, **kwargs):
         self.slots = threading.BoundedSemaphore(self.max_handlers)
         self.handlers = 0
+        self.retiring = False
+        self.retire_enabled = False
         self.drain = threading.Lock()
         super().__init__(*args, **kwargs)
 
@@ -107,7 +114,15 @@ class Server(socketserver.ThreadingUnixStreamServer):
                 self.handlers -= 1
             self.slots.release()
 
+    def reject_retiring(self):
+        if self.transactions.record and self.transactions.record["phase"] in FINISHED:
+            self.retiring = True
+        if self.retiring:
+            raise Rejected("The completed worker is handing over to installed code. Read status and retry the same request.")
+
     def serve_until_idle(self, finalize, retained_idle=False):
+        self.retire_enabled = True
+        self.retiring = retained_idle
         self.timeout = 0.25
         while True:
             # Only this loop accepts new sockets. Once all replies and the
@@ -116,7 +131,8 @@ class Server(socketserver.ThreadingUnixStreamServer):
                 drained = not self.handlers and not (self.worker and self.worker.is_alive())
             with self.transactions.mutex:
                 terminal = self.transactions.record and self.transactions.record["phase"] in FINISHED
-            if drained and (retained_idle or terminal):
+                self.retiring = self.retiring or bool(terminal)
+            if drained and self.retiring:
                 try:
                     finalize()
                 except Exception:

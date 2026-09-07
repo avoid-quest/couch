@@ -5,11 +5,13 @@ from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 import socket
 import socketserver
+import select
 import struct
 import threading
 from types import SimpleNamespace
@@ -26,6 +28,7 @@ import ubuntu
 import serve
 import operator_client
 import worker
+import bridge
 
 
 class RepairTests(unittest.TestCase):
@@ -172,11 +175,13 @@ class UbuntuRepairTests(unittest.TestCase):
         record = {"version": "1", "revision": "a" * 40, "dataFormat": 1, "intent": "repair-current", "phase": "trial"}
         build = {key: record[key] for key in ("version", "revision", "dataFormat")}
         result = {"build": build, "nativeBuild": build, "frontendBuild": build, "database": "ok", "nativeReadiness": "libmpv-v1", "frontendReady": True}
-        platform.coordinator = lambda *args: result
+        timeouts = []
+        platform.coordinator = lambda operation, record, timeout: timeouts.append(timeout) or result
         clock = SimpleNamespace(now=0)
         clock.monotonic = lambda: clock.now
         clock.sleep = lambda _: setattr(clock, "now", 91)
         with patch.object(ubuntu, "time", clock), self.assertRaises(receipt.Rejected): platform.ready(record)
+        self.assertEqual(timeouts, [25])
         result["toolRepair"] = "verified-v1"
         platform.ready(record)
         record.update(repairRuntime=True, runtimeVersion="7:6.1.1-3ubuntu5")
@@ -216,6 +221,27 @@ class UbuntuRepairTests(unittest.TestCase):
 
 
 class WorkerLifetimeTests(unittest.TestCase):
+    def test_terminal_latch_rejects_a_new_transaction_while_an_old_reply_drains(self):
+        fixtures.fixtures.TransactionTests.setUp(self)
+        self.platform.package_lock = nullcontext
+        self.engine.submit(self.request)
+        self.engine.execute()
+        previous = dict(self.engine.record)
+        with serve.Server(str(self.root / "listener"), serve.Handler) as server:
+            server.transactions = self.engine
+            server.app_uid = 0
+            server.retire_enabled = True
+            server.handlers = 1  # The previous terminal reply is still draining.
+            responses = []
+            payload = {"op": "repair-current", "expectedCurrentId": self.candidate_id, "requestId": "c" * 32, "confirmInterrupt": True, "repairRuntime": False}
+            peer = SimpleNamespace(getsockopt=lambda *args: struct.pack("3i", 1, 0, 0), settimeout=lambda value: None, recv=lambda count: json.dumps(payload).encode() + b"\n", sendall=lambda data: responses.append(json.loads(data)))
+            with patch.object(serve.socket, "SO_PEERCRED", 17, create=True): serve.Handler(peer, "fixture", server)
+            self.assertFalse(responses[0]["ok"])
+            self.assertIn("handing over", responses[0]["error"])
+            self.assertTrue(server.retiring)
+            self.assertEqual(self.engine.record, previous)
+            self.assertFalse((self.engine.directory / ("c" * 32 + ".json")).exists())
+
     def test_retirement_reloads_even_if_a_previous_exit_already_removed_the_override(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(worker, "OVERRIDE", Path(directory) / "missing"), patch.object(worker, "run") as systemctl:
             worker.release(Path(directory), "a" * 32)
@@ -352,6 +378,7 @@ class WorkerRefreshTests(unittest.TestCase):
         with self.assertRaises(receipt.Rejected): operator_client.refresh_worker(self.storage)
         self.assertEqual(self.calls, [])
 
+
     def test_unmatched_override_is_not_stopped_or_removed(self):
         self.override.write_bytes(worker.configuration(self.storage.root, "c" * 32))
         with self.assertRaisesRegex(receipt.Rejected, "no matching terminal"): operator_client.refresh_worker(self.storage)
@@ -372,6 +399,117 @@ class WorkerRefreshTests(unittest.TestCase):
         self.platform.package_lock = lambda: (_ for _ in ()).throw(receipt.Rejected("APT is active"))
         with self.assertRaisesRegex(receipt.Rejected, "APT is active"): operator_client.refresh_worker(self.storage)
         self.assertEqual(self.calls, [])
+
+
+class BridgeHandoverTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.listener.bind(str(self.root / "maintenance")); self.listener.listen(1)
+        self.source, self.writer = os.pipe()
+        self.reader, self.sink = os.pipe()
+        self.instance = bridge.Bridge(self.listener, self.source, self.sink)
+        self.errors = []
+        self.thread = threading.Thread(target=self.run_bridge)
+        self.addCleanup(self.close)
+
+    def run_bridge(self):
+        try: self.instance.run()
+        except Exception as error: self.errors.append(error)
+        finally: self.instance.close()
+
+    def close(self):
+        os.close(self.writer)
+        if self.thread.ident: self.thread.join(2)
+        else: self.instance.close()
+        self.listener.close()
+        for descriptor in (self.source, self.reader, self.sink): os.close(descriptor)
+        self.assertFalse(self.thread.is_alive())
+
+    def receive(self):
+        self.assertTrue(select.select([self.reader], [], [], 2)[0], "Private pipe reply deadline")
+        return json.loads(os.read(self.reader, 65536))
+
+    def send(self, value):
+        os.write(self.writer, bridge.frame(value))
+
+    def handover(self, payload):
+        path = str(self.root / "worker")
+        absent = threading.Event()
+        connect = self.instance.open_worker
+        def opening(token):
+            if not Path(path).exists(): absent.set()
+            connect(token)
+        self.instance.open_worker = opening
+        with patch.object(bridge, "WORKER", path), patch.object(bridge, "peer"):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as old:
+                old.bind(path); old.listen(1); old.settimeout(2)
+                self.thread.start(); self.assertEqual(self.receive(), {"kind": "ready"})
+                request = {"kind": "worker", "id": "a" * 32, "payload": payload}
+                self.send(request)
+                peer, _ = old.accept()
+                peer.settimeout(2)
+                self.assertEqual(json.loads(peer.recv(4096)), request["payload"])
+                deadline = self.instance.connections[request["id"]]["deadline"]
+                old.close(); Path(path).unlink(); peer.close()
+                self.assertTrue(absent.wait(2), "The status reply must be lost during the socket gap")
+                self.assertTrue(self.thread.is_alive()); self.assertEqual(self.errors, [])
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as fresh:
+                    fresh.bind(path); fresh.listen(1); fresh.settimeout(2)
+                    with fresh.accept()[0] as peer:
+                        peer.settimeout(2)
+                        self.assertEqual(json.loads(peer.recv(4096)), request["payload"])
+                        self.assertEqual(self.instance.connections[request["id"]]["deadline"], deadline)
+                        peer.sendall(bridge.frame({"ok": True, "transaction": None, "repairCurrent": True}))
+                    result = self.receive()
+                    self.assertEqual(result, {"kind": "result", "id": request["id"], "payload": {"ok": True, "transaction": None, "repairCurrent": True}})
+                    self.send({**request, "id": "b" * 32, "payload": {"op": "context"}})
+                    with fresh.accept()[0] as peer:
+                        peer.settimeout(2)
+                        self.assertEqual(json.loads(peer.recv(4096)), {"op": "context"})
+                        peer.sendall(bridge.frame({"ok": True, "context": None}))
+                    self.assertEqual(self.receive()["payload"], {"ok": True, "context": None})
+            self.assertTrue(self.thread.is_alive()); self.assertEqual(self.errors, [])
+
+    def test_inflight_status_survives_listener_removal_and_lost_reply_without_bridge_loss(self):
+        self.handover({"op": "status"})
+
+    def test_mutation_replay_keeps_the_exact_durable_request_identity_and_choices(self):
+        self.handover({"op": "repair-current", "expectedCurrentId": "c" * 64, "requestId": "d" * 32, "confirmInterrupt": False, "repairRuntime": True})
+
+    def test_transport_retry_has_one_absolute_budget_and_then_fails_closed(self):
+        with patch.object(bridge, "WORKER", str(self.root / "missing")), patch.object(bridge, "WORKER_TIMEOUT", 0.2):
+            self.thread.start(); self.receive()
+            self.send({"kind": "worker", "id": "a" * 32, "payload": {"op": "status"}})
+            self.thread.join(1)
+            self.assertFalse(self.thread.is_alive())
+            self.assertIsInstance(self.errors[0], TimeoutError)
+
+    def test_complete_malformed_worker_reply_still_terminates_the_private_bridge(self):
+        path = str(self.root / "worker")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as root, patch.object(bridge, "WORKER", path), patch.object(bridge, "peer"):
+            root.bind(path); root.listen(1); root.settimeout(2)
+            self.thread.start(); self.receive()
+            self.send({"kind": "worker", "id": "a" * 32, "payload": {"op": "status"}})
+            with root.accept()[0] as peer:
+                peer.recv(4096); peer.sendall(b"malformed JSON\n")
+                self.thread.join(1)
+            self.assertFalse(self.thread.is_alive())
+            self.assertIsInstance(self.errors[0], ValueError)
+
+    def test_unauthenticated_worker_peer_is_fatal_without_transport_retry(self):
+        path = str(self.root / "worker")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as root, patch.object(bridge, "WORKER", path), patch.object(bridge, "peer", side_effect=ValueError("Unexpected local peer")) as authenticate:
+            root.bind(path); root.listen(1)
+            self.thread.start(); self.receive()
+            self.send({"kind": "worker", "id": "a" * 32, "payload": {"op": "status"}})
+            self.thread.join(1)
+            self.assertFalse(self.thread.is_alive())
+            self.assertIsInstance(self.errors[0], ValueError)
+            authenticate.assert_called_once()
+
 
 
 if __name__ == "__main__":

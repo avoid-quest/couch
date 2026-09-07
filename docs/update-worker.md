@@ -375,10 +375,18 @@ so an old loaded worker cannot freeze new source using its old module list.
 Existing durable request status and retries remain available.
 
 New workers retire after the terminal transaction thread and all replies drain.
+Retirement is latched as soon as the transaction becomes terminal. Another
+installation or repair cannot replace that record while earlier replies drain.
 Their systemd-owned socket keeps pending requests for a fresh packaged process.
 A terminal frozen worker also hands over on startup when active.json was already
 cleared, including a crash between override removal and daemon-reload. An
 unresolved transaction keeps its frozen code; no package script restarts it.
+During the explicit old-worker handover, the private bridge tolerates a replaced
+listener or interrupted worker response within one eight-second total budget.
+It rechecks root peer credentials and resends only the same frame and durable
+request ID. This keeps an in-flight status request from killing the app's private
+bridge. A prolonged outage, unauthenticated peer, complete malformed response or
+private-pipe failure still closes the maintenance gate.
 
 The warning identifies the enrolled current release and requires explicit consent
 to stop any playing media. The browser sends only the current receipt ID, its
@@ -406,6 +414,9 @@ This requires no media source credentials or external
 network. The root worker holds the package locks through matching native,
 frontend, database and tool readiness and the durable commit. Only that result
 reports **Current release repaired and verified**.
+Repair readiness allows up to 25 seconds per private exchange for native startup,
+fresh hashes and helper smoke, always capped by the remaining 90-second trial.
+It stays inside the bridge's 30-second maintenance-response deadline.
 
 The optional ffprobe runtime repair selects the fixed Ubuntu `ffmpeg` package at
 its installed version, or its Ubuntu candidate when absent. The exact archive

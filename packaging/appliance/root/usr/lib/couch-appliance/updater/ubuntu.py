@@ -195,7 +195,10 @@ class Ubuntu:
         deadline = time.monotonic() + 90
         while (remaining := deadline - time.monotonic()) > 0:
             try:
-                result = self.coordinator("readiness", record, min(5, remaining))
+                # Repair adds fresh hashing and bounded helper smoke after native
+                # initialization. Keep its reply inside the 30-second bridge bound.
+                request_budget = 25 if record.get("intent") == "repair-current" and record.get("phase") != "restoring" else 5
+                result = self.coordinator("readiness", record, min(request_budget, remaining))
                 repair_verified = record.get("intent") != "repair-current" or record.get("phase") == "restoring" or result.get("toolRepair") == "verified-v1"
                 if repair_verified and all(result.get(key) == expected for key in ("build", "nativeBuild", "frontendBuild")) and result.get("database") == "ok" and result.get("nativeReadiness") == "libmpv-v1" and result.get("frontendReady") is True:
                     if record.get("repairRuntime") and record.get("phase") != "restoring":
