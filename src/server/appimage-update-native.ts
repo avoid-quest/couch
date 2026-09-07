@@ -2,16 +2,21 @@ import type { AppImageUpdateAction, AppImageUpdateReply, UpdateRequest } from ".
 import { UpdateError, type UpdateFeed, type UpdateRelease } from "./update-feed";
 
 export function createNativeAppImageUpdates(send: (requestId: string, action: AppImageUpdateAction) => void) {
-  let pending: { id: string; resolve: (reply: AppImageUpdateReply) => void; reject: (error: Error) => void; progress?: (value: { received: number; total: number }) => void } | undefined;
+  const pending = new Map<string, { resolve: (reply: AppImageUpdateReply) => void; reject: (error: Error) => void; progress?: (value: { received: number; total: number }) => void }>();
+  let mutation: string | undefined;
   const request = (action: AppImageUpdateAction, signal: AbortSignal, progress?: (value: { received: number; total: number }) => void): Promise<AppImageUpdateReply> => {
     signal.throwIfAborted();
-    if (pending) return Promise.reject(new UpdateError("An AppImage update operation is already running."));
+    const readOnly = action.type === "status";
+    if (!readOnly && mutation) return Promise.reject(new UpdateError("An AppImage update operation is already running."));
     return new Promise((resolve, reject) => {
-      const aborted = () => { reject(new UpdateError("The update operation was interrupted. Use Check now before retrying.")); };
-      const finish = () => signal.removeEventListener("abort", aborted);
-      pending = { id: crypto.randomUUID(), progress, resolve: reply => { finish(); resolve(reply); }, reject: error => { finish(); reject(error); } };
+      const id = crypto.randomUUID();
+      const aborted = () => { if (readOnly) finish(); reject(new UpdateError("The update operation was interrupted. Use Check now before retrying.")); };
+      const finish = () => { signal.removeEventListener("abort", aborted); pending.delete(id); if (mutation === id) mutation = undefined; };
+      const current = { progress, resolve: (reply: AppImageUpdateReply) => { finish(); resolve(reply); }, reject: (error: Error) => { finish(); reject(error); } };
+      pending.set(id, current);
+      if (!readOnly) mutation = id;
       signal.addEventListener("abort", aborted, { once: true });
-      try { send(pending.id, action); } catch { const current = pending; pending = undefined; current.reject(new UpdateError("The native AppImage updater is unavailable.")); }
+      try { send(id, action); } catch { current.reject(new UpdateError("The native AppImage updater is unavailable.")); }
     });
   };
   const feed: UpdateFeed<UpdateRelease> = {
@@ -31,11 +36,11 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
     // Reserved for the qualified repair installer. No browser can select a URL or expected version.
     async checkRepair(signal: AbortSignal) { return (await request({ type: "checkRepair" }, signal)).candidate ?? null; },
     receive(reply: AppImageUpdateReply) {
-      if (!pending || reply.requestId !== pending.id) return;
-      if (reply.progress) { pending.progress?.(reply.progress); return; }
-      const current = pending; pending = undefined;
+      const current = pending.get(reply.requestId);
+      if (!current) return;
+      if (reply.progress) { current.progress?.(reply.progress); return; }
       if (reply.error) current.reject(new UpdateError(reply.error)); else current.resolve(reply);
     },
-    close() { const current = pending; pending = undefined; current?.reject(new UpdateError("The native connection closed.")); },
+    close() { for (const current of pending.values()) current.reject(new UpdateError("The native connection closed.")); },
   };
 }
