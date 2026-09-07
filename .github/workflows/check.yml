@@ -14,7 +14,7 @@ jobs:
     # Retargeting a PR changes its merge result; editing its title or body does not.
     if: github.event.action != 'edited' || github.event.changes.base
     name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'PR metadata' || 'linux' }}
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     env:
       # Keep assertions and overflow checks without bulky debug symbols.
