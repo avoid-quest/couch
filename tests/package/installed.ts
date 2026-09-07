@@ -139,7 +139,7 @@ try {
     await until("Indexed local playback has dirty progress between periodic writes", async () => state.currentEntryId === "installed-restart-local" && state.player.status === "playing" && state.player.position > 3 && state.player.position < 9);
     const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
     const sql = (statement: string) => inside("sqlite3", `${dataDir}/couch.sqlite`, statement);
-    const stored = () => Number(sql("SELECT position FROM viewing_progress WHERE mediaId='library:" + local.id + "';"));
+    const stored = () => Number(sql("SELECT printf('%!.26g', position) FROM viewing_progress WHERE profileId='" + seed.profileId + "' AND mediaId='library:" + local.id + "';"));
     const before = stored();
     assert.ok(state.player.position > before + 1, "The observed position is newer than its periodic save");
     const beforePid = supervised();
@@ -155,14 +155,20 @@ try {
     await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
     const click = (text: string) => execute(admin, "const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === arguments[0] && !b.disabled); if (!button) return false; button.click(); return true", [text]);
     await until("Administrator opens restart confirmation", async () => click("Restart Couch"));
-    const observed = state.player.position;
+    let observed = 0, beforeRestart = 0;
+    await until("Restart confirmation has unsaved native progress", async () => {
+      beforeRestart = stored(); observed = state.player.position;
+      return observed > beforeRestart + 1;
+    });
     assert.equal(await click("Confirm restart"), true);
     const savedPreferences = state.preferences;
     await until("General restart replaces the native systemd owner", async () => service("show", "couch-tv.service", "-p", "MainPID", "--value") !== beforePid && service("show", "couch-tv.service", "-p", "MainPID", "--value") !== "0");
     await retained("Administrator restart retains both browser identities without autoplay");
     assert.deepEqual(state.preferences, savedPreferences);
     assert.ok(state.queue.some((entry: any) => entry.id === "installed-restart-local"));
-    assert.ok(stored() >= observed, "Restart saves the latest dirty native position");
+    const saved = stored();
+    await Bun.write(`${fixtures}/restart-progress.json`, JSON.stringify({ before, beforeRestart, observed, saved }));
+    assert.ok(saved >= observed, `Restart saves the latest dirty native position: ${saved} >= ${observed}`);
     await until("General reports confirmed coordinator replacement", async () => execute(admin, "return document.body.textContent.includes('Couch restarted. Playback is stopped.')"));
     // systemd does not expose its current start-limit counter to the app. Prove
     // an exhausted budget fails honestly and operator recovery retains data.
