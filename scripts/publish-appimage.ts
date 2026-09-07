@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { cp, mkdir, mkdtemp, open, readlink, readdir, rename, rm, symlink } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { verifiedArchive } from "./download-release";
@@ -44,7 +44,8 @@ export async function download(artifactId: string, destination: string) {
     await Bun.write(archive, bytes);
     const names = new TextDecoder().decode(await run(["unzip", "-Z1", archive])).trim().split("\n");
     assert.ok(names.every(name => !name.startsWith("/") && !name.includes("\\") && !name.split("/").includes("..")), "Unsafe artifact path");
-    await mkdir(destination, { recursive: false });
+    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await mkdir(destination, { mode: 0o700 });
     await run(["unzip", "-q", archive, "-d", destination]);
     const build = await Bun.file(join(destination, "build-info.json")).json();
     assert.equal(build.revision, workflow.head_sha);
