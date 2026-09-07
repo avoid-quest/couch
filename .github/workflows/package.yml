@@ -105,6 +105,10 @@ jobs:
           path: .artifacts/package-release
       - name: Prepare qualification
         run: |
+          if ! command -v ffmpeg; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
           cp .artifacts/package-release/build-info.json src-tauri/build-info.json
           chmod +x .artifacts/package-release/tauri-driver
           echo "$PWD/.artifacts/package-release" >> "$GITHUB_PATH"
