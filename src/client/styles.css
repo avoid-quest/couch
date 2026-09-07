@@ -146,8 +146,8 @@ h3 { font-weight: 600; }
   [data-slot="slider"] { min-height: 44px; }
   [data-slot="tabs-list"] { height: auto; min-height: 50px; }
 }
-body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { min-height: 48px; font-size: 16px; }
-body.native-host [data-slot="button"][data-size^="icon"] { min-width: 48px; }
+body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { min-height: 48px; }
+:where(body.native-host) [data-slot="button"][data-size^="icon"] { min-width: 48px; }
 body.native-host [data-slot="slider"] { min-height: 44px; }
 body.native-host [data-slot="tabs-list"] { height: auto; min-height: 54px; }
 [data-slot="dialog-header"] { padding-right: 36px; }

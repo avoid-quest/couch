@@ -73,7 +73,7 @@ export async function verifyAppearance(context: Context) {
   await otherRemote.minimize();
   await httpRemote.restore();
   await phone.button("Largest", tvChoices);
-  await until("TV preview is shared with both WebSocket observers and the native screen", async () => all(state => state.appearance?.size === 1.3 && !!state.appearance.preview) && await scale(ui) === 1.3);
+  await until("TV preview is shared with both WebSocket observers and the native screen", async () => all(state => state.appearance?.size === 1.3 && !!state.appearance.preview) && await scale(ui) === 1.75);
   assert.deepEqual(await geometry(), original, "Interface preview leaves the fullscreen native aperture unchanged");
   await until("native preview is readable", () => ui.execute("return !!document.querySelector('[role=dialog][data-tv-local-only]') && document.querySelector('[role=dialog]')?.textContent.includes('Keep TV size')"));
   await httpRemote.minimize();
@@ -82,7 +82,7 @@ export async function verifyAppearance(context: Context) {
   await httpRemote.restore();
   await phone.button("Largest", tvChoices);
   await phone.button("Keep TV size", settingsDialog);
-  await until("confirmed TV size is shared without a remaining preview", async () => all(state => state.appearance?.size === 1.3 && state.appearance.confirmedSize === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.3);
+  await until("confirmed TV size is shared without a remaining preview", async () => all(state => state.appearance?.size === 1.3 && state.appearance.confirmedSize === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.75);
   await close(phone, until);
   await httpRemote.minimize();
   await open(ui, until);
@@ -105,11 +105,16 @@ export async function verifyAppearance(context: Context) {
   await open(phone, until);
   await phone.button("Largest", tvChoices);
   await phone.button("Keep TV size", settingsDialog);
-  await until("largest confirmed TV size applies to the paused native picture", async () => await scale(ui) === 1.3 && all(state => state.appearance?.preview === null));
+  await until("largest confirmed TV size applies to the paused native picture", async () => await scale(ui) === 1.75 && all(state => state.appearance?.preview === null));
   await close(phone, until);
   await httpRemote.minimize();
   await ui.watching();
   assert.deepEqual(await geometry(), original, "Native aperture is identical after confirming the largest size");
+  await ui.controls();
+  const controls = await ui.execute<{ width: number; height: number; icon: number; time: number }>("const button=document.querySelector('.tv-playback-controls .play-button'), rect=button.getBoundingClientRect(); return {width:rect.width,height:rect.height,icon:button.querySelector('svg').getBoundingClientRect().width,time:parseFloat(getComputedStyle(document.querySelector('.time-labels')).fontSize)*Number(getComputedStyle(document.getElementById('root')).zoom)}");
+  assert.ok(Math.abs(controls.width - controls.height) < 1, "The native play button is circular at Largest");
+  assert.ok(controls.icon >= 40 && controls.time >= 30, "Largest has TV-sized transport icons and time labels");
+  await ui.watching();
   await assertNativeVideoPixels(ui.execute, artifactDir, "appearance-largest-video");
   await assertSubtitlePixels(context, subtitle, "appearance-largest-subtitles");
   const defaults = await Bun.file(`${artifactDir}/appearance-default-subtitles-pixels.json`).json();
@@ -133,7 +138,7 @@ export async function verifyAppearance(context: Context) {
   await Bun.write(`${artifactDir}/appearance.json`, JSON.stringify({ nativeViewport: [1600, 1000], physical: false, nativeGeometry: original, remoteSizes: [1.3, 1.15], subtitlePixels: largest, subtitleGeometry: { differingCoordinates, maskSha256 }, checks: ["immediate browser size", "browser reload", "two separate HTTP browsers", "administrator scope", "TV timeout", "TV confirmation", "physical pointer reset", "ordinary remote navigation boundary", "directional focus", "native pattern", "identical subtitle screen-coordinate masks"] }, null, 2));
   return {
     async verifyAfterRestart() {
-      await until("confirmed TV size survives desktop restart", async () => all(state => state.appearance?.size === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.3);
+      await until("confirmed TV size survives desktop restart", async () => all(state => state.appearance?.size === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.75);
       assert.deepEqual(await geometry(), original);
       await httpRemote.restore();
       await open(phone, until);
