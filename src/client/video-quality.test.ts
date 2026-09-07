@@ -14,14 +14,14 @@ describe("browser video quality preference", () => {
     for (const quality of Object.keys(videoQualityLabels) as VideoQuality[]) {
       saveVideoQuality(quality, first);
       expect(readVideoQuality(first)).toBe(quality);
-      expect(readVideoQuality(second)).toBe("best");
+      expect(readVideoQuality(second)).toBe("auto");
     }
   });
 
-  test("missing, obsolete and blocked storage fall back to best", () => {
-    expect(readVideoQuality(storage())).toBe("best");
-    for (const value of ["4k", "", "toString", "__proto__"]) expect(readVideoQuality({ getItem: () => value })).toBe("best");
-    expect(readVideoQuality({ getItem: () => { throw new Error("blocked"); } })).toBe("best");
+  test("missing, obsolete and blocked storage fall back to automatic", () => {
+    expect(readVideoQuality(storage())).toBe("auto");
+    for (const value of ["4k", "", "toString", "__proto__"]) expect(readVideoQuality({ getItem: () => value })).toBe("auto");
+    expect(readVideoQuality({ getItem: () => { throw new Error("blocked"); } })).toBe("auto");
   });
 
   test("a denied write is reported instead of claiming persistence", () => {

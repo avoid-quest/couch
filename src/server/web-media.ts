@@ -102,10 +102,14 @@ function formatSelector(quality: VideoQuality): string {
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "best"): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto"): Promise<WebMediaSource> {
     const source = mediaUrl(url);
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(quality), "--", source], { ...options, signal });
-    return parseMedia(parseInfo(output), quality);
+    const selectedQuality = quality === "auto" ? "1080p" : quality;
+    const host = new URL(source).hostname;
+    const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
+      ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal });
+    return parseMedia(parseInfo(output), selectedQuality);
   };
 }
 

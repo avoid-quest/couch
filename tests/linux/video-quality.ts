@@ -56,7 +56,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
 
   await httpRemote.restore();
   await settings(phone);
-  await selected(phone, "#default-video-quality", "best");
+  await selected(phone, "#default-video-quality", "auto");
   await phone.select("#default-video-quality", qualityLabel("480p"));
   await assertResponsive(phone, "Phone local quality settings");
   await httpRemote.screenshot("quality-phone-settings");
@@ -68,14 +68,14 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await close(phone);
 
   await settings(other);
-  await selected(other, "#default-video-quality", "best");
+  await selected(other, "#default-video-quality", "auto");
   await other.select("#default-video-quality", qualityLabel("1080p"));
   await otherRemote.screenshot("quality-second-remote-settings");
   await close(other);
   await otherRemote.minimize();
   await httpRemote.minimize();
   await settings(ui, true);
-  await selected(ui, "#default-video-quality", "best");
+  await selected(ui, "#default-video-quality", "auto");
   await screenshot("quality-tv-settings");
   await close(ui);
   assert.deepEqual(clients[0]!.state!.queue, initialQueue, "Saving browser defaults leaves the entire existing queue unchanged");
@@ -86,6 +86,11 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await enqueueProvider(phone, "480p");
   await phone.select("#provider-quality", qualityLabel("720p"));
   await enqueueProvider(phone, "720p");
+  await selected(phone, "#provider-quality", "480p");
+  await phone.select("#provider-quality", qualityLabel("auto"));
+  await enqueueProvider(phone, "auto");
+  await phone.select("#provider-quality", qualityLabel("best"));
+  await enqueueProvider(phone, "best");
   await selected(phone, "#provider-quality", "480p");
   await httpRemote.screenshot("quality-phone-online");
   await addLink(phone, "Saved default link", "480p");
@@ -145,7 +150,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await httpRemote.screenshot("quality-phone-queue");
 
   await Bun.write(`${artifactDir}/video-quality.json`, JSON.stringify({
-    defaults: { firstRemote: "720p", secondRemote: "1080p", tv: "best" },
+    defaults: { firstRemote: "720p", secondRemote: "1080p", tv: "auto" },
     queueBefore: initialQueue, added: entries(),
     observations: "Actual TV Settings and two separate 390px HTTP browser sessions. Settings persistence, Online saved-card enqueue, paste-link enqueue, one-entry overrides, unchanged queued entries and audio-only controls passed. Public Online search is a separate live provider check.",
   }, null, 2));

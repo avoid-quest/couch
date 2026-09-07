@@ -61,21 +61,21 @@ test("saves named household playlists, lists summaries, and restores them after 
   expect(second.changed).not.toHaveBeenCalled();
 });
 
-test("captures original source references privately and strips unsupported queue fields", async () => {
+test.each(["auto", "best", "720p"] as const)("captures original source references privately with %s quality and strips unsupported queue fields", async quality => {
   const path = databasePath();
   const { service, setQueue, loaded } = fixture({ databasePath: path });
   const sources = ["library:local", "radio:station", `jellyfin:${"a".repeat(24)}:movie`, "web:https://artist.bandcamp.com/track/public", "file:///private/media/film.mkv", "https://chosen.example/song?token=host-only"];
   const entries = sources.map((source, index) => ({
     ...track, id: `entry-${index}`, source, title: `Item ${index}`,
     thumbnail: index === 0 ? "file:///private/artwork.jpg" : "https://images.example/art.jpg",
-    artworkId: "cached-image", duration: 123, live: false, quality: "720p" as const, automaticTitle: true,
+    artworkId: "cached-image", duration: 123, live: false, quality, automaticTitle: true,
     headers: { Authorization: "secret" }, audioSource: "https://resolved.example/private", unknown: "private-field",
   }));
   setQueue(entries);
   const saved = await create(service);
   const publicText = JSON.stringify(saved);
   for (const secret of [...sources, "automaticTitle", "/private/", "secret", "private-field", "resolved.example", "headers", "audioSource"]) expect(publicText).not.toContain(secret);
-  expect(saved.entries[0]).toEqual({ id: "entry-0", title: "Item 0", artworkId: "cached-image", duration: 123, live: false, quality: "720p" });
+  expect(saved.entries[0]).toEqual({ id: "entry-0", title: "Item 0", artworkId: "cached-image", duration: 123, live: false, quality });
   const db = new Database(path);
   const stored = db.query<{ entries: string }, []>("SELECT entries FROM saved_playlists").get()!.entries;
   db.close();
@@ -83,6 +83,7 @@ test("captures original source references privately and strips unsupported queue
   for (const secret of ["secret", "private-field", "resolved.example", "headers", "audioSource", "/private/artwork.jpg"]) expect(stored).not.toContain(secret);
   expect((await request(service, "POST", `/${saved.id}/load`, { revision: 1, mode: "append" })).status).toBe(200);
   expect(loaded.mock.calls[0]![0].map(entry => entry.source)).toEqual(sources);
+  expect(loaded.mock.calls[0]![0].map(entry => entry.quality)).toEqual(sources.map(() => quality));
   expect(loaded.mock.calls[0]![0][3]!.automaticTitle).toBeTrue();
 });
 

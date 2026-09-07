@@ -20,6 +20,8 @@ ldd /usr/bin/couch > /evidence/native-linkage.txt
 ldd /usr/bin/couch-server > /evidence/server-linkage.txt
 if grep 'not found' /evidence/*-linkage.txt; then exit 1; fi
 ldconfig -p | grep libmpv.so.2 > /evidence/mpv-linkage.txt
+test -r /usr/lib/x86_64-linux-gnu/dri/iHD_drv_video.so
+dpkg-query -W va-driver-all intel-media-va-driver > /evidence/va-drivers.txt
 ffprobe -version > /evidence/ffprobe-version.txt
 
 useradd -m -s /bin/bash qualifier

@@ -74,7 +74,7 @@ function capture(queue: QueueEntry[]): QueueEntry[] {
       ...(typeof entry.duration === "number" && Number.isFinite(entry.duration) && entry.duration >= 0 ? { duration: entry.duration } : {}),
       ...(typeof entry.live === "boolean" ? { live: entry.live } : {}),
       ...(entry.kind === "radio" ? { kind: entry.kind } : {}),
-      ...(entry.quality && ["best", "1080p", "720p", "480p"].includes(entry.quality) ? { quality: entry.quality } : {}),
+      ...(entry.quality && ["auto", "best", "1080p", "720p", "480p"].includes(entry.quality) ? { quality: entry.quality } : {}),
       ...(typeof entry.automaticTitle === "boolean" ? { automaticTitle: entry.automaticTitle } : {}),
     };
   });

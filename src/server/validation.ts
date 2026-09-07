@@ -35,7 +35,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail))
-      && (value.quality === undefined || ["best", "1080p", "720p", "480p"].includes(String(value.quality)));
+      && (value.quality === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value.quality)));
     case "remove": return id(value.entryId);
     case "play": return id(value.entryId) && (value.fromStart === undefined || typeof value.fromStart === "boolean");
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));

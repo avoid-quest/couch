@@ -11,7 +11,11 @@ couch
 ```
 
 Use the actual filename in the artifact. APT installs Couch's declared native
-runtime dependencies, including libmpv and ffmpeg for ffprobe. The destination
+runtime dependencies, including libmpv, ffmpeg for ffprobe, and the VA-API driver
+set. The drivers are required even with `--no-install-recommends`; installing
+libmpv alone can leave Intel video decoding unavailable. Driver installation
+does not prove that a particular codec or playback session uses hardware decoding.
+The destination
 does not need Bun, Node, npm, Rust, compilers, development headers or a source
 checkout. The package does not configure login, autostart or audio services.
 [Boot a fresh Ubuntu machine directly into Couch TV](https://github.com/avoid-quest/couch/issues/3)

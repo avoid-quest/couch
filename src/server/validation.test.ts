@@ -77,3 +77,7 @@ test("Go live requires a current playback identity and exposes no native option 
   expect(command({ type: "goLive", playbackId: "current", goLive: false, source: "https://untrusted.test", demuxerOptions: { live_start_index: -100 } }).action).toEqual({ type: "goLive", playbackId: "current" });
   for (const playbackId of [undefined, "", -1]) expect(() => command({ type: "goLive", playbackId })).toThrow();
 });
+
+test("web queue accepts automatic quality alongside explicit unrestricted playback", () => {
+  for (const quality of ["auto", "best"]) expect(parse({ type: "enqueueWeb", entryId: "video", url: "https://www.youtube.com/watch?v=123", quality }).action).toMatchObject({ quality });
+});
