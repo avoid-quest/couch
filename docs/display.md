@@ -22,3 +22,5 @@ Installed acceptance remains open on #13. On an Ubuntu 24.04 X11 installation wi
 
 - [Tauri 2.11.5 Monitor](https://docs.rs/tauri/latest/tauri/window/struct.Monitor.html) exposes geometry, scale and a human-readable name, but no EDID or refresh. Read-only XRandR supplies those facts on the supported X11 session.
 - [X.Org xrandr manual](https://www.x.org/releases/X11R7.5/doc/man/man1/xrandr.1.html) documents connection/mode reporting, current refresh markers, output properties, and enabling/placing a panel with `--auto --left-of`.
+
+The disposable native experiment is `tests/linux/display-run.sh`, run inside the Ubuntu Linux test image with a read-only repository at `/source`, a writable evidence directory at `/artifacts`, and private Cargo/Bun cache volumes. It installs X.Org's dummy driver inside that container, creates two 1080p outputs, builds the app, and runs `tests/linux/display.ts` through the real Tauri driver and authenticated API. Output state and journey evidence are written to `/artifacts`. Dummy outputs cannot establish physical picture quality, EDID behavior, hardware unplug or installed-session acceptance.
