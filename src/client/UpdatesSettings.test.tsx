@@ -341,3 +341,12 @@ test("AppImage staging shows byte progress and never suggests enabling the Debia
   expect(document.body.textContent).not.toContain("couch-update enable");
   expect(button("Install update").disabled).toBe(true);
 });
+
+test("operator recovery result remains visible without permanently locking future repairs", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, repairAvailable: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase: "operator-required", error: "Tool smoke failed", createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain("couch-recover");
+  expect(document.body.textContent).toContain("Tool smoke failed");
+  expect(button("Install update").disabled).toBe(false);
+});
