@@ -439,7 +439,13 @@ try {
       assert.ok(requestId);
       if (idleScenario === "failure") {
         const expectedData = preservation();
-        await until("Unattended candidate startup exhausts the real systemd restart budget", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
+        const restartBurst = Number(service("show", "couch-tv.service", "-p", "StartLimitBurst", "--value"));
+        assert.ok(restartBurst > 0, "The installed service has a finite restart budget");
+        // systemd retains an earlier exit-code result when the start limit stops retries.
+        await until("Unattended candidate startup exhausts the real systemd restart budget", async () => service("show", "couch-tv.service", "-p", "SubState", "--value") === "failed"
+          && Number(service("show", "couch-tv.service", "-p", "NRestarts", "--value")) >= restartBurst);
+        assert.equal(service("show", "couch-tv.service", "-p", "MainPID", "--value"), "0");
+        assert.ok(["exit-code", "start-limit-hit"].includes(service("show", "couch-tv.service", "-p", "Result", "--value")));
         const failed = JSON.parse(inside("cat", `${dataDir}/updates/appimage/requests/${requestId}.json`));
         assert.equal(failed.phase, "trial", "The real signed replacement reached startup trial");
         assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], expected.archiveSha256);
