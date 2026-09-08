@@ -464,8 +464,7 @@ try {
     // device metadata in this same database for an explicit operator schema fix.
     inside("couch-session", "stop");
     sql("BEGIN; ALTER TABLE devices RENAME TO qualification_current_devices; CREATE TABLE devices(token_hash TEXT PRIMARY KEY); INSERT INTO devices SELECT token_hash FROM qualification_current_devices; CREATE TABLE devices_named(unexpected INTEGER); COMMIT;");
-    service("reset-failed", "couch-tv.service");
-    service("start", "couch-tv.service");
+    inside("couch-session", "restart");
     await until("Failed existing SQLite migration exhausts the bounded startup budget", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
     const migrationLog = inside("journalctl", "-b", `_UID=${uid}`, "SYSLOG_IDENTIFIER=couch-tv", "--no-pager");
     assert.match(migrationLog, /table devices_named already exists/);
