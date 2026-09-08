@@ -25,3 +25,12 @@ export function isYouTubePlaylistUrl(value: string): boolean {
       && ["/playlist", "/watch"].includes(url.pathname.replace(/\/$/, "")) && /^[A-Za-z0-9_-]{10,100}$/.test(url.searchParams.get("list") ?? "");
   } catch { return false; }
 }
+
+export function providerForUrl(value: string): ProviderId | undefined {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
+    const domains = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
+    return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
+  } catch { return; }
+}

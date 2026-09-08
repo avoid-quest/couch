@@ -1,3 +1,4 @@
+import type { ProviderId } from "../shared/providers";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -58,7 +59,7 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   </Popover>;
 }
 
-export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, active = true, presentation = "default" }: {
+export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, active = true, presentation = "default", provider }: {
   origin: string;
   token: string;
   connected: boolean;
@@ -67,9 +68,10 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
   onPlay: HistoryPlayback;
   active?: boolean;
   presentation?: "default" | "inspect";
+  provider?: ProviderId;
 }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(connected && active);
   const [pending, setPending] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -80,11 +82,11 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
   useEffect(() => { setDetailId(null); }, [origin, token, connected, active]);
 
   useEffect(() => {
-    if (!connected || !active) return;
+    if (!connected || !active) { setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    void fetch(`${origin}/api/progress/history?limit=40`, {
+    void fetch(`${origin}/api/progress/history?limit=40${provider ? `&provider=${provider}` : ""}`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
     }).then(async response => {
       const result = await response.json();
@@ -94,7 +96,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load viewing history.");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [origin, token, connected, active, version, refresh]);
+  }, [origin, token, connected, active, version, refresh, provider]);
 
   const play = async (item: HistoryItem, fromStart = false) => {
     setPending(item.mediaId);
@@ -119,7 +121,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="text-sm text-muted-foreground" role="status">Loading history…</p>}
-    {!loading && !error && !items.length && <Card className="p-5 text-sm text-muted-foreground">Nothing played yet.</Card>}
+    {!loading && !error && !items.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
     <ul className="history-items space-y-3" aria-busy={loading}>{items.map(item => {
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;

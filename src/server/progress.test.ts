@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,22 @@ import { openStore } from "./store";
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
 const cleanup: Array<() => void> = [];
 afterEach(() => { for (const close of cleanup.splice(0)) close(); });
+
+test("limited shared history releases its read transaction so later progress can checkpoint", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-history-checkpoint-"));
+  const path = join(directory, "couch.sqlite");
+  const store = openStore(path);
+  const observer = new Database(path);
+  cleanup.push(() => { observer.close(); store.close(); rmSync(directory, { recursive: true }); });
+  const save = (index: number) => store.saveProgress("household", { mediaId: `library:${index}`, title: String(index), libraryItemId: String(index), position: 20, duration: 100, watched: false, lastPlayedAt: index });
+  for (let index = 1; index <= 3; index++) save(index);
+  observer.run("PRAGMA wal_checkpoint(TRUNCATE)");
+  expect(store.sharedHistory(1).map(item => item.mediaId)).toEqual(["library:3"]);
+  save(4);
+  const checkpoint = observer.query<{ log: number; checkpointed: number }, []>("PRAGMA wal_checkpoint(PASSIVE)").get()!;
+  expect(checkpoint.log).toBeGreaterThan(0);
+  expect(checkpoint.checkpointed).toBe(checkpoint.log);
+});
 
 function fixture(options: Parameters<typeof createSession>[3] = {}, store = openStore(":memory:")) {
   let time = 100_000;

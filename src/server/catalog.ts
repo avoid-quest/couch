@@ -1,3 +1,4 @@
+import { providerForUrl } from "../shared/providers";
 import type { PlaybackActor } from "../shared/protocol";
 import type { LibrarySource } from "../shared/library";
 import type { JellyfinSource } from "./jellyfin";
@@ -88,7 +89,13 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (request.method !== "GET") return methodNotAllowed("GET");
           const { activeProfile, queue } = viewing.session.state;
           const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
-          const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
+          const provider = searchParams.get("provider");
+          if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp"].includes(provider)) throw new RequestError("Invalid provider.");
+          const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100), mediaId => {
+            if (!provider) return true;
+            const source = queued.get(mediaId) ?? viewing.store.historySource(mediaId);
+            return !!source && source.kind !== "radio" && providerForUrl(source.source.replace(/^web:/, "")) === provider;
+          }).map(item => {
             const queueEntry = queued.get(item.mediaId);
             const source = queueEntry ?? viewing.store.historySource(item.mediaId);
             const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
