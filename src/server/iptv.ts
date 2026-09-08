@@ -16,7 +16,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   fetch?: typeof fetch;
   onChange?: () => void;
   onSourcesChanged?: (channelIds: string[]) => void;
-  enqueue?: (channel: GuideChannel, playNow: boolean) => void;
+  enqueue?: (channel: GuideChannel, playNow: boolean, authorize: () => void) => void;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
@@ -143,7 +143,23 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       if (!program) throw new GuideError("This programme is no longer in the guide.", 404);
       return { channel: publicChannel(channel(program.channelId)), program };
     },
-    getPlayable(id: string) { return { source: channel(id).streamUrl }; },
+    async getPlayable(id: string, signal: AbortSignal) {
+      const item = channel(id);
+      signal.throwIfAborted();
+      // Only identified HLS URLs enter this EVENT increment. Other live media
+      // must not wait for a body that may never finish before native playback.
+      if (!new URL(item.streamUrl).pathname.toLowerCase().endsWith(".m3u8")) return { source: item.streamUrl };
+      let eventStart = false;
+      try {
+        const media = await guideFetch(item.streamUrl, 512 * 1024, request, AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]));
+        const text = Buffer.from(media.bytes).toString("utf8");
+        eventStart = liveHlsPlaylist(text, media.url) && /^#EXT-X-PLAYLIST-TYPE:EVENT\r?$/m.test(text);
+      } catch { /* Unknown transports and failed probes keep ordinary Play. */ }
+      signal.throwIfAborted();
+      shutdown.signal.throwIfAborted();
+      if (channel(id).streamUrl !== item.streamUrl) throw new GuideError("The channel changed. Play it again.", 409);
+      return { source: item.streamUrl, ...(eventStart ? { eventStart: true } : {}) };
+    },
     async getLivePlayable(id: string, signal: AbortSignal) {
       const item = channel(id);
       const combined = AbortSignal.any([signal, shutdown.signal, AbortSignal.timeout(5_000)]);
@@ -220,7 +236,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
             if (req.method !== "POST") return methods("POST");
             caller();
             const current = channel(item.id);
-            enqueue(publicChannel(current), channelPath[2] === "play");
+            enqueue(publicChannel(current), channelPath[2] === "play", caller);
             return json({ ok: true });
           }
           if (req.method !== "GET") return methods("GET");

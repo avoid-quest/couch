@@ -1591,7 +1591,7 @@ mod linux_mpv {
             player.mpv.set_property("audio-fallback-to-null", true).map_err(mpv_error)?;
         }
         configure_network(player, payload)?;
-        player.default_live_start.configure(&player.mpv, payload.go_live)?;
+        player.default_live_start.configure(&player.mpv, payload.go_live, payload.event_start)?;
         // Append takes one unescaped item, preserving URL colons and commas.
         // Clear on every load so an ordinary source cannot inherit split audio.
         player

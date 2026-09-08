@@ -126,6 +126,7 @@ impl Player {
                 subtitles,
                 radio,
                 go_live,
+                event_start,
             } => {
                 self.segment = segment;
                 self.session_key = Some(playback_id.clone());
@@ -149,6 +150,7 @@ impl Player {
                     &subtitles,
                     radio,
                     go_live,
+                    event_start,
                 )
             }
             PlaybackCommand::AddSubtitle {
@@ -295,6 +297,7 @@ impl Player {
         subtitles: &[ExternalSubtitle],
         radio: bool,
         go_live: bool,
+        event_start: bool,
     ) -> Result<(), String> {
         use tauri_plugin_video::{NativeOpenRequest, VideoExt};
         // The plugin's own defaulted request fields retain its engine defaults.
@@ -313,6 +316,7 @@ impl Player {
             "subtitles": subtitles,
             "radio": radio,
             "goLive": go_live,
+            "eventStart": event_start,
             "backend": "mpv",
             "x": self.rect.x,
             "y": self.rect.y,
@@ -562,6 +566,7 @@ impl Player {
         _: bool,
         _: &PlaybackPreferences,
         _: &[ExternalSubtitle],
+        _: bool,
         _: bool,
         _: bool,
     ) -> Result<(), String> {

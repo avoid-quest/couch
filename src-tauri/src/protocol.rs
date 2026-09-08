@@ -82,6 +82,8 @@ pub enum PlaybackCommand {
         radio: bool,
         #[serde(default)]
         go_live: bool,
+        #[serde(default)]
+        event_start: bool,
     },
     AddSubtitle {
         playback_id: String,
@@ -460,6 +462,18 @@ mod tests {
         }
         for value in ["-1", "\"true\"", "null"] {
             let command = format!(r#"{{"type":"load","playbackId":"live","source":"https://private.test/live","goLive":{value}}}"#);
+            assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
+        }
+    }
+
+    #[test]
+    fn event_start_policy_is_private_optional_and_boolean() {
+        for (extra, expected) in [("", false), (",\"eventStart\":true", true)] {
+            let command = format!(r#"{{"type":"load","playbackId":"event","source":"https://private.test/live"{extra}}}"#);
+            assert!(matches!(serde_json::from_str::<PlaybackCommand>(&command).unwrap(), PlaybackCommand::Load { event_start, .. } if event_start == expected));
+        }
+        for value in ["0", "\"true\"", "null"] {
+            let command = format!(r#"{{"type":"load","playbackId":"event","source":"https://private.test/live","eventStart":{value}}}"#);
             assert!(serde_json::from_str::<PlaybackCommand>(&command).is_err());
         }
     }

@@ -74,6 +74,9 @@ pub struct NativeOpenRequest {
     /// Host-verified explicit IPTV live return. Ordinary loads keep demuxer defaults.
     #[serde(default)]
     pub go_live: bool,
+    /// Host-verified EVENT playlist whose first segment anchors the seek timeline.
+    #[serde(default)]
+    pub event_start: bool,
     #[serde(default)]
     pub cookies: Option<String>,
     #[serde(default)]

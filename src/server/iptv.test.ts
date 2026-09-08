@@ -123,7 +123,7 @@ test("real HTTP import, guide/now-next, raster logo cache and offline restart ex
   expect((await reopened.api(`sources/${saved.id}/refresh`, "POST")).status).toBe(502);
   expect((await (await reopened.api("guide")).json() as GuidePage).channels).toEqual(page.channels);
   expect(await (await reopened.api(`channels/${id}/logo`)).bytes()).toEqual(png);
-  expect(reopened.guide.getPlayable(id).source).toContain("secret=stream");
+  expect((await reopened.guide.getPlayable(id, new AbortController().signal)).source).toContain("secret=stream");
 });
 
 test.each([
@@ -185,14 +185,14 @@ test("committed replacement, refresh and removal still invalidate and succeed wh
   const replacement = await app.api(`sources/${saved.id}`, "POST", { ...source.definition, name: "Replacement source", playlistUrl: `${source.origin}/list.m3u?replacement=private` });
   expect(replacement.status).toBe(200);
   expect(await replacement.json()).toMatchObject({ source: { id: saved.id, name: "Replacement source", error: null } });
-  expect(app.guide.getPlayable(id).source).toBe(`${source.origin}/live.m3u8?secret=replaced`);
+  expect((await app.guide.getPlayable(id, new AbortController().signal)).source).toBe(`${source.origin}/live.m3u8?secret=replaced`);
   const db = new Database(path, { readonly: true }); cleanup.push(() => db.close());
   expect(db.query<{ playlist_url: string }, []>("SELECT playlist_url FROM iptv_sources").get()!.playlist_url).toBe(`${source.origin}/list.m3u?replacement=private`);
   source.m3u = playlist(source.origin, "Refreshed"); source.xml = xml("Refreshed program");
   const refresh = await app.api(`sources/${saved.id}/refresh`, "POST");
   expect(refresh.status).toBe(200);
   expect(await refresh.json()).toMatchObject({ source: { id: saved.id, error: null } });
-  expect(app.guide.getPlayable(id).source).toBe(`${source.origin}/live.m3u8?secret=stream`);
+  expect((await app.guide.getPlayable(id, new AbortController().signal)).source).toBe(`${source.origin}/live.m3u8?secret=stream`);
   expect((await app.api(`sources/${saved.id}`, "DELETE")).status).toBe(204);
   expect((await (await app.api("guide")).json() as GuidePage).channels).toEqual([]);
   expect(stopped).toEqual([[id], [id], [id]]);
@@ -269,6 +269,7 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   const page = await (await api("iptv/guide", "GET", undefined, secondToken)).json() as GuidePage;
   const id = page.channels[0]!.id;
   expect((await api(`iptv/channels/${id}/play`, "POST", undefined, secondToken)).status).toBe(200);
+  await wait(() => commands.at(-1)?.type === "load");
   const old = commands.findLast(item => item.type === "load")!;
   expect(old).toMatchObject({ type: "load", source: `${source.origin}/live.m3u8?secret=stream` });
   expect(hub.session.state.player.status).toBe("loading");
@@ -291,6 +292,7 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   hub.session.observe({ ...idle, playbackId: "playbackId" in old ? old.playbackId : "", status: "playing" });
   expect(hub.session.state.currentEntryId).toBeNull();
   await api(`iptv/channels/${id}/play`, "POST", undefined, secondToken);
+  await wait(() => commands.at(-1)?.type === "load");
   expect(commands.at(-1)).toMatchObject({ type: "load", source: `${source.origin}/live.m3u8?secret=replaced` });
   const loading = commands.at(-1)!;
   await api(`iptv/sources/${saved.source.id}`, "DELETE", undefined, token);
@@ -320,7 +322,7 @@ test("Go live rechecks the current channel and manifest, cancels pending probes 
   const api = (path: string, method = "GET", body?: unknown) => fetch(`${hub.origin}/api/iptv/${path}`, { method, headers: { Authorization: `Bearer ${hostToken}`, Origin: hub.origin, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const saved = await add(api, source.definition);
   const id = (await (await api("guide")).json() as GuidePage).channels[0]!.id;
-  const play = async () => { expect((await api(`channels/${id}/play`, "POST")).status).toBe(200); };
+  const play = async (wait = true) => { expect((await api(`channels/${id}/play`, "POST")).status).toBe(200); if (wait) { await settled(); expect(commands.at(-1)?.type).toBe("load"); } };
   const goLive = () => hub.session.command(parseCommand(JSON.stringify({ type: "command", requestId: crypto.randomUUID(), action: { type: "goLive", playbackId: hub.session.state.player.playbackId } }), false).action);
   const settled = async () => { for (let i = 0; i < 200 && hub.session.state.player.status === "loading" && commands.at(-1)?.type !== "load"; i++) await Bun.sleep(5); };
   await play();
@@ -348,7 +350,7 @@ test("Go live rechecks the current channel and manifest, cancels pending probes 
     goLive(); await blocked.ready;
     const before = commands.filter(command => command.type === "load").length;
     if (cancel === "stop") hub.session.command({ type: "stop" });
-    if (cancel === "ordinary") await play();
+    if (cancel === "ordinary") await play(false);
     if (cancel === "replace") {
       source.m3u = playlist(source.origin).replace("secret=stream", "secret=replaced");
       expect((await api(`sources/${saved.id}/refresh`, "POST")).status).toBe(200);
@@ -374,6 +376,8 @@ test("revoking a controller during its Go live probe prevents the late native lo
   const { token } = await (await api("pair", "POST", { code: "123456" })).json() as { token: string };
   const { controller } = await (await api("controllers/me", "GET", undefined, token)).json() as ControllerIdentity;
   expect((await api(`iptv/channels/${id}/play`, "POST", undefined, token)).status).toBe(200);
+  for (let i = 0; i < 200 && commands.at(-1)?.type !== "load"; i++) await Bun.sleep(5);
+  expect(commands.at(-1)?.type).toBe("load");
   const Constructor = WebSocket as typeof WebSocket & { new (url: string, options: Bun.WebSocketOptions): WebSocket };
   const socket = new Constructor(`${hub.origin.replace("http", "ws")}/api/ws?token=${token}`, { headers: { Origin: hub.origin } });
   cleanup.push(() => socket.close());
@@ -402,4 +406,85 @@ test("live resolution rejects replacement even when used without the hub cancell
   source.m3u = playlist(source.origin).replace("secret=stream", "secret=new");
   expect((await app.api(`sources/${saved.id}/refresh`, "POST")).status).toBe(200);
   blocked.release(); expect((await resolving).message).toContain("channel changed");
+});
+
+test("only a fresh valid direct EVENT playlist selects the private first-segment policy", async () => {
+  const source = upstream(), app = fixture();
+  await add(app.api, source.definition);
+  const id = (await (await app.api("guide")).json() as GuidePage).channels[0]!.id;
+  const event = liveManifest.replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n");
+  for (const [manifest, eventStart] of [
+    [event, true], [event.replaceAll("\n", "\r\n"), true], [liveManifest, false],
+    [event + "#EXT-X-ENDLIST\n", false], [event + "#EXT-X-PLAYLIST-TYPE:EVENT\n", false],
+    [event + "#EXT-X-STREAM-INF:BANDWIDTH=100\nvariant.m3u8\n", false],
+    [event.replace("segment.ts", "file:///private.ts"), false],
+    ["#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n", false], ["x".repeat(512 * 1024 + 1), false],
+  ] as const) {
+    source.manifest = manifest;
+    expect(await app.guide.getPlayable(id, new AbortController().signal)).toEqual({ source: `${source.origin}/live.m3u8?secret=stream`, ...(eventStart ? { eventStart: true } : {}) });
+  }
+  source.manifest = event;
+  expect(await app.guide.getLivePlayable(id, new AbortController().signal)).toEqual({ source: `${source.origin}/live.m3u8?secret=stream`, goLive: true });
+  const publicGuide = await (await app.api("guide")).text();
+  expect(publicGuide).not.toContain("eventStart"); expect(publicGuide).not.toContain("secret=");
+});
+
+test("ordinary continuous non-HLS media is handed to native without a probe that waits for EOF", async () => {
+  let opened = 0;
+  const continuous = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => {
+    opened++;
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([0x47, 0x40, 0, 0x10])); } }), { headers: { "Content-Type": "video/mp2t" } });
+  } });
+  cleanup.push(() => continuous.stop(true));
+  const source = upstream(), app = fixture();
+  source.m3u = playlist().replace("https://stream.example/live.m3u8?secret=stream", `http://127.0.0.1:${continuous.port}/live.ts`);
+  await add(app.api, source.definition);
+  const id = (await (await app.api("guide")).json() as GuidePage).channels[0]!.id;
+  const started = performance.now();
+  const playable = await app.guide.getPlayable(id, new AbortController().signal);
+  expect(playable).toEqual({ source: `http://127.0.0.1:${continuous.port}/live.ts` });
+  expect(opened).toBe(0);
+  expect(performance.now() - started).toBeLessThan(500);
+});
+
+test("EVENT source resolution rejects cancellation, replacement and removal before a native load", async () => {
+  for (const cancel of ["abort", "replace", "remove", "close"] as const) {
+    const source = upstream(), app = fixture();
+    source.manifest = liveManifest.replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n");
+    const saved = await add(app.api, source.definition);
+    const id = (await (await app.api("guide")).json() as GuidePage).channels[0]!.id;
+    const controller = new AbortController(), blocked = source.block("/live.m3u8");
+    const resolving = app.guide.getPlayable(id, controller.signal).catch(error => error);
+    await blocked.ready;
+    if (cancel === "abort") controller.abort();
+    if (cancel === "close") app.guide.close();
+    if (cancel === "replace") { source.m3u = playlist(source.origin).replace("secret=stream", "secret=new"); expect((await app.api(`sources/${saved.id}/refresh`, "POST")).status).toBe(200); }
+    if (cancel === "remove") expect((await app.api(`sources/${saved.id}`, "DELETE")).status).toBe(204);
+    blocked.release(); expect(await resolving).toBeInstanceOf(Error);
+  }
+});
+
+test("revoking a Guide Play caller during its EVENT probe prevents the late native load", async () => {
+  const source = upstream(), commands: PlaybackCommand[] = [];
+  source.manifest = liveManifest.replace("#EXTM3U\n", "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n");
+  const hub = createHub({ databasePath: ":memory:", hostToken, hostname: "127.0.0.1", port: 0, pairingCode: "123456", sendPlayer: command => commands.push(command) });
+  cleanup.push(() => hub.close()); hub.session.observe(idle);
+  const api = (path: string, method = "GET", body?: unknown, token = hostToken) => fetch(`${hub.origin}/api/${path}`, { method, headers: { Authorization: `Bearer ${token}`, Origin: hub.origin, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  expect((await api("iptv/sources", "POST", source.definition)).status).toBe(201);
+  const id = (await (await api("iptv/guide")).json() as GuidePage).channels[0]!.id;
+  const { token } = await (await api("pair", "POST", { code: "123456" })).json() as { token: string };
+  const { controller } = await (await api("controllers/me", "GET", undefined, token)).json() as ControllerIdentity;
+  const blocked = source.block("/live.m3u8");
+  expect((await api(`iptv/channels/${id}/play`, "POST", undefined, token)).status).toBe(200);
+  await blocked.ready;
+  expect((await api(`controllers/${controller!.id}`, "DELETE")).status).toBe(200);
+  blocked.release();
+  for (let i = 0; i < 200 && hub.session.state.player.status === "loading"; i++) await Bun.sleep(5);
+  expect(hub.session.state.player.status).toBe("error");
+  expect(commands.some(command => command.type === "load")).toBeFalse();
+  expect((await api(`iptv/channels/${id}/play`, "POST")).status).toBe(200);
+  for (let i = 0; i < 200 && commands.at(-1)?.type !== "load"; i++) await Bun.sleep(5);
+  expect(commands.at(-1)).toMatchObject({ type: "load", eventStart: true });
+  expect(JSON.stringify(hub.session.state)).not.toContain("eventStart");
+  expect(JSON.stringify(hub.session.state)).not.toContain("secret=");
 });

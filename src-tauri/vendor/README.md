@@ -215,15 +215,18 @@ fixed ancestry assumption as part of a larger resizing change. This local
 patch keeps the published runtime and changes only the unsafe lookup. It does
 not import the rest of the unreleased Tauri workspace.
 
-Couch's host rechecks a directly supplied live HLS media playlist when the
-current channel receives an explicit Go live command. Its private `goLive` load
+Couch's host probes an identified `.m3u8` guide channel before opening it. Other
+URLs retain ordinary playback without this probe. A verified direct EVENT
+playlist receives a private `eventStart` hint, selecting `live_start_index=0`
+so its first segment anchors the seek timeline. An explicit Go live command
+rechecks the current playlist separately. Its private `goLive` load
 flag selects FFmpeg's newest complete segment with `live_start_index=-1`.
 `mpv_iptv` restores the original `demuxer-lavf-o` before every load, preserving
-ordinary HLS, VOD and provider playback. This gives explicit live return less
+ordinary sliding HLS, VOD and provider playback. This gives explicit live return less
 buffering margin than normal startup and can stall sooner on a slow feed.
 See [FFmpeg's HLS options](https://ffmpeg.org/ffmpeg-formats.html#hls),
 [mpv's AVOptions](https://mpv.io/manual/stable/#options-demuxer-lavf-o), and
 [RFC 8216's normal startup guidance](https://www.rfc-editor.org/rfc/rfc8216.html#section-6.3.3).
 The selected native `iptv_live_start` regression loads real HLS and compares
-ordinary, explicit-live and ordinary-again segment requests; the full native
+ordinary, EVENT-origin, explicit-live and ordinary-again segment requests; the full native
 IPTV fixture separately checks presented freshness and delayed-feed recovery.
