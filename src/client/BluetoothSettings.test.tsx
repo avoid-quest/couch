@@ -4,7 +4,8 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { BluetoothState } from "../shared/bluetooth";
 let Component: typeof import("./BluetoothSettings")["BluetoothSettings"];
-let root: Root, window: Window, request: ReturnType<typeof spyOn>, state: BluetoothState;
+let root: Root, window: Window, request: ReturnType<typeof spyOn>, interval: ReturnType<typeof spyOn>, state: BluetoothState;
+let poll: () => Promise<void>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const actions: Record<string, string>[] = [];
 const click = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === name)!.click();
@@ -27,9 +28,10 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   ({ BluetoothSettings: Component } = await import("./BluetoothSettings"));
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+  interval = spyOn(globalThis, "setInterval").mockImplementation(((callback: () => Promise<void>) => { poll = callback; return 0; }) as typeof setInterval);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); window.happyDOM.abort();
+  await act(async () => root.unmount()); request.mockRestore(); interval.mockRestore(); window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
@@ -86,4 +88,66 @@ test("another remote's search cannot be cancelled by choosing a result", async (
   await render();
   expect(document.querySelector<HTMLButtonElement>('[aria-label="Connect Audio device"]')!.disabled).toBe(true);
   expect(document.body.textContent).not.toContain("Stop search");
+});
+
+
+test("polls append new Bluetooth results without moving the focused device and retain expired rows", async () => {
+  const speaker = { address: "11:22:33:44:55:66", name: "C39S", paired: false, connected: false, trusted: false };
+  state.devices.push(speaker);
+  await render();
+  const list = document.querySelector('[aria-label="Bluetooth devices"]')!;
+  const rows = () => [...list.querySelectorAll("li")].map(row => row.querySelector("p")!.textContent);
+  const select = document.querySelector<HTMLButtonElement>('[aria-label="Connect C39S"]')!;
+  select.focus();
+  state.devices = [speaker, { address: "22:33:44:55:66:77", name: "New headphones", paired: false, connected: false, trusted: false }, state.devices[0]!];
+  await act(async () => poll());
+  expect(rows()).toEqual(["Audio device", "C39S", "New headphones"]);
+  expect(document.activeElement).toBe(select);
+  expect(document.querySelector('[aria-label="Connect C39S"]')).toBe(select);
+  await act(async () => select.click());
+  expect(actions.at(-1)).toMatchObject({ op: "pair", device: speaker.address });
+  state.devices = state.devices.filter(device => device.address !== speaker.address);
+  await act(async () => poll());
+  expect(rows()).toEqual(["Audio device", "C39S", "New headphones"]);
+  expect(select.disabled).toBe(true);
+  expect(select.closest("li")!.textContent).toContain("Not currently available");
+  state.devices = [speaker, ...state.devices];
+  await act(async () => poll());
+  expect(document.querySelector('[aria-label="Connect C39S"]')).toBe(select);
+  expect(select.disabled).toBe(false);
+  expect(rows()).toEqual(["Audio device", "C39S", "New headphones"]);
+});
+
+
+test("only an explicit new search clears expired unpaired results and preserves paired rows", async () => {
+  state.devices.push({ address: "11:22:33:44:55:66", name: "C39S", paired: false, connected: false, trusted: false });
+  await render();
+  state.devices = [];
+  await act(async () => poll());
+  expect(document.querySelectorAll('[aria-label="Bluetooth devices"] li').length).toBe(2);
+  await act(async () => click("Search"));
+  expect(document.querySelectorAll('[aria-label="Bluetooth devices"] li').length).toBe(1);
+  expect(document.querySelector('[aria-label="Connect Audio device"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Connect C39S"]')).toBeNull();
+});
+
+test("successful Forget removes the retained row without hiding a later rediscovery", async () => {
+  await render();
+  await act(async () => click("Forget"));
+  const device = state.devices[0]!;
+  state.devices = [];
+  state.operation = { id: actions.at(-1)!.token!, kind: "forget", device: device.address, status: "finished", endsAt: Date.now(), message: null, prompt: null };
+  await act(async () => poll());
+  expect(document.querySelectorAll('[aria-label="Bluetooth devices"] li').length).toBe(0);
+  state.devices = [{ ...device, paired: false, trusted: false }];
+  await act(async () => poll());
+  expect(document.querySelector('[aria-label="Connect Audio device"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Forget Audio device"]')).toBeNull();
+});
+
+test("changing TV origin clears the previous TV's discovery results", async () => {
+  await render();
+  state.devices = [];
+  await act(async () => root.render(<Component credentials={{ origin: "http://another-tv", token: "admin" }} connected />));
+  expect(document.querySelectorAll('[aria-label="Bluetooth devices"] li').length).toBe(0);
 });
