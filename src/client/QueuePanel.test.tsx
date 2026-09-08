@@ -1,8 +1,23 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionState } from "../shared/protocol";
-import { QueuePanel } from "./QueuePanel";
+
+let QueuePanel: typeof import("./QueuePanel").QueuePanel;
+const window = new Window();
+const originals = new Map<string, PropertyDescriptor | undefined>();
+beforeAll(async () => {
+  for (const key of ["window", "document", "navigator"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "window" ? window : Reflect.get(window, key) });
+  }
+  // Radix chooses its layout-effect implementation when first imported.
+  ({ QueuePanel } = await import("./QueuePanel"));
+});
+afterAll(async () => {
+  await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+});
 
 const queue = ["First", "Current", "Next", "Last"].map(title => ({ id: title, title, source: `https://media.example/${title}` }));
 const state: SessionState = { queue, currentEntryId: "Current", queueCursorEntryId: "Current", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };

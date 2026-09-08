@@ -3,10 +3,9 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { SessionState } from "../shared/protocol";
-import { QueuePanel } from "./QueuePanel";
 import { applyTvNavigation, useNavigation } from "./navigation";
 
-let root: Root, window: Window;
+let root: Root, window: Window, QueuePanel: typeof import("./QueuePanel").QueuePanel;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const queue = ["one", "two", "three"].map(id => ({ id, title: id, source: `https://media.example/${id}` }));
 const state: SessionState = { queue, currentEntryId: "one", queueCursorEntryId: "one", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };
@@ -25,6 +24,7 @@ beforeEach(async () => {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
   const { createRoot } = await import("react-dom/client");
+  ({ QueuePanel } = await import("./QueuePanel"));
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
   await render(state);
 });
