@@ -46,10 +46,10 @@ const recoveryFaults = process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1";
 const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
 assert.ok(dataDir.startsWith("/"));
 const sql = (statement: string) => inside("sqlite3", `${dataDir}/couch.sqlite`, statement);
-function preservation() {
+function preservation(devices: "devices" | "qualification_current_devices" = "devices") {
   // lastSeenAt and scan status change during normal reconnect. Compare the
   // authoritative identities/settings, not those incidental timestamps.
-  return sql("SELECT token_hash,id,name,role FROM devices ORDER BY id; SELECT id,name,path FROM library_sources ORDER BY id; SELECT * FROM watching_preferences ORDER BY profileId; SELECT * FROM viewing_progress ORDER BY profileId,mediaId; SELECT * FROM session; SELECT * FROM watching_profiles ORDER BY id;");
+  return sql(`SELECT token_hash,id,name,role FROM ${devices} ORDER BY id; SELECT id,name,path FROM library_sources ORDER BY id; SELECT * FROM watching_preferences ORDER BY profileId; SELECT * FROM viewing_progress ORDER BY profileId,mediaId; SELECT * FROM session; SELECT * FROM watching_profiles ORDER BY id;`);
 }
 function rejected(...args: string[]) {
   const child = Bun.spawnSync(["docker", "exec", container, ...args]);
@@ -460,7 +460,25 @@ try {
     assert.equal(supervised(), pid, "Fixed runtime repair faults leave the application running");
     assert.equal(preservation(), expectedData);
     faultChecks.push("Real APT lock and interrupted dpkg failures preserve data; operator continuation repairs the same ffmpeg version");
-    await Bun.write(`${fixtures}/recovery-faults.json`, JSON.stringify({ checks: faultChecks, scope: "Installed recovery process interruption, backup ENOSPC, recorded compatibility refusal and operator recovery of stopped processes. No machine power-loss or failed schema migration is implied." }, null, 2));
+    // Exercise the existing legacy-device migration, while retaining all current
+    // device metadata in this same database for an explicit operator schema fix.
+    inside("couch-session", "stop");
+    sql("BEGIN; ALTER TABLE devices RENAME TO qualification_current_devices; CREATE TABLE devices(token_hash TEXT PRIMARY KEY); INSERT INTO devices SELECT token_hash FROM qualification_current_devices; CREATE TABLE devices_named(unexpected INTEGER); COMMIT;");
+    service("reset-failed", "couch-tv.service");
+    service("start", "couch-tv.service");
+    await until("Failed existing SQLite migration exhausts the bounded startup budget", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
+    const migrationLog = inside("journalctl", "-b", `_UID=${uid}`, "SYSLOG_IDENTIFIER=couch-tv", "--no-pager");
+    assert.match(migrationLog, /table devices_named already exists/);
+    await Bun.write(`${fixtures}/failed-migration.log`, migrationLog);
+    assert.equal(await api("/api/build").then(() => true).catch(() => false), false);
+    assert.equal(preservation("qualification_current_devices"), expectedData);
+    assert.equal(sql("SELECT token_hash FROM devices ORDER BY token_hash;"), sql("SELECT token_hash FROM qualification_current_devices ORDER BY token_hash;"));
+    sql("BEGIN; DROP TABLE devices; DROP TABLE devices_named; ALTER TABLE qualification_current_devices RENAME TO devices; COMMIT;");
+    inside("couch-session", "restart");
+    await retained("Operator schema repair reopens the current database after a failed existing migration");
+    assert.equal(preservation(), expectedData);
+    faultChecks.push("Actual existing SQLite migration failure preserves credentials and newer state; operator schema repair reconnects both browsers without restoring a backup");
+    await Bun.write(`${fixtures}/recovery-faults.json`, JSON.stringify({ checks: faultChecks, scope: "Installed interrupted Tauri replacement, recovery process interruption, backup ENOSPC, compatibility refusal, stopped-process recovery, current APT failures and existing SQLite migration failure. Machine power-loss is not implied." }, null, 2));
   }
   await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
 } catch (error) {
