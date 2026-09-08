@@ -60,6 +60,48 @@ const player = (overrides: Partial<PlayerState> = {}): PlayerState => ({
 });
 
 describe("Jellyfin source", () => {
+  test("preparing an album successor retains the current reporter until native adoption", async () => {
+    const upstream = fixture();
+    upstream.item.Type = "Audio";
+    const jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "queue-1")).source.slice(9);
+    await jellyfin.resolve(reference, "playback-1", undefined, true);
+    await jellyfin.observe(player({ position: 12 }));
+    const pending = new AbortController();
+    const media = await jellyfin.resolve(reference, "playback-2", pending.signal, true, true);
+    expect(media.audioOnly).toBe(true);
+    expect(media.headers.Authorization).toContain("fixture-private-token");
+    await jellyfin.observe(player({ position: 19, status: "paused" }));
+    expect(upstream.requests.filter(request => request.path === "/Sessions/Playing")).toHaveLength(1);
+    expect(upstream.requests.filter(request => request.path.endsWith("/Stopped"))).toHaveLength(0);
+    jellyfin.activatePrepared("playback-2");
+    await jellyfin.observe(player({ playbackId: "playback-2", position: 1 }));
+    jellyfin.activatePrepared("playback-2");
+    await jellyfin.observe(player({ playbackId: "playback-2", position: 1 }));
+    const reports = upstream.requests.filter(request => request.path.startsWith("/Sessions/Playing"));
+    expect(reports.map(request => request.path)).toEqual(["/Sessions/Playing", "/Sessions/Playing/Progress", "/Sessions/Playing/Stopped", "/Sessions/Playing"]);
+    expect(reports[2]!.body!.PositionTicks).toBe(190_000_000);
+  });
+
+  test("canceling a prepared source never starts or stops the current reporter", async () => {
+    const upstream = fixture();
+    const jellyfin = source();
+    await jellyfin.connect(credentials(upstream.url));
+    const reference = (await jellyfin.entry(itemId, "queue-1")).source.slice(9);
+    await jellyfin.resolve(reference, "playback-1");
+    await jellyfin.observe(player());
+    const pending = new AbortController();
+    await jellyfin.resolve(reference, "playback-2", pending.signal, true, true);
+    pending.abort();
+    jellyfin.activatePrepared("playback-2");
+    await jellyfin.observe(player({ playbackId: "playback-2" }));
+    await jellyfin.observe(player({ status: "paused", position: 8 }));
+    const reports = upstream.requests.filter(request => request.path.startsWith("/Sessions/Playing"));
+    expect(reports.map(request => request.path)).toEqual(["/Sessions/Playing", "/Sessions/Playing/Progress"]);
+    expect(reports[1]!.body!.PositionTicks).toBe(80_000_000);
+  });
+
   test("stores only host credentials and returns a bounded public catalog without server paths or tokens", async () => {
     const upstream = fixture();
     const directory = mkdtempSync(join(tmpdir(), "couch-jellyfin-"));

@@ -2,6 +2,53 @@
 # Disposable real systemd/APT qualification. The tiny application is a lifecycle
 # fixture, not native media or installed AppImage acceptance.
 set -euo pipefail
+if [[ ${1:-} = --runtime-faults ]]; then
+    [[ $EUID = 0 && -e /.dockerenv && -e /fixture/Couch.AppImage ]] || { echo 'Use the disposable appliance fixture.' >&2; exit 2; }
+    runtime_version=$(dpkg-query -W -f='${Version}' ffmpeg)
+    mkdir -p /fixture/interrupted/DEBIAN
+    cat > /fixture/interrupted/DEBIAN/control <<'PACKAGE'
+Package: couch-qualification-interrupted
+Version: 1
+Architecture: all
+Maintainer: Couch qualification <qualification@example.invalid>
+Description: Disposable dpkg interruption fixture
+PACKAGE
+    cat > /fixture/interrupted/DEBIAN/postinst <<'POSTINST'
+#!/bin/sh
+touch /fixture/dpkg-entered
+while [ -e /fixture/dpkg-block ]; do sleep 1; done
+POSTINST
+    chmod 755 /fixture/interrupted/DEBIAN/postinst
+    dpkg-deb --build /fixture/interrupted /fixture/interrupted.deb
+    rm -f /fixture/dpkg-entered
+    touch /fixture/dpkg-block
+    setsid dpkg --install /fixture/interrupted.deb > /fixture/dpkg-interrupted.log 2>&1 &
+    transaction=$!
+    trap 'kill -KILL -- "-$transaction" 2>/dev/null || true; rm -f /fixture/dpkg-block' EXIT
+    for attempt in {1..100}; do [[ -e /fixture/dpkg-entered ]] && break; sleep 0.1; done
+    [[ -e /fixture/dpkg-entered ]]
+    if runuser -u couch-tv -- systemctl --no-ask-password start couch-runtime-repair.service; then exit 1; fi
+    [[ $(systemctl show couch-runtime-repair.service -p Result --value) = exit-code ]]
+    journalctl "_SYSTEMD_INVOCATION_ID=$(systemctl show couch-runtime-repair.service -p InvocationID --value)" --no-pager | grep -E 'Could not get lock|Unable to acquire.*lock'
+    kill -KILL -- "-$transaction"
+    wait "$transaction" || true
+    [[ $(dpkg-query -W -f='${db:Status-Status}' couch-qualification-interrupted) = half-configured ]]
+    systemctl reset-failed couch-runtime-repair.service
+    if runuser -u couch-tv -- systemctl --no-ask-password start couch-runtime-repair.service; then exit 1; fi
+    journalctl "_SYSTEMD_INVOCATION_ID=$(systemctl show couch-runtime-repair.service -p InvocationID --value)" --no-pager | grep 'dpkg was interrupted'
+    # APT reports the interrupted operation. The operator resumes dpkg; no lock
+    # files or package database records are removed or rewritten by the test.
+    rm /fixture/dpkg-block
+    dpkg --configure --pending
+    systemctl reset-failed couch-runtime-repair.service
+    runuser -u couch-tv -- systemctl --no-ask-password start couch-runtime-repair.service
+    [[ $(systemctl show couch-runtime-repair.service -p Result --value) = success ]]
+    [[ $(dpkg-query -W -f='${Version}' ffmpeg) = "$runtime_version" && -z $(dpkg --verify ffmpeg) ]]
+    dpkg --purge couch-qualification-interrupted
+    trap - EXIT
+    echo 'PASS: fixed runtime repair reports held dpkg lock and interrupted package state; operator dpkg continuation restores same-version verified runtime repair'
+    exit
+fi
 if [[ ${1:-} != --inside ]]; then
     cd "$(dirname "$0")/.."
     real=false

@@ -11,7 +11,7 @@ function fixture() {
   let calls = 0;
   let signal: AbortSignal | undefined;
   const source: MediaSource = { source: "https://private.example/old?token=secret", metadata: { title: "Original", duration: 120 }, expiry: { at: 1, recover: cancellation => { calls++; signal = cancellation; return pending.promise; } } };
-  const session = createSession(store, command => commands.push(command), () => {}, { resolveSource: () => source });
+  const session = createSession(store, command => commands.push(command), () => {}, { resolveSource: () => source, prepareAudio: () => "saved-hdmi" });
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "web:https://artist.bandcamp.com/track/one", quality: "480p", automaticTitle: true } });
   session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" } });
@@ -33,7 +33,7 @@ test("one private recovery preserves observed position, settings, queue metadata
   expect(f.session.state.webRetry).toEqual({ paused: true });
   f.pending.resolve(f.fresh);
   await Bun.sleep(0);
-  expect(f.commands.at(-1)).toMatchObject({ type: "load", source: f.fresh.source, startPosition: 47.25, paused: true, preferences: { speed: 1.25, replayGain: "track", audioDelay: 0 } });
+  expect(f.commands.at(-1)).toMatchObject({ type: "load", source: f.fresh.source, audioOutput: "saved-hdmi", startPosition: 47.25, paused: true, preferences: { speed: 1.25, replayGain: "track", audioDelay: 0 } });
   expect(f.commands.at(-1)).not.toHaveProperty("expiry");
   expect(f.commands.at(-1)).not.toHaveProperty("metadata");
   expect(f.session.state.queue).toEqual(queue);
@@ -50,7 +50,7 @@ test("one private recovery preserves observed position, settings, queue metadata
   f.store.close();
 });
 
-for (const cancel of ["stop", "play", "next", "enqueue", "move", "remove", "loadQueue", "reserve", "close", "quiesce", "disconnect"] as const) {
+for (const cancel of ["stop", "play", "next", "enqueue", "move", "remove", "loadQueue", "reserve", "close", "quiesce", "disconnect", "audioLoss"] as const) {
   for (const reject of [false, true]) test(`${cancel} cancels a late recovery ${reject ? "failure" : "success"}`, async () => {
     const f = fixture();
     f.fail();
@@ -59,6 +59,7 @@ for (const cancel of ["stop", "play", "next", "enqueue", "move", "remove", "load
     if (cancel === "loadQueue") f.session.loadQueue([{ id: "new", title: "New", source: "https://media.example/new" }], "append");
     else if (cancel === "reserve") f.session.reservePlay();
     else if (cancel === "close" || cancel === "quiesce") f.session[cancel]();
+    else if (cancel === "audioLoss") f.session.audioLost("HDMI disconnected");
     else if (cancel === "disconnect") f.session.observe({ ...idle, status: "unavailable" });
     else {
       const actions: Record<string, Action> = {

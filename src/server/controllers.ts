@@ -120,6 +120,18 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
           onChange();
           return json({ controller });
         }
+        if (path === "/api/settings/setup") {
+          if (request.method !== "POST") return methods("POST");
+          const requireOwner = () => {
+            if (requireIdentity().authority !== "administrator") throw new ControllerError("Use an administrator remote to continue setup.", 403);
+          };
+          requireOwner();
+          const expected = await settingField(request, "step");
+          requireOwner();
+          const step = store.advanceSetup(expected);
+          onChange();
+          return json({ step });
+        }
         if (path === "/api/settings") {
           if (request.method === "GET") return json({ name: store.installationName() });
           if (request.method !== "POST") return methods("GET, POST");

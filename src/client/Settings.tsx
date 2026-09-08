@@ -27,6 +27,8 @@ import { DisplaySettings } from "./DisplaySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
 import { knownConnection } from "./connection";
 import { readUpdateRequest } from "./update-request";
+import type { SetupStep } from "../shared/setup";
+import { SetupProgress } from "./SetupProgress";
 
 type ClaimCode = { code: string; expiresAt: number };
 type Props = {
@@ -50,15 +52,24 @@ type Props = {
   preferences?: Preferences;
   onCommand: (action: Action) => Promise<boolean>;
   initialOpen?: boolean;
+  setupStep?: SetupStep;
   sourcesRequest?: number;
   jellyfinVersion: number;
   radioVersion: number;
   libraryVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
-  const [open, setOpen] = useState(initialOpen);
-  const [section, setSection] = useState("general");
+export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, setupStep, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
+  const [requestedOpen, setOpen] = useState(initialOpen);
+  const open = requestedOpen || !!setupStep && setupStep !== "complete";
+  const [selectedSection, setSection] = useState("general");
+  const setup = !!setupStep && setupStep !== "complete";
+  const section = setup ? !host && identity?.authority === "administrator" ? setupStep : "general" : selectedSection;
+  const previousStep = useRef(setupStep);
+  useEffect(() => {
+    if (previousStep.current && previousStep.current !== "complete" && setupStep === "complete") setOpen(false);
+    previousStep.current = setupStep;
+  }, [setupStep]);
   useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
   const [devices, setDevices] = useState<Controller[] | null>(null);
   const [forgetting, setForgetting] = useState(false);
@@ -168,15 +179,16 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     </div>
   </div>;
 
-  return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); }}>
+  return <Dialog open={open} onOpenChange={value => { if (setup) return; setOpen(value); setError(null); setNotice(null); }}>
     <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("general")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
-    <DialogContent data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
+    <DialogContent showCloseButton={!setup} data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
       <DialogHeader>
-        <DialogTitle className={host ? "text-lg" : undefined}>Settings</DialogTitle>
+        <DialogTitle className={host ? "text-lg" : undefined}>{setup ? host ? "Welcome to Couch" : "Set up your TV" : "Settings"}</DialogTitle>
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
+      {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
       <Tabs value={section} onValueChange={setSection} activationMode={host ? "manual" : "automatic"} className="min-w-0 gap-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
+        {!setup && <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
           <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
           <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
@@ -187,7 +199,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>
           <TabsTrigger value="updates" className="min-h-11">Updates</TabsTrigger>
           {administrator && <TabsTrigger value="advanced" className="min-h-11">Advanced</TabsTrigger>}
-        </TabsList>
+        </TabsList>}
         {administrator && credentials && <TabsContent value="updates" className="min-w-0">{open && section === "updates" && <UpdatesSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</TabsContent>}
         {!administrator && <TabsContent value="updates" className="min-w-0 space-y-3">
           <p>Open Settings &gt; Updates on an administrator remote to check for updates and install a signed release on this TV.</p>
@@ -250,7 +262,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
         </TabsContent>
         <TabsContent value="sources" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`} data-tv-local-only={host ? "" : undefined}>
-          <SettingsSources credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} radioVersion={radioVersion} libraryVersion={libraryVersion} />
+          <SettingsSources setupOnly={setup} credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} radioVersion={radioVersion} libraryVersion={libraryVersion} />
         </TabsContent>
         <TabsContent value="connection" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
@@ -275,6 +287,9 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           {administrator && devices && <><Separator /><PairedRemotes devices={devices} currentId={identity.controller!.id} disabled={!canWrite} update={update} /></>}
         </TabsContent>
       </Tabs>
+      {setup && administrator && <Button className="min-h-11" disabled={!canWrite || section === "general" && draftName.trim() !== savedName} onClick={event => void update(event, "/api/settings/setup", { step: setupStep }, "Setup progress saved.")}>
+        {pending ? "Saving…" : section === "general" ? "Continue to screen" : section === "display" ? "I can see Couch on the right screen" : section === "sound" ? "I heard the test sound" : "Finish setup"}
+      </Button>}
       {loading && <p role="status" className="text-muted-foreground">Loading settings…</p>}
       {!connected && <p role="status" className="text-muted-foreground">{credentials ? "Connect to the TV to change its settings." : "This browser is not paired."}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

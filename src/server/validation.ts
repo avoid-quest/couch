@@ -41,6 +41,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "move": return id(value.entryId) && (value.beforeEntryId === null || id(value.beforeEntryId));
     case "pause": return id(value.playbackId) && typeof value.paused === "boolean";
     case "seek": return id(value.playbackId) && number(value.position, 365 * 24 * 60 * 60);
+    case "mute": return typeof value.muted === "boolean";
     case "volume": return number(value.volume, 100);
     case "preferences": return id(value.profileId) && object(value.preferences)
       && Object.keys(value.preferences).some(key => ["audioLanguage", "subtitleLanguage", "subtitles", "speed", "replayGain"].includes(key))

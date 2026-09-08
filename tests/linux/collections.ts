@@ -1,3 +1,5 @@
+import { seedConfiguredFixture } from "./configured-fixture";
+seedConfiguredFixture();
 import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import { mkdir, rename } from "node:fs/promises";

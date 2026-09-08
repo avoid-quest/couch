@@ -50,7 +50,16 @@ pub enum SidecarMessage {
     rename_all_fields = "camelCase"
 )]
 pub enum PlaybackCommand {
+    Prepare {
+        playback_id: String,
+        #[serde(default)]
+        next: Option<PreparedAudio>,
+    },
+    AudioOutput { output: String },
+    AudioPause,
     Load {
+        #[serde(default)]
+        audio_output: Option<String>,
         playback_id: String,
         source: String,
         #[serde(default)]
@@ -114,6 +123,16 @@ pub enum PlaybackCommand {
         volume: f64,
     },
     Stop,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedAudio {
+    pub playback_id: String,
+    pub source: String,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    pub preferences: PlaybackPreferences,
 }
 
 #[derive(Clone, Deserialize, Serialize)]

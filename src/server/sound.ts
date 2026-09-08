@@ -3,7 +3,7 @@ import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./controllers";
 import { pulseSound, type SoundBackend, type SoundProcess } from "./sound-pulse";
 
-type Options = { available: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend };
+type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend };
 export function createSound(options: Options) {
   const backend = options.backend ?? pulseSound();
   let test: SoundTest | null = null;
@@ -16,7 +16,7 @@ export function createSound(options: Options) {
     current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor); current.release();
     if (test) test = { ...test, status, message };
   };
-  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, canTest: !closed && !starting && !active && options.idle() });
+  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), canTest: !closed && !starting && !active && options.idle() });
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -30,6 +30,24 @@ export function createSound(options: Options) {
         authorize();
         if (!options.available) return json({ error: "Sound tests require the native Ubuntu TV audio session." }, 503);
         const path = new URL(request.url).pathname;
+        if (path === "/api/sound/profile" && request.method === "POST" && options.routing) {
+          const profile = await settingField(request, "profile"); authorize();
+          if (starting || active) throw new ControllerError("Stop the sound test before changing output.", 409);
+          await options.routing.profile(profile, authorize);
+          return json(await state());
+        }
+        if (path === "/api/sound/output" && request.method === "POST" && options.routing) {
+          const output = await settingField(request, "output"); authorize();
+          if (starting || active) throw new ControllerError("Stop the sound test before changing output.", 409);
+          await options.routing.select(output, authorize);
+          return json(await state());
+        }
+        if (path === "/api/sound/delay" && request.method === "POST" && options.delay) {
+          const delay = await settingField(request, "delay"); authorize();
+          if (typeof delay !== "number" || !Number.isFinite(delay) || Math.abs(delay) > 60) throw new ControllerError("Use an audio delay between -60 and 60 seconds.", 400);
+          options.delay.set(delay);
+          return json(await state());
+        }
         if (path === "/api/sound" && request.method === "GET") return json(await state());
         if (path === "/api/sound/stop" && request.method === "POST") {
           const id = await settingField(request, "testId"); authorize();
@@ -69,7 +87,7 @@ export function createSound(options: Options) {
           active = { process: child, release: options.begin(), timer: setTimeout(() => finish(test?.observedOutput ? "finished" : "error", test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The audio server never confirmed the test route."), 3_000), monitor: setInterval(() => void check(), 100) };
           void child.exited.then(code => { if (active?.process === child) finish(code === 0 && test?.observedOutput ? "finished" : "error", code === 0 && test?.observedOutput ? "Sound test ended. Confirm audibility yourself." : "The sound test could not complete."); });
           void check();
-          return json({ ...inventory, test, canTest: false });
+          return json(await state());
         } finally { starting = false; }
       } catch (error) { return json({ error: error instanceof ControllerError ? error.message : "Could not read or test the TV audio session. Check the Ubuntu audio service and try again." }, error instanceof ControllerError ? error.status : 503); }
     },

@@ -76,6 +76,12 @@ couch-recover "$backup"
 cmp "$fixture/newer-data" /var/lib/couch-test-data/keep.txt
 failed=$(find /var/lib/couch-installer -maxdepth 1 -name 'failed-*' | head -1)
 cmp "$fixture/newer-data" "$failed/data/keep.txt"
+# Tauri moves the old archive away before writing its replacement. Recovery
+# must still work if an interruption leaves no current AppImage to preserve.
+mv /var/lib/couch/application/Couch.AppImage "$fixture/interrupted-current.AppImage"
+couch-recover "$backup"
+cmp "$backup/Couch.AppImage" /var/lib/couch/application/Couch.AppImage
+cmp "$fixture/newer-data" /var/lib/couch-test-data/keep.txt
 jq '.dataFormat = 2' "$backup/build.json" > "$fixture/incompatible"
 cp "$fixture/incompatible" "$backup/build.json"
 if couch-recover "$backup" 2> "$fixture/error"; then exit 1; fi

@@ -32,7 +32,7 @@ test("legacy pairing migration preserves exact token hashes, stable identities a
   close(initial);
   const tokens = [crypto.randomUUID(), crypto.randomUUID()];
   const legacy = new Database(file);
-  legacy.run("DROP TABLE devices; CREATE TABLE devices (token_hash TEXT PRIMARY KEY);");
+  legacy.run("DROP TABLE installation_setup; DROP TABLE devices; CREATE TABLE devices (token_hash TEXT PRIMARY KEY);");
   for (const token of tokens) legacy.query("INSERT INTO devices VALUES (?)").run(hash(token));
   legacy.close();
 
@@ -42,6 +42,7 @@ test("legacy pairing migration preserves exact token hashes, stable identities a
   for (const device of devices) expect(device).toEqual({ id: expect.any(String), name: expect.any(String), role: "controller", createdAt: null, lastSeenAt: null });
   expect(new Set(devices.map(device => device.id)).size).toBe(2);
   expect(migrated.administratorExists()).toBeFalse();
+  expect(migrated.setupStep()).toBe("complete");
   expect(migrated.activeProfile()).toEqual(profile);
   expect(migrated.progress(profile.id, "library:saved")?.position).toBe(48);
   expect(migrated.queue).toEqual([{ id: "saved", title: "Saved", source: "library:saved" }]);
@@ -49,6 +50,7 @@ test("legacy pairing migration preserves exact token hashes, stable identities a
   close(migrated);
   const reopened = open(file);
   expect(tokens.map(token => reopened.controllerForToken(token))).toEqual(devices);
+  expect(reopened.setupStep()).toBe("complete");
   for (const token of tokens) expect(reopened.isPaired(token)).toBeTrue();
   const db = new Database(file, { readonly: true });
   const rows = db.query<{ token_hash: string }, []>("SELECT token_hash FROM devices ORDER BY rowid").all();
