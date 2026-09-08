@@ -48,3 +48,21 @@ test("leaving Bluetooth or losing the remote connection cancels the exact discov
   await render(false);
   expect(actions.at(-1)).toEqual({ op: "cancel", token });
 });
+test("an HTTP remote can start discovery without randomUUID and cancel its exact operation", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
+  Object.defineProperty(crypto, "randomUUID", { configurable: true, value: undefined });
+  try {
+    await render();
+    await act(async () => click("Find audio devices"));
+    expect(actions[0]?.op).toBe("scan");
+    const token = actions[0]!.token;
+    expect(token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(document.body.textContent).toContain("Finding audio devices");
+    await act(async () => click("Cancel Bluetooth operation"));
+    expect(actions.at(-1)).toEqual({ op: "cancel", token });
+    expect(document.body.textContent).not.toContain("Finding audio devices");
+  } finally {
+    if (descriptor) Object.defineProperty(crypto, "randomUUID", descriptor);
+    else Reflect.deleteProperty(crypto, "randomUUID");
+  }
+});
