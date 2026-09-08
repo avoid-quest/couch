@@ -1,12 +1,12 @@
 # Reusing radio.avoid.quest in Couch
 
-Research for [Explore potential `radio.avoid.quest` first class support](https://github.com/avoid-quest/couch/issues/167), checked on 2026-09-08. This records a recommendation. The issue also requests a human scope decision, which remains open.
+Research for [Explore potential `radio.avoid.quest` first class support](https://github.com/avoid-quest/couch/issues/167), checked on 2026-09-08. The owner selected programme titles and artwork on the same day, with one metadata implementation maintained by radio.avoid.quest. Personal saved-station import is outside this increment.
 
 ## Recommendation
 
 Keep the deployed M3U as the catalog authority and Couch's native player as the playback authority. Couch already has an **Add avoid radio** action in Settings > Sources. It imports the deployed catalog, and paired phones browse, favorite and queue its stations. Reimplementing this would add no capability. [Couch settings](../../src/client/RadioSettings.tsx), [catalog](../../src/server/radio.ts), [existing radio evidence](providers.md#radio-station-feeds)
 
-If the owner wants deeper integration, the smallest useful next feature is programme metadata from the deployed radio service. Reuse its station-specific metadata retrieval and shared cache. First expose a provider-owned station-ID lookup so Couch does not copy the radio app's per-station configuration. Keep personal-library import and DJ playback outside that increment. The remaining decision is whether richer current-programme titles and artwork are the intended next feature, or whether first-class support means transferring a personal radio library.
+The accepted next feature is programme metadata from the deployed radio service. Reuse its station-specific metadata retrieval and shared cache. First expose a provider-owned station-ID lookup so Couch does not copy the radio app's per-station configuration. Keep personal-library import and DJ playback outside that increment. Couch consumes the service contract; it does not maintain station-specific scraping or metadata configuration.
 
 ## Ownership and deployment evidence
 
@@ -61,8 +61,48 @@ If personal-library transfer is selected, use that explicit export as input, val
 
 The radio application also has single, multiple and DJ playback modes, browser audio processing and external platform server functions. Those are browser-player and internal application contracts. Embedding them would require a separate playback authority and browser-local state reconciliation, which does not fit Couch's current shared native player. They are not needed for catalog or metadata reuse. [Radio architecture](https://github.com/avoid-quest/avoid.quest/blob/ba7742f62eead5abdad4ea56a1bcade0f32b0dc5/apps/radio/README.md)
 
-## Resolution boundary
+## Accepted implementation and qualification
 
-The research establishes that curated-catalog integration already exists and identifies a concrete path for richer metadata without copying the radio backend. Keep the issue open for the owner's decision on the intended increment. The proposed metadata endpoint would then require a bounded change in the radio repository and deployment through its normal process before Couch could rely on it.
+The owner chose programme titles and artwork, with one maintained implementation
+in radio.avoid.quest. The provider change adds `stationId` to the existing metadata
+workflow, using the same public export identity and default station configuration.
+The original parameter-based route continues serving the radio application and
+shares retrieval and cache entries with station-ID callers. Caller parameters
+cannot override a station's provider-owned configuration.
 
-Exact question for the owner: should the next increment show avoid radio's richer programme titles and artwork in Couch, or import the stations saved in a personal radio browser library?
+Couch requests metadata only for a currently playing or paused station imported
+from `https://radio.avoid.quest/playlist.m3u`. The hub binds each lookup to the
+resolved native playback stream and playback ID, then shares one optional
+`radioProgramme` snapshot with every controller. Queue station identity and
+libmpv's observed song/artist remain separate. Programme artwork and title appear
+on the TV audio stage and in remote controls, with provider attribution on the
+controls. Missing artwork leaves the title usable.
+
+Successful responses retain provider `sampledAt` and `expiresAt`. At expiry the
+hub removes the programme before fetching again. Station changes, stop, player
+loss, removed catalog entries, changed stream URLs and shutdown cancel the old
+request/timer. A response for a different stream, an expired or malformed response,
+or an upstream failure cannot replace the displayed programme. Failures retry
+once per minute; HTTP 429 observes bounded `Retry-After` delays. The service's
+anonymous session cookie stays in the hub's memory and never enters snapshots,
+SQLite or logs. Native audio playback does not depend on metadata availability.
+
+The provider branch is prepared against `avoid-quest/avoid.quest` remote main
+`ba7742f62eead5abdad4ea56a1bcade0f32b0dc5`. Its full radio test suite passed 973 tests,
+repo lint/typecheck passed, and the radio production build passed. Focused Couch
+checks cover one-request sharing, expiry and retry, cancellation and stale
+responses, imported-source provenance, changed stream URLs, session separation
+and rendered controls. These are software checks, not product acceptance.
+
+A read-only live check on 2026-09-08 returned HTTP 400
+`RADIO_METADATA_URL_REQUIRED` for the station-ID query. The existing configured
+NTS lookup returned HTTP 200 with `THE NTS BREAKFAST SHOW W/ FLO`, artwork, and
+provider freshness timestamps. This proves that the new endpoint form is not yet
+deployed, while the existing metadata implementation is available.
+
+Keep issue #167 open. Delivery still requires review/publication of both changes,
+normal radio Worker deployment, a live station-ID lookup, and installed native
+playback with the same programme visible on the TV and two paired controllers.
+Check a station change, missing artwork, provider failure and expiry while audio
+continues. No provider deployment or physical-device acceptance was performed in
+this implementation pass.

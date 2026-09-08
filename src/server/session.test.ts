@@ -217,3 +217,25 @@ test("a source resolution finishing after maintenance cannot persist metadata or
     expect(writes).toBe(0);
   } finally { session.close(); store.close(); }
 });
+
+test("programme enrichment reaches the shared snapshot separately from native tags and clears on station changes", async () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {});
+  session.observe(idle);
+  for (const id of ["one", "two"]) session.command({ type: "enqueue", entry: { id, title: id, source: `radio:${id}`, kind: "radio" } });
+  session.command({ type: "play", entryId: "one" });
+  await Bun.sleep(0);
+  const playbackId = session.state.player.playbackId!;
+  session.observe({ ...idle, playbackId, status: "playing", nowPlaying: { title: "Native track" } });
+  const programme = { playbackId, stationId: "one", provider: "radio.avoid.quest" as const, title: "Programme", artworkUrl: "https://images.example/show.jpg", sampledAt: 1000, expiresAt: 901000 };
+  session.updateRadioProgramme(playbackId, programme);
+  expect(session.state.radioProgramme).toEqual(programme);
+  expect(session.state.player.nowPlaying?.title).toBe("Native track");
+  expect(session.state.queue[0]?.title).toBe("one");
+  session.command({ type: "play", entryId: "two" });
+  expect(session.state.radioProgramme).toBeNull();
+  session.updateRadioProgramme(playbackId, programme);
+  expect(session.state.radioProgramme).toBeNull();
+  session.command({ type: "stop" });
+  session.close(); store.close();
+});

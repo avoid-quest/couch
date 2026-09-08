@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Action, PlayerState, SessionState } from "../shared/protocol";
 import type { Credentials } from "./session";
+import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";
@@ -54,6 +55,10 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
     </div>
     <h1 className="media-title" title={current?.title}>{current?.title || "Nothing playing"}</h1>
     <p className="source-label">{current ? sourceLabel(current.source) : "Choose something to play on your TV."}</p>
+    {connected && radio && state?.radioProgramme && <figure className="radio-programme">
+      {state.radioProgramme.artworkUrl && <MediaArtwork key={state.radioProgramme.artworkUrl} thumbnail={state.radioProgramme.artworkUrl} title={state.radioProgramme.title} />}
+      <figcaption>Programme: {state.radioProgramme.title}<small>via radio.avoid.quest</small></figcaption>
+    </figure>}
     {radio && player?.nowPlaying && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
     {state?.radioRetry && ["loading", "error"].includes(player?.status ?? "") && <div className="radio-retry" role="status">
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>

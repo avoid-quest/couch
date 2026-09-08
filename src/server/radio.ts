@@ -250,6 +250,14 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       return db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE source_id = ? ORDER BY position").all(playlist.id)
         .map(row => station(JSON.parse(row.station))).filter(station => !query || `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(query));
     },
+    programmeStation(source: string): { id: string; streamUrl: string } | null {
+      assertOpen();
+      if (!source.startsWith("radio:")) return null;
+      const row = db.query<{ station: string }, [string, string]>("SELECT s.station FROM radio_playlist_stations s JOIN radio_playlists p ON p.id = s.source_id WHERE s.id = ? AND p.url = ?")
+        .get(source.slice(6), "https://radio.avoid.quest/playlist.m3u");
+      const current = row ? station(JSON.parse(row.station)) : null;
+      return current?.tvgId ? { id: current.tvgId, streamUrl: current.url } : null;
+    },
     getPlayable(id: string): { source: string; title: string; metadata?: { thumbnail: string } } {
       assertOpen();
       if (!uuid.test(id)) throw new RadioError("Invalid radio station ID.");
