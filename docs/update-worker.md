@@ -40,6 +40,10 @@ and sidecar, saved state, retained phone reconnection and no automatic playback.
 A successful shell command establishes replacement, not these user journeys.
 Keep failed data until recovery is accepted. Storage exhaustion stops recovery
 before replacement. The service remains stopped for diagnosis when recovery fails.
+If Tauri was interrupted after moving the old AppImage away, recovery can replace
+the absent archive. It records that absence in `missing-appimage.txt` alongside
+the preserved current data and build receipt. The receipt must still establish
+data-format compatibility.
 
 For a failed initial migration, fix the reported dependency or bundle error and
 rerun the same trusted installer. LightDM remains masked until the installer

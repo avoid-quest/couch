@@ -28,6 +28,7 @@ try {
   await download(artifactId, target);
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = resolve(feed, `.${decodeURIComponent(new URL(request.url).pathname)}`);
+    if (!path.startsWith(`${feed}${sep}`)) return new Response(null, { status: 404 });
     const file = Bun.file(path);
     if (process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1") {
       const fault = await Bun.file(join(evidence, "feed-fault")).text().catch(() => "");
@@ -40,7 +41,7 @@ try {
         } }), { headers: { "Content-Length": String(file.size) } });
       }
     }
-    return path.startsWith(`${feed}${sep}`) && await file.exists() ? new Response(file) : new Response(null, { status: 404 });
+    return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
   } });
   const endpoint = `http://127.0.0.1:${server.port}/`;
   // Publication retains releases/RUN.ATTEMPT/release.json and its signed archive

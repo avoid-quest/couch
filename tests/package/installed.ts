@@ -379,6 +379,9 @@ try {
       assert.equal(inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0], installed.archiveSha256);
       faultChecks.push(description);
     };
+    inside("couch-session", "stop");
+    inside("mv", `${application}/Couch.AppImage`, "/tmp/qualification-interrupted.AppImage");
+    await recovered("Recovery replaces an absent current archive at the Tauri rename/write boundary");
     // Stop the real recovery shell at its actual commands, without changing the
     // installed helper or replacing filesystem/systemd operations with doubles.
     for (const boundary of ["runuser -u couch-tv -- mv -f", 'sync -f "$application"']) {
