@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createSoundRouting } from "./sound-routing";
+import { soundOutputs, soundProfiles } from "./sound-pulse";
 import { openStore } from "./store";
 import { createSession } from "./session";
 import type { PlaybackCommand } from "../shared/protocol";
@@ -169,5 +170,23 @@ test("profile rejection restores the previous card profile and saved sink withou
     f.active();
     await expect(f.sound.profile({ card: "card", profile: "output:analog" }, () => {})).rejects.toThrow("device rejected");
     expect(profiles).toEqual(["output:analog", "output:hdmi"]); expect(f.saved()).toBe("hdmi"); expect(f.lost()).toBe(1);
+  } finally { f.sound.close(); }
+});
+
+
+test("selecting a PipeWire Bluetooth sink saves its card profile and reconnect address", async () => {
+  const f = await fixture();
+  try {
+    const cards = [{ index: 215, name: "bluez_card.14_0F_92_24_EE_40", active_profile: "a2dp-sink", properties: { "api.bluez5.address": "14:0F:92:24:EE:40" }, profiles: {
+      "a2dp-sink": { description: "High Fidelity Playback (A2DP Sink, codec SBC)", sinks: 1, sources: 0, available: true },
+      "a2dp-sink-sbc_xq": { description: "High Fidelity Playback (A2DP Sink, codec SBC-XQ)", sinks: 1, sources: 0, available: true },
+    } }];
+    const sink = "bluez_output.14_0F_92_24_EE_40.1";
+    f.inventory.outputs.push(...soundOutputs([{ index: 216, name: sink, description: "C39S", properties: { "device.name": cards[0]!.name, "device.id": "33", "api.bluez5.address": "14:0F:92:24:EE:40" } }], cards));
+    f.inventory.profiles = soundProfiles(cards);
+    await f.sound.select(sink, () => {});
+    expect(f.saved()).toBe(sink);
+    expect(f.savedProfile()).toEqual({ card: cards[0]!.name, profile: "a2dp-sink", bluetoothAddress: "14:0F:92:24:EE:40" });
+    expect(f.sound.state.selectedBluetoothAddress).toBe("14:0F:92:24:EE:40");
   } finally { f.sound.close(); }
 });
