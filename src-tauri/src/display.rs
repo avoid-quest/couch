@@ -40,8 +40,10 @@ fn inventory() -> Result<Vec<Output>, String> {
     if std::env::var("XDG_SESSION_TYPE").as_deref() != Ok("x11") {
         return Err("Display selection requires the Ubuntu X11 appliance session.".into());
     }
+    // Read Xorg's current state. Reprobing hardware every second stalls the X
+    // server and video presentation; hotplug events update this state already.
     let result = std::process::Command::new("/usr/bin/timeout")
-        .args(["2", "/usr/bin/xrandr", "--props"])
+        .args(["2", "/usr/bin/xrandr", "--current", "--props"])
         .env("LC_ALL", "C")
         .output()
         .map_err(|_| "Cannot read X11 outputs.")?;
