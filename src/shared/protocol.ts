@@ -48,6 +48,7 @@ export type SessionState = {
   playlistVersion?: number;
   controllerVersion?: number;
   installationName?: string;
+  setupStep?: import("./setup").SetupStep;
   appearance?: TvAppearance;
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;

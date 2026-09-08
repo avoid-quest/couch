@@ -44,6 +44,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     currentEntryId: null,
     activeProfile,
     installationName: store.installationName(),
+    setupStep: store.setupStep(),
     appearance: { size: store.tvInterfaceSize(), confirmedSize: store.tvInterfaceSize(), preview: null },
     administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
@@ -56,6 +57,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (!admitted()) return;
     if (kind === "controller") {
       state.installationName = store.installationName();
+      state.setupStep = store.setupStep();
       state.administratorClaimed = store.administratorExists();
     }
     const field = `${kind}Version` as const;

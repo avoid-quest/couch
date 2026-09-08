@@ -1,3 +1,5 @@
+import { seedConfiguredFixture } from "./configured-fixture";
+seedConfiguredFixture();
 import { strict as assert } from "node:assert";
 const origin = "http://127.0.0.1:4100";
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file("/artifacts/journey-driver.log"), stderr: Bun.file("/artifacts/journey-native.log") });

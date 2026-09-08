@@ -1,3 +1,4 @@
+import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -46,6 +47,7 @@ export function openStore(path: string) {
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
   `);
 
+  let legacyPairedInstallation = false;
   if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
     db.transaction(() => {
       db.run(`CREATE TABLE devices_named (
@@ -53,6 +55,7 @@ export function openStore(path: string) {
         role TEXT NOT NULL CHECK (role IN ('controller', 'administrator')), createdAt INTEGER, lastSeenAt INTEGER
       )`);
       const devices = db.query<{ token_hash: string }, []>("SELECT token_hash FROM devices ORDER BY rowid").all();
+      legacyPairedInstallation = devices.length > 0;
       for (const [index, device] of devices.entries()) db.query("INSERT INTO devices_named VALUES (?, ?, ?, 'controller', NULL, NULL)").run(device.token_hash, crypto.randomUUID(), `Remote ${index + 1}`);
       db.run("DROP TABLE devices; ALTER TABLE devices_named RENAME TO devices;");
     }).immediate();
@@ -81,6 +84,9 @@ export function openStore(path: string) {
   const protectAdministrator = (device: Controller) => {
     if (device.role === "administrator" && !db.query("SELECT 1 FROM devices WHERE role = 'administrator' AND id != ? LIMIT 1").get(device.id)) throw new ControllerError("Keep at least one administrator. Approve another remote first.", 409);
   };
+  db.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
+  db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
+  const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
   const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
@@ -100,6 +106,17 @@ export function openStore(path: string) {
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },
     audioProfile() { const value = db.query<{ card: string | null; profile: string | null }, []>("SELECT card, profile FROM audio_output WHERE id = 1").get(); return value?.card && value.profile ? { card: value.card, profile: value.profile } : null; },
     saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); },
+    setupStep,
+    advanceSetup(expected: unknown) {
+      return db.transaction(() => {
+        if (!administratorExists()) throw new ControllerError("Claim an administrator before continuing setup.", 409);
+        const current = setupStep();
+        if (expected !== current || current === "complete") throw new ControllerError("Setup changed. Review the current step and try again.", 409);
+        const next = setupSteps[setupSteps.indexOf(current) + 1]!;
+        db.query("UPDATE installation_setup SET step = ? WHERE id = 1").run(next);
+        return next;
+      }).immediate();
+    },
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
     saveTvInterfaceSize(size: InterfaceSize) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");

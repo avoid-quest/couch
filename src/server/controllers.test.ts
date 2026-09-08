@@ -309,3 +309,67 @@ test("revocation notification follows the committed credential deletion and fail
   expect(revoked).toHaveBeenCalledTimes(1);
   expect(f.changed).toHaveBeenCalledTimes(1);
 });
+
+test("first-run setup resumes after restart and only its administrator can advance the current step", async () => {
+  const path = file();
+  const first = fixture({ file: path });
+  const owner = first.phone("Owner");
+  const guest = first.phone("Guest");
+  expect(first.store.setupStep()).toBe("general");
+  expect((await first.request("/api/settings/setup", "POST", { step: "general" }, guest.identity)).status).toBe(403);
+  expect((await first.request("/api/settings/setup", "POST", { step: "general" })).status).toBe(403);
+  const { code } = await first.setup();
+  expect((await first.request("/api/controllers/claim", "POST", { code }, owner.identity)).status).toBe(200);
+  expect((await first.request("/api/settings", "POST", { name: "Living room" }, owner.identity)).status).toBe(200);
+  expect((await first.request("/api/settings/setup", "POST", { step: "general" }, owner.identity)).status).toBe(200);
+  expect((await first.request("/api/settings/setup", "POST", { step: "general" }, owner.identity)).status).toBe(409);
+  close(first.store);
+  const next = fixture({ file: path });
+  const identity = (): ControllerIdentity => ({ controller: next.store.controllerForToken(owner.token), authority: "administrator", claimAvailable: false });
+  expect(next.store.setupStep()).toBe("display");
+  expect(next.store.installationName()).toBe("Living room");
+  expect(next.service.claimAvailable()).toBeFalse();
+  for (const step of ["display", "sound", "sources"]) expect((await next.request("/api/settings/setup", "POST", { step }, identity)).status).toBe(200);
+  close(next.store);
+  const final = fixture({ file: path });
+  expect(final.store.setupStep()).toBe("complete");
+  expect(final.store.controllerForToken(owner.token)?.role).toBe("administrator");
+  expect(final.store.controllerForToken(guest.token)?.role).toBe("controller");
+  expect(final.store.queue).toEqual([]);
+});
+
+test("existing claimed installations migrate to home while empty unclaimed installations still welcome", async () => {
+  for (const claimed of [false, true]) {
+    const path = file();
+    const old = fixture({ file: path });
+    if (claimed) {
+      const phone = old.phone();
+      const { code } = await old.setup();
+      await old.request("/api/controllers/claim", "POST", { code }, phone.identity);
+    }
+    close(old.store);
+    const legacy = new Database(path);
+    legacy.run("DROP TABLE installation_setup");
+    legacy.close();
+    const migrated = fixture({ file: path });
+    expect(migrated.store.setupStep()).toBe(claimed ? "complete" : "general");
+    close(migrated.store);
+    expect(fixture({ file: path }).store.setupStep()).toBe(claimed ? "complete" : "general");
+  }
+});
+
+test("setup advancement rechecks administrator authority after a delayed request body", async () => {
+  const f = fixture();
+  const phone = f.phone();
+  const { code } = await f.setup();
+  await f.request("/api/controllers/claim", "POST", { code }, phone.identity);
+  let caller = phone.identity();
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start(controller) { streamController = controller; } });
+  const pending = f.service.handle(new Request("http://localhost/api/settings/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body }), () => caller);
+  caller = null;
+  streamController.enqueue(new TextEncoder().encode('{"step":"general"}'));
+  streamController.close();
+  expect((await pending).status).toBe(401);
+  expect(f.store.setupStep()).toBe("general");
+});

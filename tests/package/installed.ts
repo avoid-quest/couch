@@ -21,6 +21,8 @@ if (mode === "--prepare") {
   const tokens = [store.pair("Qualification administrator"), store.pair("Qualification second remote")];
   store.createControllerClaim("installed-qualification", false);
   store.consumeControllerClaim(store.controllerForToken(tokens[0]!)!.id, "installed-qualification");
+  // This package fixture represents an already configured installation.
+  for (const step of ["general", "display", "sound", "sources"]) store.advanceSetup(step);
   store.close();
   await createLibrary({ databasePath: `${fixtures}/couch.sqlite` }).close();
   await Bun.write(`${fixtures}/installed-seed.json`, JSON.stringify({ profileId: profile.id, tokens }));

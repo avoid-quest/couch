@@ -112,3 +112,20 @@ qualification limits.
 The image and build caches remain for later runs. `docker run --rm` removes the disposable test container. Nothing is published and no host ports are exposed.
 
 Official references: [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/), [manual WebDriver setup](https://v2.tauri.app/develop/tests/webdriver/manual-setup/), [Tauri Selenium example and capabilities](https://v2.tauri.app/develop/tests/webdriver/example/selenium/).
+
+First-run setup has its own fresh-data journey in `onboarding.ts`. Run it with
+`COUCH_DATA_DIR` pointing to a missing disposable database, the joined native
+binaries in `/work/bin`, a virtual X11 output and a Pulse-compatible null sink.
+It uses the real phone claim/name, display preview/confirm and sound selection/test
+controls, captures non-silent test PCM, skips optional sources, and restarts both
+the browser and native app. After completion it adds a generated local video
+through normal Folder Settings, scans and plays it from the phone, checks native
+video pixels, stops playback and checks home after another app restart. Its screen/sound confirmation clicks represent only
+the virtual fixture. Installed-target picture, audible sound, local playback and
+machine reboot remain separate acceptance gates.
+
+The other native entrypoints call `seedConfiguredFixture()` before launch. This
+seeds only completion in a new disposable database and preserves their existing
+pairing and claim scenarios. It does not qualify first-run setup. Package fixtures
+also explicitly start configured. There is no production bypass or automatic
+completion in the shared HTTP pairing helper.
