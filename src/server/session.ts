@@ -4,9 +4,10 @@ import { createProgress, localMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
 import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
+import type { WebMediaSource } from "./web-media";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean };
+export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   admitted?: () => boolean;
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
@@ -22,6 +23,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
+  let expiry: MediaSource["expiry"];
+  let webRecovery: { paused: boolean } | null = null;
+  let webAuthorize = () => {};
+  let pendingPause: boolean | null = null;
+  let webRetried = false;
   let quiescing = false;
   const admitted = () => !quiescing && (options.admitted?.() ?? true);
   const assertAdmitted = () => { if (!admitted()) throw new ViewingError("The TV is preparing an update. Controls are paused.", 503); };
@@ -62,6 +68,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const saveQueue = (queue: SessionState["queue"]) => {
     store.saveQueue(queue);
     state.queue = queue;
+    cancelWebRecovery();
   };
   const enrichEntry = (entryId: string, source: string, metadata: Metadata) => {
     assertAdmitted();
@@ -102,6 +109,52 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     send({ type: "stop" });
     return true;
   };
+  const cancelWebRecovery = () => {
+    if (!webRecovery) return;
+    webRecovery = null;
+    playIntent++;
+    resolution?.abort();
+    state.webRetry = null;
+    state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", error: "Stream recovery canceled by a newer control. Play the track to try again." };
+  };
+  const recoverWeb = (failure: PlayerState) => {
+    if (!expiry || Date.now() < expiry.at || activePlayIntent !== playIntent) return false;
+    const recover = expiry.recover;
+    const authorize = webAuthorize;
+    expiry = undefined; // One replacement transport per explicit Play, including failed checks.
+    const previous = state.player;
+    const recovery = { paused: pendingPause ?? previous.status === "paused" };
+    webRecovery = recovery;
+    resolution?.abort();
+    const controller = resolution = new AbortController();
+    const intent = playIntent;
+    const playbackId = crypto.randomUUID();
+    state.webRetry = { paused: recovery.paused };
+    state.player = { ...previous, playbackId, status: "loading", error: null };
+    const current = () => admitted() && !controller.signal.aborted && intent === playIntent && state.player.playbackId === playbackId;
+    const failed = (error: unknown) => {
+      if (!current()) return;
+      webRecovery = null;
+      state.webRetry = null;
+      state.player = { ...state.player, status: "error", error: error instanceof Error ? error.message : "Stream recovery failed. Play the track to try again." };
+      broadcast();
+    };
+    try { send({ type: "stop" }); } catch { return true; }
+    broadcast();
+    void Promise.resolve().then(() => { if (!current()) return null; authorize(); return recover(controller.signal); }).then(fresh => {
+      if (!current()) return;
+      authorize();
+      if (!fresh) throw new Error(failure.error || "This stream failed without a confirmed expiry. Play the track to try again.");
+      const { metadata: _metadata, expiry: _expiry, ...media } = fresh;
+      webRecovery = null;
+      webRetried = true;
+      pendingPause = recovery.paused;
+      send({ type: "load", playbackId, ...media, startPosition: previous.position, paused: recovery.paused,
+        preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
+      broadcast();
+    }).catch(failed);
+    return true;
+  };
   const failRadio = (error: string, authorize = () => {}) => {
     if (!admitted()) return false;
     const entry = state.queue.find(entry => entry.id === state.currentEntryId);
@@ -138,6 +191,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
     activePlayIntent = ++playIntent;
+    webRecovery = null;
+    state.webRetry = null;
+    expiry = undefined;
+    webAuthorize = authorize;
+    pendingPause = null;
+    webRetried = false;
     resolution?.abort();
     resolution = new AbortController();
     options.deactivate?.();
@@ -160,10 +219,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     };
     try {
       const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart, goLive) ?? { source: entry.source };
-      const load = ({ metadata, radio, subtitleWarning: warning, ...media }: MediaSource) => {
+      const load = ({ metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
         if (!admitted() || state.player.playbackId !== playbackId) return;
         authorize();
         subtitleWarning = warning ?? null;
+        expiry = sourceExpiry;
         if (metadata || radio) enrichEntry(entry.id, entry.source, { ...metadata, ...(radio ? { kind: "radio", live: true } : {}) });
         const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
         const mediaId = localMediaId(currentEntry);
@@ -179,6 +239,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     } catch (error) { failed(error); throw error; }
   };
   const stop = () => {
+    webRecovery = null;
+    state.webRetry = null;
+    expiry = undefined;
+    webRetried = false;
+    pendingPause = null;
     playIntent++;
     cancelRadioRetry();
     finishProgress(true);
@@ -240,6 +305,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     reservePlay() {
       available();
+      if (webRecovery) { cancelWebRecovery(); broadcast(); }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;
     },
@@ -357,7 +423,16 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           broadcast();
           send(action);
           break;
-        case "pause": case "speed": case "subtitleDelay":
+        case "pause":
+          currentPlayback(action.playbackId);
+          pendingPause = action.paused;
+          if (webRecovery) {
+            webRecovery.paused = action.paused;
+            state.webRetry = { paused: action.paused };
+            broadcast();
+          } else send(action);
+          break;
+        case "speed": case "subtitleDelay":
           currentPlayback(action.playbackId);
           send(action);
           break;
@@ -398,6 +473,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
       const ended = player.status === "ended" && state.player.status !== "ended";
+      if (player.status === "error" && recoverWeb(player)) return;
+      if (["playing", "paused"].includes(player.status)) {
+        if (pendingPause === (player.status === "paused")) pendingPause = null;
+        state.webRetry = null;
+      }
+      if (player.status === "error" && webRetried) player = { ...player, error: "Stream recovery failed after one attempt. Play the track to try again." };
+      if (["error", "unavailable", "idle", "ended"].includes(player.status)) state.webRetry = null;
       if ((player.status === "error" || ended) && isRadio(state.queue.find(entry => entry.id === state.currentEntryId))) {
         options.observe?.(player);
         failRadio(player.error || "The radio stream disconnected.");

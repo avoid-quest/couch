@@ -58,6 +58,10 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>
       {player?.status === "error" && current && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button>}
     </div>}
+    {state?.webRetry && <div className="radio-retry" role="status">
+      <p>Checking the expired stream. Recovery is limited to one attempt. Stop cancels recovery.</p>
+      {player?.playbackId && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "pause", playbackId: player.playbackId!, paused: !state.webRetry!.paused })}>{state.webRetry.paused ? "Resume after recovery" : "Stay paused after recovery"}</Button>}
+    </div>}
     {player?.error && player.status !== "unavailable" && <p className="playback-error" role="alert">{player.error}</p>}
     <div className="seek-control" hidden={!current}>
       <RangeControl key={player?.playbackId || "idle"} label="Playback position" value={player?.position || 0} max={player?.duration || 1} showValue={false}

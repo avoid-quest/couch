@@ -2,7 +2,7 @@ import type { VideoQuality } from "../shared/protocol";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
-export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata };
+export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
 type ResolverOptions = Omit<YtDlpOptions, "signal">;
 type Metadata = Record<string, unknown>;
@@ -109,7 +109,28 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
     const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
       ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
     const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal });
-    return parseMedia(parseInfo(output), selectedQuality);
+    const info = parseInfo(output);
+    const media = parseMedia(info, selectedQuality);
+    const transport = new URL(media.source);
+    const at = Number(transport.searchParams.get("ts")) * 1000;
+    // Qualified with Bandcamp's naturally aged mp3-128 URL returning 410 while a
+    // fresh resolution of the same track returns the same media. Other 4xx errors
+    // and providers do not establish transport expiry.
+    if (host.endsWith(".bandcamp.com") && info.extractor === "Bandcamp" && info.format_id === "mp3-128" && !media.audioSource && !media.metadata?.live && transport.protocol === "https:" && /^t\d+\.bcbits\.com$/.test(transport.hostname) && /^\/stream\//.test(transport.pathname) && Number.isSafeInteger(at) && at > 0) {
+      media.expiry = { at, recover: async cancellation => {
+        if (Date.now() < at) return null;
+        cancellation.throwIfAborted();
+        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Could not confirm stream expiry. Play the track to try again."); });
+        await response.body?.cancel();
+        cancellation.throwIfAborted();
+        if (response.status !== 410) return null;
+        const fresh = await resolveWebMedia(source, cancellation, quality);
+        const replacement = new URL(fresh.source);
+        if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("The website did not return a fresh transport for the same track. Play it again to retry.");
+        return fresh;
+      } };
+    }
+    return media;
   };
 }
 

@@ -61,6 +61,8 @@ pub enum PlaybackCommand {
         max_video_height: Option<u16>,
         #[serde(default, deserialize_with = "deserialize_start_position")]
         start_position: Option<f64>,
+        #[serde(default)]
+        paused: bool,
         #[serde(default, deserialize_with = "deserialize_segment")]
         segment: Option<PlaybackSegment>,
         #[serde(default)]
