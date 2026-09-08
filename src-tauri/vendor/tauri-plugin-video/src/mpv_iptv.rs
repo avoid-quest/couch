@@ -9,13 +9,14 @@ impl LiveStartDefaults {
         mpv.get_property("demuxer-lavf-o").map(Self).map_err(option_error)
     }
 
-    pub(crate) fn configure(&self, mpv: &Mpv, go_live: bool) -> Result<()> {
+    pub(crate) fn configure(&self, mpv: &Mpv, go_live: bool, event_start: bool) -> Result<()> {
         // Restore before every load, including after a failed or canceled live return.
         mpv.set_property("demuxer-lavf-o", self.0.as_str()).map_err(option_error)?;
-        if go_live {
-            // Explicit live return trades the normal three-segment buffering margin
-            // for the newest complete segment. The host revalidates eligibility.
-            mpv.command("change-list", &["demuxer-lavf-o", "append", "live_start_index=-1"])
+        if go_live || event_start {
+            // EVENT starts anchor the timeline at the first segment; explicit live
+            // return selects the newest complete segment. The host verifies both.
+            let start = if go_live { "live_start_index=-1" } else { "live_start_index=0" };
+            mpv.command("change-list", &["demuxer-lavf-o", "append", start])
                 .map_err(option_error)?;
         }
         Ok(())
@@ -67,7 +68,8 @@ mod tests {
                 let request = String::from_utf8_lossy(&bytes[..count]);
                 let path = request.split_whitespace().nth(1).unwrap_or("").to_owned();
                 log.lock().unwrap().push(path.clone());
-                let manifest = format!("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n{}",
+                let playlist_type = if path.starts_with("/case-1/") || path.starts_with("/case-2/") { "#EXT-X-PLAYLIST-TYPE:EVENT\n" } else { "" };
+                let manifest = format!("#EXTM3U\n{playlist_type}#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n{}",
                     (0..6).map(|index| format!("#EXTINF:2,\n{index}.ts\n")).collect::<String>());
                 let body = if path.ends_with(".m3u8") { manifest.as_bytes() } else { &generated.stdout };
                 let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
@@ -81,19 +83,19 @@ mod tests {
             Ok(())
         }).unwrap();
         let defaults = LiveStartDefaults::read(&mpv).unwrap();
-        for (go_live, expected) in [(false, "/3.ts"), (true, "/5.ts"), (false, "/3.ts")] {
+        for (case, (go_live, event_start, expected)) in [(false, false, "/3.ts"), (false, true, "/0.ts"), (true, true, "/5.ts"), (false, false, "/3.ts")].into_iter().enumerate() {
             mpv.command("stop", &[]).unwrap();
             while mpv.wait_event(0.0).is_some() {}
-            requested.lock().unwrap().clear();
-            defaults.configure(&mpv, go_live).unwrap();
-            if !go_live { assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), defaults.0); }
-            mpv.command("loadfile", &[&format!("{origin}/live.m3u8"), "replace"]).unwrap();
+            defaults.configure(&mpv, go_live, event_start).unwrap();
+            if !go_live && !event_start { assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), defaults.0); }
+            let prefix = format!("/case-{case}");
+            mpv.command("loadfile", &[&format!("{origin}{prefix}/live.m3u8"), "replace"]).unwrap();
             let deadline = Instant::now() + Duration::from_secs(10);
             loop {
                 assert!(Instant::now() < deadline, "live HLS did not load: {:?}", requested.lock().unwrap());
                 if matches!(mpv.wait_event(0.1), Some(Ok(Event::FileLoaded))) { break; }
             }
-            assert_eq!(requested.lock().unwrap().iter().find(|path| path.ends_with(".ts")).unwrap(), expected);
+            assert_eq!(requested.lock().unwrap().iter().find(|path| path.starts_with(&format!("{prefix}/")) && path.ends_with(".ts")).unwrap(), &format!("{prefix}{expected}"));
         }
         mpv.command("stop", &[]).unwrap();
         stop.store(true, Ordering::SeqCst);
@@ -101,13 +103,13 @@ mod tests {
         // Preserve unrelated AVOptions and a caller's original start override too.
         mpv.set_property("demuxer-lavf-o", "probesize=500000,live_start_index=-2").unwrap();
         let configured = LiveStartDefaults::read(&mpv).unwrap();
-        configured.configure(&mpv, true).unwrap();
+        configured.configure(&mpv, true, false).unwrap();
         assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1");
         mpv.command("loadfile", &[local.to_str().unwrap(), "replace"]).unwrap();
         // Cancel this load before resetting, as replacement and Stop do in the player.
         mpv.command("stop", &[]).unwrap();
         while mpv.wait_event(0.0).is_some() {}
-        configured.configure(&mpv, false).unwrap();
+        configured.configure(&mpv, false, false).unwrap();
         mpv.command("loadfile", &[local.to_str().unwrap(), "replace"]).unwrap();
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {

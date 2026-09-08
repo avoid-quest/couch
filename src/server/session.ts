@@ -7,7 +7,7 @@ import type { TvAppearance } from "../shared/appearance";
 import type { WebMediaSource } from "./web-media";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   admitted?: () => boolean;
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
@@ -134,7 +134,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       return options.resolveSource?.(next, pending.playbackId, pending.controller.signal, false, false, true);
     }).then(media => {
       if (audioInterrupted || prepared !== pending || pending.controller.signal.aborted) return;
-      if (!media?.audioOnly || media.segment || media.audioSource || media.startPosition || media.subtitles?.length || media.radio || media.goLive) {
+      if (!media?.audioOnly || media.segment || media.audioSource || media.startPosition || media.subtitles?.length || media.radio || media.goLive || media.eventStart) {
         pending.controller.abort();
         return;
       }

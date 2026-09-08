@@ -119,7 +119,7 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
-      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
+      if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.
@@ -145,10 +145,10 @@ export function createHub(options: HubOptions) {
       const current = state.queue.find(entry => entry.id === state.currentEntryId);
       if (current && channelIds.some(id => current.source === `iptv:${id}`)) session.command({ type: "stop" });
     },
-    enqueue: (channel, playNow) => {
+    enqueue: (channel, playNow, authorize) => {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
-      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }); }
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow });
+      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize); }
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize);
     },
   });
   const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
