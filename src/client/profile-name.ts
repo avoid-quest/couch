@@ -8,3 +8,8 @@ export function storedProfileName(profile: WatchingProfile | null | undefined) {
 export function profileDisplayName(profile: WatchingProfile | null | undefined) {
   return storedProfileName(profile) ?? "Default profile";
 }
+
+// Legacy labels do not establish a person's identity. Only the explicit name form does.
+export function personDisplayName(profile: WatchingProfile | null | undefined) {
+  return profile?.personName || "Your name";
+}

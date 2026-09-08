@@ -515,6 +515,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       invalidate("library");
       return profile;
     },
+    namePerson(id: string, name: unknown, expectedName: string) {
+      assertAdmitted();
+      const profile = store.namePerson(id, name, expectedName);
+      if (state.activeProfile.id === id) state.activeProfile = profile;
+      invalidate("library");
+      return profile;
+    },
     removeProfile(id: string, expectedName: string) {
       assertAdmitted();
       if (["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop playback before removing a watching profile. Pausing keeps the current profile.", 409);

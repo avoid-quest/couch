@@ -35,7 +35,7 @@ export function openStore(path: string) {
     INSERT OR IGNORE INTO queue_position VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
-    INSERT OR IGNORE INTO watching_profiles VALUES ('household', 'Household');
+    INSERT OR IGNORE INTO watching_profiles (id, name) VALUES ('household', 'Household');
     CREATE TABLE IF NOT EXISTS watching_state (id INTEGER PRIMARY KEY CHECK (id = 1), profileId TEXT NOT NULL);
     INSERT OR IGNORE INTO watching_state VALUES (1, 'household');
     CREATE TABLE IF NOT EXISTS viewing_progress (
@@ -51,6 +51,11 @@ export function openStore(path: string) {
     CREATE TABLE IF NOT EXISTS playback_device (id INTEGER PRIMARY KEY CHECK (id = 1), audioDelay REAL NOT NULL);
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
   `);
+
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(watching_profiles)").all().some(column => column.name === "confirmedName")) {
+    db.run("ALTER TABLE watching_profiles ADD COLUMN confirmedName INTEGER NOT NULL DEFAULT 0");
+  }
+  const profileView = ({ id, name, confirmedName }: WatchingProfile & { confirmedName: number }): WatchingProfile => ({ id, name, ...(confirmedName ? { personName: name } : {}) });
 
   let legacyPairedInstallation = false;
   if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
@@ -95,7 +100,7 @@ export function openStore(path: string) {
   const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
-  const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
+  const activeProfile = () => profileView(db.query<WatchingProfile & { confirmedName: number }, []>("SELECT p.id, p.name, p.confirmedName FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!);
   const availableProfileName = (value: unknown, id = "") => {
     const name = profileName(value);
     if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("A watching profile already has that name.");
@@ -139,7 +144,7 @@ export function openStore(path: string) {
       })();
     },
     volume: stored.volume,
-    profiles() { return db.query<WatchingProfile, []>("SELECT id, name FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all(); },
+    profiles() { return db.query<WatchingProfile & { confirmedName: number }, []>("SELECT id, name, confirmedName FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all().map(profileView); },
     activeProfile,
     playbackPreferences(profileId: string): PlaybackPreferences {
       const row = db.query<{ preferences: string }, [string]>("SELECT preferences FROM watching_preferences WHERE profileId = ?").get(profileId);
@@ -157,7 +162,7 @@ export function openStore(path: string) {
         const name = availableProfileName(value);
         if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM watching_profiles").get()!.count >= 20) throw new ViewingError("You can create up to 20 watching profiles.");
         const profile = { id: crypto.randomUUID(), name };
-        db.query("INSERT INTO watching_profiles VALUES (?, ?)").run(profile.id, profile.name);
+        db.query("INSERT INTO watching_profiles (id, name) VALUES (?, ?)").run(profile.id, profile.name);
         return profile;
       }).immediate();
     },
@@ -165,8 +170,18 @@ export function openStore(path: string) {
       return db.transaction(() => {
         unchangedProfile(id, expectedName);
         const name = availableProfileName(value, id);
-        db.query("UPDATE watching_profiles SET name = ? WHERE id = ?").run(name, id);
+        db.query("UPDATE watching_profiles SET name = ?, confirmedName = 0 WHERE id = ?").run(name, id);
         return { id, name };
+      }).immediate();
+    },
+    namePerson(id: string, value: unknown, expectedName: string) {
+      return db.transaction(() => {
+        unchangedProfile(id, expectedName);
+        if (typeof value !== "string" || !value.trim() || value.trim().length > 60 || /[\u0000-\u001f\u007f]/.test(value)) throw new ViewingError("Enter your name using 1 to 60 characters.");
+        const name = value.trim();
+        if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("That name already has a saved history. Choose it under Existing histories or use another name.");
+        db.query("UPDATE watching_profiles SET name = ?, confirmedName = 1 WHERE id = ?").run(name, id);
+        return { id, name, personName: name };
       }).immediate();
     },
     removeProfile(id: string, expectedName: string) {
@@ -181,10 +196,10 @@ export function openStore(path: string) {
       }).immediate();
     },
     selectProfile(id: string) {
-      const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);
+      const profile = db.query<WatchingProfile & { confirmedName: number }, [string]>("SELECT id, name, confirmedName FROM watching_profiles WHERE id = ?").get(id);
       if (!profile) throw new ViewingError("Watching profile not found.", 404);
       db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
-      return profile;
+      return profileView(profile);
     },
     progress(profileId: string, mediaId: string) {
       const row = db.query<ProgressRow, [string, string]>(`SELECT ${progressColumns} FROM viewing_progress WHERE profileId = ? AND mediaId = ?`).get(profileId, mediaId);

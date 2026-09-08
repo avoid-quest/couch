@@ -64,15 +64,17 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           authorize();
           return Response.json({ profile: viewing.session.createProfile(name) }, { status: 201 });
         }
-        const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove)$/.exec(pathname);
+        const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove|person-name)$/.exec(pathname);
         if (viewing && profileEdit) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           const changes = await body(request);
           authorize();
-          const allowed = profileEdit[2] === "rename" ? ["name", "expectedName"] : ["expectedName"];
+          const allowed = profileEdit[2] !== "remove" ? ["name", "expectedName"] : ["expectedName"];
           if (Object.keys(changes).some(key => !allowed.includes(key))) throw new RequestError("Send only the watching profile change.");
           if (typeof changes.expectedName !== "string" || !changes.expectedName || changes.expectedName.length > 60 || /[\u0000-\u001f\u007f]/.test(changes.expectedName)) throw new RequestError("Reload watching profiles before editing.");
-          return profileEdit[2] === "rename"
+          return profileEdit[2] === "person-name"
+            ? Response.json({ profile: viewing.session.namePerson(profileEdit[1]!, changes.name, changes.expectedName) })
+            : profileEdit[2] === "rename"
             ? Response.json({ profile: viewing.session.renameProfile(profileEdit[1]!, changes.name, changes.expectedName) })
             : Response.json({ activeProfile: viewing.session.removeProfile(profileEdit[1]!, changes.expectedName) });
         }

@@ -1,4 +1,3 @@
-import { profileDisplayName } from "./profile-name";
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -35,14 +34,14 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       if (ok) {
         setDraft(null);
         setSaved(true);
-      } else setError("Could not save preferences. Check the connection and selected profile.");
+      } else setError("Could not save preferences. Check the connection and try again.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save playback preferences.");
     } finally { setPending(false); }
   };
 
   return <form className="grid gap-4" onSubmit={event => void save(event)}>
-    <div className="space-y-1"><p className="font-medium break-words">Profile: {profileDisplayName(profile)}</p><p className="text-sm text-muted-foreground">Applies to new playback for this profile.</p></div>
+    <p className="text-sm text-muted-foreground">Applies to new playback.</p>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
@@ -83,7 +82,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       </div>
     </div>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-    {saved && <p className="text-sm text-primary" role="status">Defaults saved for profile {profileDisplayName(profile)}.</p>}
+    {saved && <p className="text-sm text-primary" role="status">Playback defaults saved.</p>}
     <Button className="min-h-11 justify-self-start" type="submit" disabled={!connected || pending || draft === null}>{pending ? "Saving…" : "Save preferences"}</Button>
   </form>;
 }

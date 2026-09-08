@@ -45,6 +45,6 @@ export type VideoMetadata = VideoDescription & {
 export type VideoShows = { items: Array<VideoShow & { seasonCount: number; episodeCount: number }>; total: number; offset: number; limit: number };
 export type VideoSeason = { season: number | null; episodeCount: number; artworkId: string | null };
 
-export type WatchingProfile = { id: string; name: string };
+export type WatchingProfile = { id: string; name: string; personName?: string };
 export type ViewingProgress = { position: number; duration: number | null; watched: boolean; lastPlayedAt: number | null };
 export type HistoryItem = ViewingProgress & { mediaId: string; title: string; libraryItemId: string | null; queueEntryId?: string; playable?: boolean; thumbnail?: string; artworkId?: string; sourceLabel?: string };

@@ -215,3 +215,53 @@ test("forgetting a different profile retains the current viewer's checkpoint", (
   progress.finish();
   expect(store.progress("household", history.mediaId)?.position).toBe(32);
 });
+
+
+test("legacy databases keep labels and data unconfirmed until explicit naming on the same ID", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-person-name-"));
+  cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "state.sqlite");
+  const legacy = new Database(path);
+  legacy.run("CREATE TABLE watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE); INSERT INTO watching_profiles VALUES ('household', 'MBP'), ('older', 'Other');");
+  legacy.close();
+  const store = openStore(path);
+  cleanup.push(() => store.close());
+  expect(store.activeProfile()).toEqual({ id: "household", name: "MBP" });
+  expect(store.profiles().every(profile => profile.personName === undefined)).toBe(true);
+  store.saveProgress("household", history);
+  store.saveProfilePreferences("household", preferences);
+  const token = store.pair("MBP");
+  const device = store.controllerForToken(token);
+  const named = store.namePerson("household", "  Francesco  ", "MBP");
+  expect(named).toEqual({ id: "household", name: "Francesco", personName: "Francesco" });
+  const reopened = openStore(path);
+  cleanup.push(() => reopened.close());
+  expect(reopened.activeProfile()).toEqual(named);
+  expect(reopened.profiles()).toHaveLength(2);
+  expect(reopened.selectProfile("household")).toEqual(named);
+  expect(reopened.progress("household", history.mediaId)).toEqual(history);
+  expect(reopened.playbackPreferences("household").profile).toEqual(preferences);
+  expect(reopened.controllerForToken(token)).toEqual(device);
+  expect(reopened.renameProfile("household", "MBP", "Francesco")).toEqual({ id: "household", name: "MBP" });
+  expect(reopened.activeProfile().personName).toBeUndefined();
+});
+
+test("person naming validates, refuses stale writes and publishes without changing playback", () => {
+  const { store } = fixture();
+  for (const value of [null, "", " ", "x".repeat(61), "bad\nname"]) expect(() => store.namePerson("household", value, "Household")).toThrow("Enter your name");
+  store.createProfile("Existing");
+  expect(() => store.namePerson("household", "Existing", "Household")).toThrow("already has a saved history");
+  const commands: PlaybackCommand[] = [];
+  const session = createSession(store, command => commands.push(command), () => {});
+  session.observe(idle);
+  session.command({ type: "enqueue", entry: { id: "movie", title: "Movie", source: "library:movie" } });
+  session.command({ type: "play", entryId: "movie" });
+  session.observe({ ...idle, status: "paused", playbackId: session.state.player.playbackId, position: 24, duration: 120 });
+  const before = structuredClone(session.state), count = commands.length;
+  const named = session.namePerson("household", "Francesco", "Household");
+  expect(session.state).toEqual({ ...before, activeProfile: named, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(commands).toHaveLength(count);
+  expect(() => session.namePerson("household", "Stale", "Household")).toThrow("renamed on another remote");
+  expect(session.state.activeProfile).toEqual(named);
+  session.close();
+});

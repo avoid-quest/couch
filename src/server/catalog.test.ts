@@ -258,3 +258,15 @@ test("history replay validates the current person and keeps durable source URLs 
   expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true })).status).toBe(200);
   expect(store.progress("household", mediaId)?.position).toBe(0);
 });
+
+test("person naming requires an explicit valid request and retains generic label API compatibility", async () => {
+  const { request, store } = fixture();
+  const path = "/api/profiles/household/person-name";
+  expect((await request(path)).status).toBe(405);
+  for (const body of [{ name: "Francesco" }, { name: "", expectedName: "Household" }, { name: "Francesco", expectedName: "Household", personName: "Invented" }]) expect((await request(path, "POST", body)).status).toBe(400);
+  expect(await (await request(path, "POST", { name: "Francesco", expectedName: "Household" })).json()).toEqual({ profile: { id: "household", name: "Francesco", personName: "Francesco" } });
+  expect((await request(path, "POST", { name: "Stale", expectedName: "Household" })).status).toBe(409);
+  expect(store.profiles()).toEqual([{ id: "household", name: "Francesco", personName: "Francesco" }]);
+  expect((await request("/api/profiles/household/rename", "POST", { name: "Device", expectedName: "Francesco" })).status).toBe(200);
+  expect(store.activeProfile()).toEqual({ id: "household", name: "Device" });
+});

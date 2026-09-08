@@ -41,6 +41,7 @@ test("revoked request bodies cannot change profiles, progress, favorites, playli
   const profileId = store.profiles()[0]!.id;
   const cases = [
     ["/api/profiles", '{"name":"Unauthorized"}', ordinary],
+    [`/api/profiles/${profileId}/person-name`, '{"name":"Unauthorized","expectedName":"Household"}', ordinary],
     [`/api/profiles/${profileId}/rename`, '{"name":"Unauthorized","expectedName":"Household"}', ordinary],
     [`/api/profiles/${profileId}/remove`, '{"expectedName":"Household"}', ordinary],
     ["/api/progress/library:item", '{"watched":true}', ordinary],
