@@ -201,7 +201,7 @@ export function createHub(options: HubOptions) {
       if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize);
     },
   });
-  const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: controller => {
+  const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
     session.invalidate("controller");
   }, onRevoke: id => {

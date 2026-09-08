@@ -28,7 +28,7 @@ test("General keeps one startup control across navigation and identity loss", as
     await render();
     await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-page="general"]')!.click());
     expect(startupCount()).toBe(1);
-    await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-page="remotes"]')!.click());
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-page="connection"]')!.click());
     await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-page="general"]')!.click());
     expect(startupCount()).toBe(1);
     await render(null);

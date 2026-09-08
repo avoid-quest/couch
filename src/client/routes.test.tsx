@@ -157,3 +157,14 @@ test("Settings entry selects Playback and Back skips the index", async () => {
   expect(window.location.pathname).toBe("/search");
   expect(mounts).toBe(1);
 });
+
+
+for (const native of [false, true]) test(`legacy remotes URL opens Connections without remounting in ${native ? "TV" : "browser"}`, async () => {
+  window.history.replaceState(null, "", native ? "/index.html#/settings/remotes" : "/settings/remotes");
+  await render(native);
+  expect(native ? window.location.hash : window.location.pathname).toBe(native ? "#/settings/connection" : "/settings/connection");
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("connection");
+  await click("Sound settings"); await click("Back");
+  expect(native ? window.location.hash : window.location.pathname).toBe(native ? "#/settings/connection" : "/settings/connection");
+  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+});

@@ -35,6 +35,7 @@ export function usePageRoute() {
     setVisited(previous => previous.has(section) ? previous : new Set([...previous, section]));
     document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Home" ? "Couch" : `${section === "Queue" ? "Up next" : section} · Couch`;
     if (!sectionForPath(location.pathname)) void navigate("/", { replace: true });
+    else if (location.pathname.replace(/\/$/, "") === "/settings/remotes") void navigate("/settings/connection", { replace: true });
     else if (location.pathname.replace(/\/$/, "") === "/settings") void navigate("/settings/playback", { replace: true });
   }, [section, settingsSection, location.pathname, navigate]);
   const sectionUrl = (name: string) => pathForSection(name) + (name === "Search" ? rememberedSearch.current : "");

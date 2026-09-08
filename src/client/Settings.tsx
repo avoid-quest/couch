@@ -22,7 +22,7 @@ import type { useVideoQualityPreference } from "./video-quality";
 import { PlaybackPreferences } from "./PlaybackPreferences";
 import { AppearanceSettings } from "./AppearanceSettings";
 import type { TvAppearance } from "../shared/appearance";
-import { PairedRemotes } from "./PairedRemotes";
+import { PairedRemotes, RemoteName } from "./PairedRemotes";
 import { UpdatesSettings } from "./UpdatesSettings";
 import { BluetoothSettings } from "./BluetoothSettings";
 import { SoundSettings } from "./SoundSettings";
@@ -124,7 +124,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
   const token = credentials?.token;
   const administrator = !host && identity?.authority === "administrator";
   useEffect(() => {
-    if (identity && !administrator && ["bluetooth", "sound", "display", "advanced", "remotes"].includes(selectedSection ?? "")) {
+    if (identity && !administrator && ["bluetooth", "sound", "display", "advanced"].includes(selectedSection ?? "")) {
       focusSection.current = true;
       setSection("general");
     }
@@ -212,7 +212,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
 
   const pairAgain = () => { setOpen(false); onPairAgain(); };
   const addresses = <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
-    {setupUrl && <SetupQr url={setupUrl} />}
+    {setupUrl && credentials && connected && (administrator || identity?.authority === "host") && <SetupQr url={setupUrl} credentials={credentials} />}
     <div className="min-w-0 space-y-1">
       <p className="font-medium">TV addresses on your network</p>
       {urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block min-h-11 content-center break-all text-muted-foreground underline underline-offset-4">{url}</a>)}
@@ -229,7 +229,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
   const sourcePages = Object.entries(settingsPages).filter(([id]) => id.startsWith("source-")) as [SettingsPage, (typeof settingsPages)[SettingsPage]][];
   const sourcePage = section?.startsWith("source-");
   const visiblePages = Object.entries(settingsPages).filter(([id]) =>
-    !id.startsWith("source-") && (administrator || !["bluetooth", "sound", "display", "remotes", "advanced"].includes(id)) && (id !== "tv-appearance" || !host),
+    !id.startsWith("source-") && (administrator || !["bluetooth", "sound", "display", "advanced"].includes(id)) && (id !== "tv-appearance" || !host),
   ) as [SettingsPage, (typeof settingsPages)[SettingsPage]][];
   const pageLink = (id: SettingsPage | null, label: React.ReactNode, className = "", back = false) => <Button
     variant="ghost" className={`settings-link ${className}`} asChild={!!onSectionChange && !setup}
@@ -255,7 +255,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
         {!administrator && <SettingsSection section={section} value="updates" className="min-w-0 space-y-3">
           <p>Use an administrator remote to install updates.</p>
           <p className="text-muted-foreground">An administrator can approve this remote in Paired remotes.</p>
-          {pageLink("connection", "Connection")}
+          {pageLink("connection", "Connections")}
         </SettingsSection>}
         {administrator && credentials && <SettingsSection section={section} value="advanced" className="min-w-0">{open && section === "advanced" && <AdvancedSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</SettingsSection>}
         {administrator && credentials && <SettingsSection section={section} value="bluetooth" className="min-w-0">{open && section === "bluetooth" && <BluetoothSettings credentials={credentials} connected={connected} />}</SettingsSection>}
@@ -263,7 +263,6 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
         {administrator && credentials && <SettingsSection section={section} value="display" className="min-w-0">{open && section === "display" && <DisplaySettings credentials={credentials} connected={connected} />}</SettingsSection>}
         <SettingsSection section={section} value="appearance" className="min-w-0"><AppearanceSettings scope="device" native={!!host} credentials={credentials} connected={connected} administrator={administrator || !!host && identity?.authority === "host"} appearance={appearance} /></SettingsSection>
         {!host && <SettingsSection section={section} value="tv-appearance" className="min-w-0"><AppearanceSettings scope="tv" native={false} credentials={credentials} connected={connected} administrator={administrator} appearance={appearance} /></SettingsSection>}
-        {administrator && devices && <SettingsSection section={section} value="remotes" className="min-w-0"><PairedRemotes devices={devices} currentId={identity.controller!.id} disabled={!canWrite} update={update} /></SettingsSection>}
         <SettingsSection section={section} value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>
@@ -326,6 +325,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
           </dl>
           {pairingRequired && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}
           {status === "Connection rejected" && <p role="alert">The TV rejected this browser's address. Open one of its advertised LAN addresses.</p>}
+          {identity?.controller && <RemoteName device={identity.controller} disabled={!canWrite} update={update} />}
           <Separator />{addresses}
           {host && <div className="rounded-lg border bg-muted/30 p-3"><p className="font-medium">Controller pairing code</p><p className="my-2 font-mono text-2xl tracking-wider" data-pairing-code>{host.pairingCode}</p><p className="text-muted-foreground">Connects a remote for browsing and playback.</p></div>}
           <div className="flex flex-wrap gap-2">
@@ -334,6 +334,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
           </div>
           {!host && <p className="text-muted-foreground">Reconnect keeps your pairing. Pair again forgets it in this browser.</p>}
           {lastAdministrator && !pairingRequired && <p className="text-muted-foreground">Approve another administrator before forgetting this browser.</p>}
+          {administrator && devices && <><Separator /><PairedRemotes devices={devices} currentId={identity.controller?.id ?? ""} disabled={!canWrite} update={update} /></>}
           {forgetting && <div role="alert" className="space-y-3 rounded-lg border p-3"><p>Forget this browser's pairing? You will need the code shown on the TV to connect again.{identity?.authority === "administrator" ? " Administration will require another administrator or local/SSH recovery." : ""}</p><div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setForgetting(false)}>Cancel</Button><Button className="min-h-11" disabled={lastAdministrator && !pairingRequired} onClick={pairAgain}>Forget this browser</Button></div></div>}
         </SettingsSection>
       </div>

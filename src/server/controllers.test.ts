@@ -16,7 +16,7 @@ function fixture(options: { file?: string; recoveryCode?: string; onChange?: () 
   const store = openStore(options.file ?? ":memory:");
   stores.add(store);
   const changed = mock(options.onChange ?? (() => {}));
-  const service = createControllers({ store, onChange: changed, recoveryCode: options.recoveryCode });
+  const service = createControllers({ store, pairingCode: "123456", onChange: changed, recoveryCode: options.recoveryCode });
   const phone = (name = "Phone") => {
     const token = store.pair(name);
     const identity = (): ControllerIdentity | null => {
@@ -271,7 +271,7 @@ test("only current administrators manage named remotes and a racing demotion blo
   const owner = f.phone("Owner"), guest = f.phone("Guest"), replacement = f.phone("Replacement");
   f.store.setControllerRole(owner.id, "administrator");
   expect((await f.request("/api/controllers", "GET", undefined, guest.identity)).status).toBe(403);
-  for (const path of [`/api/controllers/${owner.id}/role`, `/api/controllers/${guest.id}/name`]) expect((await f.request(path, "POST", { role: "administrator" }, guest.identity)).status).toBe(403);
+  for (const path of [`/api/controllers/${owner.id}/role`, `/api/controllers/${owner.id}/name`]) expect((await f.request(path, "POST", { role: "administrator" }, guest.identity)).status).toBe(403);
   expect((await f.request(`/api/controllers/${guest.id}`, "DELETE", undefined, guest.identity)).status).toBe(403);
   const listing = await (await f.request("/api/controllers", "GET", undefined, owner.identity)).json();
   expect(listing).toMatchObject({ controllers: expect.arrayContaining([expect.objectContaining({ name: "Owner", role: "administrator", lastSeenAt: expect.any(Number) }), expect.objectContaining({ name: "Guest", role: "controller" }), expect.objectContaining({ name: "Replacement" })]) });
@@ -372,4 +372,36 @@ test("setup advancement rechecks administrator authority after a delayed request
   streamController.close();
   expect((await pending).status).toBe(401);
   expect(f.store.setupStep()).toBe("general");
+});
+
+
+test("the pairing QR code is restricted to the host and current administrators", async () => {
+  const f = fixture(), owner = f.phone("Owner"), guest = f.phone("Guest");
+  f.store.setControllerRole(owner.id, "administrator");
+  const path = "/api/controllers/pairing-code";
+  for (const identity of [host, owner.identity]) {
+    const response = await f.request(path, "GET", undefined, identity);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ code: "123456" });
+  }
+  expect((await f.request(path, "GET", undefined, guest.identity)).status).toBe(403);
+  expect((await f.request(path, "GET", undefined, () => null)).status).toBe(401);
+  f.store.setControllerRole(guest.id, "administrator");
+  f.store.setControllerRole(owner.id, "controller");
+  expect((await f.request(path, "GET", undefined, owner.identity)).status).toBe(403);
+});
+
+test("a device can rename itself without gaining administration, and revocation blocks pending rename", async () => {
+  const f = fixture(), guest = f.phone("Phone"), other = f.phone("Other");
+  expect((await f.request(`/api/controllers/${guest.id}/name`, "POST", { name: "Frank's phone" }, guest.identity)).status).toBe(200);
+  expect(f.store.controllerForToken(guest.token)).toMatchObject({ id: guest.id, name: "Frank's phone", role: "controller" });
+  expect((await f.request(`/api/controllers/${other.id}/name`, "POST", { name: "No" }, guest.identity)).status).toBe(403);
+  let finish!: () => void;
+  const body = new ReadableStream({ start(stream) { finish = () => { stream.enqueue(new TextEncoder().encode('{"name":"Late"}')); stream.close(); }; } });
+  const response = f.service.handle(new Request(`http://localhost/api/controllers/${guest.id}/name`, { method: "POST", headers: { "Content-Type": "application/json" }, body }), guest.identity);
+  f.store.revokeController(guest.id);
+  finish();
+  expect((await response).status).toBe(401);
+  expect(f.store.controller(guest.id)).toBeNull();
 });

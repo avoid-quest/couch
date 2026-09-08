@@ -31,6 +31,7 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     const path = new URL(String(input)).pathname;
     calls.push({ path, method: init?.method ?? "GET" });
+    if (path === "/api/controllers/pairing-code") return Response.json({ code: "123456" });
     if (path === "/api/display") return Response.json({ outputs: [], current: null, saved: null, preview: null });
     if (path === "/api/controllers") return Response.json({ controllers: [admin.controller] });
     if (path === "/api/settings/startup") return Response.json({ enabled: true, fullscreenAtLaunch: true, fullscreenNow: true, applies: "next-session" });
@@ -52,7 +53,7 @@ test("settings opens a flat page index without tabs, cards or a quality control"
   const command = spyOn(props, "onCommand");
   try {
     await render();
-    expect([...document.querySelectorAll<HTMLElement>("[data-settings-page]")].map(button => button.dataset.settingsPage)).toEqual(["playback", "appearance", "connection", "general", "sources", "bluetooth", "sound", "display", "tv-appearance", "remotes", "updates", "advanced"]);
+    expect([...document.querySelectorAll<HTMLElement>("[data-settings-page]")].map(button => button.dataset.settingsPage)).toEqual(["playback", "appearance", "connection", "general", "sources", "bluetooth", "sound", "display", "tv-appearance", "updates", "advanced"]);
     expect(document.querySelector('[role="tablist"]')).toBeNull();
     expect(document.querySelector('[data-settings-group]')).toBeNull();
     expect(document.querySelector("#default-video-quality")).toBeNull();
@@ -73,19 +74,19 @@ test("device appearance, TV appearance and connection have separate pages", asyn
   expect(document.querySelector("#tv-interface-size")).toBeNull();
   await select("connection");
   expect(document.body.textContent).toContain("Owner's phone");
-  expect(document.querySelector('[aria-label="Paired remotes"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Paired remotes"]')).not.toBeNull();
   expect(document.querySelector("#default-video-quality")).toBeNull();
   await select("tv-appearance");
   expect(document.querySelector("#tv-interface-size")).not.toBeNull();
   expect(document.querySelector("#remote-interface-size")).toBeNull();
 });
 
-test("administrator pages stay gated and demotion closes paired remotes", async () => {
-  await render(); await select("remotes");
+test("administrator pages stay gated and demotion removes remote management", async () => {
+  await render(); await select("connection");
   expect(document.querySelector('[aria-label="Paired remotes"]')).not.toBeNull();
   await render({ identity: { ...admin, authority: "controller", controller: { ...admin.controller, role: "controller" } } });
-  for (const id of ["bluetooth", "sound", "display", "remotes", "advanced"]) expect(page(id)).toBeNull();
-  expect(page("general")?.getAttribute("aria-current")).toBe("page");
+  for (const id of ["bluetooth", "sound", "display", "advanced"]) expect(page(id)).toBeNull();
+  expect(page("connection")?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector('[aria-label="Paired remotes"]')).toBeNull();
   expect(document.querySelector("#tv-name")).toBeNull();
   expect(calls.some(call => call.method !== "GET")).toBe(false);
@@ -200,4 +201,32 @@ test("Sources links to one form at a time instead of piling every source into on
   expect(page("sources")?.getAttribute("aria-current")).toBe("page");
   expect(document.activeElement).toBe(page("source-jellyfin"));
   expect(page("source-jellyfin")!.tabIndex).toBeGreaterThanOrEqual(0);
+});
+
+
+test("Connections QR includes the pairing code and disappears when administration is removed", async () => {
+  const { QRCodeSVG } = await import("qrcode.react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const details = { name: "Couch", urls: ["http://couch.local:4100"], player: "idle" as const };
+  await render({ details }); await select("connection");
+  expect(document.querySelector("#remote-owner")).not.toBeNull();
+  expect(page("remotes")).toBeNull();
+  const svg = document.querySelector('svg[role="img"]') ?? document.querySelector("svg:has(title)");
+  expect(svg?.textContent).toBe("Pair another device");
+  const expected = document.createElement("div");
+  expected.innerHTML = renderToStaticMarkup(<QRCodeSVG value="http://couch.local:4100/#pair=123456" size={160} marginSize={4} level="M" />);
+  expect([...svg!.querySelectorAll("path")].map(path => path.getAttribute("d"))).toEqual([...expected.querySelectorAll("path")].map(path => path.getAttribute("d")));
+  expect(document.body.innerHTML).not.toContain("Bearer paired");
+  expect(calls.filter(call => call.path === "/api/controllers/pairing-code")).toHaveLength(1);
+  await render({ details, identity: { ...admin, authority: "controller", controller: { ...admin.controller, role: "controller" } } });
+  expect(document.querySelector("svg:has(title)")).toBeNull();
+  expect(document.querySelector("#remote-owner")).not.toBeNull();
+  expect(document.querySelector('[aria-label="Paired remotes"]')).toBeNull();
+});
+
+test("a failed pairing code request never shows an address-only QR", async () => {
+  request.mockImplementation((async input => String(input).endsWith("/pairing-code") ? Response.json({ error: "Unavailable" }, { status: 503 }) : String(input).endsWith("/controllers") ? Response.json({ controllers: [admin.controller] }) : Response.json({ name: "Couch" })) as typeof fetch);
+  await render({ details: { name: "Couch", urls: ["http://couch.local:4100"], player: "idle" } }); await select("connection");
+  expect(document.querySelector("svg:has(title)")).toBeNull();
+  expect(document.body.textContent).toContain("Retry pairing QR");
 });

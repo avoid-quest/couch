@@ -1432,3 +1432,26 @@ test("current quality commands await resolution, preserve paused position and sh
     expect(await remote.command({ type: "videoQuality", playbackId: loaded.playbackId, quality: "480p" })).toMatchObject({ ok: false });
   } finally { resolve.mockRestore(); }
 });
+
+
+test("the authorized pairing QR uses the existing code and grants only controller access", async () => {
+  const { hub } = fixture();
+  const owner = await pair(hub), guest = await pair(hub);
+  await claimAdministrator(hub, owner);
+  for (const token of [hostToken, owner]) {
+    const response = await controllerApi(hub, token, "/api/controllers/pairing-code");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ code: hub.pairingCode });
+  }
+  expect((await controllerApi(hub, guest, "/api/controllers/pairing-code")).status).toBe(403);
+  expect((await controllerApi(hub, "unpaired", "/api/controllers/pairing-code")).status).toBe(401);
+  const { code } = await (await controllerApi(hub, owner, "/api/controllers/pairing-code")).json() as { code: string };
+  const paired = await fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code, name: "QR phone" }) });
+  expect(paired.status).toBe(200);
+  const result = await paired.json() as { token: string; controller: { id: string; role: string } };
+  expect(result.controller.role).toBe("controller");
+  expect(result.token).not.toBe(owner);
+  expect((await controllerApi(hub, result.token, `/api/controllers/${result.controller.id}/name`, "POST", { name: "Frank's phone" })).status).toBe(200);
+  expect(await (await controllerApi(hub, result.token, "/api/controllers/me")).json()).toMatchObject({ authority: "controller", controller: { name: "Frank's phone" } });
+});
