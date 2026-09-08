@@ -16,6 +16,8 @@ if (mode === "--prepare") {
   const store = openStore(`${fixtures}/couch.sqlite`);
   const profile = store.createProfile("Installed qualification viewer");
   store.selectProfile(profile.id);
+  store.saveProfilePreferences(profile.id, { audioLanguage: "it", subtitleLanguage: "en", subtitles: "off", speed: 1, replayGain: "off" });
+  store.saveProgress(profile.id, { mediaId: "qualification:retained", title: "Retained progress", libraryItemId: null, position: 37, duration: 120, watched: false, lastPlayedAt: 1 });
   const tokens = [store.pair("Qualification administrator"), store.pair("Qualification second remote")];
   store.createControllerClaim("installed-qualification", false);
   store.consumeControllerClaim(store.controllerForToken(tokens[0]!)!.id, "installed-qualification");
@@ -39,6 +41,21 @@ function run(args: string[]) {
   return child.stdout.toString().trim();
 }
 const inside = (...args: string[]) => run(["docker", "exec", container, ...args]);
+const faultChecks: string[] = [];
+const recoveryFaults = process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1";
+const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
+assert.ok(dataDir.startsWith("/"));
+const sql = (statement: string) => inside("sqlite3", `${dataDir}/couch.sqlite`, statement);
+function preservation() {
+  // lastSeenAt and scan status change during normal reconnect. Compare the
+  // authoritative identities/settings, not those incidental timestamps.
+  return sql("SELECT token_hash,id,name,role FROM devices ORDER BY id; SELECT id,name,path FROM library_sources ORDER BY id; SELECT * FROM watching_preferences ORDER BY profileId; SELECT * FROM viewing_progress ORDER BY profileId,mediaId; SELECT * FROM session; SELECT * FROM watching_profiles ORDER BY id;");
+}
+function rejected(...args: string[]) {
+  const child = Bun.spawnSync(["docker", "exec", container, ...args]);
+  assert.notEqual(child.exitCode, 0, "Injected fault must reject the operation");
+  return child.stderr.toString();
+}
 const uid = inside("id", "-u", "couch-tv");
 const service = (...args: string[]) => inside("runuser", "-u", "couch-tv", "--", "env", `XDG_RUNTIME_DIR=/run/user/${uid}`, `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${uid}/bus`, "systemctl", "--user", ...args);
 async function until(description: string, predicate: () => Promise<unknown>, timeout = 60_000) {
@@ -112,6 +129,11 @@ try {
     await driver(port, `/session/${browser.id}/url`, { url: origin });
   }
   await retained("Two retained browser identities connect to the installed native service");
+  if (recoveryFaults) {
+    inside("apt-get", "install", "-y", "--no-install-recommends", "sqlite3");
+    inside("mkdir", "-p", "/media/couch-retained");
+    await api("/api/library/sources", { path: "/media/couch-retained" });
+  }
   socket!.send(JSON.stringify({ type: "command", requestId: crypto.randomUUID(), action: { type: "enqueue", entry: { id: "installed-tone", title: "Installed qualification tone", source: "http://127.0.0.1:44212/album.flac" }, playNow: true } }));
   await until("Installed native player plays before restart", async () => state.player.status === "playing" && state.player.position > 1);
   inside("couch-session", "restart");
@@ -211,6 +233,26 @@ try {
     assert.equal(update.candidate.version, expected.version);
     assert.equal(update.candidate.revision, expected.revision);
     const candidate = update.candidate;
+    if (recoveryFaults) {
+      const expectedData = preservation();
+      const pid = supervised();
+      for (const fault of ["offline", "bad-signature", "interrupted-download"]) {
+        await Bun.write(`${fixtures}/feed-fault`, fault);
+        try {
+          await api(fault === "interrupted-download" ? "/api/updates/stage" : "/api/updates/check", fault === "interrupted-download" ? { candidateId: candidate.id } : { check: true });
+          await until(`Installed updater reports ${fault} as failed`, async () => (await api("/api/updates")).status === "failed");
+          assert.equal(supervised(), pid, "Failed staging preserves the running native owner");
+          assert.equal(preservation(), expectedData);
+          assert.deepEqual(await api("/api/build"), build);
+          faultChecks.push(`${fault}: failed staging retains credentials, sources, preferences, queue and progress`);
+        } finally { await Bun.write(`${fixtures}/feed-fault`, ""); }
+        await api("/api/updates/check", { check: true });
+        await until("Restored signed feed offers the same candidate", async () => {
+          const value = await api("/api/updates");
+          return value.status === "available" && value.candidate.id === candidate.id;
+        });
+      }
+    }
     await api("/api/updates/stage", { candidateId: candidate.id });
     await until("Signed B download reports its complete byte count", async () => {
       update = await api("/api/updates");
@@ -308,8 +350,6 @@ try {
     }
     await Bun.write(`${fixtures}/startup-result.json`, JSON.stringify({ initial: original, final: await api(path), scope: "Installed OS readback, authorization and noninterrupting toggle; physical reboot acceptance is separate." }, null, 2));
   }
-  const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
-  assert.ok(dataDir.startsWith("/"));
   // A disposable operator backup: recovery must retain writes made after it.
   inside("couch-session", "stop");
   inside("sh", "-c", "mkdir -p /var/lib/couch/application/backups/qualification; cp /var/lib/couch/application/Couch.AppImage /var/lib/couch/application/build.json /var/lib/couch/application/backups/qualification/; cd /var/lib/couch/application/backups/qualification; sha256sum Couch.AppImage > SHA256SUMS");
@@ -327,10 +367,60 @@ try {
   assert.ok((await api("/api/profiles")).profiles.some((profile: any) => profile.id === newer.id), "Recovery preserves newer database writes");
   assert.deepEqual(await api("/api/build"), build);
   assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], installed.archiveSha256);
+  if (recoveryFaults) {
+    const backup = "/var/lib/couch/application/backups/qualification";
+    const application = "/var/lib/couch/application";
+    const expectedData = preservation();
+    const recovered = async (description: string) => {
+      inside("couch-recover", backup);
+      await retained(description);
+      assert.equal(preservation(), expectedData, `${description}: credentials, sources, preferences, progress, queue and newer profile survive`);
+      assert.deepEqual(await api("/api/build"), build);
+      assert.equal(inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0], installed.archiveSha256);
+      faultChecks.push(description);
+    };
+    // Stop the real recovery shell at its actual commands, without changing the
+    // installed helper or replacing filesystem/systemd operations with doubles.
+    for (const boundary of ["runuser -u couch-tv -- mv -f", 'sync -f "$application"']) {
+      inside("couch-session", "stop");
+      inside("sh", "-c", "printf '#!/bin/sh\\nexit 1\\n' > /var/lib/couch/application/Couch.AppImage");
+      const failedHash = inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0];
+      const error = rejected("bash", "-c", 'boundary=$1; backup=$2; set -T; trap \'if [[ $BASH_COMMAND == "$boundary"* ]]; then echo "qualification recovery interruption" >&2; kill -KILL $$; fi\' DEBUG; source /usr/sbin/couch-recover "$backup"', "sh", boundary, backup);
+      // Variables are supplied as arguments so shell syntax in a boundary is
+      // literal and cannot become a command in the test driver.
+      assert.match(error, /qualification recovery interruption/);
+      assert.equal(preservation(), expectedData);
+      assert.equal(inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0], boundary.startsWith("runuser") ? failedHash : installed.archiveSha256);
+      await recovered(`Recovery resumes after interruption at ${boundary}`);
+    }
+    inside("couch-session", "stop");
+    inside("mount", "-t", "tmpfs", "-o", "size=1m", "tmpfs", "/var/lib/couch-installer");
+    try {
+      assert.match(rejected("couch-recover", backup), /No space left on device/);
+      assert.equal(preservation(), expectedData);
+      assert.equal(inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0], installed.archiveSha256);
+    } finally { inside("umount", "/var/lib/couch-installer"); }
+    await recovered("Recovery after actual backup storage exhaustion preserves current data");
+    inside("sh", "-c", 'cp "$1/build.json" /tmp/recovery-compatible-build.json; jq ".dataFormat += 1" "$1/build.json" > /tmp/recovery-incompatible-build.json; cp /tmp/recovery-incompatible-build.json "$1/build.json"', "sh", backup);
+    try {
+      const pid = supervised();
+      assert.match(rejected("couch-recover", backup), /Incompatible data format/);
+      assert.equal(supervised(), pid, "Incompatible recovery does not stop the current application");
+      assert.equal(preservation(), expectedData);
+      faultChecks.push("Incompatible recorded data format rejects old-app recovery and preserves current data");
+    } finally { inside("cp", "/tmp/recovery-compatible-build.json", `${backup}/build.json`); }
+    for (const process of ["couch-server", "couch"]) {
+      inside("pkill", "-STOP", "-u", "couch-tv", "-x", process);
+      const started = Date.now();
+      await recovered(`Operator recovery terminates hung ${process} and preserves current data`);
+      assert.ok(Date.now() - started < 60_000, "Systemd bounds stopping the hung process");
+    }
+    await Bun.write(`${fixtures}/recovery-faults.json`, JSON.stringify({ checks: faultChecks, scope: "Installed recovery process interruption, backup ENOSPC, recorded compatibility refusal and operator recovery of stopped processes. No machine power-loss or failed schema migration is implied." }, null, 2));
+  }
   await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
 } catch (error) {
   await Bun.write(`${fixtures}/tool-health-failure.json`, JSON.stringify(await api("/api/tools").catch(error => ({ error: String(error) })), null, 2));
-  await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, error: String(error) }, null, 2));
+  await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, faultChecks, error: String(error) }, null, 2));
   throw error;
 } finally {
   media.stop(true);

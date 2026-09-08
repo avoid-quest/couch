@@ -29,6 +29,17 @@ try {
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = resolve(feed, `.${decodeURIComponent(new URL(request.url).pathname)}`);
     const file = Bun.file(path);
+    if (process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1") {
+      const fault = await Bun.file(join(evidence, "feed-fault")).text().catch(() => "");
+      if (fault === "offline") return new Response(null, { status: 503 });
+      if (fault === "bad-signature" && path.endsWith(".sig")) return new Response("invalid qualification signature");
+      if (fault === "interrupted-download" && path.endsWith(".AppImage") && await file.exists()) {
+        return new Response(new ReadableStream({ async start(controller) {
+          controller.enqueue(new Uint8Array(await file.slice(0, 1024).arrayBuffer()));
+          setTimeout(() => controller.error(new Error("qualification interrupted download")), 50);
+        } }), { headers: { "Content-Length": String(file.size) } });
+      }
+    }
     return path.startsWith(`${feed}${sep}`) && await file.exists() ? new Response(file) : new Response(null, { status: 404 });
   } });
   const endpoint = `http://127.0.0.1:${server.port}/`;
