@@ -421,18 +421,20 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       const terms = query.match(/[\p{L}\p{N}]+/gu) ?? [];
       if (query && terms.length === 0) return { items: [], total: 0, offset, limit };
       const match = terms.map(term => `"${term}"*`).join(" AND ");
-      const clauses = [match ? "i.id IN (SELECT id FROM library_search WHERE library_search MATCH ?)" : "", options.artistId ? "i.id IN (SELECT itemId FROM library_music_artists WHERE artistId = ?)" : "",
+      const clauses = [match ? "library_search MATCH ?" : "", options.artistId ? "i.id IN (SELECT itemId FROM library_music_artists WHERE artistId = ?)" : "",
         options.videoType ? "json_extract(i.video, '$.type') = ?" : "", options.showId ? "json_extract(i.video, '$.show.id') = ?" : "",
         options.season === "unknown" ? "json_extract(i.video, '$.season') IS NULL" : options.season !== undefined ? "json_extract(i.video, '$.season') = ?" : ""].filter(Boolean);
       const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
       const args = [...(match ? [match] : []), ...(options.artistId ? [options.artistId] : []), ...(options.videoType ? [options.videoType] : []), ...(options.showId ? [options.showId] : []),
         ...(typeof options.season === "number" ? [options.season] : [])];
-      const total = db.query<{ count: number }, (string | number)[]>(`SELECT COUNT(*) AS count FROM library_items i ${where}`).get(...args)!.count;
+      const from = `library_items i${match ? " JOIN library_search ON library_search.id = i.id" : ""}`;
+      const total = db.query<{ count: number }, (string | number)[]>(`SELECT COUNT(*) AS count FROM ${from} ${where}`).get(...args)!.count;
       const order = options.showId ? "json_extract(i.video, '$.season') IS NULL, json_extract(i.video, '$.season'), json_extract(i.video, '$.episode') IS NULL, json_extract(i.video, '$.episode')," : "";
+      const relevance = match && !options.showId ? "(i.title = ? COLLATE NOCASE) DESC, bm25(library_search, 0, 10, 3, 2)," : "";
       const rows = db.query<PublicItemRow, (string | number)[]>(`
         SELECT ${itemColumns}
-        FROM library_items i JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY ${order} i.title COLLATE NOCASE, i.id LIMIT ? OFFSET ?`)
-        .all(...args, limit, offset);
+        FROM ${from} JOIN library_sources s ON s.id = i.sourceId ${where} ORDER BY ${order} ${relevance} i.title COLLATE NOCASE, i.id LIMIT ? OFFSET ?`)
+        .all(...args, ...(relevance ? [query] : []), limit, offset);
       return { items: rows.map(publicItem), total, offset, limit };
     },
     collectionItems(filter: CollectionFilter, sort: CollectionSort, descending: boolean): LibrarySearch {

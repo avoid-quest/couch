@@ -339,3 +339,17 @@ test.skipIf(!Bun.which("ffmpeg"))("maintained parser reads real tagged MP3 FLAC 
   expect(items.map(item => item.title)).toEqual(["mp3 title", "flac title", "m4a title"]);
   expect(items.every(item => item.duration! > 0.9 && item.duration! < 1.2 && item.artists?.[0] === "Guest Singer")).toBe(true);
 });
+
+test("search ranks exact titles before weighted title matches and artist matches across folders", async () => {
+  const { root, media, library } = await setup();
+  await Bun.write(join(media, "artist.wav"), taggedWave({ TIT2: "A different song", TPE1: "Evening", TALB: "First" }));
+  await Bun.write(join(media, "title.wav"), taggedWave({ TIT2: "Evening lights", TPE1: "Someone", TALB: "Second" }));
+  const second = join(root, "second"); await mkdir(second);
+  await Bun.write(join(second, "exact.wav"), taggedWave({ TIT2: "Evening", TPE1: "Another", TALB: "Third" }));
+  const firstSource = await library.addSource(media); await library.scan(firstSource.id);
+  const secondSource = await library.addSource(second); await library.scan(secondSource.id);
+  expect(library.search({ query: "evening" }).items.map(item => item.title)).toEqual(["Evening", "Evening lights", "A different song"]);
+  expect(library.search({ query: "evening", offset: 1, limit: 1 }).items.map(item => item.title)).toEqual(["Evening lights"]);
+  expect(library.search({ query: "lights even" }).items.map(item => item.title)).toEqual(["Evening lights"]);
+  expect(library.search().items.map(item => item.title)).toEqual(["A different song", "Evening", "Evening lights"]);
+});

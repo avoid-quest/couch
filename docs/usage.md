@@ -538,3 +538,27 @@ their normal buffering settings. Slow or interrupted connections can still rebuf
 
 Automatic quality is capped at 1080p; existing queue entries keep their saved quality.
 An old Unrestricted entry must be added again with Automatic to use the new default.
+
+### Search across your libraries
+
+Open **Search** to submit one query to scanned TV folders and the configured
+Jellyfin library. Each source has its own results, pages and retry control. A
+failed Jellyfin connection leaves local results available. Unavailable folders
+keep their indexed results visible with playback disabled; folder administration
+stays in Settings > Sources. Refresh checks the catalog again without starting a
+scan or changing source configuration.
+
+Local search matches word prefixes across titles, original video titles, show
+titles, artists and albums. All query words must match. Exact titles come first,
+then SQLite FTS5 relevance with title matches weighted above artist and album
+matches. Empty browsing remains alphabetical, and episodes within a selected
+show retain season/episode order. Jellyfin uses its existing account-scoped
+server search and alphabetical ordering. The result groups are not a combined
+ranking across different search engines.
+
+Open a result's details to inspect, play, resume or queue it. Closing details
+returns to the same result, query and scroll position. Each TV or phone retains
+its own search while visiting another catalog. Online, Radio and Guide buttons
+open their existing catalogs; this search does not send queries to public
+providers. Existing movie/show hierarchies, music albums, collections, metadata
+editing and progress controls remain in their respective library views.
