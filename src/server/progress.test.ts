@@ -228,3 +228,52 @@ test("profile storage bounds names and count and failed profile changes do not p
   expect(() => f.session.selectProfile("missing")).toThrow("not found");
   expect(f.session.state.activeProfile).toEqual(first);
 });
+
+
+test("growing recording EOF offers explicit resume without watched or queue advance; confirmed completion advances", () => {
+  let complete = false;
+  const source = `recording:${crypto.randomUUID()}`;
+  const f = fixture({ resolveSource: entry => entry.source === source ? { source: "http://127.0.0.1/private/event.m3u8", eventStart: true, canComplete: ended => ended && complete } : { source: entry.source } });
+  const saved = () => f.store.progress("household", source);
+  f.enqueue("growing", source); f.enqueue("after"); f.play("growing");
+  f.observe(114, "playing", 120);
+  f.session.command({ type: "stop" });
+  expect(saved()).toMatchObject({ position: 114, watched: false });
+  f.play("growing");
+  expect(f.commands.findLast(command => command.type === "load")).toMatchObject({ startPosition: 114, eventStart: true });
+  expect(f.commands.findLast(command => command.type === "load")).not.toHaveProperty("canComplete");
+  f.observe(118, "playing", 120); f.observe(120, "ended", 120);
+  expect(f.session.state.player).toMatchObject({ status: "error", error: expect.stringContaining("Play it again") });
+  expect(f.session.state.currentEntryId).toBe("growing"); expect(saved()).toMatchObject({ position: 118, watched: false });
+  f.play("growing");
+  expect(f.commands.findLast(command => command.type === "load")).toMatchObject({ startPosition: 118 });
+  f.observe(150, "playing", 180); complete = true; f.observe(180, "ended", 180);
+  expect(saved()).toMatchObject({ position: 0, watched: true }); expect(f.session.state.currentEntryId).toBe("after");
+  f.observe(120, "ended", 120); expect(f.saved("after")).toMatchObject({ watched: true });
+});
+
+test("confirmed Ant recording still needs native completion to mark watched when stopped near its end", () => {
+  const source = `recording:${crypto.randomUUID()}`;
+  const f = fixture({ resolveSource: () => ({ source: "http://127.0.0.1/event.m3u8", canComplete: ended => ended }) });
+  f.enqueue("one", source); f.play("one"); f.observe(118, "playing", 120); f.session.command({ type: "stop" });
+  expect(f.store.progress("household", source)).toMatchObject({ watched: false, position: 118 });
+});
+
+
+test("completed Ant early native EOF preserves resume and queue until a retry reaches the end", () => {
+  const source = `recording:${crypto.randomUUID()}`;
+  const f = fixture({ resolveSource: entry => entry.source === source ? { source: "http://127.0.0.1/complete.m3u8", eventStart: true, canComplete: ended => ended } : { source: entry.source } });
+  f.enqueue("recording", source); f.enqueue("after"); f.play("recording");
+  f.observe(24, "playing", 120);
+  f.observe(24, "ended", 120);
+  expect(f.session.state.player).toMatchObject({ status: "error", error: expect.stringContaining("Play it again") });
+  expect(f.session.state.currentEntryId).toBe("recording");
+  expect(f.store.progress("household", source)).toMatchObject({ watched: false, position: 24 });
+  f.observe(24, "ended", 120);
+  expect(f.session.state.currentEntryId).toBe("recording");
+  f.play("recording");
+  expect(f.commands.findLast(command => command.type === "load")).toMatchObject({ startPosition: 24 });
+  f.observe(119, "playing", 120); f.observe(120, "ended", 120);
+  expect(f.store.progress("household", source)).toMatchObject({ watched: true, position: 0 });
+  expect(f.session.state.currentEntryId).toBe("after");
+});

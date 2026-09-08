@@ -7,7 +7,7 @@ import type { TvAppearance } from "../shared/appearance";
 import type { WebMediaSource } from "./web-media";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { canComplete?: (ended: boolean) => boolean; audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   admitted?: () => boolean;
   resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
@@ -24,6 +24,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let desiredVolume = store.volume;
   let audioInterrupted = false;
   let resolution: AbortController | null = null;
+  let canComplete: MediaSource["canComplete"];
   let audioOnly = false;
   let prepared: { entryId: string; playbackId: string; currentId: string; key: string; controller: AbortController; sent: boolean } | null = null;
   let subtitleWarning: string | null = null;
@@ -291,8 +292,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     };
     try {
       const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart, goLive) ?? { source: entry.source };
-      const load = ({ audioOnly: sourceAudioOnly, metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
+      const load = ({ canComplete: sourceCanComplete, audioOnly: sourceAudioOnly, metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
         if (!admitted() || state.player.playbackId !== playbackId) return;
+        canComplete = sourceCanComplete;
         audioOnly = sourceAudioOnly === true && !media.segment;
         authorize();
         subtitleWarning = warning ?? null;
@@ -302,7 +304,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const mediaId = localMediaId(currentEntry);
         const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
         if (position !== undefined && position > 0) media.startPosition = position;
-        progress.begin(currentEntry, playbackId, profileId);
+        progress.begin(currentEntry, playbackId, profileId, canComplete);
         send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
       };
       if (source instanceof Promise) {
@@ -614,6 +616,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       // VOD end only starts the same private expiry confirmation, never a blind retry.
       const earlyEnd = player.status === "ended" && player.duration !== null && player.position + 2 < player.duration;
       if (earlyEnd && webRetried) player = { ...player, status: "error" };
+      if (player.status === "ended" && canComplete && (earlyEnd || !canComplete(true))) player = { ...player, status: "error", error: earlyEnd ? "This recording stopped before its end. Play it again to resume." : "This recording has not finished on the backend. Play it again to resume." };
       const ended = player.status === "ended" && state.player.status !== "ended";
       if ((player.status === "error" || earlyEnd) && recoverWeb(player)) return;
       if (["playing", "paused"].includes(player.status)) {
