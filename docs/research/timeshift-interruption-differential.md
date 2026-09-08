@@ -1,5 +1,7 @@
 # Ant interruption differential, 8 September 2026
 
+This report preserves the earlier comparisons. The later [controlled EVENT replay](timeshift-event-reload.md) reproduced the failure and isolated `max_reload`; it supersedes the unresolved diagnosis below.
+
 [Stable live/growing timeshift](https://github.com/avoid-quest/couch/issues/67) remains incomplete. Two bounded follow-ups narrowed the retained premature-EOF failure without establishing a production fix. Neither run passed overall, and neither qualifies packaged playback or physical audio.
 
 The tests reused the same dirty native/sidecar pair as the prior passing baseline: source d77af244cf6d1f6aab872e2fee0a11897284815f, staged tree 36657fd28d59bf6efd034ea90e4b4e8e3d5d661f, native SHA256 10ef0d0d85746c66f2ddc9b829f33cb06ad88d9acccba04d42a5428cc4386de0, sidecar SHA256 d3e0891d11350e1111ad8385ac52913b9aef50bad8d1fc07e09ad0d4a5ea3a50. No application source, libmpv option, image, package or installed device changed.
