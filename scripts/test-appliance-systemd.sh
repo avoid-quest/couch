@@ -65,7 +65,7 @@ if [[ ${1:-} != --inside ]]; then
     name="couch-appliance-systemd-${GITHUB_RUN_ID:-local}-$$"
     trap 'result=$?; if [[ $result != 0 ]]; then docker exec "$name" journalctl -b --no-pager -n 150 || true; fi; docker rm -f "$name" >/dev/null 2>&1 || true; docker image rm "$name" >/dev/null 2>&1 || true' EXIT
     docker build --platform linux/amd64 -t "$name" - <<'DOCKER'
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:1e0a86e57d247923571b75e0aaf48a1449cf8c543d51fb3e07a4a7d7bfa79316
 RUN rm -f /etc/dpkg/dpkg.cfg.d/excludes && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus git jq acl procps
 CMD ["/sbin/init"]
 DOCKER
