@@ -8,6 +8,7 @@ import { SavedPlaylists } from "./SavedPlaylists";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
 import { Button } from "@/components/ui/button";
 import "./saved-section.css";
+import { personalProfileName } from "./profile-name";
 
 export function SavedSection({ state, credentials, connected, canPlay, onPlay, active, onBrowse, ...favoriteActions }: SavedFavoriteActions & {
   state: SessionState | null;
@@ -38,7 +39,7 @@ export function SavedSection({ state, credentials, connected, canPlay, onPlay, a
       <Button ref={historyBack} data-back variant="outline" onClick={() => setHistory(false)}>Back to Saved</Button>
       <HistoryPanel presentation="inspect" key={state?.activeProfile.id} {...shared} version={state?.libraryVersion ?? 0} onPlay={onPlay} active={active} />
     </> : <>
-    <div className="saved-intro"><p className="text-sm text-muted-foreground">Your saved videos, music and stations, shared on this TV. Saving keeps the current queue and playback as they are.</p><Button variant="outline" onClick={() => onBrowse("Search")}>Find something</Button></div>
+    <div className="saved-intro"><p className="text-sm text-muted-foreground">Videos, music and stations saved by everyone on this TV.</p><Button variant="outline" onClick={() => onBrowse("Search")}>Find something to save</Button></div>
     <Tabs value={tab} onValueChange={setTab}>
       <TabsList className="saved-tabs" aria-label="Saved collections">
         {["Items", "Playlists"].map(name => <TabsTrigger key={name} value={name}>{name}</TabsTrigger>)}
@@ -46,7 +47,7 @@ export function SavedSection({ state, credentials, connected, canPlay, onPlay, a
       <TabsContent value="Items">{active && <div className="saved-items space-y-8"><ForLaterSection inspect {...shared} version={state?.forLaterVersion ?? 0} onFind={() => onBrowse("Search")} /><SavedFavorites {...shared} {...favoriteActions} providerVersion={state?.providerVersion ?? 0} radioVersion={state?.radioVersion ?? 0} /></div>}</TabsContent>
       <TabsContent value="Playlists">{active && <SavedPlaylists {...shared} version={state?.playlistVersion ?? 0} queueCount={state?.queue.length ?? 0} inline />}</TabsContent>
     </Tabs>
-    <Button ref={historyTrigger} variant="ghost" onClick={() => setHistory(true)}>Viewing history for {state?.activeProfile.name ?? "this profile"}</Button>
+    <Button ref={historyTrigger} variant="ghost" onClick={() => setHistory(true)}>{personalProfileName(state?.activeProfile) ? `Viewing history for ${personalProfileName(state?.activeProfile)}` : "Your viewing history"}</Button>
     </>}
   </section>;
 }

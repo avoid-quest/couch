@@ -1345,3 +1345,22 @@ test("paired controllers share For later across profile changes and restart with
   expect(second.hub.session.state.currentEntryId).toBe(current.currentEntryId);
   expect(await (await controllerApi(second.hub, another, "/api/for-later")).json()).toEqual({ items: [] });
 });
+
+
+test("page deep links and refresh serve the frontend while unknown APIs stay unavailable", async () => {
+  const { pagePaths } = await import("../shared/page-paths");
+  const frontend = (await import("../client/index.html")).default;
+  const { hub } = fixture(undefined, undefined, undefined, { frontend });
+  for (const path of Object.values(pagePaths)) {
+    const response = await fetch(`${hub.origin}${path}?q=evening&source=Radio`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<div id="root">');
+    const script = html.match(/<script[^>]+src="([^"]+)"/)?.[1];
+    expect(script).toBeDefined();
+    const asset = await fetch(new URL(script!, `${hub.origin}${path}`));
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("Content-Type")).toContain("javascript");
+  }
+  expect((await fetch(`${hub.origin}/api/not-a-page`)).status).not.toBe(200);
+});

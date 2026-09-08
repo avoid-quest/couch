@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { WatchingProfile as Profile } from "../shared/library";
+import { personalProfileName, profileDisplayName } from "./profile-name";
 
 export function WatchingProfile({ origin, token, connected, profile, playing, version, caption = false }: {
   origin: string;
@@ -20,6 +21,7 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [name, setName] = useState("");
+  const [personName, setPersonName] = useState("");
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -29,6 +31,7 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
   const current = profiles.find(item => item.id === edit?.profile.id);
   const stale = !!edit && current?.name !== edit.profile.name;
   const fallback = profiles.find(item => item.id === "household");
+  const unnamed = !!profile && !personalProfileName(profile);
 
   useEffect(() => {
     if (!open || !connected) return;
@@ -78,7 +81,7 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
     if (await update(`/api/profiles/${encodeURIComponent(edit.profile.id)}/${edit.type}`, {
       expectedName: edit.profile.name, ...(edit.type === "rename" ? { name: edit.name } : {}),
     })) {
-      setNotice(edit.type === "rename" ? `Renamed ${edit.profile.name} to ${edit.name.trim()}.` : `Removed ${edit.profile.name} and their local history and saved playback preferences.`);
+      setNotice(edit.type === "rename" ? `Name saved as ${edit.name.trim()}.` : `Removed ${profileDisplayName(edit.profile)} and their local history and saved playback preferences.`);
       finishEdit(edit.type === "remove");
     }
   };
@@ -93,12 +96,21 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
     }
   };
 
+  const saveName = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!profile || !personName.trim()) return;
+    if (await update(`/api/profiles/${encodeURIComponent(profile.id)}/rename`, { name: personName.trim(), expectedName: profile.name })) {
+      setPersonName("");
+      setOpen(false);
+    }
+  };
+
   return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild><Button variant="outline" className="watching-profile min-h-11 max-w-full" disabled={!connected} aria-label={`Watching profile: ${profile?.name ?? "Household"}`}><UserRound aria-hidden="true" /><span className="profile-name">{caption && <small>Watching as</small>}<span className="truncate">{profile?.name ?? "Household"}</span></span></Button></DialogTrigger>
-    <DialogContent className="sm:max-w-xl break-words [&>*]:min-w-0">
+    <DialogTrigger asChild><Button variant="outline" className="watching-profile min-h-11 max-w-full" disabled={!connected} aria-label={personalProfileName(profile) ? `Watching profile: ${personalProfileName(profile)}` : "Set your name"}><UserRound aria-hidden="true" /><span className="profile-name">{caption && personalProfileName(profile) && <small>Watching as</small>}<span className="truncate">{personalProfileName(profile) ?? "Set your name"}</span></span></Button></DialogTrigger>
+    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl break-words [&>*]:min-w-0">
       <DialogHeader>
         <DialogTitle>Who is watching?</DialogTitle>
-        <DialogDescription>Resume points, watched marks and local media history belong to the selected profile. The shared default cannot be removed. Everyone paired with this TV controls the same profile.</DialogDescription>
+        <DialogDescription>Choose the person watching this TV. Their resume points, watched marks and playback preferences stay with their profile. All paired remotes use the same selection.</DialogDescription>
       </DialogHeader>
       <p className="text-sm text-muted-foreground">Your connected Jellyfin account keeps its own history. Changing this profile does not change that account.</p>
       {playing && <Alert><AlertDescription>Stop playback before switching or removing profiles. Pausing keeps the current watching profile. You can still rename a profile.</AlertDescription></Alert>}
@@ -106,7 +118,7 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
       {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading profiles…</p>}
       {edit ? <form className="min-w-0 space-y-3" aria-label={edit.type === "rename" ? "Rename watching profile" : "Remove watching profile"} onSubmit={event => void saveEdit(event)}>
-        <p className="break-words font-medium">{edit.type === "rename" ? "Rename" : "Remove"} {edit.profile.name}</p>
+        <p className="break-words font-medium">{edit.type === "rename" ? "Rename" : "Remove"} {profileDisplayName(edit.profile)}</p>
         {stale && <Alert><AlertDescription>
           {current ? `Another remote renamed this profile to ${current.name}. Review the name before continuing. Your draft is kept.` : "Another remote removed this profile. Return to the list to choose another profile."}
           {current && <Button type="button" variant="outline" className="mt-2 min-h-11" disabled={pending} onClick={() => { setEdit({ ...edit, profile: current }); setError(null); }}>Use current profile</Button>}
@@ -116,8 +128,8 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
           <Input id="watching-profile-rename" autoFocus autoComplete="off" maxLength={60} required value={edit.name} disabled={!connected || pending} onChange={event => setEdit({ ...edit, name: event.target.value })} />
           <p className="text-sm text-muted-foreground">The new name keeps this profile's saved playback preferences, resume points, watched marks and local history.</p>
         </> : <div className="space-y-2 text-sm text-muted-foreground">
-          <p>This permanently removes {edit.profile.name}'s local resume points, watched marks, media history and saved playback preferences from this TV.</p>
-          <p>Other viewers' history and preferences stay unchanged. If this profile is selected when removed, {fallback?.name ?? "the shared default"} becomes the watching profile.</p>
+          <p>This permanently removes {profileDisplayName(edit.profile)}'s local resume points, watched marks, media history and saved playback preferences from this TV.</p>
+          <p>Other viewers' history and preferences stay unchanged. If this profile is selected when removed, {profileDisplayName(fallback)} becomes the watching profile.</p>
           <p>Your Jellyfin account and its history, paired remotes and administrator access stay unchanged.</p>
         </div>}
         <div className="flex flex-wrap gap-2">
@@ -127,13 +139,18 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
           </Button>
         </div>
       </form> : <>
+      {unnamed && <form className="space-y-3 rounded-lg border p-4" aria-label="Set your name" onSubmit={event => void saveName(event)}>
+        <div className="space-y-1"><Label htmlFor="watching-profile-person-name">Your name</Label><p className="text-sm text-muted-foreground">This profile has no personal name yet. Add yours to keep using its existing history and preferences.</p></div>
+        <Input id="watching-profile-person-name" autoFocus autoComplete="given-name" maxLength={60} required value={personName} disabled={!connected || pending} onChange={event => setPersonName(event.target.value)} />
+        <Button type="submit" className="min-h-11" disabled={!connected || pending || !personName.trim()}>{pending ? "Saving…" : "Save name"}</Button>
+      </form>}
       <ul className="grid gap-2" aria-label="Watching profiles" aria-busy={loading}>{profiles.map(item => <li key={item.id} data-profile-id={item.id} className="min-w-0 space-y-1 rounded-lg border p-2">
         <Button variant={profile?.id === item.id ? "secondary" : "outline"} className="min-h-11 h-auto w-full justify-between gap-3 py-3 text-left whitespace-normal" aria-pressed={profile?.id === item.id} disabled={!connected || pending || playing || profile?.id === item.id} onClick={() => void update(`/api/profiles/${encodeURIComponent(item.id)}/select`).then(ok => { if (ok) setOpen(false); })}>
-          <span className="min-w-0 break-words">{item.name}</span>{profile?.id === item.id && <Check aria-hidden="true" />}
+          <span className="min-w-0 break-words">{profileDisplayName(item)}</span>{profile?.id === item.id && <Check aria-hidden="true" />}
         </Button>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" className="min-h-11" data-action="rename" aria-label={`Rename ${item.name}`} disabled={!connected || pending} onClick={() => { setError(null); setNotice(null); setEdit({ type: "rename", profile: item, name: item.name }); }}><Pencil aria-hidden="true" />Rename</Button>
-          {item.id === "household" ? <span className="text-sm text-muted-foreground">Shared default</span> : <Button variant="ghost" className="min-h-11" data-action="remove" aria-label={`Remove ${item.name}`} disabled={!connected || pending || playing} onClick={() => { setError(null); setNotice(null); setEdit({ type: "remove", profile: item, name: item.name }); }}><Trash2 aria-hidden="true" />Remove</Button>}
+          <Button variant="ghost" className="min-h-11" data-action="rename" aria-label={`Rename ${profileDisplayName(item)}`} disabled={!connected || pending} onClick={() => { setError(null); setNotice(null); setEdit({ type: "rename", profile: item, name: personalProfileName(item) ?? "" }); }}><Pencil aria-hidden="true" />Rename</Button>
+          {item.id !== "household" && <Button variant="ghost" className="min-h-11" data-action="remove" aria-label={`Remove ${item.name}`} disabled={!connected || pending || playing} onClick={() => { setError(null); setNotice(null); setEdit({ type: "remove", profile: item, name: item.name }); }}><Trash2 aria-hidden="true" />Remove</Button>}
         </div>
       </li>)}</ul>
       <Separator />

@@ -57,8 +57,8 @@ test("three groups lead to profile defaults and preserve entry and back focus wi
     expect(document.querySelector("#default-video-quality")?.textContent).toBe("1080p (recommended)");
     await enter("profile");
     expect(document.activeElement).toBe(tab("playback"));
-    expect(document.body.textContent).toContain("Watching profile: Household");
-    expect(document.body.textContent).toContain("Change the watching profile beside playback after stopping.");
+    expect(document.body.textContent).toContain("Watching profile: Your profile");
+    expect(document.body.textContent).toContain("Choose who is watching from your name in the navigation. Stop playback before switching people.");
     expect(tab("general")).toBeNull();
     await all();
     expect(document.activeElement).toBe(document.querySelector('[data-settings-group="profile"]'));

@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { ChevronRight, Play, Search, X } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Bookmark, ChevronRight, Play, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SaveForLater } from "./SaveForLater";
@@ -22,16 +22,33 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
 }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
+  const hero = useRef<HTMLDivElement | null>(null);
+  const focusedControl = useRef<HTMLElement | null>(null);
   const queue = state?.queue ?? [];
   const detail = queue.find(entry => entry.id === detailId);
   const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
   const cursorIndex = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
   const upcoming = queue.slice(cursorIndex + 1);
+  const current = queue.find(entry => entry.id === state?.currentEntryId);
   const canPlay = connected && !!state?.player && state.player.status !== "unavailable";
 
+  useLayoutEffect(() => {
+    const previous = focusedControl.current;
+    if (!active) { focusedControl.current = null; return; }
+    if (!previous || previous.isConnected) return;
+    focusedControl.current = null;
+    if (document.activeElement !== document.body) return;
+    const replacement = hero.current?.querySelector<HTMLButtonElement>(".session-idle-actions button, .play-button:not(:disabled)")
+      ?? hero.current?.querySelector<HTMLButtonElement>(".transport-buttons button:not(:disabled), .session-remote-link");
+    replacement?.focus({ preventScroll: true });
+  });
+
   return <section className="session-home" aria-label="Current TV session">
-    <div className="session-current">
+    <div ref={hero} className="session-current" onFocusCapture={event => { focusedControl.current = event.currentTarget.contains(event.target) ? event.target : null; }} onBlurCapture={event => {
+      if (event.target.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
+    }}>
       <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" />
+      {!current && <div className="session-idle-actions"><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button><Button variant="outline" onClick={() => onBrowse("Saved")}><Bookmark aria-hidden="true" />Saved</Button><Button variant="ghost" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>}
       <Button variant="ghost" className="session-remote-link" onClick={() => onBrowse("Remote")}>TV navigation controls <ChevronRight aria-hidden="true" /></Button>
     </div>
     <div className="session-following">
@@ -41,8 +58,8 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
           {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="session-next-art" video={entry.kind !== "radio"} /> : <MediaArtwork key={entry.thumbnail || entry.id} thumbnail={entry.thumbnail} title={entry.title} className="session-next-art" />}
           <Button variant="ghost" className="session-next-copy" aria-label={`Details for ${entry.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(entry.id); }}><strong>{entry.title}</strong><small>{sourceLabel(entry.source)}{entry.live ? " · LIVE" : ""}</small></Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from Up next`} disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}><X aria-hidden="true" /></Button>
-        </li>)}</ol> : <p className="session-empty">Nothing waiting. Choose something to watch or listen to.</p>}
-        <div className="session-browse-actions"><Button variant="outline" className="session-find" onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something</Button><Button variant="ghost" className="session-find" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>
+        </li>)}</ol> : <p className="session-empty">Your queue is empty. Add items from Search or Saved to play them next.</p>}
+        {current && <div className="session-browse-actions"><Button variant="outline" className="session-find" onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something</Button><Button variant="ghost" className="session-find" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>}
       </section>
       <HistoryPanel presentation="inspect" key={state?.activeProfile.id} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.libraryVersion ?? 0} onPlay={onPlay} continueOnly active={active} />
     </div>

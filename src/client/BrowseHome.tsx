@@ -10,6 +10,7 @@ import { progressTime, type HistoryPlayback } from "./HistoryPanel";
 import type { Credentials } from "./session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
+import { personalProfileName } from "./profile-name";
 
 const sources = ["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"];
 const asHistory = (item: LibraryItem): HistoryItem => ({
@@ -103,11 +104,12 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
   const hour = new Date().getHours();
+  const personName = personalProfileName(state?.activeProfile);
   const selected = detail && metadata(detail);
 
   return <section className="browse-home" aria-label="Browse and resume">
     <div className="browse-greeting">
-      <div><p className="browse-eyebrow">Good {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}{state?.activeProfile.name ? `, ${state.activeProfile.name}` : ""}</p><h1>{hero ? "Pick up where you left off." : "Find something for tonight."}</h1></div>
+      <div><p className="browse-eyebrow">Good {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}{personName ? `, ${personName}` : ""}</p><h1>{hero ? "Pick up where you left off." : "Find something for tonight."}</h1></div>
     </div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p role="status" className="browse-notice">{notice}</p>}
@@ -117,7 +119,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
       <div className="browse-hero-copy"><p className="browse-eyebrow">Continue watching · {hero.libraryItemId ? "Local library" : "Local file"}</p><h2>{hero.title}</h2><p>{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
         <div className="browse-actions"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
       </div>
-    </section> : !loading && <section className="browse-hero browse-empty" aria-label="Continue watching"><div><p className="browse-eyebrow">Your next watch starts here</p><h2>Make yourself at home.</h2><p>No unfinished local media for this profile. Search your sources, or open your library to choose something.</p><div className="browse-actions"><Button onClick={() => onBrowse("Search")}>Find something to play<ChevronRight aria-hidden="true" /></Button><Button variant="outline" onClick={() => onBrowse("Library")}>Open library</Button></div></div></section>}
+    </section> : !loading && <section className="browse-hero browse-empty" aria-label="Continue watching"><div><p className="browse-eyebrow">Ready when you are</p><h2>What would you like to play?</h2><p>Search videos, music and live TV, or choose something from your library.</p><div className="browse-actions"><Button onClick={() => onBrowse("Search")}>Find something to play<ChevronRight aria-hidden="true" /></Button><Button variant="outline" onClick={() => onBrowse("Library")}>Open library</Button></div></div></section>}
     <div className="browse-section-heading"><h2>From your library</h2><Button variant="ghost" aria-expanded={browseAll} aria-controls="browse-all-sources" onClick={() => setBrowseAll(value => !value)}>Browse all<ChevronRight aria-hidden="true" /></Button></div>
     {!!cards.length && <ul className="browse-media-grid">{cards.map(item => {
       const entry = asHistory(item);

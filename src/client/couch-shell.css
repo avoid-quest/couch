@@ -12,9 +12,9 @@
 .couch-shell .profile-name small { font-size: 10px; font-weight: 400; color: var(--muted-foreground); }
 .couch-shell .workspace { display: grid; grid-template-columns: var(--shell-rail) minmax(0, 1fr); gap: 0; min-height: calc(100dvh / var(--interface-scale) - var(--shell-header)); padding: 0; }
 .couch-shell .primary-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 8px; width: var(--shell-rail); height: calc(100dvh / var(--interface-scale) - var(--shell-header)); padding: 26px 18px calc(var(--shell-footer) + 18px); border-right: 1px solid var(--border); }
-.couch-shell .primary-nav button { position: relative; display: flex; justify-content: flex-start; align-items: center; height: 48px; min-height: 48px; gap: 12px; padding: 12px; font-size: 14px; }
-.couch-shell .primary-nav button:last-child { margin-top: auto; }
-.couch-shell .primary-nav button[aria-current="page"] { background: var(--muted); }
+.couch-shell .primary-nav [data-source] { position: relative; display: flex; justify-content: flex-start; align-items: center; height: 48px; min-height: 48px; border-radius: 8px; text-decoration: none; gap: 12px; padding: 12px; font-size: 14px; }
+.couch-shell .primary-nav [data-source]:last-child { margin-top: auto; }
+.couch-shell .primary-nav [data-source][aria-current="page"] { background: var(--muted); }
 .couch-shell .primary-nav svg { width: 20px; height: 20px; }
 .couch-shell .nav-count { margin-left: auto; font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--muted); }
 .couch-shell .media-browser { min-width: 0; padding: 32px var(--shell-gutter) calc(var(--shell-footer) + 32px); gap: 0; border: 0; border-radius: 0; background: transparent; }
@@ -34,7 +34,7 @@
 .couch-shell.tv-shell .tv-browser { padding: 0; }
 .couch-shell.tv-shell .media-browser { font-size: 18px; }
 .couch-shell.tv-shell .media-browser h1 { font-size: 34px; }
-.couch-shell.tv-shell .primary-nav button { font-size: 18px; }
+.couch-shell.tv-shell .primary-nav [data-source] { font-size: 18px; }
 .couch-shell.tv-shell .pair-shortcut { font-size: 14px; }
 .couch-shell.tv-shell .media-browser .section-heading { padding-inline: 0; }
 @media (max-width: 959px) {
@@ -44,10 +44,10 @@
   .couch-shell.remote-shell .tv-name { display: none; }
   .couch-shell.remote-shell .watching-profile { min-height: 46px; height: 46px; }
   .couch-shell.remote-shell .workspace { display: block; }
-  .couch-shell.remote-shell .media-browser { padding: 25px 20px calc(var(--shell-nav) + var(--shell-footer) + 25px); }
+  .couch-shell.remote-shell .media-browser { padding: 25px 20px calc(var(--shell-nav) + 25px); }
   .couch-shell.remote-shell .primary-nav { position: fixed; inset: auto 0 0; z-index: 30; width: 100%; height: var(--shell-nav); flex-direction: row; padding: 9px 8px calc(9px + env(safe-area-inset-bottom)); gap: 0; border: 0; border-top: 1px solid var(--border); background: var(--background); }
-  .couch-shell.remote-shell .primary-nav button { flex: 1; flex-direction: column; justify-content: center; height: 55px; min-height: 55px; min-width: 0; gap: 5px; font-size: 10px; padding: 4px; }
-  .couch-shell.remote-shell .primary-nav button:last-child { margin: 0; }
+  .couch-shell.remote-shell .primary-nav [data-source] { flex: 1; flex-direction: column; justify-content: center; height: 55px; min-height: 55px; min-width: 0; gap: 5px; font-size: 10px; padding: 4px; }
+  .couch-shell.remote-shell .primary-nav [data-source]:last-child { margin: 0; }
   .couch-shell.remote-shell .nav-count { position: absolute; right: 8px; top: 0; font-size: 8px; }
   .couch-shell.remote-shell .session-bar { bottom: var(--shell-nav); min-height: var(--shell-footer); padding: 10px 18px; }
   .couch-shell.remote-shell .header-status { gap: 6px; }
@@ -57,9 +57,14 @@
 .couch-shell .media-browser > section > .session-home { padding: 0; }
 .couch-shell .settings-page > h1 { font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }
 @media (max-width: 959px) {
-  .couch-shell.remote-shell .session-current-art { height: 120px; aspect-ratio: auto; }
-  .couch-shell.remote-shell .session-home .media-title { font-size: 18px; }
 }
 
 .couch-shell .page-title { margin-bottom: 26px; font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }
 .couch-shell .browse-source-list { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.couch-shell:has(.session-bar) .media-browser { padding-bottom: calc(var(--shell-footer) + 32px); }
+@media (max-width: 959px) {
+  .couch-shell.remote-shell:has(.session-bar) .media-browser { padding-bottom: calc(var(--shell-nav) + var(--shell-footer) + 25px); }
+  .couch-shell.remote-shell .pair-card { margin: 24px 20px; }
+  .couch-shell.remote-shell .profile-name { max-width: 150px; overflow-wrap: anywhere; white-space: normal; }
+}

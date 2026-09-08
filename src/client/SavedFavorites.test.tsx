@@ -120,18 +120,18 @@ test("Saved starts with every existing save store together and keeps viewing his
   expect([...document.querySelectorAll('[role="tab"]')].map(node => node.textContent)).toEqual(["Items", "Playlists"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
-  await click("Find something");
+  await click("Find something to save");
   expect(browsed).toEqual(["Search"]);
-  await click("Viewing history for this profile");
+  await click("Your viewing history");
   expect(document.querySelector("h1")?.textContent).toBe("Viewing history");
-  expect(document.body.textContent).toContain("Household's local history");
+  expect(document.body.textContent).toContain("Your local history");
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(true);
   expect(document.activeElement).toBe(button("Back to Saved"));
   expect(document.querySelector("button[data-back]")).toBe(button("Back to Saved"));
   await act(async () => document.querySelector<HTMLButtonElement>("button[data-back]")!.click());
   await flush();
   expect(document.querySelector("h1")?.textContent).toBe("Saved");
-  expect(document.activeElement).toBe(button("Viewing history for this profile"));
+  expect(document.activeElement).toBe(button("Your viewing history"));
   expect(calls.every(call => call.method === "GET")).toBe(true);
 });
 
