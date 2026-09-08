@@ -79,9 +79,9 @@ try {
   await api("/api/sound/output", { output: "couch_sound_hdmi" });
   await Bun.sleep(500);
   // Read only a synthetic output monitor, never a microphone.
-  const silence = Bun.spawn(["pacat", "--playback", "--raw", "--device=couch_sound_analog", "--format=s16le", "--rate=48000", "--channels=2", "/dev/zero"], { stdout: "ignore", stderr: Bun.file("/artifacts/silence-clock.log") });
-  const capture = Bun.spawn(["parec", "--device=couch_sound_analog.monitor", "--format=s16le", "--rate=48000", "--channels=2"], { stdout: Bun.file("/artifacts/fallback-monitor.pcm"), stderr: Bun.file("/artifacts/fallback-monitor.log") });
-  await Bun.sleep(250);
+  const silence = Bun.spawn(["pacat", "--playback", "--raw", "--device=couch_sound_analog", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50", "/dev/zero"], { stdout: "ignore", stderr: Bun.file("/artifacts/silence-clock.log") });
+  const capture = Bun.spawn(["parec", "--device=couch_sound_analog.monitor", "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50"], { stdout: Bun.file("/artifacts/fallback-monitor.pcm"), stderr: Bun.file("/artifacts/fallback-monitor.log") });
+  await until("alternate monitor produces clocked samples before output loss", async () => (await Bun.file("/artifacts/fallback-monitor.pcm").stat()).size >= 4800);
   await pactl("unload-module", hdmi);
   await until("selected sink loss pauses seekable native media", () => state?.player.status === "paused" && !!state.player.error && !!state.systemAudio?.error);
   hdmi = await pactl("load-module", "module-null-sink", "sink_name=couch_sound_hdmi", "sink_properties=device.description=HDMI_Test");
