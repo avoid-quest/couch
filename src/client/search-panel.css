@@ -1,0 +1,18 @@
+.search-panel.catalog-panel { padding: 0; border: 0; background: transparent; }
+.search-panel .search-box { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border: 1px solid #565650; border-radius: 10px; background: #242423; }
+.search-box > svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted-foreground); }
+.search-panel .search-box input { height: 44px; border: 0; background: transparent; box-shadow: none; padding: 0; font-size: 17px; }
+.search-panel .search-catalogs > button { border: 0; background: transparent; font-size: 13px; }
+.search-panel .search-results { padding: 0; }
+.search-panel .search-result-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.search-panel .search-result-art { width: 46px; height: 54px; border-radius: 6px; }
+.search-panel .search-result-title { display: flex; min-width: 0; height: auto; min-height: 44px; flex: 1; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; text-align: left; white-space: normal; }
+.search-result-title strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.search-result-title small { color: var(--muted-foreground); font-size: 11px; overflow-wrap: anywhere; }
+.search-detail-art { width: 100%; height: auto; aspect-ratio: 1.9; }
+.search-detail-art svg { width: 64px; height: 64px; }
+@media (max-width: 650px) {
+  .search-panel .search-box { padding: 10px 14px; gap: 10px; }
+  .search-panel .search-box input { font-size: 14px; }
+  .search-optional { display: none; }
+}

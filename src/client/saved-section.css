@@ -1,0 +1,29 @@
+.saved-section { min-width: 0; }
+.saved-section > h1 { margin: 12px 0 26px; font-size: 34px; font-weight: 600; line-height: 1.15; letter-spacing: -1.2px; }
+.saved-section .saved-tabs { width: 100%; height: auto; justify-content: flex-start; gap: 8px; padding: 0 0 14px; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.saved-section .saved-tabs > button { flex: 0 1 auto; min-height: 44px; padding: 0 15px; font-size: 14px; }
+.saved-section .saved-tabs > button[data-state="active"] { background: var(--secondary); box-shadow: none; }
+.saved-section [data-slot="tabs-content"] { padding-top: 18px; }
+.saved-section .catalog-panel { padding: 0; border: 0; background: transparent; }
+.saved-section .catalog-panel li, .saved-section .history-items [data-slot="card"] { padding: 13px 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+.saved-playlists-inline { display: grid; gap: 20px; min-width: 0; }
+.saved-playlist-heading { display: flex; align-items: center; gap: 20px; }
+.saved-playlist-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.saved-playlist-heading h2 { margin: 5px 0; font-size: 24px; font-weight: 600; }
+.saved-playlist-art { display: grid; width: 90px; height: 90px; flex-shrink: 0; place-items: center; border-radius: 12px; background: #555044; color: #e0d8c5; }
+.saved-playlist-art svg { width: 34px; height: 34px; }
+.saved-playlists-inline ul, .saved-playlists-inline ol { max-height: none; }
+.saved-playlists-inline ul > li > button { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; padding: 16px 0; }
+.saved-section .saved-item-art { width: 46px; height: 54px; border-radius: 6px; }
+.saved-section .saved-item-title { display: flex; min-width: 0; height: auto; min-height: 44px; flex: 1; align-items: flex-start; flex-direction: column; gap: 6px; padding: 0; white-space: normal; text-align: left; }
+.saved-item-title strong { overflow-wrap: anywhere; font-size: 14px; font-weight: 600; }
+.saved-item-title small { color: var(--muted-foreground); font-size: 11px; }
+.saved-detail-art { width: 100%; height: auto; aspect-ratio: 1.9; }
+.saved-detail-art svg { width: 64px; height: 64px; }
+@media (max-width: 650px) {
+  .saved-section > h1 { font-size: 27px; letter-spacing: -.9px; }
+  .saved-section .saved-tabs > button { padding: 0 10px; font-size: 13px; }
+  .saved-playlist-heading { gap: 14px; }
+  .saved-playlist-art { width: 70px; height: 70px; }
+  .saved-optional { display: none; }
+}

@@ -10,15 +10,15 @@ let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Ev
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
-async function render(connected = true, canPlay = true, version = 1) {
+async function render(connected = true, canPlay = true, version = 1, inspect = false) {
   const { ForLaterSection } = await import("./ForLaterSection");
-  await act(async () => root.render(<ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} version={version} />));
+  await act(async () => root.render(<ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} version={version} inspect={inspect} />));
   await flush();
 }
 beforeEach(async () => {
   calls.length = 0; missing = canceled = false; items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "MutationObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -98,4 +98,17 @@ test("a successful append whose Play was canceled reports that outcome instead o
   expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
   expect(document.querySelectorAll("li")).toHaveLength(2);
+});
+
+
+test("Saved opens details without playing and keeps playback inside the dialog", async () => {
+  await render(true, true, 1, true);
+  expect(button("Play Evening movie")).toBeUndefined();
+  await click("Details for Evening movie");
+  expect(calls.every(call => call.method === "GET")).toBe(true);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Saved for later");
+  await click("Play Evening movie");
+  expect(calls.at(-1)?.body).toEqual({ mode: "play" });
+  await click("Close");
+  expect(document.activeElement).toBe(button("Details for Evening movie"));
 });

@@ -59,6 +59,9 @@ type Props = {
   preferences?: Preferences;
   onCommand: (action: Action) => Promise<boolean>;
   initialOpen?: boolean;
+  inline?: boolean;
+  active?: boolean;
+  onOpenRequest?: () => void;
   setupStep?: SetupStep;
   sourcesRequest?: number;
   jellyfinVersion: number;
@@ -66,27 +69,30 @@ type Props = {
   libraryVersion: number;
 };
 
-export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, setupStep, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
+export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, inline = false, active = true, onOpenRequest, setupStep, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
   const [requestedOpen, setOpen] = useState(initialOpen);
-  const open = requestedOpen || !!setupStep && setupStep !== "complete";
-  const [selectedSection, setSection] = useState("");
   const setup = !!setupStep && setupStep !== "complete";
+  const page = inline && !!credentials && !pairingRequired && !setup;
+  const open = setup || (page ? active : requestedOpen);
+  const [selectedSection, setSection] = useState("");
+  const requestOpen = useRef(onOpenRequest);
+  requestOpen.current = onOpenRequest;
   const section = setup ? !host && identity?.authority === "administrator" ? setupStep : "general" : selectedSection;
   const group = settingsGroups.find(group => group.id === settingsGroup(section))!;
   const sectionNavigation = useRef<HTMLDivElement | null>(null);
   const focusSection = useRef(false);
   useEffect(() => {
-    if (focusSection.current && section && !setup) {
+    if (open && focusSection.current && section && !setup) {
       sectionNavigation.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.focus();
       focusSection.current = false;
     }
-  }, [section, setup]);
+  }, [section, setup, open]);
   const previousStep = useRef(setupStep);
   useEffect(() => {
     if (previousStep.current && previousStep.current !== "complete" && setupStep === "complete") setOpen(false);
     previousStep.current = setupStep;
   }, [setupStep]);
-  useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); } }, [sourcesRequest]);
+  useEffect(() => { if (sourcesRequest) { setSection("sources"); setOpen(true); setError(null); setNotice(null); requestOpen.current?.(); } }, [sourcesRequest]);
   const [devices, setDevices] = useState<Controller[] | null>(null);
   const [forgetting, setForgetting] = useState(false);
   const [draftName, setDraftName] = useState(name);
@@ -110,7 +116,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
       setSection("general");
     }
   }, [administrator, selectedSection]);
-  useEffect(() => { if (origin && administrator && readUpdateRequest(origin)) { setSection("updates"); setOpen(true); } }, [origin, administrator]);
+  useEffect(() => { if (origin && administrator && readUpdateRequest(origin)) { setSection("updates"); setOpen(true); requestOpen.current?.(); } }, [origin, administrator]);
   const canWrite = connected && !loading && !pending;
   const urls = host?.urls ?? details?.urls ?? [];
   const setupUrl = urls[0];
@@ -201,13 +207,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     </div>
   </div>;
 
-  return <Dialog open={open} onOpenChange={value => { if (setup) return; setOpen(value); setError(null); setNotice(null); }}>
-    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
-    <DialogContent showCloseButton={!setup} data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
-      <DialogHeader>
-        <DialogTitle className={host ? "text-lg" : undefined}>{setup ? host ? "Welcome to Couch" : "Set up your TV" : "Settings"}</DialogTitle>
-        <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
-      </DialogHeader>
+  const content = <>
       {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
       {!setup && !section && <div className="grid gap-3" aria-label="Settings sections">
         {settingsGroups.map(group => <Button key={group.id} variant="outline" className="h-auto min-h-16 justify-between gap-3 whitespace-normal px-4 py-3 text-left" data-settings-group={group.id} onClick={() => { focusSection.current = true; setSection(group.section); }}><span><span className="block font-medium">{group.title}</span><span className="block text-sm font-normal text-muted-foreground">{group.description}</span></span><ChevronRight aria-hidden="true" /></Button>)}
@@ -329,6 +329,20 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
       {!connected && <p role="status" className="text-muted-foreground">{credentials ? "Connect to the TV to change its settings." : "This browser is not paired."}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {notice && <p role="status">{notice}</p>}
+  </>;
+
+  if (page) return <section className="settings-page space-y-6" aria-label="Settings" hidden={!active} data-tv-local-only={host && section === "sources" ? "" : undefined}>
+    {active && <><header><h1 className="text-3xl font-semibold">Settings</h1><p className="mt-2 text-muted-foreground">{savedName || "Couch"}</p></header>{content}</>}
+  </section>;
+
+  return <Dialog open={open} onOpenChange={value => { if (setup) return; setOpen(value); setError(null); setNotice(null); }}>
+    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
+    <DialogContent showCloseButton={!setup} data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
+      <DialogHeader>
+        <DialogTitle className={host ? "text-lg" : undefined}>{setup ? host ? "Welcome to Couch" : "Set up your TV" : "Settings"}</DialogTitle>
+        <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
+      </DialogHeader>
+      {content}
     </DialogContent>
   </Dialog>;
 }

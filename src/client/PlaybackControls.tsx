@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Action, PlayerState, SessionState } from "../shared/protocol";
 import type { Credentials } from "./session";
+import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
@@ -21,24 +22,26 @@ function time(seconds: number) {
   return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(value % 60).padStart(2, "0")}`;
 }
 
-function sourceLabel(source: string) {
+export function sourceLabel(source: string) {
   try {
     if (source.startsWith("web:")) return new URL(source.slice(4)).host;
     const url = new URL(source);
     if (url.protocol === "file:") return "Local file";
     if (url.protocol === "library:") return "Your library";
     if (url.protocol === "jellyfin:") return "Jellyfin";
+    if (url.protocol === "iptv:") return "TV guide";
     if (url.protocol === "radio:") return "Radio playlist";
     return url.host || "Media";
   } catch { return "Media"; }
 }
 
-export function PlaybackControls({ state, credentials, connected, run, onExpand }: {
+export function PlaybackControls({ state, credentials, connected, run, onExpand, presentation = "default" }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
   run: (action: Action) => Promise<boolean>;
   onExpand?: () => void;
+  presentation?: "default" | "session";
 }) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
@@ -48,11 +51,24 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
   const transportReady = available && !!player?.playbackId && ["playing", "paused"].includes(player.status);
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
 
-  return <div className="player-controls">
+  const session = presentation === "session";
+  const stop = <Button variant="ghost" size={session ? "default" : "icon"} className="icon-button" aria-label="Stop playback" disabled={!available || !active}
+    onClick={() => void run({ type: "stop" })}><Icon name="stop" />{session && "Stop playback"}</Button>;
+  const volume = <div className="volume-control"><Icon name="volume" /><RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
+    onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>{state?.systemAudio && <Button variant="outline" disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? "Unmute TV" : "Mute TV"}</Button>}</div>;
+  const settings = <div className="player-settings">
+    {player && state?.preferences && <PlaybackSettings player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+    {!session && <WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} />}
+  </div>;
+
+  return <div className={`player-controls${session ? " session-playback" : ""}`}>
     <div className="now-heading">
-      <p className="eyebrow">Now playing</p>
+      <p className="eyebrow">{session ? state?.installationName || "Your TV" : "Now playing"}</p>
       <Badge variant="secondary" className="playback-status">{state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</Badge>
     </div>
+    {session && <div className="session-current-art">{current?.artworkId
+      ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} video={!radio} />
+      : <MediaArtwork key={current?.thumbnail || current?.id || "idle"} thumbnail={current?.thumbnail} title={current?.title || "TV"} />}</div>}
     <h1 className="media-title" title={current?.title}>{current?.title || "Nothing playing"}</h1>
     <p className="source-label">{current ? sourceLabel(current.source) : "Choose something to play on your TV."}</p>
     {connected && radio && state?.radioProgramme && <figure className="radio-programme">
@@ -79,21 +95,17 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
     </div>
     <div className="transport-row">
       <div className="transport-buttons">
-        <Button size="icon" className="play-button" aria-label={player?.status === "playing" ? "Pause" : "Resume"} disabled={!transportReady}
-          onClick={() => { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" }); }}><Icon name={player?.status === "playing" ? "pause" : "play"} /></Button>
-        <Button variant="ghost" size="icon" className="icon-button" aria-label="Next in queue" disabled={!transportReady}
-          onClick={() => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" /></Button>
-        <Button variant="ghost" size="icon" className="icon-button" aria-label="Stop playback" disabled={!available || !active}
-          onClick={() => void run({ type: "stop" })}><Icon name="stop" /></Button>
+        <Button size={session ? "default" : "icon"} className="play-button" aria-label={player?.status === "playing" ? "Pause" : "Resume"} disabled={!transportReady}
+          onClick={() => { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" }); }}><Icon name={player?.status === "playing" ? "pause" : "play"} />{session && (player?.status === "playing" ? "Pause" : "Resume")}</Button>
+        <Button variant={session ? "outline" : "ghost"} size={session ? "default" : "icon"} className="icon-button" aria-label="Next in queue" disabled={!transportReady}
+          onClick={() => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" />{session && "Next"}</Button>
+        {!session && stop}
         {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp /></Button>}
       </div>
-      <div className="volume-control"><Icon name="volume" /><RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
-        onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>{state?.systemAudio && <Button variant="outline" disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? "Unmute TV" : "Mute TV"}</Button>}</div>
+      {!session && volume}
     </div>
+    {session && <details className="session-playback-options"><summary>Volume &amp; playback options</summary>{volume}{settings}{stop}</details>}
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
-    <div className="player-settings">
-      {player && state?.preferences && <PlaybackSettings player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
-      <WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} />
-    </div>
+    {!session && settings}
   </div>;
 }

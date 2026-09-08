@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { WatchingProfile as Profile } from "../shared/library";
 
-export function WatchingProfile({ origin, token, connected, profile, playing, version }: {
+export function WatchingProfile({ origin, token, connected, profile, playing, version, caption = false }: {
   origin: string;
   token: string;
   connected: boolean;
   profile: Profile | undefined;
   playing: boolean;
   version: number;
+  caption?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -93,7 +94,7 @@ export function WatchingProfile({ origin, token, connected, profile, playing, ve
   };
 
   return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild><Button variant="outline" className="watching-profile min-h-11 max-w-full" disabled={!connected} aria-label={`Watching profile: ${profile?.name ?? "Household"}`}><UserRound aria-hidden="true" /><span className="truncate">{profile?.name ?? "Household"}</span></Button></DialogTrigger>
+    <DialogTrigger asChild><Button variant="outline" className="watching-profile min-h-11 max-w-full" disabled={!connected} aria-label={`Watching profile: ${profile?.name ?? "Household"}`}><UserRound aria-hidden="true" /><span className="profile-name">{caption && <small>Watching as</small>}<span className="truncate">{profile?.name ?? "Household"}</span></span></Button></DialogTrigger>
     <DialogContent className="sm:max-w-xl break-words [&>*]:min-w-0">
       <DialogHeader>
         <DialogTitle>Who is watching?</DialogTitle>

@@ -1,0 +1,71 @@
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import type { Action, SessionState } from "../shared/protocol";
+
+let root: Root, window: Window, request: ReturnType<typeof spyOn>;
+const originals = new Map<string, PropertyDescriptor | undefined>();
+const actions: Action[] = [], browsed: string[] = [];
+const state: SessionState = {
+  queue: ["past", "current", "next"].map(id => ({ id, title: id, source: `library:${id}` })), currentEntryId: "current", queueCursorEntryId: "current",
+  activeProfile: { id: "household", name: "Household" },
+  player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
+};
+const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
+async function render(value = state, connected = true) {
+  const { SessionHome } = await import("./SessionHome");
+  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active onBrowse={name => browsed.push(name)} onPlay={async () => true} run={async action => { actions.push(action); return true; }} />));
+}
+beforeEach(async () => {
+  actions.length = 0; browsed.length = 0;
+  window = new Window({ url: "http://localhost" });
+  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLFormElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
+  }
+  request = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ profile: state.activeProfile, items: [] })) as unknown as typeof fetch);
+  const { createRoot } = await import("react-dom/client");
+  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+});
+afterEach(async () => {
+  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+});
+test("session presentation retains native playback commands and real upcoming queue actions", async () => {
+  await render();
+  expect(button("Pause").textContent).toBe("Pause");
+  expect(button("Next in queue").textContent).toBe("Next");
+  expect(document.querySelector(".session-next-list")?.textContent).toContain("next");
+  expect(document.querySelector(".session-next-list")?.textContent).not.toContain("past");
+  expect(document.querySelector(".session-next-list")?.textContent).not.toContain("current");
+  expect(document.querySelector(".session-playback-options")?.hasAttribute("open")).toBe(false);
+  expect(button("Stop playback").closest("details")).not.toBeNull();
+  expect(document.body.textContent).not.toContain("Watching as");
+  expect(actions).toEqual([]);
+  await act(async () => button("Details for next").click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("next");
+  expect(actions).toEqual([]);
+  await act(async () => button("Play next on TV").click());
+  expect(actions).toEqual([{ type: "play", entryId: "next" }]);
+  actions.length = 0;
+  for (const label of ["Pause", "Next in queue", "Stop playback", "Remove next from Up next"]) await act(async () => button(label).click());
+  expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: true }, { type: "next", playbackId: "playback" }, { type: "stop" }, { type: "remove", entryId: "next" }]);
+  await act(async () => button("Find something").click());
+  await act(async () => button("Browse sources").click());
+  expect(browsed).toEqual(["Search", "Browse"]);
+});
+test("Stop preserves the durable queue cursor and disconnected controls cannot send commands", async () => {
+  await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  expect(document.querySelector(".session-next-list")?.textContent).toContain("next");
+  expect(document.querySelector(".session-next-list")?.textContent).not.toContain("current");
+  expect(button("Resume").disabled).toBe(true);
+  await render(state, false);
+  for (const label of ["Pause", "Next in queue", "Stop playback", "Remove next from Up next"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
+  await act(async () => button("Details for next").click());
+  expect(button("Play next on TV").disabled).toBe(true);
+  expect(button("Save next for later").disabled).toBe(true);
+  expect(actions).toEqual([]);
+});

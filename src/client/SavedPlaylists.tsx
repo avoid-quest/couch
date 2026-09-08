@@ -8,15 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
 
-export function SavedPlaylists({ origin, token, connected, canPlay, version, queueCount }: {
+export function SavedPlaylists({ origin, token, connected, canPlay, version, queueCount, inline = false }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
   version: number;
   queueCount: number;
+  inline?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [dialogOpen, setOpen] = useState(false);
+  const open = inline || dialogOpen;
   const [playlists, setPlaylists] = useState<SavedPlaylistSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playlist, setPlaylist] = useState<SavedPlaylist | null>(null);
@@ -131,13 +133,14 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   const load = (mode: PlaylistLoadMode) => playlist && update(`${path}/load`, { revision: playlist.revision, mode },
     mode === "append" ? `Added ${playlist.name} to the queue.` : mode === "play" ? `Starting ${playlist.name} on the TV.` : `Loaded ${playlist.name}. Press Play to start.`);
 
-  return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); setConfirm(null); }}>
-    <DialogTrigger asChild><Button variant="outline" className="min-h-11" disabled={!connected}><ListMusic aria-hidden="true" />Saved playlists</Button></DialogTrigger>
-    <DialogContent className="saved-playlists sm:max-w-2xl">
-      <DialogHeader>
+  const content = <>
+      {inline ? <header className="saved-playlist-heading">
+        <span className="saved-playlist-art" aria-hidden="true"><ListMusic /></span>
+        <div><p className="text-sm text-muted-foreground">Shared on this TV</p><h2>{playlist?.name ?? "Playlists"}</h2><p className="text-sm text-muted-foreground">{selectedId ? "An ordered mix you can play again." : "Keep a queue to play again later."}</p></div>
+      </header> : <DialogHeader>
         <DialogTitle className="break-words pr-12">{playlist?.name ?? "Saved playlists"}</DialogTitle>
         <DialogDescription>{selectedId ? "Edit this playlist or load it into the shared TV queue." : "Playlists are shared on this TV and stay available when the watching profile changes. Save the queue to reuse it later."}</DialogDescription>
-      </DialogHeader>
+      </DialogHeader>}
       {selectedId && <Button ref={backRef} variant="ghost" className="justify-self-start" disabled={pending} onClick={() => select(null)}><ArrowLeft aria-hidden="true" />All playlists</Button>}
       {!connected && <Alert><AlertDescription>Reconnect to load or edit playlists.</AlertDescription></Alert>}
       {error && <Alert variant="destructive" className="gap-2"><AlertDescription>{error}</AlertDescription><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload playlists</Button></Alert>}
@@ -205,6 +208,10 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           </div>
         </div>}
       </>}
-    </DialogContent>
+    </>;
+  if (inline) return <section className="saved-playlists saved-playlists-inline" aria-label="Saved playlists">{content}</section>;
+  return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); setConfirm(null); }}>
+    <DialogTrigger asChild><Button variant="outline" className="min-h-11" disabled={!connected}><ListMusic aria-hidden="true" />Saved playlists</Button></DialogTrigger>
+    <DialogContent className="saved-playlists sm:max-w-2xl">{content}</DialogContent>
   </Dialog>;
 }

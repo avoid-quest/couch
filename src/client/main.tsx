@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./theme.css";
 import "./styles.css";
-import "./remote-mode.css";
 import "./tv-mode.css";
+import "./couch-shell.css";
 import "./appearance.css";
 
 document.documentElement.classList.add("dark");

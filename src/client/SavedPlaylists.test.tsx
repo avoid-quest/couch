@@ -1,0 +1,53 @@
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+
+let root: Root, window: Window, request: ReturnType<typeof spyOn>;
+const originals = new Map<string, PropertyDescriptor | undefined>();
+const writes: Array<{ path: string; method: string; body: unknown }> = [];
+const playlist = { id: "friday", name: "Friday night", revision: 3, updatedAt: 1, entries: [{ id: "movie", title: "Evening movie" }] };
+const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
+const flush = () => act(async () => { await Bun.sleep(15); });
+const click = async (node: HTMLElement) => { await act(async () => node.click()); await flush(); };
+
+beforeEach(async () => {
+  writes.length = 0;
+  window = new Window({ url: "http://localhost" });
+  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
+  }
+  request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
+    return Response.json(path === "/api/playlists" ? { playlists: [{ ...playlist, entryCount: 1 }] } : { playlist });
+  }) as typeof fetch);
+  const { createRoot } = await import("react-dom/client");
+  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+});
+afterEach(async () => {
+  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+});
+
+for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} reuses authenticated playlist loading and deletion confirmation`, async () => {
+  const { SavedPlaylists } = await import("./SavedPlaylists");
+  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
+  await flush();
+  if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
+  else { expect(request).not.toHaveBeenCalled(); await click(button("Saved playlists")); }
+  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
+  expect(writes).toEqual([]);
+  await click(button("Add to queue"));
+  expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
+  await click(button("Delete playlist"));
+  expect(writes).toHaveLength(1);
+  await click(button("Cancel"));
+  expect(writes).toHaveLength(1);
+  await click(button("Delete playlist")); await click(button("Confirm delete"));
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
+});
