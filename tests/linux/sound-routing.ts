@@ -40,6 +40,7 @@ async function api(path: string, body?: unknown): Promise<any> {
   const result = await response.json(); assert.ok(response.ok, `HTTP ${response.status} ${JSON.stringify(result)}`); return result;
 }
 async function connect() {
+  await until("native server ready after launch", async () => { try { return (await fetch(`${origin}/api/build`, { headers: { authorization: `Bearer ${token}` } })).ok; } catch { return false; } });
   socket = new (WebSocket as any)(await remoteSocketUrl(origin, token), { headers: { origin } });
   socket.onmessage = event => {
     const message = JSON.parse(String(event.data)) as ServerMessage;
