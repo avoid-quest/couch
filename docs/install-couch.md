@@ -50,6 +50,8 @@ remains available. Fix the reported APT error and rerun the installer.
 
 After installation the session starts without a network dependency. Offline boot
 can display Couch and use local media; online services still require connectivity.
+For a named HTTP address on port 80 or local HTTPS on port 443, see
+[named LAN address configuration](lan-origin.md).
 See [session operation and recovery](appliance-session.md) for supervision,
 administrator recovery, AC/lid behavior and returning to a console.
 
