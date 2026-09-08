@@ -14,15 +14,18 @@
 .couch-shell .session-bar-controls button { width: 44px; height: 44px; padding: 0; border-radius: 50%; }
 .couch-shell .session-bar-controls .play-button { background: var(--foreground); color: var(--background); }
 .couch-shell .session-bar-controls button svg { width: 22px; height: 22px; }
-.couch-shell .session-bar-open { min-height: 44px; }
+.couch-shell footer.session-bar .session-bar-open { min-width: 160px; min-height: 44px; }
 .couch-shell .session-bar-open:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 4px; }
+@media (min-width: 720px) and (max-width: 959px) {
+  .couch-shell.remote-shell .session-bar-volume { flex-basis: 220px; }
+}
 @media (max-width: 719px) {
   .couch-shell.remote-shell:has(.session-bar) { --shell-footer: 116px; }
   .couch-shell.remote-shell:has(.session-bar .playback-timeline) { --shell-footer: 164px; }
   .couch-shell.remote-shell .session-bar-transport { display: contents; }
   .couch-shell.remote-shell .session-bar .playback-timeline { grid-column: 1 / -1; grid-row: 3; }
-  .couch-shell.remote-shell .session-bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) repeat(4, 44px); gap: 4px 0; padding: 10px 12px; }
-  .couch-shell.remote-shell .session-bar-open { grid-column: 1 / 3; grid-row: 1; padding-right: 8px; }
+  .couch-shell.remote-shell footer.session-bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) repeat(4, 44px); gap: 4px 0; padding: 10px 12px; }
+  .couch-shell.remote-shell footer.session-bar .session-bar-open { min-width: 0; grid-column: 1 / 3; grid-row: 1; padding-right: 8px; }
   .couch-shell.remote-shell .session-bar-controls, .couch-shell.remote-shell .session-bar-controls .playback-settings, .couch-shell.remote-shell .session-bar-volume, .couch-shell.remote-shell .session-bar-volume .volume-control { display: contents; }
   .couch-shell.remote-shell .session-bar-controls .play-button { grid-column: 3; grid-row: 1; }
   .couch-shell.remote-shell .session-bar-controls .transport-next { grid-column: 4; grid-row: 1; }
