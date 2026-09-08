@@ -17,7 +17,7 @@
 .remote-shell .playback-error { margin-top: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .remote-shell .seek-control { margin-top: 12px; }
 .remote-shell .time-labels { margin-top: 4px; font-size: 12px; }
-.remote-shell .transport-row { display: grid; gap: 8px; margin-top: 8px; }
+.remote-shell .transport-row { display: grid; justify-content: stretch; gap: 8px; margin-top: 8px; }
 .remote-shell .transport-buttons { gap: 4px; }
 .remote-shell .play-button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: var(--radius-lg); }
 .remote-shell .volume-control { width: 100%; min-width: 0; gap: 8px; }
