@@ -148,6 +148,8 @@ body.native-host {
 }
 body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { font-size: 24px; }
 body.native-host [data-slot="dialog-content"], body.native-host [data-slot="popover-content"] { font-size: 24px; }
+body.native-host .pairing-panel { width: min(680px, calc(100% - 80px)); max-width: none; padding: 28px; }
+body.native-host .pairing-panel [data-slot="dialog-header"] { padding-right: 48px; }
 body.native-host button svg { width: 24px; height: 24px; }
 body.native-host .play-button svg { width: 32px; height: 32px; }
 body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset: 4px; }
