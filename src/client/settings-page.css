@@ -1,0 +1,33 @@
+.settings-page { min-width: 0; }
+.settings-header { margin-bottom: 1.5rem; }
+.settings-header h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 650; }
+.settings-layout { display: grid; gap: 1.5rem; align-items: start; }
+.settings-nav { display: grid; gap: .25rem; min-width: 0; }
+.settings-link { min-height: 44px; height: auto; width: 100%; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; text-align: left; white-space: normal; }
+.settings-link[aria-current="page"] { background: var(--muted); color: var(--foreground); }
+.settings-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.settings-link-arrow { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--muted-foreground); }
+.settings-page-index .settings-nav { max-width: 44rem; }
+.settings-page-index .settings-nav > div { border-bottom: 1px solid var(--border); }
+.settings-page-index .settings-content { display: none; }
+.settings-page-detail .settings-nav { display: none; }
+.settings-content { width: 100%; max-width: 48rem; }
+.settings-section-header { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+.settings-section-header h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.settings-section-header h2:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; border-radius: 2px; }
+.settings-back { width: auto; justify-content: flex-start; margin-left: -.75rem; }
+.settings-content .quality-select { max-width: 28rem; }
+.settings-content .quality-select > button { width: 100%; }
+.settings-dialog .settings-nav { max-width: none; }
+@media (min-width: 1024px) {
+  .settings-page-detail .settings-layout { grid-template-columns: 11rem minmax(0, 1fr); gap: 2rem; }
+  .settings-page-detail .settings-nav { display: grid; position: sticky; top: 1rem; }
+  .settings-page-detail .settings-link-arrow { display: none; }
+  .settings-page-detail .settings-section-header { min-height: 44px; justify-content: center; }
+  .settings-page-detail .settings-back { display: none; }
+  .settings-page-detail .settings-layout > :not(nav):not(.settings-content) { grid-column: 2; }
+}
+.settings-source-list { max-width: 44rem; }
+.settings-source-list > div { border-bottom: 1px solid var(--border); }
+.settings-source-back { width: auto; justify-content: flex-start; margin-left: -.75rem; }
+.settings-content h3:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; }

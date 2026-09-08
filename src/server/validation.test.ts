@@ -89,3 +89,13 @@ test("YouTube playlist commands validate quality and play intent", () => {
   expect(parse(action).action).toEqual(action);
   for (const change of [{ provider: "twitch" }, { url: "file:///private" }, { quality: "4k" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
 });
+
+test("current video quality requires a playback ID and a known quality and strips private fields", () => {
+  for (const quality of ["auto", "best", "1080p", "720p", "480p"] as const) {
+    const action = { type: "videoQuality", playbackId: "current", quality } as const;
+    expect(parse({ ...action, source: "file:///private", headers: { Authorization: "secret" } }).action).toEqual(action);
+  }
+  for (const change of [{ playbackId: null }, { quality: "4k" }, { quality: ["720p"] }, { quality: 720 }, { quality: null }]) {
+    expect(() => parse({ type: "videoQuality", playbackId: "current", quality: "720p", ...change })).toThrow();
+  }
+});

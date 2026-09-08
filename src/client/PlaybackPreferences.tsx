@@ -35,14 +35,14 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       if (ok) {
         setDraft(null);
         setSaved(true);
-      } else setError("Could not save preferences. Check the connection and current watching profile, then try again.");
+      } else setError("Could not save preferences. Check the connection and selected profile.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save playback preferences.");
     } finally { setPending(false); }
   };
 
   return <form className="grid gap-4" onSubmit={event => void save(event)}>
-    <div className="space-y-1"><p className="font-medium break-words">Profile: {profileDisplayName(profile)}</p><p className="text-sm text-muted-foreground">Defaults apply to the next item. Open Profiles in the header to switch profiles after stopping playback.</p></div>
+    <div className="space-y-1"><p className="font-medium break-words">Profile: {profileDisplayName(profile)}</p><p className="text-sm text-muted-foreground">Applies to new playback for this profile.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
@@ -58,7 +58,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
           <SelectContent>{playbackLanguages(values.subtitleLanguage).map(({ code, name }) => <SelectItem key={code} value={code || "automatic"} className="min-h-11">{name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <p className="text-sm text-muted-foreground sm:col-span-2">The TV chooses a matching language when the item offers it. Automatic lets the player choose.</p>
+
       <div className="grid gap-2">
         <Label htmlFor="preferred-subtitle-mode">Default subtitles</Label>
         <Select value={values.subtitles} disabled={!connected || pending} onValueChange={value => change({ subtitles: value as "auto" | "off" })}>
@@ -79,11 +79,9 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
           <SelectTrigger id="preferred-replaygain" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
           <SelectContent>{["off", "track", "album"].map(mode => <SelectItem key={mode} value={mode} className="min-h-11">{mode[0]!.toUpperCase() + mode.slice(1)}</SelectItem>)}</SelectContent>
         </Select>
-        <p className="text-sm text-muted-foreground">Track uses each song's gain tags. Album keeps the album's relative levels and falls back to Track. Untagged music stays unchanged. Radio and video keep their normal level.</p>
-        <p className="text-sm text-muted-foreground">Tagged peaks limit amplification, with no added preamp. Missing classic peaks prevent boosts; some formats also lose attenuation. R128 without peaks and inaccurate tags can still clip.</p>
+        <p className="text-sm text-muted-foreground">Track balances song volume. Album preserves the album's relative levels. Untagged audio, radio and video stay unchanged.</p>
       </div>
     </div>
-    <p className="text-sm text-muted-foreground">TV audio delay is {Number(preferences.device.audioDelay.toFixed(2))} seconds and applies to every profile. Change it during playback. Subtitle delay applies only to the current item.</p>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {saved && <p className="text-sm text-primary" role="status">Defaults saved for profile {profileDisplayName(profile)}.</p>}
     <Button className="min-h-11 justify-self-start" type="submit" disabled={!connected || pending || draft === null}>{pending ? "Saving…" : "Save preferences"}</Button>

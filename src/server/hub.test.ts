@@ -1349,10 +1349,10 @@ test("paired controllers share For later across profile changes and restart with
 
 
 test("page deep links and refresh serve the frontend while unknown APIs stay unavailable", async () => {
-  const { pagePaths } = await import("../shared/page-paths");
+  const { frontendPaths } = await import("../shared/page-paths");
   const frontend = (await import("../client/index.html")).default;
   const { hub } = fixture(undefined, undefined, undefined, { frontend });
-  for (const path of Object.values(pagePaths)) {
+  for (const path of frontendPaths) {
     const response = await fetch(`${hub.origin}${path}?q=evening&source=Radio`);
     expect(response.status).toBe(200);
     const html = await response.text();
@@ -1364,6 +1364,7 @@ test("page deep links and refresh serve the frontend while unknown APIs stay una
     expect(asset.headers.get("Content-Type")).toContain("javascript");
   }
   expect((await fetch(`${hub.origin}/api/not-a-page`)).status).not.toBe(200);
+  expect((await fetch(`${hub.origin}/settings/not-a-page`)).status).not.toBe(200);
 });
 
 
@@ -1397,4 +1398,37 @@ test("a later Stop cancels playlist play intent without losing resolved queue en
     expect(hub.session.state.queue).toHaveLength(1);
     expect(hub.session.state.currentEntryId).toBeNull();
   } finally { loading.resolve({ items: [] }); playlist.mockRestore(); }
+});
+
+test("current quality commands await resolution, preserve paused position and share only public queue quality", async () => {
+  const gate = Promise.withResolvers<Awaited<ReturnType<typeof webMediaModule.resolveWebMedia>>>();
+  const started = Promise.withResolvers<void>();
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockImplementation(async (_url, _signal, quality) => {
+    if (quality === "720p") { started.resolve(); return gate.promise; }
+    return { source: "https://stream.example/original" };
+  });
+  try {
+    const { hub, commands, waitForCommand } = fixture();
+    hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub));
+    const other = new Peer(hub, await pair(hub));
+    await Promise.all([remote.ready(), other.ready()]);
+    expect(await remote.command({ type: "enqueueWeb", entryId: "video", title: "Video", url: "https://youtube.com/watch?v=one", playNow: true })).toMatchObject({ ok: true });
+    const loaded = await waitForCommand(command => command.type === "load");
+    if (loaded.type !== "load") throw new Error("Expected load");
+    hub.session.observe({ ...idle, playbackId: loaded.playbackId, status: "paused", seekable: true, position: 84, duration: 200 });
+    let complete = false;
+    const result = remote.command({ type: "videoQuality", playbackId: loaded.playbackId, quality: "720p" }).then(value => { complete = true; return value; });
+    await started.promise;
+    expect(complete).toBe(false);
+    expect(commands.filter(command => command.type === "load")).toHaveLength(1);
+    gate.resolve({ source: "https://stream.example/private", headers: { Authorization: "secret" }, maxVideoHeight: 720 });
+    expect(await result).toMatchObject({ ok: true });
+    await other.waitFor(message => message.type === "state" && message.state.queue[0]?.quality === "720p");
+    expect(commands.at(-1)).toMatchObject({ type: "load", paused: true, startPosition: 84, maxVideoHeight: 720 });
+    expect(other.state.queue[0]).toMatchObject({ id: "video", source: "web:https://youtube.com/watch?v=one", quality: "720p" });
+    expect(JSON.stringify(other.messages)).not.toContain("secret");
+    expect(JSON.stringify(other.messages)).not.toContain("stream.example");
+    expect(await remote.command({ type: "videoQuality", playbackId: loaded.playbackId, quality: "480p" })).toMatchObject({ ok: false });
+  } finally { resolve.mockRestore(); }
 });

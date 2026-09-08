@@ -7,14 +7,16 @@ const canFocus = (element: HTMLElement | null): element is HTMLElement => !!elem
 const playbackControl = () => document.querySelector<HTMLElement>(".tv-playback-controls .play-button:not(:disabled)")
   ?? document.querySelector<HTMLElement>(".tv-playback-controls button:not(:disabled)");
 
-export function useTvPresentation({ enabled, playbackId, phase }: {
+export function useTvPresentation({ enabled, presentationId, playbackId, phase }: {
   enabled: boolean;
+  presentationId?: string | null;
   playbackId?: string | null;
   phase?: PlayerState["status"];
 }) {
   const [browsing, setBrowsing] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(false);
-  const previousPlayback = useRef<string | null | undefined>(undefined);
+  const previousPresentation = useRef<string | null | undefined>(undefined);
+  const mediaId = presentationId ?? playbackId;
   const browserFocus = useRef<HTMLElement | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const focusFrame = useRef(0);
@@ -99,16 +101,16 @@ export function useTvPresentation({ enabled, playbackId, phase }: {
     if (!enabled) return;
     if (phase === "idle" || phase === "unavailable") {
       if (!current.current.browsing) openHome();
-    } else if (playbackId && previousPlayback.current !== playbackId) {
+    } else if (playbackId && previousPresentation.current !== mediaId) {
       rememberBrowserFocus();
       setBrowsing(false);
       setControlsVisible(true);
       if (document.activeElement instanceof HTMLElement && document.activeElement.closest(".tv-browser")) document.activeElement.blur();
-    } else if (phase === "paused" || phase === "loading" || phase === "error") {
+    } else if (!current.current.browsing && (phase === "paused" || phase === "loading" || phase === "error")) {
       setControlsVisible(true);
     }
-    previousPlayback.current = playbackId;
-  }, [enabled, phase, playbackId, openHome, rememberBrowserFocus]);
+    previousPresentation.current = mediaId;
+  }, [enabled, mediaId, phase, playbackId, openHome, rememberBrowserFocus]);
 
   useEffect(() => {
     if (enabled && controlsVisible && !browsing) scheduleHide();

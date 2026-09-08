@@ -174,3 +174,34 @@ test("settings gear and Remote stay with the player and do not send playback com
   await act(async () => button("Remote").click());
   expect(browsed).toEqual(["Remote", "Remote"]);
 });
+
+
+test("the playback gear offers current video quality first and keeps it through a quality reload", async () => {
+  const value = { ...state, queue: [{ id: "current", title: "Video", source: "web:https://www.youtube.com/watch?v=abcdefghijk", quality: "1080p" as const }], player: { ...state.player, tracks: [{ id: "v", index: 0, kind: "video" as const, label: "Video", language: "", selected: true }] } };
+  await render(value);
+  await act(async () => button("Playback settings").click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('[role="combobox"]')?.id).toBe("playback-quality");
+  expect(dialog.querySelector("#playback-quality")?.textContent).toBe("Up to 1080p");
+  expect(dialog.querySelector("#playback-audio")).toBeNull();
+  expect(dialog.querySelector("#playback-chapters")).toBeNull();
+  expect(dialog.querySelector("#playback-replaygain")).toBeNull();
+  const quality = dialog.querySelector<HTMLButtonElement>("#playback-quality")!;
+  await act(async () => quality.click());
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Up to 720p")!;
+  await act(async () => option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(actions).toEqual([{ type: "videoQuality", playbackId: "playback", quality: "720p" }]);
+  await render({ ...value, player: { ...value.player, status: "loading" } });
+  expect(document.querySelector("#playback-quality")).toBe(quality);
+  expect(quality.disabled).toBe(true);
+  await render(value);
+  expect(quality.disabled).toBe(false);
+});
+
+test("radio playback settings omit video quality, speed, empty tracks and unavailable music controls", async () => {
+  await render({ ...state, queue: [{ id: "current", title: "Station", source: "radio:station", kind: "radio", live: true }], player: { ...state.player, seekable: false, tracks: [{ id: "a", index: 0, kind: "audio", label: "Audio", language: "", selected: true }] } });
+  await act(async () => button("Playback settings").click());
+  for (const id of ["playback-quality", "playback-speed", "playback-audio", "playback-subtitles", "playback-chapters", "playback-replaygain", "playback-subtitle-file"]) expect(document.getElementById(id)).toBeNull();
+  expect(document.querySelector("#playback-audio-delay")).not.toBeNull();
+  expect(actions).toEqual([]);
+});

@@ -36,6 +36,7 @@ export type PlayerState = {
 export type SessionState = {
   queue: QueueEntry[];
   currentEntryId: string | null;
+  presentationId?: string | null;
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;
@@ -74,6 +75,7 @@ export type Action =
   | { type: "remove"; entryId: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
+  | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "goLive"; playbackId: string }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

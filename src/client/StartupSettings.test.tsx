@@ -20,14 +20,14 @@ test("General shows OS startup readback and clears stale state after a rejected 
     await act(async () => root.render(<StrictMode><StartupSettings credentials={{ origin: "http://localhost", token: "admin" }} connected /></StrictMode>));
     expect(document.body.textContent).toContain("Couch starts automatically");
     expect(document.body.textContent).toContain("Current TV window: windowed");
-    expect(document.body.textContent).toContain("next boot or graphical session");
+    expect(document.body.textContent).toContain("without a login prompt");
     expect(document.body.textContent).toContain("sudo couch-session autostart enable");
     await act(async () => button("Disable automatic startup").click());
     const sent = request.mock.calls.find(([, options]) => options?.method === "POST")![1]!;
     expect(sent.body).toBe(JSON.stringify({ enabled: false }));
     expect(sent.headers).toMatchObject({ Authorization: "Bearer admin" });
     expect(document.body.textContent).toContain("OS permission denied");
-    expect(document.body.textContent).not.toContain("Saved and read back");
+    expect(document.body.textContent).not.toContain("Saved. Applies at the next startup.");
     expect(document.querySelector("[data-startup-mode]")).toBeNull();
     await act(async () => button("Refresh startup").click());
     expect(document.body.textContent).toContain("Couch starts automatically");

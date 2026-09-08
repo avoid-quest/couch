@@ -5,6 +5,7 @@ import type { Root } from "react-dom/client";
 import { Link } from "react-router";
 import { CouchRouter, readSearchState, searchLocation, usePageRoute } from "./routes";
 import { pagePaths, sectionForPath } from "../shared/page-paths";
+import { settingsPages, settingsPageForPath, settingsPagePath } from "../shared/settings-pages";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -17,6 +18,11 @@ function SessionShell() {
   return <><output>{route.section}:{playbackId}</output><div data-query={route.searchState.query} data-source={route.searchState.source} />
     {Object.keys(pagePaths).map(section => <Link key={section} to={route.sectionUrl(section)}>{section}</Link>)}
     <button onClick={() => route.changeSearch({ query: "moon & stars", source: "TV folders" })}>Submit search</button>
+    <Link to={settingsPages.sound.path}>Sound settings</Link>
+    <Link to={settingsPages["source-jellyfin"].path}>Jellyfin settings</Link>
+    <button onClick={() => route.changeSettingsSection("playback")}>Playback settings</button>
+    <button onClick={() => route.changeSettingsSection(null)}>All settings</button>
+    <div data-settings-section={route.settingsSection ?? "index"} />
     <button onClick={route.back}>Back</button></>;
 }
 async function render(native = false) { await act(async () => root.render(<CouchRouter native={native}><SessionShell /></CouchRouter>)); await flush(); }
@@ -80,4 +86,63 @@ test("all pages map to known paths and malformed search filters use truthful def
   expect(sectionForPath("/api/settings")).toBeUndefined();
   expect(readSearchState("?q=a%26b&source=Unknown")).toEqual({ query: "a&b", source: "All" });
   expect(searchLocation({ query: "", source: "All" })).toBe("/search");
+});
+
+
+test("settings direct links and browser history keep the session mounted", async () => {
+  window.history.replaceState(null, "", "/settings/bluetooth");
+  await render();
+  expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("bluetooth");
+  expect(document.title).toBe("Bluetooth · Settings · Couch");
+  await click("Sound settings");
+  expect(window.location.pathname).toBe("/settings/sound");
+  await click("Playback settings");
+  expect(window.location.pathname).toBe("/settings/playback");
+  await act(async () => window.history.back()); await flush();
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("sound");
+  await act(async () => window.history.forward()); await flush();
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
+  await click("All settings");
+  expect(window.location.pathname).toBe("/settings");
+  expect(document.title).toBe("Settings · Couch");
+  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+});
+
+test("native settings links and remote Back retain the webview document", async () => {
+  window.history.replaceState(null, "", "/index.html#/settings/tv");
+  await render(true);
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("general");
+  await click("Sound settings");
+  expect(window.location.hash).toBe("#/settings/sound");
+  await click("Playback settings");
+  await click("Back");
+  expect(window.location.hash).toBe("#/settings/sound");
+  expect(window.location.pathname).toBe("/index.html");
+  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+});
+
+test("settings routes only accept defined pages", () => {
+  for (const [page, { path }] of Object.entries(settingsPages)) {
+    expect(sectionForPath(path)).toBe("Settings");
+    expect(settingsPageForPath(path + "/") as string).toBe(page);
+  }
+  expect(settingsPagePath(null)).toBe("/settings");
+  expect(settingsPageForPath("/settings/not-a-page")).toBeNull();
+  expect(sectionForPath("/settings/not-a-page")).toBeUndefined();
+  expect(sectionForPath("/api/settings/sound")).toBeUndefined();
+});
+
+
+test("source settings direct links retain their page and browser history", async () => {
+  window.history.replaceState(null, "", "/settings/sources/folders");
+  await render();
+  expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("source-folders");
+  expect(document.title).toBe("TV folders · Settings · Couch");
+  await click("Jellyfin settings");
+  expect(window.location.pathname).toBe("/settings/sources/jellyfin");
+  await click("Back");
+  expect(window.location.pathname).toBe("/settings/sources/folders");
+  expect(mounts).toBe(1); expect(unmounts).toBe(0);
 });

@@ -68,7 +68,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     <RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
       onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>
   </div>;
-  const settings = player && state?.preferences && <PlaybackSettings player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
+  const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
   return <div className={`player-controls${session ? " session-playback" : ""}`}>
     {!session && <div className="now-heading">

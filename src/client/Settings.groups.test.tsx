@@ -16,10 +16,9 @@ const props: Parameters<typeof SettingsComponent>[0] = {
   preferences: { profile: { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1, replayGain: "off" }, device: { audioDelay: 0 } },
 };
 const render = (override: Partial<typeof props> = {}) => act(async () => root.render(<Settings {...props} {...override} />));
-const enter = (id: string) => act(async () => document.querySelector<HTMLButtonElement>(`[data-settings-group="${id}"]`)!.click());
-const tab = (id: string) => document.querySelector<HTMLButtonElement>(`[role="tab"][id$="-trigger-${id}"]`);
-const select = (id: string) => act(async () => { const control = tab(id)!; control.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })); control.click(); });
-const all = () => act(async () => { [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "All settings")!.click(); await new Promise(resolve => setTimeout(resolve, 30)); });
+const page = (id: string) => document.querySelector<HTMLElement>(`[data-settings-page="${id}"]`);
+const select = (id: string) => act(async () => page(id)!.click());
+const all = () => act(async () => { document.querySelector<HTMLElement>("[data-back]")!.click(); });
 
 beforeEach(async () => {
   calls.length = 0;
@@ -32,6 +31,7 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     const path = new URL(String(input)).pathname;
     calls.push({ path, method: init?.method ?? "GET" });
+    if (path === "/api/display") return Response.json({ outputs: [], current: null, saved: null, preview: null });
     if (path === "/api/controllers") return Response.json({ controllers: [admin.controller] });
     if (path === "/api/settings/startup") return Response.json({ enabled: true, fullscreenAtLaunch: true, fullscreenNow: true, applies: "next-session" });
     if (path.startsWith("/api/library/") || path === "/api/radio/sources") return Response.json({ sources: [] });
@@ -48,70 +48,70 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("three groups lead to profile defaults and preserve entry and back focus without changing playback", async () => {
+test("settings opens a flat page index without tabs, cards or a quality control", async () => {
   const command = spyOn(props, "onCommand");
   try {
     await render();
-    expect([...document.querySelectorAll<HTMLElement>("[data-settings-group]")].map(button => button.dataset.settingsGroup)).toEqual(["profile", "device", "tv"]);
-    expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect([...document.querySelectorAll<HTMLElement>("[data-settings-page]")].map(button => button.dataset.settingsPage)).toEqual(["playback", "appearance", "connection", "general", "sources", "bluetooth", "sound", "display", "tv-appearance", "remotes", "updates", "advanced"]);
+    expect(document.querySelector('[role="tablist"]')).toBeNull();
+    expect(document.querySelector('[data-settings-group]')).toBeNull();
+    expect(document.querySelector("#default-video-quality")).toBeNull();
+    await select("playback");
+    expect(document.activeElement?.textContent).toBe("Playback");
     expect(document.querySelector("#default-video-quality")?.textContent).toBe("1080p (recommended)");
-    await enter("profile");
-    expect(document.activeElement).toBe(tab("playback"));
-    expect(document.body.textContent).toContain("Profile: Default profile");
-    expect(document.body.textContent).toContain("Open Profiles in the header to switch profiles after stopping playback.");
-    expect(tab("general")).toBeNull();
+    expect(document.querySelector("#preferred-audio-language")).not.toBeNull();
     await all();
-    expect(document.activeElement).toBe(document.querySelector('[data-settings-group="profile"]'));
+    expect(document.activeElement).toBe(page("playback"));
     expect(command).not.toHaveBeenCalled();
     expect(calls.some(call => call.method !== "GET")).toBe(false);
   } finally { command.mockRestore(); }
 });
 
-test("device appearance and connection exclude shared TV appearance and administrator remotes", async () => {
-  await render(); await enter("device");
+test("device appearance, TV appearance and connection have separate pages", async () => {
+  await render(); await select("appearance");
   expect(document.querySelector("#remote-interface-size")).not.toBeNull();
   expect(document.querySelector("#tv-interface-size")).toBeNull();
   await select("connection");
   expect(document.body.textContent).toContain("Owner's phone");
   expect(document.querySelector('[aria-label="Paired remotes"]')).toBeNull();
-  await select("remote");
-  expect(document.querySelector("#default-video-quality")).not.toBeNull();
-  await all(); await enter("tv"); await select("tv-appearance");
+  expect(document.querySelector("#default-video-quality")).toBeNull();
+  await select("tv-appearance");
   expect(document.querySelector("#tv-interface-size")).not.toBeNull();
   expect(document.querySelector("#remote-interface-size")).toBeNull();
 });
 
-test("administrator TV controls remain gated and an open remotes page recovers after demotion", async () => {
-  await render(); await enter("tv");
-  for (const id of ["general", "sources", "bluetooth", "sound", "display", "tv-appearance", "remotes", "updates", "advanced"]) expect(tab(id)).not.toBeNull();
-  await select("remotes");
+test("administrator pages stay gated and demotion closes paired remotes", async () => {
+  await render(); await select("remotes");
   expect(document.querySelector('[aria-label="Paired remotes"]')).not.toBeNull();
   await render({ identity: { ...admin, authority: "controller", controller: { ...admin.controller, role: "controller" } } });
-  for (const id of ["bluetooth", "sound", "display", "remotes", "advanced"]) expect(tab(id)).toBeNull();
-  expect(tab("general")?.getAttribute("data-state")).toBe("active");
+  for (const id of ["bluetooth", "sound", "display", "remotes", "advanced"]) expect(page(id)).toBeNull();
+  expect(page("general")?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector('[aria-label="Paired remotes"]')).toBeNull();
   expect(document.querySelector("#tv-name")).toBeNull();
   expect(calls.some(call => call.method !== "GET")).toBe(false);
 });
 
-test("source deep links select the TV group and native sources remain local-only", async () => {
+test("source requests open Sources and native sources remain local-only", async () => {
   await render({ sourcesRequest: 1 });
-  expect(tab("sources")?.getAttribute("data-state")).toBe("active");
+  expect(page("sources")?.getAttribute("aria-current")).toBe("page");
   expect(document.body.textContent).toContain("Jellyfin");
+  expect(calls.some(call => call.path === "/api/library/folders")).toBe(false);
+  await select("source-folders");
   expect(calls.some(call => call.path === "/api/library/folders")).toBe(true);
   await render({ sourcesRequest: 2, host: { origin: "http://localhost", token: "host", urls: [], pairingCode: "123456" }, identity: { authority: "host", controller: null, claimAvailable: false } });
-  expect(tab("sources")?.hasAttribute("data-tv-local-only")).toBe(true);
+  expect(page("sources")?.hasAttribute("data-tv-local-only")).toBe(true);
   expect(document.querySelector('[role="dialog"]')?.hasAttribute("data-tv-local-only")).toBe(true);
-  await all(); await enter("device");
+  expect(page("tv-appearance")).toBeNull();
+  await select("appearance");
   expect(document.querySelector("#tv-interface-size")?.closest("[data-tv-local-only]")).not.toBeNull();
   expect(document.querySelector("#remote-interface-size")).toBeNull();
 });
 
-
-test("the landing quality control preserves an unrestricted choice and saves a new default", async () => {
+test("Playback preserves an unrestricted quality choice and saves a new default", async () => {
   const save = spyOn(props.videoQualityPreference, "save");
   try {
     await render({ videoQualityPreference: { ...props.videoQualityPreference, quality: "best" } });
+    await select("playback");
     expect(document.querySelectorAll("#default-video-quality")).toHaveLength(1);
     const control = document.querySelector<HTMLButtonElement>("#default-video-quality")!;
     expect(control.textContent).toBe("Unrestricted quality");
@@ -120,4 +120,82 @@ test("the landing quality control preserves an unrestricted choice and saves a n
     await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Up to 720p")!.click());
     expect(save).toHaveBeenCalledWith("720p");
   } finally { save.mockRestore(); }
+});
+
+test("live state renders preserve unsaved profile defaults and the focused control", async () => {
+  await render(); await select("playback");
+  const control = document.querySelector<HTMLButtonElement>("#preferred-subtitle-mode")!;
+  await act(async () => control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Off")!.click());
+  await act(async () => control.focus());
+  await render({ status: "Playing" });
+  expect(document.querySelector("#preferred-subtitle-mode")).toBe(control);
+  expect(control.textContent).toBe("Off");
+  expect(document.activeElement).toBe(control);
+  expect(calls.some(call => call.method !== "GET")).toBe(false);
+});
+
+test("setup keeps its required screen step without settings navigation", async () => {
+  await render({ setupStep: "display" });
+  expect(document.querySelector('[aria-label="Settings pages"]')).toBeNull();
+  expect(document.body.textContent).toContain("I can see Couch on the right screen");
+  expect(document.querySelector("#default-video-quality")).toBeNull();
+});
+
+
+test("linked settings pages preserve URLs, Back focus and hidden-page focus", async () => {
+  const { BrowserRouter, useLocation, useNavigate } = await import("react-router");
+  const { settingsPageForPath, settingsPagePath } = await import("../shared/settings-pages");
+  function Pages({ active = true }: { active?: boolean }) {
+    const location = useLocation();
+    const navigate = useNavigate();
+    return <Settings {...props} inline active={active} section={settingsPageForPath(location.pathname)} onSectionChange={section => void navigate(settingsPagePath(section))} />;
+  }
+  await act(async () => root.render(<BrowserRouter><Pages /></BrowserRouter>));
+  expect(page("playback")?.tagName).toBe("A");
+  expect(page("playback")?.getAttribute("href")).toBe("/settings/playback");
+  await select("playback");
+  expect(window.location.pathname).toBe("/settings/playback");
+  expect(document.activeElement?.textContent).toBe("Playback");
+  await all();
+  expect(window.location.pathname).toBe("/settings");
+  expect(document.activeElement).toBe(page("playback"));
+  await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(window.location.pathname).toBe("/settings/playback");
+  expect(document.querySelector("#default-video-quality")).not.toBeNull();
+  await select("sources");
+  await select("source-jellyfin");
+  await all();
+  expect(window.location.pathname).toBe("/settings/sources");
+  expect(document.activeElement).toBe(page("source-jellyfin"));
+  expect(page("source-jellyfin")?.tagName).toBe("A");
+  expect(page("source-jellyfin")!.tabIndex).toBeGreaterThanOrEqual(0);
+  const outside = document.body.appendChild(document.createElement("button"));
+  await act(async () => { outside.focus(); root.render(<BrowserRouter><Pages active={false} /></BrowserRouter>); });
+  expect(document.activeElement).toBe(outside);
+});
+
+test("direct protected pages wait for identity before redirecting", async () => {
+  const navigate = spyOn({ navigate: (_section: string | null) => {} }, "navigate");
+  const { MemoryRouter } = await import("react-router");
+  await act(async () => root.render(<MemoryRouter><Settings {...props} section="bluetooth" identity={null} connected={false} onSectionChange={navigate} /></MemoryRouter>));
+  expect(navigate).not.toHaveBeenCalled();
+  await act(async () => root.render(<MemoryRouter><Settings {...props} section="bluetooth" identity={{ ...admin, authority: "controller" }} onSectionChange={navigate} /></MemoryRouter>));
+  expect(navigate).toHaveBeenCalledWith("general");
+});
+
+
+test("Sources links to one form at a time instead of piling every source into one page", async () => {
+  await render(); await select("sources");
+  expect([...document.querySelectorAll<HTMLElement>("[data-settings-page^='source-']")].map(control => control.dataset.settingsPage)).toEqual(["source-folders", "source-jellyfin", "source-radio", "source-metadata", "source-streaming-community"]);
+  expect(document.querySelector('[aria-label="Jellyfin settings"]')).toBeNull();
+  await select("source-jellyfin");
+  expect(document.querySelector('[aria-label="Jellyfin settings"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="TV folder settings"]')).toBeNull();
+  expect(document.querySelector('[aria-label="StreamingCommunity settings"]')).toBeNull();
+  expect(document.activeElement?.textContent).toBe("Jellyfin");
+  await all();
+  expect(page("sources")?.getAttribute("aria-current")).toBe("page");
+  expect(document.activeElement).toBe(page("source-jellyfin"));
+  expect(page("source-jellyfin")!.tabIndex).toBeGreaterThanOrEqual(0);
 });

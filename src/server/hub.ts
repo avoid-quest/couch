@@ -1,4 +1,4 @@
-import { pagePaths } from "../shared/page-paths";
+import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
@@ -277,7 +277,7 @@ export function createHub(options: HubOptions) {
     development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
     routes: {
-      ...Object.fromEntries(Object.values(pagePaths).map(path => [path, options.frontend ?? new Response("Couch media server")])),
+      ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), urls: connectionUrls, player: session.state.player.status })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
@@ -466,7 +466,7 @@ export function createHub(options: HubOptions) {
             else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
               if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
-              session.command(action, authorize);
+              await session.command(action, authorize);
             }
           }
           if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
