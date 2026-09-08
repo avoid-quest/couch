@@ -1,3 +1,4 @@
+import { searchSources, type SearchRouteState } from "./routes";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { AuthArtwork } from "./AuthArtwork";
@@ -31,13 +32,19 @@ type Props = {
   onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;
   onBrowse: (section: string) => void;
+  searchState?: SearchRouteState;
+  onSearchChange?: (state: SearchRouteState) => void;
 };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
 export function SearchPanel(props: Props) {
-  const [draft, setDraft] = useState("");
-  const [search, setSearch] = useState({ query: "", attempt: 0 });
-  const [filter, setFilter] = useState("All");
+  const [draft, setDraft] = useState(props.searchState?.query ?? "");
+  const [localSearch, setSearch] = useState({ query: "", attempt: 0 });
+  const search = { ...localSearch, query: props.searchState?.query ?? localSearch.query };
+  const [localFilter, setLocalFilter] = useState("All");
+  const filter = props.searchState?.source ?? localFilter;
+  const setFilter = (source: string) => { setLocalFilter(source); props.onSearchChange?.({ query: search.query, source }); };
+  useEffect(() => { if (props.searchState) setDraft(props.searchState.query); }, [props.searchState?.query]);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
   const [linkPending, setLinkPending] = useState(false);
   const [linkNotice, setLinkNotice] = useState("");
@@ -55,7 +62,7 @@ export function SearchPanel(props: Props) {
   const linkedProvider = url ? providerForLink(url) : undefined;
   const providers = linkedProvider ? [linkedProvider] : url ? [] : ["youtube", "raiplay", "twitch"] as ProviderId[];
   const visible = (source: string) => filter === "All" || filter === source;
-  const scopes = ["All", "YouTube", "RaiPlay", "Radio", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
+  const scopes = searchSources;
   async function playLink(playNow: boolean) {
     if (!props.onCommand || !url || linkPending || !linkRequest.current) return;
     const signal = linkRequest.current.signal;
@@ -66,19 +73,20 @@ export function SearchPanel(props: Props) {
   }
   return <section ref={panel} className="search-panel catalog-panel min-w-0 space-y-5" aria-label="Search media">
     <h1>Search</h1>
-    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setLinkNotice(""); if (/^https?:\/\//i.test(draft.trim())) setFilter("All"); setSearch(value => ({ query: draft.trim(), attempt: value.attempt + 1 })); }}>
+    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setLinkNotice(""); const query = draft.trim(), source = /^https?:\/\//i.test(query) ? "All" : filter; setLocalFilter(source); setSearch(value => ({ query, attempt: value.attempt + 1 })); props.onSearchChange?.({ query, source }); }}>
       <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search your sources</Label><Input id="media-search" type="search" maxLength={4096} value={draft} disabled={!props.connected} onChange={event => setDraft(event.target.value)} placeholder="Title, artist, station or link" /></div>
       <Button variant="ghost" type="submit" disabled={!props.connected}>Search</Button>
     </form>
-    <p className="text-sm text-muted-foreground">Find videos, programs, music and radio across your sources.</p>
+    <p className="text-sm text-muted-foreground">Search your sources or paste a media link.</p>
+    <p className="text-sm text-muted-foreground">Video default: {props.defaultQuality === "auto" ? "Auto" : props.defaultQuality ?? "Auto"}. <Button variant="link" onClick={() => props.onBrowse("Settings")}>Change in Settings</Button> You can choose another quality before adding a video.</p>
     <nav className="search-scopes" aria-label="Search sources">{scopes.map(scope => <Button key={scope} variant={filter === scope ? "secondary" : "ghost"} aria-pressed={filter === scope} onClick={() => setFilter(scope)}>{scope}</Button>)}</nav>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
-    {!search.query ? <Card className="search-start"><h2>What would you like to play?</h2><p>Search YouTube, RaiPlay, Twitch, your radio sources, TV folders and Jellyfin together. Paste a Bandcamp album or track link to open it here.</p><div className="flex flex-wrap gap-2">{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>Browse {section}</Button>)}</div></Card> : <>
+    {!search.query ? <Card className="search-start"><h2>What would you like to play?</h2><p>Find videos, music and radio, including media saved on your TV. Paste a Bandcamp album or track link to open it.</p><div className="flex flex-wrap gap-2">{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>{section === "Guide" ? "Live TV" : `Browse ${section.toLowerCase()}`}</Button>)}</div></Card> : <>
       {linkedProvider !== "bandcamp" && (filter === "All" || ["YouTube", "RaiPlay", "Twitch"].includes(filter)) && <div className="search-quality"><QualitySelect id="search-quality" label="Next video quality" value={quality} disabled={!props.connected} onChange={setQuality} /><p className="text-xs text-muted-foreground">Overrides your default for the next video you play or add.</p></div>}
-      {providers.map(provider => <div key={`${provider}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onEnqueued={resetQuality} /></div>)}
+      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
-        <div hidden={!visible("Radio")}><SearchRadioResults key={`radio:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} /><SearchRadioResults key={`directory:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} directory /></div>
-        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
+        <div hidden={!visible("Radio")}><SearchRadioResults key={`radio:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} /><SearchRadioResults key={`directory:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} directory /></div>
+        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
         {(filter === "All" || filter === "Bandcamp") && <p className="search-capability">Bandcamp: paste a public album or track link to open its tracks.</p>}
       </>}
       {url && !linkedProvider && <Card className="search-start"><h2>Open a media link</h2><p>Send this link to the TV using the existing website player. Supported pages and direct streams can play here.</p><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play link on TV</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}

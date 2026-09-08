@@ -1,3 +1,4 @@
+import { profileDisplayName } from "./profile-name";
 import { useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
   };
 
   return <form className="grid gap-4" onSubmit={event => void save(event)}>
-    <div className="space-y-1"><p className="font-medium break-words">Watching profile: {profile.name}</p><p className="text-sm text-muted-foreground">Saved defaults apply when the next item starts and survive a restart. This item keeps its current choices. Change the watching profile beside playback after stopping.</p></div>
+    <div className="space-y-1"><p className="font-medium break-words">Watching profile: {profileDisplayName(profile)}</p><p className="text-sm text-muted-foreground">Saved defaults apply when the next item starts and survive a restart. This item keeps its current choices. Choose who is watching from your name in the navigation. Stop playback before switching people.</p></div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
@@ -84,7 +85,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
     </div>
     <p className="text-sm text-muted-foreground">TV audio delay is {Number(preferences.device.audioDelay.toFixed(2))} seconds and applies to every profile. Change it during playback. Subtitle delay applies only to the current item.</p>
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-    {saved && <p className="text-sm text-primary" role="status">Preferences saved for {profile.name}.</p>}
+    {saved && <p className="text-sm text-primary" role="status">Preferences saved for {profileDisplayName(profile)}.</p>}
     <Button className="min-h-11 justify-self-start" type="submit" disabled={!connected || pending || draft === null}>{pending ? "Saving…" : "Save preferences"}</Button>
   </form>;
 }

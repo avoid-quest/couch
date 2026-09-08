@@ -36,3 +36,7 @@
   .saved-playlist-art { width: 70px; height: 70px; }
   .saved-optional { display: none; }
 }
+
+.saved-section .catalog-panel li > .flex { width: 100%; }
+.saved-section .saved-item-actions { min-height: 44px; }
+.saved-section .saved-item-actions button, .saved-section .catalog-panel li button { min-height: 44px; }

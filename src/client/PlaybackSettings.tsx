@@ -1,3 +1,4 @@
+import { profileDisplayName } from "./profile-name";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -163,7 +164,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
     const patch = playbackDefault(player, setting);
     const saved = patch && Object.entries(patch).every(([key, value]) => preferences.profile[key as keyof typeof preferences.profile] === value);
     return <div className="space-y-2">
-      <p className="text-sm text-muted-foreground" role="status">Default for {profile.name}: {value}</p>
+      <p className="text-sm text-muted-foreground" role="status">Default for {profileDisplayName(profile)}: {value}</p>
       <Button variant="outline" className="min-h-11" disabled={disabled || !patch || !!saved} aria-label={`Save ${label} as default`} onClick={async () => {
         setDefaultError(null);
         if (player.playbackId && !await run({ type: "savePlaybackDefault", profileId: profile.id, playbackId: player.playbackId, setting })) setDefaultError("Could not save this default. Check the connection and watching profile, then try again.");
@@ -179,7 +180,7 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
-            <DialogDescription>Track, speed, ReplayGain and subtitle changes last for this item. Save as default uses that choice for {profile.name} on the next item. All remotes see the TV's current choices.</DialogDescription>
+            <DialogDescription>Track, speed, ReplayGain and subtitle changes last for this item. Save as default uses that choice for {profileDisplayName(profile)} on the next item. All remotes see the TV's current choices.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 pt-2">
                 <div className="grid gap-5 sm:grid-cols-2">

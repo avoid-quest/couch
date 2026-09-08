@@ -1,3 +1,4 @@
+import { pagePaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
@@ -275,7 +276,7 @@ export function createHub(options: HubOptions) {
     development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
     routes: {
-      "/": options.frontend ?? new Response("Couch media server"),
+      ...Object.fromEntries(Object.values(pagePaths).map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), urls: connectionUrls, player: session.state.player.status })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {

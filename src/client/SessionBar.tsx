@@ -16,8 +16,8 @@ export function SessionBar({ state, credentials, connected, run, onOpen }: {
   return <footer className="session-bar" aria-label="Current TV playback">
     <button className="session-bar-open" onClick={onOpen} aria-label={`Open current playback: ${current.title}`}>
       <span className="session-bar-art" aria-hidden="true">{current.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : <Play />}</span>
-      <span><small>{state?.installationName || "Your TV"} · {player.status === "playing" ? "Playing" : player.status === "paused" ? "Paused" : "Loading"}</small><strong>{current.title}</strong></span>
+      <span><small>{state?.installationName || "Your TV"} · {player.status === "playing" ? "Playing" : player.status === "paused" ? "Paused" : player.status === "loading" ? "Loading" : player.status === "error" ? "Playback error" : player.status === "ended" ? "Finished" : "Offline"}</small><strong>{current.title}</strong></span>
     </button>
-    <Button variant="ghost" size="icon" disabled={!ready} aria-label={player.status === "playing" ? "Pause playback" : "Resume playback"} onClick={() => void run({type:"pause",playbackId:player.playbackId!,paused:player.status === "playing"})}>{player.status === "playing" ? <Pause /> : <Play />}</Button>
+    <Button variant="ghost" size="icon" disabled={!ready} aria-label={player.status === "playing" ? "Pause playback" : "Resume playback"} onClick={() => void run({type:"pause",playbackId:player.playbackId!,paused:player.status === "playing"})}>{player.status === "playing" ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</Button>
   </footer>;
 }

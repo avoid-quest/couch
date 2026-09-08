@@ -49,7 +49,7 @@ afterEach(async () => {
 });
 test("browse home offers only unfinished local history and preserves resume and restart commands", async () => {
   await renderHome();
-  expect(document.body.textContent).toContain("Household");
+  expect(document.body.textContent).not.toContain("Household");
   expect(document.body.textContent).toContain("Halfway home");
   expect(document.body.textContent).not.toContain("Finished film");
   expect(document.body.textContent).not.toContain("No progress");
@@ -79,24 +79,33 @@ test("a paired remote starts with its current TV session and can browse and sear
   const command = async (...args: unknown[]) => { played.push(args); };
   sessionMock = spyOn(session, "useSession").mockReturnValue({ state, status: "connected", details: null, identity: { authority: "controller", controller: null, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command, reconnect: () => {} });
   const { App } = await import("./App");
-  await act(async () => root.render(<App />));
+  const { CouchRouter } = await import("./routes");
+  await act(async () => root.render(<CouchRouter native={false}><App /></CouchRouter>));
   expect(document.querySelector('[data-source="Home"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector(".session-home .media-title")?.textContent).toBe("Evening radio");
   expect(document.querySelector(".mode-switch, .source-nav")).toBeNull();
   const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  expect([...navigation.querySelectorAll('button')].map(node => node.textContent)).toEqual(["Home", "Search", "Saved", "Up next", "Settings"]);
+  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Saved", "Up next", "Settings"]);
   await act(async () => button("Find something").click());
   expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
   request.mockResolvedValue(Response.json({ items: [{ id: "saved", title: "Saved evening film" }] }));
-  await act(async () => button("Saved", navigation).click());
+  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Saved"]')!.click());
   expect(document.querySelector('[data-source="Saved"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector('[aria-label="Saved for later"]')?.textContent).toContain("Saved evening film");
-  await act(async () => button("Settings", navigation).click());
+  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Settings"]')!.click());
   expect(document.querySelector('.settings-page:not([hidden])')).not.toBeNull();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await act(async () => button("Home", navigation).click());
+  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Home"]')!.click());
   expect(document.querySelector('[data-page="Home"]')?.hasAttribute('hidden')).toBe(false);
+  expect(window.location.pathname).toBe("/");
+  await act(async () => { window.history.back(); await Bun.sleep(20); });
+  expect(window.location.pathname).toBe("/settings");
+  expect(document.querySelector('[data-page="Settings"]')?.hasAttribute("hidden")).toBe(false);
+  await act(async () => { window.history.forward(); await Bun.sleep(20); });
+  expect(window.location.pathname).toBe("/");
+  expect(localStorage.getItem("couch.remote-token")).toBe("paired");
+  expect(state.player.playbackId).toBe("playback");
   expect(state.queue).toHaveLength(1); expect(played).toEqual([]);
 });
 

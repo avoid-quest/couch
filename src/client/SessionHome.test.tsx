@@ -13,9 +13,9 @@ const state: SessionState = {
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
-async function render(value = state, connected = true) {
+async function render(value = state, connected = true, active = true) {
   const { SessionHome } = await import("./SessionHome");
-  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active onBrowse={name => browsed.push(name)} onPlay={async () => true} run={async action => { actions.push(action); return true; }} />));
+  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBrowse={name => browsed.push(name)} onPlay={async () => true} run={async action => { actions.push(action); return true; }} />));
 }
 beforeEach(async () => {
   actions.length = 0; browsed.length = 0;
@@ -36,13 +36,13 @@ afterEach(async () => {
 });
 test("session presentation retains native playback commands and real upcoming queue actions", async () => {
   await render();
-  expect(button("Pause").textContent).toBe("Pause");
-  expect(button("Next in queue").textContent).toBe("Next");
+  expect(button("Pause").textContent).toBe("");
+  expect(button("Next in queue").textContent).toBe("");
   expect(document.querySelector(".session-next-list")?.textContent).toContain("next");
   expect(document.querySelector(".session-next-list")?.textContent).not.toContain("past");
   expect(document.querySelector(".session-next-list")?.textContent).not.toContain("current");
-  expect(document.querySelector(".session-playback-options")?.hasAttribute("open")).toBe(false);
-  expect(button("Stop playback").closest("details")).not.toBeNull();
+  expect(document.querySelector(".session-playback-options")).toBeNull();
+  expect(button("Stop playback").closest(".transport-buttons")).not.toBeNull();
   expect(document.body.textContent).not.toContain("Watching as");
   expect(actions).toEqual([]);
   await act(async () => button("Details for next").click());
@@ -61,11 +61,84 @@ test("Stop preserves the durable queue cursor and disconnected controls cannot s
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
   expect(document.querySelector(".session-next-list")?.textContent).toContain("next");
   expect(document.querySelector(".session-next-list")?.textContent).not.toContain("current");
-  expect(button("Resume").disabled).toBe(true);
+  expect(button("Resume")).toBeUndefined();
+  expect(document.querySelector(".session-current-art")).toBeNull();
+  expect(button("Find something to play").disabled).toBe(false);
+  expect(button("Saved").disabled).toBe(false);
   await render(state, false);
   for (const label of ["Pause", "Next in queue", "Stop playback", "Remove next from Up next"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
   await act(async () => button("Details for next").click());
   expect(button("Play next on TV").disabled).toBe(true);
   expect(button("Save next for later").disabled).toBe(true);
   expect(actions).toEqual([]);
+});
+
+test("seek controls clamp commands, remain focused during player updates and hide for live streams", async () => {
+  await render({ ...state, player: { ...state.player, position: 4 } });
+  const backward = button("Seek backward 10 seconds");
+  backward.focus();
+  await act(async () => backward.click());
+  expect(actions).toEqual([{ type: "seek", playbackId: "playback", position: 0 }]);
+  await render({ ...state, player: { ...state.player, position: 97, status: "paused" } });
+  expect(button("Seek backward 10 seconds")).toBe(backward);
+  expect(document.activeElement).toBe(backward);
+  await act(async () => button("Seek forward 10 seconds").click());
+  await act(async () => button("Resume").click());
+  expect(actions.slice(1)).toEqual([{ type: "seek", playbackId: "playback", position: 100 }, { type: "pause", playbackId: "playback", paused: false }]);
+  await render({ ...state, queue: state.queue.map(entry => ({ ...entry, live: true })), player: { ...state.player, seekable: false, duration: null } });
+  expect(button("Seek backward 10 seconds")).toBeUndefined();
+  expect(document.querySelector('.seek-control')).toBeNull();
+  expect(button("Pause").disabled).toBe(false);
+  expect(button("Stop playback").disabled).toBe(false);
+});
+
+test("loading keeps Stop available, unavailable audio stays honest, and idle has no transport controls", async () => {
+  await render({ ...state, player: { ...state.player, status: "loading", seekable: false }, systemAudio: { selectedOutput: "hdmi", observedOutput: "hdmi", volume: null, muted: false, error: null } });
+  expect(button("Resume").disabled).toBe(true);
+  expect(button("Stop playback").disabled).toBe(false);
+  expect(button("Mute TV").disabled).toBe(true);
+  expect(document.querySelector('.volume-control')?.textContent).toContain("Unknown");
+  await render({ ...state, queue: [state.queue[1]!], systemAudio: { selectedOutput: "hdmi", observedOutput: "hdmi", volume: 30, muted: true, error: null } });
+  expect(button("Next in queue")).toBeUndefined();
+  expect(button("Unmute TV").disabled).toBe(false);
+  await act(async () => button("Unmute TV").click());
+  expect(actions).toEqual([{ type: "mute", muted: false }]);
+  await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  expect(document.querySelector('.transport-row')).toBeNull();
+  expect(document.querySelector('.now-heading')).toBeNull();
+  await act(async () => button("Saved").click());
+  await act(async () => button("Find something to play").click());
+  expect(browsed).toEqual(["Saved", "Search"]);
+});
+
+
+test("removed playback controls restore focus to a useful action without taking unrelated focus", async () => {
+  const idle: SessionState = { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } };
+  await render();
+  button("Stop playback").focus();
+  await act(async () => button("Stop playback").click());
+  await render(idle);
+  expect(document.activeElement).toBe(button("Find something to play"));
+  expect(actions).toEqual([{ type: "stop" }]);
+
+  await render();
+  button("Next in queue").focus();
+  await render({ ...state, queue: state.queue.slice(0, 2) });
+  expect(document.activeElement).toBe(button("Pause"));
+
+  await render();
+  button("Stop playback").focus();
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  outside.focus();
+  await render(idle);
+  expect(document.activeElement).toBe(outside);
+  outside.blur();
+  await render(idle);
+  expect(document.activeElement).toBe(document.body);
+
+  await render();
+  button("Stop playback").focus();
+  await render(idle, true, false);
+  expect(document.activeElement).toBe(document.body);
 });
