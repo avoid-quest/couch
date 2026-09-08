@@ -46,6 +46,7 @@ export function openStore(path: string) {
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
   `);
 
+  let legacyPairedInstallation = false;
   if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
     db.transaction(() => {
       db.run(`CREATE TABLE devices_named (
@@ -53,6 +54,7 @@ export function openStore(path: string) {
         role TEXT NOT NULL CHECK (role IN ('controller', 'administrator')), createdAt INTEGER, lastSeenAt INTEGER
       )`);
       const devices = db.query<{ token_hash: string }, []>("SELECT token_hash FROM devices ORDER BY rowid").all();
+      legacyPairedInstallation = devices.length > 0;
       for (const [index, device] of devices.entries()) db.query("INSERT INTO devices_named VALUES (?, ?, ?, 'controller', NULL, NULL)").run(device.token_hash, crypto.randomUUID(), `Remote ${index + 1}`);
       db.run("DROP TABLE devices; ALTER TABLE devices_named RENAME TO devices;");
     }).immediate();
@@ -82,7 +84,7 @@ export function openStore(path: string) {
     if (device.role === "administrator" && !db.query("SELECT 1 FROM devices WHERE role = 'administrator' AND id != ? LIMIT 1").get(device.id)) throw new ControllerError("Keep at least one administrator. Approve another remote first.", 409);
   };
   db.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
-  db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() ? "complete" : "general");
+  db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
   const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";

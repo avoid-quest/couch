@@ -63,12 +63,14 @@ try {
   const sound = await (await fetch(`${origin}/api/sound`, { headers: { Authorization: `Bearer ${token}` } })).json() as SoundState;
   assert.ok(sound.routing?.selectedOutput);
   const pcm = `${artifacts}/onboarding-tone.pcm`;
-  const recorder = Bun.spawn(["parec", `--device=${sound.routing.selectedOutput}.monitor`, "--format=s16le", "--rate=48000", "--channels=2"], { stdout: Bun.file(pcm), stderr: Bun.file(`${artifacts}/onboarding-tone.log`) });
+  const clock = Bun.spawn(["pacat", "--playback", "--raw", `--device=${sound.routing.selectedOutput}`, "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50", "/dev/zero"], { stdout: "ignore", stderr: Bun.file(`${artifacts}/onboarding-clock.log`) });
+  const recorder = Bun.spawn(["parec", `--device=${sound.routing.selectedOutput}.monitor`, "--format=s16le", "--rate=48000", "--channels=2", "--latency-msec=50"], { stdout: Bun.file(pcm), stderr: Bun.file(`${artifacts}/onboarding-tone.log`) });
   try {
+    await until("virtual monitor is capturing before the tone", () => Bun.file(pcm).size > 0);
     await phone.ui.button(`Test ${output}`);
     await until("audio server confirms the requested test route", () => phone!.ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('audio server confirms the test stream')"));
     await until("bounded test finishes", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Stop sound test')"));
-  } finally { recorder.kill(); await recorder.exited; }
+  } finally { recorder.kill(); clock.kill(); await Promise.all([recorder.exited, clock.exited]); }
   assert.ok(new Uint8Array(await Bun.file(pcm).arrayBuffer()).some(byte => byte !== 0), "Virtual sink captures non-silent test PCM; audible physical sound is unqualified");
   await phone.ui.button("I heard the test sound");
   await until("optional local and Jellyfin controls are reused", () => phone!.ui.execute("return !!document.querySelector('[aria-label=\"Jellyfin settings\"]') && document.querySelector('[role=dialog]').textContent.includes('folder')"));
