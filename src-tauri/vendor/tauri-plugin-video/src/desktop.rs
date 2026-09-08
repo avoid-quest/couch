@@ -448,6 +448,11 @@ mod linux_surface {
             overlay.add_overlay(&child);
             gtk_window.add(&overlay);
             gtk_window.show_all();
+            // Reparenting clears GTK's focused child even while the TV window is active.
+            window
+                .as_ref()
+                .set_focus()
+                .map_err(|error| Error::Pipeline(error.to_string()))?;
             *slot.borrow_mut() = Some(SurfaceHost { fixed });
             Ok(())
         })
