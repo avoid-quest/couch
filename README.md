@@ -28,6 +28,9 @@ Couch runs the player and its server on your TV computer. Browser remotes connec
 on your local network. `couch.avoid.quest` is the project identity; the commands
 below run a local app and do not deploy a hosted service.
 
+On Mac or Windows, [connect as a browser controller](docs/desktop-controllers.md)
+or save the TV's address as a Dock or taskbar app. The Ubuntu TV plays the media.
+
 ## Try it with Docker
 
 On a development machine with Docker running and Bun installed:

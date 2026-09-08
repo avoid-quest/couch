@@ -59,6 +59,8 @@ identify this browser. Every remote controls this one player.
 The TV always fills its display. Home opens browsing over the mounted player;
 Back closes the current menu, browsing view or playback controls. Phones and
 laptops have a dedicated controller interface with no video surface.
+See [Mac and Windows controllers](desktop-controllers.md) for pairing, Dock or
+taskbar shortcuts, and reconnection. Controllers need only a browser.
 
 In Settings > Sources, an administrator can use **Add avoid radio** to import
 the station index from
