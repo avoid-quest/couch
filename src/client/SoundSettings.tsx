@@ -7,9 +7,10 @@ import type { SoundOutput, SoundProfile, SoundState } from "../shared/sound";
 type SoundChoice = { key: string; output: SoundOutput } | { key: string; profile: SoundProfile };
 type SoundView = SoundState & { choices: SoundChoice[] };
 function updateSound(previous: SoundView | null, next: SoundState): SoundView {
+  const outputs = next.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked);
   const current = new Map<string, SoundChoice>([
-    ...next.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked).map(output => [`output:${output.id}`, { key: `output:${output.id}`, output }] as const),
-    ...(next.profiles ?? []).filter(profile => profile.selectable && profile.available && !profile.active).map(profile => {
+    ...outputs.map(output => [`output:${output.id}`, { key: `output:${output.id}`, output }] as const),
+    ...(next.profiles ?? []).filter(profile => profile.selectable && profile.available && !profile.active && !(profile.bluetoothAddress && outputs.some(output => output.card === profile.card))).map(profile => {
       const key = `profile:${profile.card}/${profile.id}`;
       return [key, { key, profile }] as const;
     }),

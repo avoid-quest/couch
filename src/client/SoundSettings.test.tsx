@@ -100,6 +100,25 @@ test("retains a disconnected selection without silently selecting another route"
   expect(calls.every(call => call.body === undefined)).toBe(true);
 });
 
+test("hides Bluetooth codec alternatives once the same speaker has a usable output", async () => {
+  state = { ...state, routing: { selectedOutput: "hdmi", observedOutput: null, volume: 63, muted: false, error: null },
+    outputs: [{ ...state.outputs[0]!, card: "internal" }, { id: "bluez.C39S", card: "bluez_card.C39S", name: "C39S", state: "IDLE", availability: "available", volume: 40, muted: false }],
+    profiles: [
+      { card: "internal", id: "output:analog", name: "Built-in speakers", active: false, available: true, selectable: true },
+      { card: "bluez_card.C39S", bluetoothAddress: "00:11:22:33:44:55", id: "a2dp-sink-sbc_xq", name: "C39S · SBC-XQ", active: false, available: true, selectable: true },
+    ],
+  };
+  await render();
+  await openOutputs();
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "C39S", "Built-in speakers · Pauses playback"]);
+  state = { ...state, outputs: state.outputs.filter(output => output.id !== "bluez.C39S") };
+  await act(async () => { await Bun.sleep(800); });
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "Built-in speakers · Pauses playback", "C39S · SBC-XQ · Pauses playback"]);
+  const profile = options().find(option => option.textContent === "C39S · SBC-XQ · Pauses playback")!;
+  await act(async () => { profile.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); profile.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(calls.find(call => call.url.endsWith("/profile"))!.body).toBe(JSON.stringify({ profile: { card: "bluez_card.C39S", profile: "a2dp-sink-sbc_xq" } }));
+});
+
 test("does not mistake the saved output for the currently observed playback route", async () => {
   state = { ...state, routing: { selectedOutput: "hdmi", observedOutput: "analog", volume: 63, muted: false, error: "Couch left the selected audio output." } };
   await render();
