@@ -14,7 +14,7 @@ const diagnostics = createDiagnostics({ databasePath: ":memory:", runtime: () =>
 const response = await diagnostics.handle(new Request("http://localhost/api/diagnostics/export"), () => ({ authority: "administrator", controller: null, claimAvailable: false }));
 console.log(await response.text());`);
     // scripts/build.ts embeds this same build-info JSON into the packaged sidecar.
-    const build = await Bun.build({ entrypoints: [entry], outdir: join(directory, "built"), target: "bun", define: { "process.env.COUCH_BUILD_INFO": JSON.stringify(JSON.stringify(metadata)) } });
+    const build = await Bun.build({ entrypoints: [entry], outdir: join(directory, "built"), target: "bun", define: { "COUCH_BUILD_INFO": JSON.stringify(JSON.stringify(metadata)) } });
     expect(build.success).toBe(true);
     const child = Bun.spawn([process.execPath, build.outputs[0]!.path], { stdout: "pipe", stderr: "pipe" });
     const [output, errors, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
