@@ -2,10 +2,19 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import type { Action } from "../shared/protocol";
+import type { ProviderItem } from "../shared/providers";
+import type { RadioStation } from "../shared/radio";
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const paths: string[] = [], queued: unknown[] = [], browsed: string[] = [];
 let release: (() => void) | undefined, jellyfinError = false, delayedQuery = "", unavailable = false, connectedJellyfin = true, empty = false;
+const commands: Action[] = [];
+let integrated = false, youtubeError = false;
+let onlineFavorites: ProviderItem[] = [], radioFavorites: RadioStation[] = [];
+const video: ProviderItem = { id: "yt-video", provider: "youtube", kind: "media", title: "Evening video", subtitle: "An artist", url: "https://www.youtube.com/watch?v=abcdefghijk" };
+const collection: ProviderItem = { id: "yt-list", provider: "youtube", kind: "collection", title: "Evening collection", url: "https://www.youtube.com/playlist?list=PLabc" };
+const station: RadioStation = { id: "station-one", sourceId: "own", name: "Evening radio", url: "https://radio.example/live", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
 const local = { id: "local", title: "Evening movie", kind: "video", artist: null, album: null, available: true, duration: 180, video: { type: "movie", plot: "An evening story" }, progress: { position: 12 } };
 const flush = () => act(async () => { await Bun.sleep(10); });
 const button = (label: string, scope: ParentNode = document) => [...scope.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
@@ -19,12 +28,13 @@ async function search(query: string) {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await flush();
 }
-async function render(active = true, connected = true, canPlay = true, libraryVersion = 1) {
+async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost") {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  await act(async () => root.render(<SearchPanel origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality="1080p" onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
   await flush();
 }
 beforeEach(async () => {
+  commands.length = 0; integrated = youtubeError = false; onlineFavorites = []; radioFavorites = [];
   paths.length = 0; queued.length = 0; browsed.length = 0; release = undefined; jellyfinError = unavailable = empty = false; delayedQuery = ""; connectedJellyfin = true;
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
@@ -35,7 +45,27 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (delayedQuery && url.searchParams.get("q") === delayedQuery && url.pathname.endsWith("/items")) await new Promise<void>(resolve => { release = resolve; });
+    if (delayedQuery && url.searchParams.get("q") === delayedQuery && url.pathname === "/api/library/items") await new Promise<void>(resolve => { release = resolve; });
+    if (url.pathname === "/api/providers/favorites") {
+      if (init?.method === "POST") onlineFavorites.push(JSON.parse(String(init.body)).item);
+      return Response.json({ favorites: onlineFavorites });
+    }
+    if (url.pathname.startsWith("/api/providers/favorites/")) { onlineFavorites = onlineFavorites.filter(item => item.id !== url.pathname.split("/").at(-1)); return new Response(null, { status: 204 }); }
+    if (url.pathname === "/api/radio/favorites") {
+      if (init?.method === "POST") radioFavorites.push(JSON.parse(String(init.body)).station);
+      return Response.json({ favorites: radioFavorites });
+    }
+    if (url.pathname.startsWith("/api/radio/favorites/")) { radioFavorites = radioFavorites.filter(item => item.id !== url.pathname.split("/").at(-1)); return new Response(null, { status: 204 }); }
+    if (url.pathname === "/api/providers/youtube/items") {
+      if (youtubeError) return Response.json({ error: "YouTube is temporarily unavailable" }, { status: 502 });
+      return Response.json({ items: integrated ? url.searchParams.get("url") ? [{ ...video, id: "collection-video", title: "Collection episode" }] : url.searchParams.get("cursor") ? [{ ...video, id: "yt-more", title: "Another video" }] : [video, collection] : [], ...(!url.searchParams.has("url") && !url.searchParams.has("cursor") && integrated ? { nextCursor: "24" } : {}) });
+    }
+    if (url.pathname === "/api/providers/raiplay/items" && url.searchParams.get("url")?.endsWith("/dirette")) return Response.json({ items: [{ id: "rai-one", provider: "raiplay", title: "Rai 1", kind: "media", live: true, url: "https://www.raiplay.it/dirette/rai1" }] });
+    if (url.pathname === "/api/providers/bandcamp/items") return Response.json({ title: "Public album", items: [{ id: "bc-track", provider: "bandcamp", kind: "media", title: "Album track", url: "https://artist.bandcamp.com/track/one" }] });
+    if (url.pathname.startsWith("/api/providers/")) return Response.json({ items: [] });
+    if (url.pathname === "/api/radio/playlists") return Response.json({ playlists: integrated ? [{ id: "own", name: "My radio" }] : [] });
+    if (url.pathname === "/api/radio/playlists/own/stations") return Response.json({ stations: integrated ? [station] : [] });
+    if (url.pathname === "/api/radio/stations") return Response.json({ stations: integrated ? [{ ...station, sourceId: undefined, id: "directory-one", name: "Directory radio" }] : [] });
     if (url.pathname === "/api/jellyfin") return Response.json({ connected: connectedJellyfin, serverName: "Home" });
     if (url.pathname === "/api/jellyfin/items") return jellyfinError ? Response.json({ error: "Jellyfin server unavailable" }, { status: 502 }) : Response.json({ items: empty ? [] : [{ id: "remote", title: "Evening song", kind: "Audio", detail: "Artist", duration: 80, resumePosition: 0, played: false }], total: empty ? 0 : 55, startIndex: Number(url.searchParams.get("startIndex")) });
     if (url.pathname.endsWith("/sources")) return Response.json({ sources: [{ name: "NAS", status: unavailable ? "unavailable" : "ready" }] });
@@ -70,7 +100,10 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} cross-source inspec
   expect(queued).toEqual([["Library", "local", { playNow: true }], ["Library", "local", undefined], ["Jellyfin", "remote", { playNow: true }], ["Jellyfin", "remote", undefined]]);
   await render(false); scroller.scrollTop = 0; await render();
   expect(scroller.scrollTop).toBe(480); expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
-  await click("Online"); expect(browsed).toEqual(["Online"]); expect(paths.every(path => path.startsWith("/api/library") || path.startsWith("/api/jellyfin"))).toBe(true);
+  await click("YouTube"); expect(browsed).toEqual([]);
+  expect(paths).toContain("/api/providers/youtube/items?q=Evening");
+  expect(document.querySelector('[aria-label="Library search results"]')?.closest("[hidden]")).not.toBeNull();
+  await click("All"); expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
 });
 test("one unavailable source does not hide local results and retries only that source", async () => {
   jellyfinError = true; await render(); await search("Evening");
@@ -143,4 +176,108 @@ for (const invalidation of ["query", "hidden"] as const) test(`deferred return f
     if (invalidation === "query") await search("new"); else await render(false);
     expect(frames.size).toBe(0);
   } finally { schedule.mockRestore(); cancel.mockRestore(); }
+});
+
+test("one submitted search integrates online and configured radio with default quality and existing saved stores", async () => {
+  integrated = true; await render(); await search("Evening");
+  for (const path of ["/api/providers/youtube/items?q=Evening", "/api/providers/raiplay/items?q=Evening", "/api/providers/twitch/items?q=Evening", "/api/radio/stations?q=Evening", "/api/radio/playlists/own/stations?q=Evening"]) expect(paths).toContain(path);
+  await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: video.url, quality: "1080p", playNow: true });
+  await click("Add Evening video to Up next"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", quality: "1080p", playNow: false });
+  await click("Play Evening radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueueRadio", stationId: station.id, playNow: true });
+  await click("Play Directory radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueue", entry: { title: "Directory radio", kind: "radio" } });
+  await click("Save Evening video"); expect(onlineFavorites).toEqual([video]); expect(button("Remove Evening video from saved").getAttribute("aria-pressed")).toBe("true");
+  await click("Save Evening radio"); expect(radioFavorites).toEqual([station]);
+  await click("Remove Evening video from saved"); expect(onlineFavorites).toEqual([]);
+});
+test("provider errors and pagination stay independent and collection Back restores result focus", async () => {
+  integrated = true; youtubeError = true; await render(); await search("Evening");
+  expect(document.body.textContent).toContain("YouTube is temporarily unavailable"); expect(button("Play Evening radio").disabled).toBe(false); expect(button("Details for Evening movie").disabled).toBe(false);
+  const raiCount = paths.filter(path => path.includes("raiplay/items")).length;
+  youtubeError = false; await click("Retry YouTube"); expect(paths.filter(path => path.includes("raiplay/items"))).toHaveLength(raiCount);
+  await click("Show more YouTube"); expect(paths).toContain("/api/providers/youtube/items?q=Evening&cursor=24"); expect(button("Play Another video")).toBeDefined();
+  await click("Open Evening collection"); expect(button("Play Collection episode")).toBeDefined(); expect(document.activeElement?.textContent).toBe("Back to results");
+  await click("Back to results"); expect(document.activeElement?.getAttribute("aria-label")).toBe("Open Evening collection"); expect(button("Play Another video")).toBeDefined();
+  const onlineCount = paths.filter(path => path.includes("youtube/items")).length;
+  await render(true, true, true, 2); expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(onlineCount);
+});
+test("provider URL opens its existing catalogue, Bandcamp album commands remain audio, and other links use existing playback", async () => {
+  integrated = true; await render(); await search("https://artist.bandcamp.com/album/public");
+  expect(paths).toContain("/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Falbum%2Fpublic");
+  expect(paths.some(path => path.includes("youtube/items") || path.includes("library/items"))).toBe(false);
+  await click("Play album"); expect(commands.at(-1)).toEqual({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/public", playNow: true });
+  await click("Play Album track"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://artist.bandcamp.com/track/one" }); expect(commands.at(-1)).not.toHaveProperty("quality");
+  await search("https://streamingcommunityz.taxi/watch/public"); await click("Play link on TV"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.taxi/watch/public", playNow: true });
+});
+test("filters retain query and source results, and broadcasts refresh saved state without repeating online searches", async () => {
+  integrated = true; await render(); await search("Evening");
+  const count = paths.filter(path => path.includes("youtube/items")).length;
+  await click("Radio"); await click("YouTube"); expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(count);
+  expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("Evening");
+  onlineFavorites = [video]; await render(true, true, true, 1, 2); expect(button("Remove Evening video from saved").getAttribute("aria-pressed")).toBe("true");
+  expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(count);
+  await render(true, false); expect(button("Play Evening video").disabled).toBe(true); expect(button("Remove Evening video from saved")).toBeUndefined();
+});
+test("Search applies a temporary online quality override once and returns to the default", async () => {
+  integrated = true; await render(); await search("Evening");
+  await act(async () => document.querySelector<HTMLButtonElement>("#search-quality")!.click()); await flush();
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(item => item.textContent === "Up to 720p")!;
+  expect(option).toBeDefined();
+  await act(async () => option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush();
+  await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ quality: "720p" });
+  await click("Add Evening video to Up next"); expect(commands.at(-1)).toMatchObject({ quality: "1080p" });
+});
+test("a superseded online search cannot overwrite the current provider results", async () => {
+  integrated = true;
+  const implementation = request.getMockImplementation()!;
+  let oldSignal: AbortSignal | undefined;
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/api/providers/youtube/items" && url.searchParams.get("q") === "old online") {
+      oldSignal = init?.signal as AbortSignal;
+      await new Promise<void>(resolve => { release = resolve; });
+      return Response.json({ items: [{ ...video, title: "Obsolete provider video" }] });
+    }
+    return implementation(input, init);
+  }) as typeof fetch);
+  await render(); await search("old online"); await search("Evening");
+  expect(oldSignal?.aborted).toBe(true); release?.(); await flush();
+  expect(document.body.textContent).not.toContain("Obsolete provider video"); expect(button("Play Evening video")).toBeDefined();
+});
+
+test("changing TV identity clears saved radio results while the new TV request is pending", async () => {
+  integrated = true; radioFavorites = [{ ...station, id: "old-favorite", name: "Evening private favorite" }];
+  await render(); await search("Evening"); expect(button("Play Evening private favorite")).toBeDefined();
+  const implementation = request.getMockImplementation()!;
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (new URL(String(input)).origin === "http://other-tv" && String(input).includes("/api/radio/")) {
+      await new Promise<void>(resolve => { const prior = release; release = () => { prior?.(); resolve(); }; });
+      return Response.json({ favorites: [], playlists: [], stations: [] });
+    }
+    return implementation(input, init);
+  }) as typeof fetch);
+  await render(true, true, true, 1, 1, "http://other-tv");
+  expect(document.body.textContent).not.toContain("Evening private favorite"); expect(button("Play Evening radio")).toBeUndefined();
+  release?.(); await flush(); expect(document.body.textContent).not.toContain("Evening private favorite");
+});
+test("a new query aborts an in-flight provider pagination request", async () => {
+  integrated = true; await render(); await search("Evening");
+  const implementation = request.getMockImplementation()!; let pageSignal: AbortSignal | undefined;
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/api/providers/youtube/items" && url.searchParams.has("cursor")) {
+      pageSignal = init?.signal as AbortSignal;
+      await new Promise<void>(resolve => { release = resolve; });
+      return Response.json({ items: [{ ...video, title: "Obsolete page" }] });
+    }
+    return implementation(input, init);
+  }) as typeof fetch);
+  await click("Show more YouTube"); expect(pageSignal?.aborted).toBe(false);
+  await search("new"); expect(pageSignal?.aborted).toBe(true);
+  release?.(); await flush(); expect(document.body.textContent).not.toContain("Obsolete page");
+});
+
+test("RaiPlay searches include matching live channels even when the programme catalogue has no match", async () => {
+  await render(); await search("rai1");
+  expect(button("Play Rai 1")).toBeDefined();
+  await click("Play Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
 });
