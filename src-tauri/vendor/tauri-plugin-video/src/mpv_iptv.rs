@@ -109,10 +109,15 @@ mod tests {
         // Preserve unrelated AVOptions and a caller's original start override too.
         mpv.set_property("demuxer-lavf-o", "probesize=500000,live_start_index=-2,max_reload=7").unwrap();
         let configured = LiveStartDefaults::read(&mpv).unwrap();
+        let options = |value: String| {
+            let mut entries: Vec<_> = value.split(',').map(str::to_owned).collect();
+            entries.sort();
+            entries
+        };
         configured.configure(&mpv, true, false).unwrap();
-        assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1,max_reload=7");
+        assert_eq!(options(mpv.get_property::<String>("demuxer-lavf-o").unwrap()), options("probesize=500000,live_start_index=-1,max_reload=7".into()));
         configured.configure(&mpv, true, true).unwrap();
-        assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1,max_reload=30");
+        assert_eq!(options(mpv.get_property::<String>("demuxer-lavf-o").unwrap()), options("probesize=500000,live_start_index=-1,max_reload=30".into()));
         mpv.command("loadfile", &[local.to_str().unwrap(), "replace"]).unwrap();
         // Cancel this load before resetting, as replacement and Stop do in the player.
         mpv.command("stop", &[]).unwrap();
