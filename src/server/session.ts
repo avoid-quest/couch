@@ -112,7 +112,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const refreshPreparation = () => {
     const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
     const next = index >= 0 ? state.queue[index + 1] : undefined;
-    if (!admitted() || !audioOnly || !next || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
+    if (!admitted() || !audioOnly || !next || !/^(library|jellyfin):/.test(next.source) || activePlayIntent !== playIntent || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
       cancelPreparation();
       return;
     }
@@ -353,6 +353,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     reservePlay() {
       available();
+      cancelPreparation();
       if (state.webRetry) { cancelWebRecovery(); broadcast(); }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;

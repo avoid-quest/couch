@@ -83,6 +83,19 @@ test("a slow obsolete source cannot prepare or restart after queue replacement",
   } finally { f.close(); }
 });
 
+test("a newer pending Play cancels preparation and native observations cannot rearm it", async () => {
+  const f = fixture();
+  try {
+    await tick();
+    f.session.reservePlay();
+    expect(f.commands.at(-1)).toEqual({ type: "prepare", playbackId: f.firstId });
+    const count = f.commands.length;
+    f.session.observe({ ...idle, playbackId: f.firstId, status: "playing", position: 2.5, duration: 3 });
+    await tick();
+    expect(f.commands).toHaveLength(count);
+  } finally { f.close(); }
+});
+
 test("failed preparation preserves the song and ordinary next-source error controls", async () => {
   const f = fixture(id => {
     if (id === "second") throw new Error("The mounted audio file is unavailable.");
