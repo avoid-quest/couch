@@ -1831,6 +1831,8 @@ mod linux_mpv {
                     let output = payload.audio_output.as_deref().filter(|output| !output.is_empty() && output.len() <= 512)
                         .ok_or_else(|| Error::Pipeline("Invalid audio output".into()))?;
                     player.mpv.set_property("audio-device", format!("pulse/{output}")).map_err(mpv_error)?;
+                    // Re-setting the same device does not reopen null fallback after hotplug.
+                    player.mpv.command("ao-reload", &[]).map_err(mpv_error)?;
                     player.mpv.set_property("volume", 100.0_f64).map_err(mpv_error)?;
                 }
                 "volume" => player

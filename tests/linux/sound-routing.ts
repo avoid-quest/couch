@@ -9,7 +9,10 @@ const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444";
 const checks: string[] = [];
 async function until(name: string, predicate: () => boolean | Promise<boolean>, timeout = 15_000) {
   const deadline = Date.now() + timeout;
-  while (!await predicate()) { assert.ok(Date.now() < deadline, name); await Bun.sleep(50); }
+  while (!await predicate()) {
+    if (Date.now() >= deadline) { await Bun.write("/artifacts/sound-failure-state.json", JSON.stringify({ check: name, state }, null, 2)); throw new Error(name); }
+    await Bun.sleep(50);
+  }
   checks.push(name); console.log(`PASS ${name}`);
 }
 async function pactl(...args: string[]) {
