@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import type { SoundState } from "../shared/sound";
+import { createId } from "./session";
 
 export function BluetoothSettings({ credentials: { origin, token }, connected }: { credentials: { origin: string; token: string }; connected: boolean }) {
   const [state, setState] = useState<BluetoothState | null>(null);
@@ -41,7 +42,7 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
   async function change(action: Omit<BluetoothAction, "owner">) {
     const controller = life.current;
     if (!controller || controller.signal.aborted) return;
-    if (!["cancel", "answer"].includes(action.op)) { action.token = crypto.randomUUID(); operation.current = action.token; }
+    if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
     setPending(true); setError(null);
     try {
       const response = await fetch(`${origin}/api/bluetooth`, { method: "POST", headers, body: JSON.stringify({ action }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(7_000)]) });
