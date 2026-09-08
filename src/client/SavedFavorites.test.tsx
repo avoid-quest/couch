@@ -180,3 +180,28 @@ test("an opened YouTube playlist plays or queues the full collection with a qual
   await act(async () => root.render(<ProviderPanel {...props} connected={false} />)); await flush();
   expect(button("Play playlist").disabled).toBe(true);
 });
+
+test("Back from a live Twitch channel restores focus to its Past broadcasts button", async () => {
+  const { ProviderPanel } = await import("./ProviderPanel");
+  const channel: ProviderItem = { id: "twitch-live", provider: "twitch", kind: "media", title: "Live channel", url: "https://www.twitch.tv/live_channel", live: true };
+  const browsed: URL[] = [];
+  request.mockImplementation((async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/items")) return Response.json({ favorites: [] });
+    browsed.push(url);
+    return Response.json({ title: "Twitch", items: [channel] });
+  }) as typeof fetch);
+  await act(async () => root.render(<ProviderPanel origin="http://localhost" token="paired" connected canPlay initialItem={channel} version={1} defaultQuality="auto"
+    onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />));
+  await flush();
+  await click("Back");
+  const opener = button("Past broadcasts");
+  await act(async () => { opener.focus(); opener.click(); });
+  await flush();
+  expect(browsed.at(-1)?.searchParams.get("url")).toBe(channel.url);
+  expect(button("Past broadcasts")).toBeUndefined();
+  await click("Back");
+  expect(browsed.at(-1)?.searchParams.has("url")).toBe(false);
+  expect(document.activeElement === button("Past broadcasts")).toBe(true);
+  expect(document.querySelectorAll('[data-provider-id="twitch-live"]')).toHaveLength(1);
+});
