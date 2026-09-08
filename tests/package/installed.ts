@@ -283,6 +283,7 @@ try {
       const general = await driver(admin.port, `/session/${admin.id}/element`, { using: "css selector", value: '[role="tab"][id$="-trigger-general"]' });
       await driver(admin.port, `/session/${admin.id}/element/${general["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
       await until("General tab is selected before the next link", async () => execute(admin, 'return document.querySelector(\'[role="tab"][id$="-trigger-general"]\')?.getAttribute("aria-selected") === "true"'));
+      assert.equal(await execute(admin, "return [...document.querySelectorAll('p')].filter(p => p.textContent === 'Start Couch automatically without a login password').length"), 1, "General retains exactly one startup section after returning from another tab");
     }
     checks.push("Installed administrator toggles effective passwordless TV startup without interrupting the current session");
     const override = "/etc/lightdm/lightdm.conf.d/99-qualification-override.conf";
