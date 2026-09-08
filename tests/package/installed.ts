@@ -44,7 +44,23 @@ function run(args: string[]) {
 }
 const inside = (...args: string[]) => run(["docker", "exec", container, ...args]);
 const faultChecks: string[] = [];
+let damagedTools: string | undefined;
+// FUSE admits its owner, even when root cannot traverse the bundle. Give only
+// this disposable mount command the owner's credentials and mount capability.
+const mountAsOwner = (...args: string[]) => inside("setpriv", "--reuid=couch-tv", "--regid=couch-tv", "--clear-groups", "--inh-caps=-all,+sys_admin", "--ambient-caps=-all,+sys_admin", "--no-new-privs", ...args);
+function clearDamagedTools() {
+  if (damagedTools && inside("findmnt", "--kernel", "--noheadings", "--raw", "--output", "TARGET").split("\n").includes(damagedTools)) mountAsOwner("umount", damagedTools);
+  damagedTools = undefined;
+}
+const bundledTools = () => {
+  const pid = inside("pgrep", "-u", "couch-tv", "-x", "couch-server");
+  const directory = inside("cat", `/proc/${pid}/environ`).split("\0").find(value => value.startsWith("COUCH_BUNDLED_TOOLS="))?.slice("COUCH_BUNDLED_TOOLS=".length);
+  assert.ok(typeof directory === "string" && directory.startsWith("/tmp/.mount_") && directory.endsWith("/tools"), "Fault only the current disposable AppImage's actual bundled tools");
+  return directory;
+};
 const recoveryFaults = process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1";
+const idleScenario = process.env.COUCH_QUALIFY_IDLE_SCENARIO ?? "";
+assert.ok(["", "success", "failure"].includes(idleScenario));
 const dataDir = inside("sh", "-c", ". /etc/couch/appliance.env; printf '%s' \"$COUCH_DATA_DIR\"");
 assert.ok(dataDir.startsWith("/"));
 const sql = (statement: string) => inside("sqlite3", `${dataDir}/couch.sqlite`, statement);
@@ -112,7 +128,16 @@ async function retained(description: string) {
   for (const browser of browsers) assert.equal(await execute(browser, "return localStorage.getItem('couch.remote-token')"), seed.tokens[browsers.indexOf(browser)]);
   supervised();
 }
-const media = Bun.serve({ hostname: "127.0.0.1", port: 44212, fetch: () => new Response(Bun.file(new URL("../fixtures/cue/album.flac", import.meta.url))) });
+let importGate: ReturnType<typeof Promise.withResolvers<void>> | undefined;
+let importStarted = false;
+const media = Bun.serve({ hostname: "127.0.0.1", port: 44212, async fetch(request) {
+  if (new URL(request.url).pathname === "/idle.m3u") {
+    importStarted = true;
+    await importGate?.promise;
+    return new Response("#EXTM3U\n#EXTINF:-1,Idle qualification\nhttp://127.0.0.1:44212/album.flac\n");
+  }
+  return new Response(Bun.file(new URL("../fixtures/cue/album.flac", import.meta.url)));
+} });
 try {
   await until("Installed HTTP coordinator starts", async () => api("/api/build").then(() => true).catch(() => false));
   let build = await api("/api/build");
@@ -302,15 +327,178 @@ try {
       await api("/api/updates/stage", { candidateId: candidate.id });
       await until("Interrupted candidate can be staged again", async () => (await api("/api/updates")).status === "ready");
     }
+    let automaticRequest: string | undefined;
+    let automaticPid: string | undefined;
+    if (idleScenario) {
+      inside("apt-get", "install", "-y", "--no-install-recommends", "sqlite3");
+      const samples: unknown[] = [];
+      const sample = async (event: string, detail: unknown) => {
+        samples.push({ at: new Date().toISOString(), event, detail });
+        await Bun.write(`${fixtures}/idle-update.json`, JSON.stringify({ scenario: idleScenario, clock: "Real elapsed monotonic time; production five-minute interval is unchanged", samples }, null, 2));
+      };
+      const currentUpdate = () => api("/api/updates");
+      const waiting = async (text: string) => until(`Idle policy reports ${text}`, async () => (await currentUpdate()).waiting?.includes(text), 8_000);
+      const command = (action: unknown) => socket!.send(JSON.stringify({ type: "command", requestId: crypto.randomUUID(), action }));
+      const originalPid = supervised();
+      assert.equal((await currentUpdate()).policy, "manual");
+      const denied = await fetch(`${origin}/api/updates/policy`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: '{"policy":"idle"}' });
+      assert.equal(denied.status, 403, "The second controller cannot change installation policy");
+      await api("/api/updates/policy", { policy: "idle" });
+      command({ type: "play", entryId: "installed-tone", fromStart: true });
+      await until("Idle qualification has actual native playback", async () => state.player.status === "playing" && state.player.position > 1);
+      await waiting("playback to stop");
+      const position = state.player.position;
+      await Bun.write(`${fixtures}/feed-fault`, "offline");
+      try {
+        await api("/api/updates/check", { check: true });
+        await until("Offline automatic-policy check reports failure during playback", async () => (await currentUpdate()).status === "failed");
+        await until("Offline check leaves native playback advancing", async () => state.player.status === "playing" && state.player.position > position + 1);
+        assert.equal(supervised(), originalPid);
+        assert.equal((await currentUpdate()).installation.transaction, null);
+      } finally { await Bun.write(`${fixtures}/feed-fault`, ""); }
+      await api("/api/updates/check", { check: true });
+      await until("Restored feed reuses the exact verified candidate", async () => {
+        const value = await currentUpdate();
+        return value.status === "ready" && value.candidate.id === candidate.id;
+      });
+      command({ type: "pause", playbackId: state.player.playbackId, paused: true });
+      await until("Native paused playback remains active for idle updates", async () => state.player.status === "paused");
+      await waiting("Paused playback is still active");
+      command({ type: "stop" });
+      await until("Native playback stops before idle qualification", async () => state.player.status === "idle");
+      inside("mkdir", "-p", "/media/couch-idle-retained");
+      await api("/api/library/sources", { path: "/media/couch-idle-retained" });
+      importGate = Promise.withResolvers<void>();
+      const importing = api("/api/radio/playlists", { name: "Idle background import", url: "http://127.0.0.1:44212/idle.m3u" });
+      try {
+        await until("Real radio import waits on its upstream response", async () => importStarted, 2_000);
+        await waiting("settings, scan or import request");
+        assert.equal((await currentUpdate()).installation.transaction, null);
+      } finally { importGate.resolve(); }
+      await importing;
+      await waiting("five continuous idle minutes");
+      const admin = browsers[0]!;
+      await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
+      const updates = await driver(admin.port, `/session/${admin.id}/element`, { using: "css selector", value: '[role="tab"][id$="-trigger-updates"]' });
+      await driver(admin.port, `/session/${admin.id}/element/${updates["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+      await until("Administrator opens Updates during the idle wait", async () => execute(admin, 'return document.querySelector(\'[role="tab"][id$="-trigger-updates"]\')?.getAttribute("aria-selected") === "true"'));
+      await until("Updates explains the active idle policy", async () => execute(admin, "return document.body.textContent.includes('five continuous idle minutes')"));
+      for (const browser of browsers) {
+        await until("Idle countdown advances without a controller heartbeat", async () => {
+          const value = await currentUpdate();
+          const remaining = / (\d+) seconds remaining\./.exec(value.waiting ?? "");
+          return remaining && Number(remaining[1]) <= 285;
+        }, 25_000);
+        const before = (await currentUpdate()).waiting;
+        await driver(browser.port, `/session/${browser.id}/actions`, { actions: [{ type: "key", id: "idle-activity", actions: [{ type: "keyDown", value: "\uE008" }, { type: "keyUp", value: "\uE008" }] }] });
+        await until("Independent browser input restarts the five-minute countdown", async () => {
+          const value = await currentUpdate();
+          const remaining = / (\d+) seconds remaining\./.exec(value.waiting ?? "");
+          return remaining && Number(remaining[1]) >= 290;
+        }, 8_000);
+        await sample("remote activity reset", { remote: browsers.indexOf(browser) + 1, before, after: (await currentUpdate()).waiting });
+      }
+      const dropin = "/etc/systemd/user/couch-tv.service.d/qualification-idle-failure.conf";
+      if (idleScenario === "failure") {
+        // Fail the next real service startup after Tauri installs B. The current
+        // A continues normally until the unchanged idle gate closes admission.
+        inside("sh", "-c", 'printf "[Service]\\nExecStartPre=/usr/bin/false\\n" > "$1"', "sh", dropin);
+        service("daemon-reload");
+      }
+      const started = performance.now();
+      const activity = await fetch(`${origin}/api/activity`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: '{"activity":true}' });
+      assert.equal(activity.status, 204);
+      let requestId: string | undefined;
+      let nextSample = 0;
+      await until("Actual five-minute idle interval admits the signed update", async () => {
+        const elapsed = performance.now() - started;
+        const settings = JSON.parse(inside("cat", `${dataDir}/updates/settings.json`));
+        if (settings.attempt) {
+          assert.ok(elapsed >= 300_000, `No early automatic attempt: ${elapsed}ms`);
+          requestId = settings.attempt.requestId;
+          assert.equal(settings.attempt.candidateId, candidate.id);
+          await sample("automatic admission", { elapsedMs: elapsed, requestId, candidateId: candidate.id });
+          return true;
+        }
+        assert.equal(service("show", "couch-tv.service", "-p", "MainPID", "--value"), originalPid);
+        if (elapsed >= nextSample) {
+          await sample("waiting", { elapsedMs: elapsed, waiting: (await currentUpdate()).waiting });
+          nextSample += 60_000;
+        }
+        return false;
+      }, 330_000);
+      assert.ok(requestId);
+      if (idleScenario === "failure") {
+        const expectedData = preservation();
+        await until("Unattended candidate startup exhausts the real systemd restart budget", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
+        const failed = JSON.parse(inside("cat", `${dataDir}/updates/appimage/requests/${requestId}.json`));
+        assert.equal(failed.phase, "trial", "The real signed replacement reached startup trial");
+        assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], expected.archiveSha256);
+        inside("rm", dropin);
+        service("daemon-reload");
+        inside("couch-recover", `/var/lib/couch/application/backups/${requestId}`);
+        await retained("Operator recovery from failed unattended startup reconnects both remotes on A");
+        assert.equal(preservation(), expectedData);
+        assert.deepEqual(await api("/api/build"), build);
+        const result = (await api(`/api/updates?requestId=${requestId}`)).installation.requestedTransaction;
+        assert.equal(result.phase, "operator-required");
+        await until("Remote displays the failed unattended outcome", async () => execute(admin, "return document.body.textContent.includes('Update needs SSH recovery')"));
+        const newer = (await api("/api/profiles", { name: "After unattended recovery" })).profile;
+        const recoveredPid = supervised();
+        await api("/api/updates/check", { check: true });
+        await waiting("already had an automatic attempt");
+        const recoveredAt = performance.now();
+        await until("Recovered failed candidate does not loop after another actual five idle minutes", async () => {
+          const value = await currentUpdate();
+          assert.equal(value.policy, "idle");
+          assert.equal(value.installation.transaction.requestId, requestId);
+          assert.equal(value.installation.transaction.phase, "operator-required");
+          assert.equal(service("show", "couch-tv.service", "-p", "MainPID", "--value"), recoveredPid);
+          return performance.now() - recoveredAt >= 305_000;
+        }, 320_000);
+        assert.ok((await api("/api/profiles")).profiles.some((profile: any) => profile.id === newer.id));
+        await sample("failed candidate remains suppressed after operator recovery", { elapsedMs: performance.now() - recoveredAt, transaction: result });
+        await api("/api/updates/policy", { policy: "manual" });
+      } else { automaticRequest = requestId; automaticPid = originalPid; }
+    }
     for (const repair of [false, true]) {
-      const beforePid = supervised();
-      const requestId = crypto.randomUUID().replaceAll("-", "");
-      const current = (await api("/api/updates")).installation.current;
+      if (repair) inside("apt-get", "install", "-y", "--no-install-recommends", "sqlite3");
+      const beforePid = !repair && automaticPid ? automaticPid : supervised();
+      const requestId = !repair && automaticRequest ? automaticRequest : crypto.randomUUID().replaceAll("-", "");
+      const current = repair ? (await api("/api/updates")).installation.current : null;
+      const beforeRepairData = repair ? preservation() : null;
+      let damagedHealth: any;
       const body = repair
         ? { repair: { expectedCurrentId: current.candidateId, requestId, confirmInterrupt: false, repairRuntime: false } }
         : { install: { candidateId: candidate.id, requestId, confirmInterrupt: false } };
-      const accepted = await api(repair ? "/api/updates/repair" : "/api/updates/install", body);
-      assert.equal(accepted.transaction.requestId, requestId);
+      if (repair) {
+        const tools = bundledTools();
+        // The signed archive and its read-only FUSE files remain intact. Replace
+        // the running bundle's actual tools view, not a health response or override.
+        inside("install", "-d", "-o", "couch-tv", "-g", "couch-tv", "-m", "700", "/fixture/damaged-tools");
+        inside("runuser", "-u", "couch-tv", "--", "cp", "-R", `${tools}/.`, "/fixture/damaged-tools");
+        inside("runuser", "-u", "couch-tv", "--", "rm", "/fixture/damaged-tools/yt-dlp");
+        inside("runuser", "-u", "couch-tv", "--", "sh", "-c", "printf '#!/bin/sh\\ntouch /tmp/couch-corrupt-deno-executed\\n' > /fixture/damaged-tools/deno");
+        mountAsOwner("mount", "--bind", "/fixture/damaged-tools", tools);
+        damagedTools = tools;
+        await until("Installed Tools detects missing yt-dlp and corrupt Deno without executing them", async () => {
+          damagedHealth = await api("/api/tools");
+          return damagedHealth.tools.find((tool: any) => tool.name === "yt-dlp")?.installed.status === "missing"
+            && damagedHealth.tools.find((tool: any) => tool.name === "Deno")?.installed.status === "corrupt";
+        });
+        for (const tool of damagedHealth.tools) assert.ok(tool.expectedVersion);
+        assert.equal(damagedHealth.ffprobe.status, "ready");
+        inside("test", "!", "-e", "/tmp/couch-corrupt-deno-executed");
+        for (const path of ["/api/tools", "/api/updates/repair"]) {
+          const denied = await fetch(`${origin}${path}`, { method: path.endsWith("repair") ? "POST" : "GET", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: path.endsWith("repair") ? JSON.stringify(body) : undefined });
+          assert.equal(denied.status, 403, "A retained nonadministrator cannot inspect tools or repair the release");
+        }
+        await Bun.write(`${fixtures}/helper-repair-before.json`, JSON.stringify({ tools, health: damagedHealth, scope: "Real mounted bundle view with missing yt-dlp and corrupt Deno; signed archive bytes unchanged." }, null, 2));
+      }
+      if (repair || !automaticRequest) {
+        const accepted = await api(repair ? "/api/updates/repair" : "/api/updates/install", body);
+        assert.equal(accepted.transaction.requestId, requestId);
+      }
       let transaction: any;
       await until(repair ? "Exact-current repair commits" : "Signed A to B installation commits", async () => {
         // Expected coordinator downtime must not hide a reported transaction failure.
@@ -336,8 +524,27 @@ try {
       assert.equal(installed.archiveSha256, expected.archiveSha256);
       assert.equal(inside("sha256sum", "/var/lib/couch/application/Couch.AppImage").split(" ")[0], expected.archiveSha256);
       assert.ok(state.queue.some((entry: any) => entry.id === "installed-tone"));
-      assert.equal((await api("/api/updates")).policy, "manual");
+      assert.equal((await api("/api/updates")).policy, automaticRequest ? "idle" : "manual");
       assert.equal((await api("/api/updates")).channel, "preview");
+      if (repair) {
+        const tools = bundledTools();
+        assert.notEqual(tools, damagedTools, "Repair starts the genuine tools in a fresh AppImage mount");
+        assert.equal(preservation(), beforeRepairData);
+        const health = await api("/api/tools");
+        assert.deepEqual(health.tools.map((tool: any) => tool.name), damagedHealth.tools.map((tool: any) => tool.name));
+        for (const tool of health.tools) {
+          assert.equal(tool.installed.status, "ready");
+          assert.equal(tool.installed.version, tool.expectedVersion);
+          assert.equal(tool.effective.source, "package");
+          assert.equal(tool.effective.status, "ready");
+          assert.equal(tool.expectedVersion, damagedHealth.tools.find((prior: any) => prior.name === tool.name).expectedVersion);
+        }
+        assert.equal(health.ffprobe.status, "ready");
+        inside("test", "!", "-e", "/tmp/couch-corrupt-deno-executed");
+        await Bun.write(`${fixtures}/helper-repair-after.json`, JSON.stringify({ tools, health, transaction, archiveSha256: installed.archiveSha256, checks: "Fresh hash/version and actual extractor/Deno smoke gate the succeeded transaction; pairings, sources, preferences, queue and progress retained." }, null, 2));
+        clearDamagedTools();
+        checks.push("Signed exact-current repair replaces the damaged bundled-tool view and verifies helpers without losing user data");
+      }
     }
   }
   // Run after the signed transaction so the baseline may predate startup controls.
@@ -487,7 +694,11 @@ try {
   await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, faultChecks, error: String(error) }, null, 2));
   throw error;
 } finally {
-  media.stop(true);
-  socket?.close();
-  for (const browser of browsers) await driver(browser.port, `/session/${browser.id}`, undefined, "DELETE").catch(() => {});
+  importGate?.resolve();
+  try { clearDamagedTools(); }
+  finally {
+    media.stop(true);
+    socket?.close();
+    for (const browser of browsers) await driver(browser.port, `/session/${browser.id}`, undefined, "DELETE").catch(() => {});
+  }
 }

@@ -21,6 +21,7 @@ async function run(args: string[], quiet = false, env = process.env) {
   assert.equal(await child.exited, 0, `${args[0]} failed`);
 }
 let server: ReturnType<typeof Bun.serve> | undefined;
+let activeEvidence = evidence;
 try {
   await run(["bunx", "--no-install", "tauri", "signer", "generate", "--ci", "-p", "", "-w", key], true);
   await chmod(key, 0o600);
@@ -28,8 +29,8 @@ try {
     const path = resolve(feed, `.${decodeURIComponent(new URL(request.url).pathname)}`);
     if (!path.startsWith(`${feed}${sep}`)) return new Response(null, { status: 404 });
     const file = Bun.file(path);
-    if (process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1") {
-      const fault = await Bun.file(join(evidence, "feed-fault")).text().catch(() => "");
+    if (process.env.COUCH_QUALIFY_RECOVERY_FAULTS === "1" || process.env.COUCH_QUALIFY_IDLE_UPDATES === "1") {
+      const fault = await Bun.file(join(activeEvidence, "feed-fault")).text().catch(() => "");
       if (fault === "offline") return new Response(null, { status: 503 });
       if (fault === "bad-signature" && path.endsWith(".sig")) return new Response("invalid qualification signature");
       if (fault === "interrupted-download" && path.endsWith(".AppImage") && await file.exists()) {
@@ -50,10 +51,15 @@ try {
   delete process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
   const file = [...new Bun.Glob("*.AppImage").scanSync(target)][0]!;
   const archiveSha256 = new Bun.CryptoHasher("sha256").update(await Bun.file(join(target, file)).arrayBuffer()).digest("hex");
-  const receipt = join(evidence, "update-target.json");
-  await Bun.write(receipt, JSON.stringify({ version: release.version, revision: release.revision, archiveSha256 }));
-  await Bun.write(join(evidence, "appimage-update.json"), JSON.stringify({ endpoint, pubkey: (await Bun.file(`${key}.pub`).text()).trim() }));
-  await run(["bash", "scripts/test-appliance-systemd.sh", "--appimage", resolve(appimage), evidence], false, { ...process.env, COUCH_QUALIFY_UPDATE_RECEIPT: receipt });
+  const trust = { endpoint, pubkey: (await Bun.file(`${key}.pub`).text()).trim() };
+  for (const scenario of process.env.COUCH_QUALIFY_IDLE_UPDATES === "1" ? ["success", "failure"] : [""]) {
+    activeEvidence = scenario ? join(evidence, `idle-${scenario}`) : evidence;
+    await mkdir(activeEvidence, { recursive: true });
+    const receipt = join(activeEvidence, "update-target.json");
+    await Bun.write(receipt, JSON.stringify({ version: release.version, revision: release.revision, archiveSha256 }));
+    await Bun.write(join(activeEvidence, "appimage-update.json"), JSON.stringify(trust));
+    await run(["bash", "scripts/test-appliance-systemd.sh", "--appimage", resolve(appimage), activeEvidence], false, { ...process.env, COUCH_QUALIFY_UPDATE_RECEIPT: receipt, COUCH_QUALIFY_IDLE_SCENARIO: scenario });
+  }
 } finally {
   server?.stop(true);
   await rm(temporary, { recursive: true, force: true });
