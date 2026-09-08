@@ -148,3 +148,21 @@ test("a premature native EOF confirms expiry before retrying, while normal EOF a
     f.store.close();
   }
 });
+
+test("queue changes and playback reservations stop a replacement while its native load settles", async () => {
+  for (const reserve of [false, true]) {
+    const f = fixture();
+    f.fail();
+    f.pending.resolve(f.fresh);
+    await Bun.sleep(0);
+    const loadingId = f.session.state.player.playbackId;
+    expect(f.commands.at(-1)?.type).toBe("load");
+    if (reserve) f.session.reservePlay();
+    else f.session.command({ type: "move", entryId: "two", beforeEntryId: "one" });
+    expect(f.commands.at(-1)).toEqual({ type: "stop" });
+    expect(f.session.state.webRetry).toBeNull();
+    f.session.observe({ ...idle, playbackId: loadingId, status: "playing", position: 50 });
+    expect(f.session.state.player.status).toBe("error");
+    f.store.close();
+  }
+});

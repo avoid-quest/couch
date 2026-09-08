@@ -110,12 +110,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     return true;
   };
   const cancelWebRecovery = () => {
-    if (!webRecovery) return;
+    if (!state.webRetry) return;
+    const loadingNative = !webRecovery;
     webRecovery = null;
     playIntent++;
     resolution?.abort();
     state.webRetry = null;
     state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", error: "Stream recovery canceled by a newer control. Play the track to try again." };
+    if (loadingNative) send({ type: "stop" });
   };
   const recoverWeb = (failure: PlayerState) => {
     if (!expiry || Date.now() < expiry.at || activePlayIntent !== playIntent) return false;
@@ -305,7 +307,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     reservePlay() {
       available();
-      if (webRecovery) { cancelWebRecovery(); broadcast(); }
+      if (state.webRetry) { cancelWebRecovery(); broadcast(); }
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;
     },
