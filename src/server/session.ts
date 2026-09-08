@@ -565,7 +565,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         progress.begin(next, player.playbackId!, state.activeProfile.id);
       }
       if (player.status === "unavailable") audioInterrupted = false;
-      if (audioInterrupted) return;
+      if (audioInterrupted) {
+        if (player.playbackId === state.player.playbackId && player.status === "paused") {
+          const paused = { ...player, volume: state.player.volume };
+          persistProgress(() => progress.observe(paused));
+          options.observe?.(paused);
+        }
+        return;
+      }
       // Native Stop can acknowledge the retired source while another source is still resolving.
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
@@ -595,7 +602,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
       catch { state.progressError = "Could not save viewing progress. Check the TV's storage."; }
-      options.observe?.(player);
+      options.observe?.(state.player);
       if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
       broadcast();
       if (ended) {

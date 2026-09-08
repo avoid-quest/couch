@@ -166,7 +166,7 @@ export function createHub(options: HubOptions) {
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
   if (systemAudio) soundRouting = createSoundRouting({
-    saved: store.audioOutput, save: store.saveAudioOutput,
+    saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
     pin: output => options.sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),

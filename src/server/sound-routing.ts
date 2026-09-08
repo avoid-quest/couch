@@ -1,10 +1,11 @@
-import type { SoundInventory, SoundRouteState } from "../shared/sound";
+import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
 import { ControllerError } from "./controllers";
 import { pulseRouting } from "./sound-pulse";
 
 type Options = {
   saved: () => string | null;
-  save: (output: string) => void;
+  savedProfile?: () => SavedSoundProfile | null;
+  save: (output: string, profile?: SavedSoundProfile | null) => void;
   active: () => boolean;
   pin: (output: string) => void;
   lost: (error: string) => void;
@@ -28,13 +29,24 @@ export function createSoundRouting(options: Options) {
     publish({ ...snapshot, observedOutput: null, volume: null, error: message });
     if (options.active()) options.lost(message);
   };
+  const profileFor = (inventory: SoundInventory, name: string) => {
+    const card = output(inventory, name)?.card;
+    const profile = inventory.profiles?.find(profile => profile.card === card && profile.active);
+    return profile ? { card: profile.card, profile: profile.id } : null;
+  };
   const refresh = async () => {
-    const inventory = await backend.inventory();
+    let inventory = await backend.inventory();
     if (closed) return;
     if (!selected) {
       const initial = output(inventory, inventory.defaultOutput);
       if (!initial) throw new Error("No available system output.");
-      options.save(initial.id); selected = initial.id;
+      options.save(initial.id, profileFor(inventory, initial.id)); selected = initial.id;
+    }
+    const savedProfile = options.savedProfile?.();
+    if (!output(inventory) && savedProfile && inventory.profiles?.some(profile => profile.card === savedProfile.card && profile.id === savedProfile.profile && profile.available && !profile.active)) {
+      lost("Restoring the saved audio output. Resume playback when it becomes available.");
+      await backend.profile(savedProfile.card, savedProfile.profile);
+      inventory = await backend.inventory();
     }
     const sink = output(inventory);
     if (!sink) { lost("The selected audio output is unavailable. Reconnect it or choose another output, then resume playback."); return; }
@@ -52,10 +64,36 @@ export function createSoundRouting(options: Options) {
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {
-    if (busy || closed) throw new ControllerError("The audio session is busy. Try again.", 409);
+    while (busy && !closed) await Bun.sleep(10);
+    if (closed) throw new ControllerError("The audio session is closing.", 503);
     busy = true;
     try { await work(); await refresh(); }
     finally { busy = false; }
+  };
+  const select = async (name: string, inventory: SoundInventory, authorize: () => void) => {
+    if (!output(inventory, name)) throw new ControllerError("That audio output is unavailable.", 409);
+    if (output(inventory, name)?.testBlocked) throw new ControllerError("This audio server couples stream and system volume. Disable flat volumes before selecting this output.", 409);
+    const previous = selected;
+    const hadStream = await backend.route(); authorize();
+    try {
+      changing = true;
+      options.pin(name);
+      if (hadStream) {
+        const deadline = Date.now() + 2_000;
+        while (await backend.route() !== name) {
+          if (closed || Date.now() >= deadline) throw new ControllerError("The audio server did not confirm the requested playback route.", 503);
+          await Bun.sleep(50);
+        }
+      }
+      authorize();
+      await backend.default(name);
+      if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
+      authorize(); options.save(name, profileFor(inventory, name)); selected = name;
+    } catch (error) {
+      if (previous) options.pin(previous);
+      if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
+      throw error;
+    } finally { changing = false; }
   };
   const timer = setInterval(() => void check(), 500);
   void check();
@@ -68,28 +106,31 @@ export function createSoundRouting(options: Options) {
     },
     async select(name: unknown, authorize: () => void) {
       if (typeof name !== "string" || !name || name.length > 512) throw new ControllerError("Choose an available output.", 400);
+      await mutate(async () => { const inventory = await backend.inventory(); authorize(); await select(name, inventory, authorize); });
+    },
+    async profile(value: unknown, authorize: () => void) {
+      if (!value || typeof value !== "object" || !("card" in value) || !("profile" in value)) throw new ControllerError("Choose an available audio output profile.", 400);
       await mutate(async () => {
         const inventory = await backend.inventory(); authorize();
-        if (!output(inventory, name)) throw new ControllerError("That audio output is unavailable.", 409);
-        if (output(inventory, name)?.testBlocked) throw new ControllerError("This audio server couples stream and system volume. Disable flat volumes before selecting this output.", 409);
-        const previous = selected;
-        const hadStream = await backend.route(); authorize();
+        const requested = inventory.profiles?.find(profile => profile.card === value.card && profile.id === value.profile && profile.available && profile.selectable);
+        if (!requested) throw new ControllerError("That output profile is unavailable.", 409);
+        const previous = inventory.profiles?.find(profile => profile.card === requested.card && profile.active);
+        if (options.active()) options.lost("The audio output is changing. Resume playback after the output is ready.");
+        changing = true;
         try {
-          changing = true;
-          options.pin(name);
-          if (hadStream) {
-            const deadline = Date.now() + 2_000;
-            while (await backend.route() !== name) {
-              if (closed || Date.now() >= deadline) throw new ControllerError("The audio server did not confirm the requested playback route.", 503);
-              await Bun.sleep(50);
-            }
+          await backend.profile(requested.card, requested.id);
+          const deadline = Date.now() + 2_000;
+          let updated = await backend.inventory();
+          while (!updated.profiles?.some(profile => profile.card === requested.card && profile.id === requested.id && profile.active) || !updated.outputs.some(output => output.card === requested.card && output.availability !== "unavailable")) {
+            if (closed || Date.now() >= deadline) throw new ControllerError("The selected profile did not produce an available output.", 503);
+            await Bun.sleep(50); updated = await backend.inventory();
           }
           authorize();
-          await backend.default(name);
-          if ((await backend.inventory()).defaultOutput !== name) throw new ControllerError("The audio server did not confirm the default output.", 503);
-          authorize(); options.save(name); selected = name;
+          const sink = updated.outputs.find(output => output.card === requested.card && output.availability !== "unavailable")!;
+          await select(sink.id, updated, authorize);
         } catch (error) {
-          if (previous) options.pin(previous);
+          if (previous) await backend.profile(previous.card, previous.id).catch(() => {});
+          if (selected) options.pin(selected);
           if (inventory.defaultOutput) await backend.default(inventory.defaultOutput).catch(() => {});
           throw error;
         } finally { changing = false; }

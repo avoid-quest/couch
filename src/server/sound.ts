@@ -30,6 +30,12 @@ export function createSound(options: Options) {
         authorize();
         if (!options.available) return json({ error: "Sound tests require the native Ubuntu TV audio session." }, 503);
         const path = new URL(request.url).pathname;
+        if (path === "/api/sound/profile" && request.method === "POST" && options.routing) {
+          const profile = await settingField(request, "profile"); authorize();
+          if (starting || active) throw new ControllerError("Stop the sound test before changing output.", 409);
+          await options.routing.profile(profile, authorize);
+          return json(await state());
+        }
         if (path === "/api/sound/output" && request.method === "POST" && options.routing) {
           const output = await settingField(request, "output"); authorize();
           if (starting || active) throw new ControllerError("Stop the sound test before changing output.", 409);

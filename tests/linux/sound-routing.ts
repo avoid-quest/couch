@@ -1,0 +1,93 @@
+import { strict as assert } from "node:assert";
+import { remoteSocketUrl } from "./build";
+import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
+import { UiDriver } from "./ui";
+
+const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444";
+const checks: string[] = [];
+async function until(name: string, predicate: () => boolean | Promise<boolean>, timeout = 15_000) {
+  const deadline = Date.now() + timeout;
+  while (!await predicate()) { assert.ok(Date.now() < deadline, name); await Bun.sleep(50); }
+  checks.push(name); console.log(`PASS ${name}`);
+}
+async function pactl(...args: string[]) {
+  const child = Bun.spawn(["pactl", ...args], { stdout: "pipe", stderr: "pipe" });
+  const text = await new Response(child.stdout).text(); assert.equal(await child.exited, 0); return text.trim();
+}
+async function wd(path: string, body?: unknown, method = body === undefined ? "GET" : "POST"): Promise<any> {
+  const response = await fetch(`${driverOrigin}${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+  const json = await response.json() as any;
+  assert.ok(response.ok && !json.value?.error, `WebDriver ${JSON.stringify(json.value)}`); return json.value;
+}
+let sessionId = "", token = "", state: SessionState | null = null, socket: WebSocket;
+const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+const ui = new UiDriver(wd, () => sessionId);
+const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file("/artifacts/sound-driver.log"), stderr: Bun.file("/artifacts/sound-native.log") });
+const media = Bun.serve({ hostname: "127.0.0.1", port: 4204, fetch: () => new Response(Bun.file("/work/sound.wav")) });
+const command = (action: Action) => new Promise<void>((resolve, reject) => {
+  const requestId = crypto.randomUUID();
+  const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("Command timed out")); }, 5_000);
+  pending.set(requestId, { resolve: () => { clearTimeout(timer); resolve(); }, reject: error => { clearTimeout(timer); reject(error); } });
+  socket.send(JSON.stringify({ type: "command", requestId, action }));
+});
+async function api(path: string, body?: unknown): Promise<any> {
+  const response = await fetch(`${origin}${path}`, { method: body === undefined ? "GET" : "POST", headers: { origin, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const result = await response.json(); assert.ok(response.ok, `HTTP ${response.status} ${JSON.stringify(result)}`); return result;
+}
+async function connect() {
+  socket = new (WebSocket as any)(await remoteSocketUrl(origin, token), { headers: { origin } });
+  socket.onmessage = event => {
+    const message = JSON.parse(String(event.data)) as ServerMessage;
+    if (message.type === "state") state = message.state;
+    else if (message.type === "result") {
+      const item = pending.get(message.requestId); pending.delete(message.requestId);
+      if (message.ok) item?.resolve(); else item?.reject(new Error(message.error));
+    }
+  };
+  await until("paired remote connected", () => socket.readyState === WebSocket.OPEN && state?.player.status === "idle");
+}
+async function launch() {
+  sessionId = (await wd("/session", { capabilities: { alwaysMatch: { browserName: "wry", "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
+}
+let hdmi = await pactl("load-module", "module-null-sink", "sink_name=couch_sound_hdmi", "sink_properties=device.description=HDMI_Test");
+await pactl("load-module", "module-null-sink", "sink_name=couch_sound_analog", "sink_properties=device.description=Analog_Test");
+await pactl("set-default-sink", "couch_sound_hdmi");
+await pactl("set-sink-volume", "couch_sound_hdmi", "64%");
+try {
+  await until("official Tauri driver ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
+  await launch();
+  await until("native setup exposes pairing and separate claim codes", () => ui.execute("return !!document.querySelector('[data-pairing-code]') && !!document.querySelector('[data-administrator-code]')"));
+  const codes = await ui.execute("return { pair: document.querySelector('[data-pairing-code]').textContent, claim: document.querySelector('[data-administrator-code]').textContent }");
+  token = (await api("/api/pair", { code: codes.pair })).token;
+  await api("/api/controllers/claim", { code: codes.claim });
+  await connect();
+  await until("system sink readback", () => state?.systemAudio?.volume === 64);
+  await api("/api/sound/delay", { delay: 0.25 });
+  await command({ type: "enqueue", entry: { id: "sound", title: "Sound qualification", source: "http://127.0.0.1:4204/sound.wav" }, playNow: true });
+  await until("native PCM stream on saved HDMI sink", () => state?.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_hdmi");
+  await api("/api/sound/output", { output: "couch_sound_analog" });
+  await until("current stream changes to analog with confirmed routing", () => state?.systemAudio?.observedOutput === "couch_sound_analog");
+  await command({ type: "volume", volume: 31 }); await command({ type: "mute", muted: true });
+  await until("shared system volume and mute", () => state?.player.volume === 31 && state.systemAudio?.muted === true);
+  await pactl("set-sink-volume", "couch_sound_analog", "48%"); await pactl("set-sink-mute", "couch_sound_analog", "0");
+  await until("external system changes reach the paired remote", () => state?.player.volume === 48 && state.systemAudio?.muted === false);
+  await command({ type: "stop" }); await until("playback stopped", () => state?.player.status === "idle");
+  await command({ type: "play", entryId: "sound" });
+  await until("subsequent load uses saved analog and TV delay", () => state?.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_analog" && state.player.audioDelay === 0.25);
+  await api("/api/sound/output", { output: "couch_sound_hdmi" });
+  await pactl("unload-module", hdmi);
+  await until("selected sink loss pauses seekable native media", () => state?.player.status === "paused" && !!state.player.error && !!state.systemAudio?.error);
+  hdmi = await pactl("load-module", "module-null-sink", "sink_name=couch_sound_hdmi", "sink_properties=device.description=HDMI_Test");
+  await until("reconnected output stays paused", () => state?.systemAudio?.error === null && state.player.status === "paused");
+  await Bun.sleep(1_000); assert.equal(state!.player.status, "paused");
+  await command({ type: "pause", playbackId: state!.player.playbackId!, paused: false });
+  await until("explicit resume restores native audio on HDMI", () => state?.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_hdmi");
+  await command({ type: "stop" }); await until("idle before restart", () => state?.player.status === "idle");
+  socket.close(); await wd(`/session/${sessionId}`, undefined, "DELETE"); sessionId = ""; state = null;
+  await launch(); await connect();
+  await until("restart retains output and delay without autoplay", () => state?.systemAudio?.selectedOutput === "couch_sound_hdmi" && state.preferences?.device.audioDelay === 0.25 && state.player.status === "idle");
+  await Bun.write("/artifacts/sound-routing-result.json", JSON.stringify({ checks, physicalAudibility: false }, null, 2));
+} finally {
+  socket!?.close(); if (sessionId) await wd(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});
+  driver.kill(); media.stop(true);
+}
