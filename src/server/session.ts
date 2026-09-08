@@ -519,8 +519,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     namePerson(id: string, name: unknown, expectedName: string) {
       assertAdmitted();
+      if (id !== state.activeProfile.id) throw new ViewingError("The active history changed on another remote. Reopen Your name before saving.", 409);
       const profile = store.namePerson(id, name, expectedName);
-      if (state.activeProfile.id === id) state.activeProfile = profile;
+      state.activeProfile = profile;
       invalidate("library");
       return profile;
     },

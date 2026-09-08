@@ -270,3 +270,26 @@ test("person naming requires an explicit valid request and retains generic label
   expect((await request("/api/profiles/household/rename", "POST", { name: "Device", expectedName: "Francesco" })).status).toBe(200);
   expect(store.activeProfile()).toEqual({ id: "household", name: "Device" });
 });
+
+
+test("changing active history while a person-name body loads rejects the stale name", async () => {
+  const { catalog, session, store } = fixture();
+  const first = store.activeProfile(), second = session.createProfile("Other");
+  let finish!: () => void;
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode(JSON.stringify({ name: "Francesco", expectedName: first.name })));
+    finish = () => controller.close();
+  } });
+  const request = new Request(`http://localhost/api/profiles/${first.id}/person-name`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: stream,
+  });
+  const pending = catalog.handle(request, false);
+  session.selectProfile(second.id);
+  const before = structuredClone(session.state), profiles = store.profiles();
+  finish();
+  const response = await pending;
+  expect(response.status).toBe(409);
+  expect((await response.json()).error).toContain("active history changed");
+  expect(store.profiles()).toEqual(profiles);
+  expect(session.state).toEqual(before);
+});

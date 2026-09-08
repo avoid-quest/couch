@@ -265,3 +265,24 @@ test("person naming validates, refuses stale writes and publishes without changi
   expect(session.state.activeProfile).toEqual(named);
   session.close();
 });
+
+
+test("person naming refuses an inactive history without mutation or broadcast", () => {
+  const { store } = fixture();
+  const first = store.activeProfile(), second = store.createProfile("Other");
+  store.saveProgress(first.id, history);
+  store.saveProfilePreferences(first.id, preferences);
+  let published = 0;
+  const session = createSession(store, () => {}, () => published++);
+  session.selectProfile(second.id);
+  const before = structuredClone(session.state), count = published;
+  expect(() => session.namePerson(first.id, "Francesco", first.name)).toThrow("active history changed");
+  expect(session.state).toEqual(before);
+  expect(published).toBe(count);
+  expect(store.profiles()).toContainEqual(first);
+  expect(store.progress(first.id, history.mediaId)).toEqual(history);
+  expect(store.playbackPreferences(first.id).profile).toEqual(preferences);
+  expect(session.renameProfile(first.id, "Older history", first.name)).toEqual({ ...first, name: "Older history" });
+  expect(session.state.activeProfile).toEqual(second);
+  session.close();
+});
