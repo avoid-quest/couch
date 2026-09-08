@@ -29,6 +29,7 @@ const media = Bun.serve({ hostname: "127.0.0.1", port: 4200, fetch: () => new Re
 try {
   await until("diagnostics native driver starts", async () => { try { return (await fetch("http://127.0.0.1:4444/status")).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
+  await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('[aria-label=Settings]')"));
   await tv.button("Settings");
   await until("native startup offers its administrator code", () => tv.execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '')"));
   const claim = await tv.execute("return document.querySelector('[data-administrator-code]').textContent") as string;

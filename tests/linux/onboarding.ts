@@ -52,13 +52,16 @@ try {
   await phone.restore();
   await until("existing Display Settings offers a virtual output", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Preview on ') && !button.disabled)"));
   const preview = await phone.ui.execute("return [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Preview on ') && !button.disabled).textContent") as string;
-  await phone.ui.button(preview); await phone.ui.button("Keep this screen");
+  await phone.ui.button(preview);
+  await until("native preview offers confirmation", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent === 'Keep this screen' && !button.disabled)"));
+  await phone.ui.button("Keep this screen");
   await until("display preview is saved", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Keep this screen') && document.querySelector('[role=dialog]').textContent.includes('Saved')"));
   await assertResponsive(phone.ui, "First-run screen");
   await phone.ui.button("I can see Couch on the right screen");
   await until("existing Sound Settings offers an output", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Use ') && !button.disabled)"));
   const output = await phone.ui.execute("return [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Use ') && !button.disabled).textContent.slice(4)") as string;
   await phone.ui.button(`Use ${output}`);
+  await until("selected output is saved before capturing", () => phone!.ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('Selected output: ' + arguments[0]) && [...document.querySelectorAll('button')].some(button => button.textContent === 'Test ' + arguments[0] && !button.disabled)", [output]));
   const token = await phone.ui.execute("return localStorage.getItem('couch.remote-token')") as string;
   const sound = await (await fetch(`${origin}/api/sound`, { headers: { Authorization: `Bearer ${token}` } })).json() as SoundState;
   assert.ok(sound.routing?.selectedOutput);
