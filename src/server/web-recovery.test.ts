@@ -16,7 +16,7 @@ function fixture() {
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "web:https://artist.bandcamp.com/track/one", quality: "480p", automaticTitle: true } });
   session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" } });
-  session.command({ type: "play", entryId: "one" });
+  session.command({ type: "play", entryId: "one" }, undefined, { deviceId: "phone", name: "Phone" });
   const playbackId = session.state.player.playbackId!;
   session.observe({ ...idle, playbackId, status: "paused", position: 47.25, duration: 120, seekable: true, speed: 1.25, replayGain: "track" });
   const fail = () => session.observe({ ...idle, playbackId, status: "error", error: "Native transport failed" });
@@ -38,6 +38,7 @@ test("one private recovery preserves observed position, settings, queue metadata
   expect(f.commands.at(-1)).not.toHaveProperty("expiry");
   expect(f.commands.at(-1)).not.toHaveProperty("metadata");
   expect(f.session.state.queue).toEqual(queue);
+  expect(f.session.state.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
   expect(JSON.stringify(f.session.state)).not.toContain("secret");
   const playbackId = f.session.state.player.playbackId;
   f.session.observe({ ...idle, playbackId, status: "playing", position: 50 });

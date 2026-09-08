@@ -1,3 +1,4 @@
+import type { PlaybackActor } from "../shared/protocol";
 import type { LibrarySource } from "../shared/library";
 import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
@@ -54,7 +55,7 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
 
 export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
   return {
-    async handle(request: Request, trusted: boolean, authorize = () => {}): Promise<Response> {
+    async handle(request: Request, trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
         if (viewing && pathname === "/api/profiles") {
@@ -110,7 +111,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           try { mediaId = decodeURIComponent(historyPlay[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings);
+          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy);
           return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {

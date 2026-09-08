@@ -1,5 +1,5 @@
 import type { HistoryItem } from "../shared/library";
-import type { PlayerState, QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, PlayerState, QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 
 export class ViewingError extends Error {
@@ -36,11 +36,11 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
     forgetProfile(id: string) { if (active?.profileId === id) active = null; },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
-    begin(entry: QueueEntry, playbackId: string, profileId: string) {
+    begin(entry: QueueEntry, playbackId: string, profileId: string, playedBy?: PlaybackActor) {
       const mediaId = playbackMediaId(entry);
       active = mediaId ? {
         playbackId, profileId, entry: { ...entry }, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
-        item: { mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
+        item: { ...(playedBy ? { playedBy: { ...playedBy } } : {}), mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
     },
     replaceTransport(previousPlaybackId: string | null, playbackId: string, entry?: QueueEntry) {

@@ -1,3 +1,4 @@
+import type { PlaybackActor } from "../shared/protocol";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -16,7 +17,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
   fetch?: typeof fetch;
   onChange?: () => void;
   onSourcesChanged?: (channelIds: string[]) => void;
-  enqueue?: (channel: GuideChannel, playNow: boolean, authorize: () => void) => void;
+  enqueue?: (channel: GuideChannel, playNow: boolean, authorize: () => void, playedBy?: PlaybackActor) => void;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
@@ -174,7 +175,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         throw new GuideError("Could not check this channel's live playlist. Use Play.", 502);
       }
     },
-    async handle(req: Request, identity: Identity): Promise<Response> {
+    async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device before connecting.", 401); return value; };
       const administrator = () => { if (caller().authority === "controller") throw new GuideError("An administrator is required to manage guide sources.", 403); };
       try {
@@ -236,7 +237,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
             if (req.method !== "POST") return methods("POST");
             caller();
             const current = channel(item.id);
-            enqueue(publicChannel(current), channelPath[2] === "play", caller);
+            enqueue(publicChannel(current), channelPath[2] === "play", caller, playedBy);
             return json({ ok: true });
           }
           if (req.method !== "GET") return methods("GET");

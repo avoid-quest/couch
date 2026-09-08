@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ForLaterReference } from "../shared/for-later";
-import type { QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError, settingField } from "./controllers";
 import { capturePlaylistEntries } from "./playlists";
 
@@ -12,7 +12,7 @@ type Options = {
   lookup: (reference: ForLaterReference) => Promise<QueueEntry>;
   reservePlay: () => number;
   prepare: (entry: QueueEntry) => Promise<void>;
-  enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void) => void;
+  enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
 };
 type Row = { id: string; entry: string };
 const publicItem = (entry: QueueEntry) => { const { source: _source, automaticTitle: _automaticTitle, ...item } = entry; return item; };
@@ -28,7 +28,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
     return JSON.parse(row.entry) as QueueEntry;
   };
   return {
-    async handle(request: Request, authorize = () => {}): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const path = new URL(request.url).pathname;
       try {
         authorize();
@@ -64,7 +64,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           await prepare(entry);
           authorize();
           get(id); // Another controller may have removed it while the source was checked.
-          enqueue({ ...entry, id: crypto.randomUUID() }, intent, authorize);
+          enqueue({ ...entry, id: crypto.randomUUID() }, intent, authorize, playedBy);
           return Response.json({ ok: true });
         }
         if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { Allow: "DELETE" } });

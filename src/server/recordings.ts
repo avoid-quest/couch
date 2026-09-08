@@ -1,3 +1,4 @@
+import type { PlaybackActor } from "../shared/protocol";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -24,7 +25,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   channel: (channelId: string) => GuideChannel;
   onChange?: () => void;
   onConnectionChanged?: () => void;
-  enqueue?: (job: Recording, authorize: () => void) => void;
+  enqueue?: (job: Recording, authorize: () => void, playedBy?: PlaybackActor) => void;
   fetch?: typeof fetch;
   pollMs?: number;
   admitted?: () => boolean;
@@ -122,7 +123,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         throw new RecordingError("Could not open the completed recording.", 502);
       }
     },
-    async handle(req: Request, identity: () => ControllerIdentity | null): Promise<Response> {
+    async handle(req: Request, identity: () => ControllerIdentity | null, playedBy?: PlaybackActor): Promise<Response> {
       const caller = () => { assertOpen(); const value = identity(); if (!value) throw new RecordingError("Pair this device before connecting.", 401); return value; };
       const administrator = () => { if (caller().authority === "controller") throw new RecordingError("An administrator is required to configure recordings.", 403); };
       const guard = () => { caller(); req.signal.throwIfAborted(); };
@@ -212,7 +213,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         const jobPath = /^\/api\/recordings\/([a-f0-9-]{36})\/(cancel|play)$/.exec(path);
         if (jobPath) {
           if (req.method !== "POST") return method("POST");
-          if (jobPath[2] === "play") { guard(); const job = get(jobPath[1]!); if (job.status !== "completed") throw new RecordingError("Wait for this recording to complete.", 409); enqueue(publicJob(job), () => { caller(); }); return json({ ok: true }); }
+          if (jobPath[2] === "play") { guard(); const job = get(jobPath[1]!); if (job.status !== "completed") throw new RecordingError("Wait for this recording to complete.", 409); enqueue(publicJob(job), () => { caller(); }, playedBy); return json({ ok: true }); }
           const value = await body(req);
           return await serial(async () => {
             guard(); await reconcile(); guard(); const job = get(jobPath[1]!);

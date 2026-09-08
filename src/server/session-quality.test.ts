@@ -20,7 +20,7 @@ function fixture(changes: Partial<QueueEntry> = {}, player: Partial<PlayerState>
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "one", title: "Original title", source: "web:https://youtube.com/watch?v=one", ...changes } });
   session.command({ type: "enqueue", entry: { id: "two", title: "Next", source: "web:https://youtube.com/watch?v=two" } });
-  session.command({ type: "play", entryId: "one" });
+  session.command({ type: "play", entryId: "one" }, undefined, { deviceId: "phone", name: "Phone" });
   const playbackId = session.state.player.playbackId!;
   session.observe({ ...idle, playbackId, status: "playing", position: 40, duration: 200, seekable: true, speed: 1.25, ...player });
   commands.length = 0;
@@ -46,6 +46,7 @@ test("quality replaces only the current transport at the latest position and kee
     expect(session.state.preferences).toEqual(before.preferences);
     expect(session.state.player.playbackId).not.toBe(playbackId);
     expect(session.state.presentationId).toBe(before.presentationId);
+    expect(session.state.playedBy).toEqual(before.playedBy);
     expect(JSON.stringify(session.state)).not.toContain("secret");
     expect(JSON.stringify(session.state)).not.toContain("stream.example");
     session.observe({ ...before.player, position: 99 });
@@ -183,6 +184,7 @@ test("history follows a quality replacement and ignores observations from the re
     session.command({ type: "stop" });
     expect(store.progress("household", mediaId)?.position).toBe(60);
     expect(store.historySource(mediaId)).toMatchObject({ id: "one", quality: "720p" });
+    expect(store.sharedProgress(mediaId)?.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
   } finally { session.close(); store.close(); }
 });
 

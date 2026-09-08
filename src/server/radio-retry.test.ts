@@ -25,7 +25,7 @@ function setup(resolveSource: NonNullable<Parameters<typeof createSession>[3]>["
   session.observe(idle);
   session.command({ type: "enqueue", entry });
   session.command({ type: "enqueue", entry: following });
-  const play = () => session.command({ type: "play", entryId: entry.id });
+  const play = () => session.command({ type: "play", entryId: entry.id }, undefined, { deviceId: "phone", name: "Phone" });
   const observe = (changes: Partial<PlayerState>) => session.observe({ ...idle, playbackId: session.state.player.playbackId, ...changes });
   return { store, session, commands, observations, play, observe, loads: () => commands.filter(command => command.type === "load") };
 }
@@ -35,6 +35,7 @@ test("radio EOF retries the station's current source three times, retires failed
   const test = setup(entry => { resolutions.push(entry.source); return { source: `https://private.test/stream-${resolutions.length}` }; });
   test.play();
   expect(test.loads()[0]).toMatchObject({ radio: true });
+  expect(test.session.state.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
   for (const [index, delay] of [1000, 2000, 4000].entries()) {
     const failedId = test.session.state.player.playbackId!;
     test.observe({ status: "playing", nowPlaying: { title: "Current song", artist: "Artist" } });
@@ -47,6 +48,7 @@ test("radio EOF retries the station's current source three times, retires failed
     test.session.observe({ ...idle, playbackId: failedId, status: "ended" });
     test.session.observe(idle);
     expect(test.session.state).toEqual(waiting);
+    expect(test.session.state.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
     advance(delay - 1);
     expect(test.loads()).toHaveLength(index + 1);
     advance(1);
@@ -276,4 +278,14 @@ test("non-radio media keeps EOF queue advancement and does not retry failures", 
   expect(test.loads()).toHaveLength(2);
   expect(test.session.state.player.error).toBe("Movie failed");
   expect(test.session.state.radioRetry).toBeNull();
+});
+
+test("a radio retry that first resolves successfully retains the requesting device", () => {
+  let calls = 0;
+  const f = setup(entry => { if (++calls === 1) throw new Error("Temporarily unavailable"); return { source: entry.source }; });
+  expect(() => f.play()).toThrow("Temporarily unavailable");
+  expect(f.session.state.playedBy).toBeUndefined();
+  advance(1000);
+  expect(f.loads()).toHaveLength(1);
+  expect(f.session.state.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
 });

@@ -10,8 +10,8 @@ import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 
-type ProgressRow = Omit<HistoryItem, "watched"> & { watched: number };
-const progressView = (row: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched });
+type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
+const progressView = ({ playedBy, ...row }: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched, ...(playedBy ? { playedBy: JSON.parse(playedBy) } : {}) });
 
 function profileName(value: unknown) {
   if (typeof value !== "string") throw new ViewingError("Enter a watching profile name.");
@@ -55,6 +55,9 @@ export function openStore(path: string) {
 
   if (!db.query<{ name: string }, []>("PRAGMA table_info(watching_profiles)").all().some(column => column.name === "confirmedName")) {
     db.run("ALTER TABLE watching_profiles ADD COLUMN confirmedName INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(viewing_progress)").all().some(column => column.name === "playedBy")) {
+    db.run("ALTER TABLE viewing_progress ADD COLUMN playedBy TEXT");
   }
   const profileView = ({ id, name, confirmedName }: WatchingProfile & { confirmedName: number }): WatchingProfile => ({ id, name, ...(confirmedName ? { personName: name } : {}) });
 
@@ -100,7 +103,7 @@ export function openStore(path: string) {
   db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
   const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
-  const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
+  const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy";
   const latestProgress = (mediaId: string) => db.query<ProgressRow & { profileId: string }, [string]>(`SELECT profileId, ${progressColumns} FROM viewing_progress WHERE mediaId = ? ORDER BY lastPlayedAt DESC, rowid DESC LIMIT 1`).get(mediaId);
   const activeProfile = () => profileView(db.query<WatchingProfile & { confirmedName: number }, []>("SELECT p.id, p.name, p.confirmedName FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!);
   const availableProfileName = (value: unknown, id = "") => {
@@ -231,11 +234,11 @@ export function openStore(path: string) {
     },
     saveProgress(profileId: string, item: HistoryItem, entry?: QueueEntry) {
       db.transaction(() => {
-        db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
+        db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
           title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
-          watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt`)
-          .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt);
+          watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt, playedBy=excluded.playedBy`)
+          .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt, item.playedBy ? JSON.stringify(item.playedBy) : null);
         if (entry) db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify(entry));
       })();
     },

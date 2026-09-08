@@ -3,6 +3,7 @@ import type { WatchingProfile } from "./library";
 import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
+export type PlaybackActor = { deviceId: string; name: string };
 export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio" };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
@@ -37,6 +38,7 @@ export type SessionState = {
   queue: QueueEntry[];
   currentEntryId: string | null;
   presentationId?: string | null;
+  playedBy?: PlaybackActor;
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;

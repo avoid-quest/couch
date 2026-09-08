@@ -2,14 +2,14 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
-import type { QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 
 type Options = {
   databasePath: string;
   onChange: () => void;
   queue: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void) => void;
+  loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor) => void;
 };
 type Row = Omit<SavedPlaylist, "entries"> & { entries: string };
 
@@ -107,7 +107,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
   };
 
   return {
-    async handle(request: Request, authorize = () => {}): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const { pathname } = new URL(request.url);
       try {
         if (pathname === "/api/playlists") {
@@ -144,7 +144,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
           const entries = JSON.parse(row.entries) as QueueEntry[];
           if (!entries.length) throw new PlaylistError("This playlist is empty. Save a queue before loading it.");
           if (input.mode === "append" && queue().length + entries.length > 500) throw new PlaylistError("The queue can contain up to 500 entries. Replace it or remove some entries first.");
-          loadQueue(entries, input.mode as PlaylistLoadMode, authorize);
+          loadQueue(entries, input.mode as PlaylistLoadMode, authorize, playedBy);
           return Response.json({ ok: true });
         }
         if (request.method === "GET") return Response.json({ playlist: view(get(id)) });

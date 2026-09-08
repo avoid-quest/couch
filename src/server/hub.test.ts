@@ -654,7 +654,7 @@ test("HTTP viewing profiles, observed history and resume stay shared across cont
   await first.command({ type: "stop" });
   hub.session.observe(idle);
   await api("/api/profiles/household/select", "POST");
-  expect(await (await api("/api/progress/history")).json()).toMatchObject({ items: [] });
+  expect(await (await api("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId: history.items[0]!.mediaId, position: 8, queueEntryId: file.id }] });
   await api(`/api/profiles/${profile.id}/select`, "POST");
   await Promise.all([first.close(), second.close(), host.close()]);
   await hub.close();
@@ -1454,4 +1454,43 @@ test("the authorized pairing QR uses the existing code and grants only controlle
   expect(result.token).not.toBe(owner);
   expect((await controllerApi(hub, result.token, `/api/controllers/${result.controller.id}/name`, "POST", { name: "Frank's phone" })).status).toBe(200);
   expect(await (await controllerApi(hub, result.token, "/api/controllers/me")).json()).toMatchObject({ authority: "controller", controller: { name: "Frank's phone" } });
+});
+
+test("manual playback uses authenticated device names across sockets, history, Saved and playlists", async () => {
+  const { hub } = fixture();
+  hub.session.observe(idle);
+  const firstToken = await pair(hub), secondToken = await pair(hub);
+  const firstIdentity = await (await controllerApi(hub, firstToken, "/api/controllers/me")).json();
+  const secondIdentity = await (await controllerApi(hub, secondToken, "/api/controllers/me")).json();
+  await controllerApi(hub, firstToken, `/api/controllers/${firstIdentity.controller.id}/name`, "POST", { name: "Phone" });
+  await controllerApi(hub, secondToken, `/api/controllers/${secondIdentity.controller.id}/name`, "POST", { name: "Laptop" });
+  const first = new Peer(hub, firstToken), second = new Peer(hub, secondToken), host = new Peer(hub, hostToken);
+  await Promise.all([first.ready(), second.ready(), host.ready()]);
+  const phone = { deviceId: firstIdentity.controller.id, name: "Phone" };
+  const laptop = { deviceId: secondIdentity.controller.id, name: "Laptop" };
+  // Extra client fields never become attribution, including on raw queue entries.
+  expect(await first.command({ type: "enqueue", entry: { id: "attributed", title: "Video", source: "https://media.example/video", playedBy: { deviceId: "fake", name: "Fake" } }, playNow: true, playedBy: { deviceId: "fake", name: "Fake" } } as Action)).toMatchObject({ ok: true });
+  expect(hub.session.state.playedBy).toEqual(phone);
+  expect(hub.session.state.queue[0]).not.toHaveProperty("playedBy");
+  const observe = () => hub.session.observe({ ...idle, playbackId: hub.session.state.player.playbackId, status: "playing", position: 20, duration: 120, seekable: true });
+  observe();
+  await controllerApi(hub, firstToken, `/api/controllers/${phone.deviceId}/name`, "POST", { name: "Renamed phone" });
+  expect(hub.session.state.playedBy).toEqual(phone);
+  let history = await (await controllerApi(hub, secondToken, "/api/progress/history")).json();
+  expect(history.items[0].playedBy).toEqual(phone);
+  expect(JSON.stringify(history)).not.toContain(firstToken);
+  const saved = await (await controllerApi(hub, firstToken, "/api/for-later", "POST", { reference: { kind: "queue", id: "attributed" } })).json();
+  const playlist = await (await controllerApi(hub, firstToken, "/api/playlists", "POST", { name: "Videos" })).json();
+  await second.command({ type: "stop" });
+  expect((await controllerApi(hub, secondToken, `/api/progress/${encodeURIComponent(history.items[0].mediaId)}/play`, "POST", { profileId: hub.session.state.activeProfile.id })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual(laptop);
+  observe();
+  history = await (await controllerApi(hub, firstToken, "/api/progress/history")).json();
+  expect(history.items[0].playedBy).toEqual(laptop);
+  expect((await controllerApi(hub, firstToken, `/api/for-later/${saved.item.id}/load`, "POST", { mode: "play" })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual({ ...phone, name: "Renamed phone" });
+  expect((await controllerApi(hub, secondToken, `/api/playlists/${playlist.playlist.id}/load`, "POST", { revision: playlist.playlist.revision, mode: "play" })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual(laptop);
+  expect(await host.command({ type: "play", entryId: hub.session.state.currentEntryId! })).toMatchObject({ ok: true });
+  expect(hub.session.state.playedBy).toEqual({ deviceId: "host", name: "Couch" });
 });
