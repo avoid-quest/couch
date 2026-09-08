@@ -114,6 +114,35 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
 
+test.each(["http://couch.avoid.local:80", "https://couch.avoid.local:443", "https://couch.avoid.local:8443"])("advertised origin %s preserves proxy pairing, authentication and exact scheme checks", async configured => {
+  const advertised = new URL(configured);
+  const { hub } = fixture(undefined, [configured]);
+  const headers = { Host: advertised.host, Origin: advertised.origin, "Content-Type": "application/json" };
+  expect(hub.urls).toEqual([advertised.origin]);
+  expect(hub.origin).toStartWith("http://127.0.0.1:");
+  const paired = await fetch(`${hub.origin}/api/pair`, { method: "POST", headers, body: JSON.stringify({ code: hub.pairingCode }) });
+  expect(paired.status).toBe(200);
+  const { token } = await paired.json() as { token: string };
+  const authenticated = await fetch(`${hub.origin}/api/controllers/me`, { headers: { ...headers, Authorization: `Bearer ${token}` } });
+  expect(authenticated.status).toBe(200);
+  expect(authenticated.headers.get("Access-Control-Allow-Origin")).toBe(advertised.origin);
+  expect((await fetch(`${hub.origin}/api/controllers/me`, { headers })).status).toBe(401);
+  const socket = new BunWebSocket(`${hub.origin.replace("http:", "ws:")}/api/ws?token=${token}`, { headers });
+  try {
+    const message = await new Promise<MessageEvent>((resolve, reject) => { socket.onmessage = resolve; socket.onerror = () => reject(new Error("Proxied connection failed")); });
+    expect(JSON.parse(message.data).type).toBe("state");
+  } finally { socket.close(); }
+  for (const origin of [`${advertised.protocol === "https:" ? "http:" : "https:"}//${advertised.host}`, `${advertised.origin}.evil.example`, "null"]) {
+    expect((await fetch(`${hub.origin}/api/connection`, { headers: { ...headers, Origin: origin } })).status).toBe(403);
+  }
+  expect((await fetch(`${hub.origin}/api/connection`, { headers: { ...headers, Host: "untrusted.example", "X-Forwarded-Host": advertised.host, "X-Forwarded-Proto": advertised.protocol.slice(0, -1) } })).status).toBe(403);
+  expect((await fetch(`${hub.origin}/api/controllers/me`, { headers: { Origin: "tauri://localhost", Authorization: `Bearer ${hostToken}` } })).status).toBe(200);
+});
+
+test.each(["ftp://couch.local", "https://user:secret@couch.local", "https://couch.local/path", "https://couch.local?query", "https://couch.local#fragment", "https://couch.local\\evil", " https://couch.local"])("advertised origin rejects %s", origin => {
+  expect(() => fixture(undefined, [origin])).toThrow("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
+});
+
 test("Bandcamp albums append once in order, play through the host resolver and persist public metadata", async () => {
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
   const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
@@ -1162,6 +1191,48 @@ test("active and uncertain recordings defer idle updates, while confirmed future
     job.status = "completed"; save();
     expect(hub.idleReason()).toContain("five continuous");
     now += 300_000; expect(hub.idleReason()).toBeNull();
+  } finally { db.close(); }
+});
+
+test("General restart requires an administrator confirmation and installed supervisor", async () => {
+  const { hub } = fixture();
+  const admin = await pair(hub), guest = await pair(hub);
+  await claimAdministrator(hub, admin);
+  const restart = (token: string, confirmInterrupt: boolean) => controllerApi(hub, token, "/api/settings/restart", "POST", { confirmInterrupt });
+  expect((await restart(guest, true)).status).toBe(403);
+  expect((await restart(hostToken, true)).status).toBe(403);
+  expect((await restart(admin, false)).status).toBe(400);
+  expect((await restart(admin, true)).status).toBe(409);
+  expect((await controllerApi(hub, admin, "/api/build")).status).toBe(200);
+});
+
+test("restart checkpoint failure preserves authenticated HTTP, playback and dirty progress for retry", async () => {
+  let hub!: Hub;
+  const fixtureResult = fixture(undefined, undefined, undefined, { restart: async () => hub.prepareRestart() });
+  hub = fixtureResult.hub;
+  const admin = await pair(hub);
+  await claimAdministrator(hub, admin);
+  hub.session.observe(idle);
+  hub.session.command({ type: "enqueue", entry: { id: "restart-local", title: "Restart local", source: "file:///restart.mp4" }, playNow: true });
+  const player = { ...idle, playbackId: hub.session.state.player.playbackId, status: "playing" as const, position: 12, duration: 100 };
+  hub.session.observe(player);
+  hub.session.observe({ ...player, position: 17 });
+  const db = new Database(fixtureResult.databasePath);
+  try {
+    db.run("CREATE TRIGGER reject_restart_progress BEFORE INSERT ON viewing_progress BEGIN SELECT RAISE(FAIL, 'fixture disk failure'); END");
+    const response = await controllerApi(hub, admin, "/api/settings/restart", "POST", { confirmInterrupt: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "Could not save viewing progress. Check the TV's storage." });
+    expect((await controllerApi(hub, admin, "/api/settings")).status).toBe(200);
+    expect(hub.session.state.player.playbackId).toBe(player.playbackId);
+    expect(() => hub.session.command({ type: "volume", volume: 44 })).not.toThrow();
+    db.run("DROP TRIGGER reject_restart_progress");
+    const accepted = await controllerApi(hub, admin, "/api/settings/restart", "POST", { confirmInterrupt: true });
+    expect(accepted.status).toBe(202);
+    expect(await accepted.json()).toMatchObject({ ok: true, instanceId: expect.any(String) });
+    expect((await controllerApi(hub, admin, "/api/settings/restart")).status).toBe(200);
+    expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(17);
+    expect(() => hub.session.command({ type: "volume", volume: 30 })).toThrow("update");
   } finally { db.close(); }
 });
 

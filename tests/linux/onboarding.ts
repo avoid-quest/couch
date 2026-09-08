@@ -91,7 +91,7 @@ try {
   await phone.ui.button("Finish setup");
   await until("completion opens home on TV and phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]')"));
   const NativeSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
-  socket = new NativeSocket(remoteSocketUrl(origin, token), { headers: { Origin: origin } });
+  socket = new NativeSocket(await remoteSocketUrl(origin, token), { headers: { Origin: origin } });
   socket.addEventListener("message", event => { const message = JSON.parse(String(event.data)); if (message.type === "state") state = message.state; });
   await until("paired observer receives the actual native idle state", () => state?.player.status === "idle");
   await addTVFolder(phone.ui, until, "onboarding-fixture");
@@ -107,7 +107,7 @@ try {
   await until("first local item plays on the native TV", () => state?.player.status === "playing" && state.player.position > 0.5 && state.queue.some(entry => entry.id === state!.currentEntryId && entry.source.startsWith("library:")), 30_000);
   await phone.minimize(); await tv.watching();
   await assertNativeVideoPixels(tv.execute, artifacts, "onboarding-first-local-video", [0, 0, 255]);
-  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop", ".player-controls");
+  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop playback", ".player-controls");
   await until("phone stops its first local item", () => state?.player.status === "idle" && !state.currentEntryId);
   socket.close(); socket = undefined;
   await restart();
@@ -116,6 +116,10 @@ try {
   await until("saved name and ordinary Settings remain available", () => phone!.ui.execute("return document.querySelector('#tv-name')?.value === 'First-run fixture' && !!document.querySelector('[aria-label=\"Settings sections\"]')"));
   await phone.screenshot("onboarding-complete-settings");
   await Bun.write(`${artifacts}/onboarding-acceptance.json`, JSON.stringify({ checks, physicalConfirmation: false, source: "optional source skipped with no Internet access required", audio: "actual test route and non-silent null-sink PCM", localPlayback: "real phone folder registration, scan, native playback pixels and stop", remaining: "Installed target, physical screen and audible sound, machine reboot" }, null, 2));
+} catch (error) {
+  const report = await phone?.ui.execute("return { step: document.querySelector('[role=dialog]')?.textContent?.slice(0, 240), alerts: [...document.querySelectorAll('[role=alert]')].map(el => el.textContent), buttons: [...document.querySelectorAll('[role=dialog] button')].map(el => ({ text: el.textContent, disabled: el.disabled })) }").catch(() => null);
+  await Bun.write(`${artifacts}/onboarding-failure.json`, JSON.stringify({ error: String(error), report, checks }, null, 2));
+  throw error;
 } finally {
   socket?.close();
   await phone?.close();

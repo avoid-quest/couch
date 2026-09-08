@@ -1,3 +1,4 @@
+import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -36,6 +37,7 @@ import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
+import { createSoundRouting } from "./sound-routing";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -48,6 +50,7 @@ type HubOptions = {
   pairingCode?: string;
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
+  restart?: (confirmInterrupt: boolean) => Promise<unknown>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
   frontend?: HTMLBundle;
@@ -68,7 +71,7 @@ export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
   const advertised = (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
-    if (url.protocol !== "http:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be plain HTTP origins without credentials or paths.");
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
   });
   const store = openStore(options.databasePath);
@@ -86,11 +89,19 @@ export function createHub(options: HubOptions) {
   const urlFor = (address: string, port: number) => `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
   const idle = createUpdateIdle(options.idleNow);
   let closed = false;
-  const admitted = () => !closed && (options.admitted?.() ?? true);
+  let restarting = false;
+  const instanceId = crypto.randomUUID();
+  const admitted = () => !closed && !restarting && (options.admitted?.() ?? true);
   const shutdown = new AbortController();
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const startup = createStartup(async () => {
+    const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
+    return value === "true" ? true : value === "false" ? false : null;
+  });
+  let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
+  const systemAudio = !!options.nativeDiagnostics && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
@@ -98,10 +109,11 @@ export function createHub(options: HubOptions) {
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
-    admitted,
-    resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
+    admitted, systemAudio,
+    ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
+    resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
-      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
+      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
@@ -112,6 +124,7 @@ export function createHub(options: HubOptions) {
       return { source: entry.source };
     },
     deactivate: () => { void jellyfin.deactivate(); },
+    activatePrepared: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous),
     observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
     stopped: playbackId => subtitles.stopped(playbackId),
   });
@@ -152,7 +165,13 @@ export function createHub(options: HubOptions) {
     }
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
-  sound = createSound({ available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
+  if (systemAudio) soundRouting = createSoundRouting({
+    saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
+    active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
+    pin: output => options.sendPlayer({ type: "audioOutput", output }),
+    lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
+  });
+  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const idleReason = () => {
@@ -265,6 +284,18 @@ export function createHub(options: HubOptions) {
         try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
+      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority === "administrator" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: "An administrator remote is required." }, 403));
+      if (url.pathname === "/api/settings/restart" && request.method === "POST") {
+        if (caller.authority !== "administrator") return cors(request, json({ error: "An administrator remote is required." }, 403));
+        try {
+          const confirmed = await settingField(request, "confirmInterrupt");
+          if (confirmed !== true) return cors(request, json({ error: "Confirm interruption before restarting Couch." }, 400));
+          if (identity()?.authority !== "administrator") return cors(request, json({ error: "Administrator access changed." }, 403));
+          if (!options.restart) return cors(request, json({ error: "Restart requires the installed systemd application." }, 409));
+          await options.restart(true);
+          return cors(request, json({ ok: true, instanceId }, 202));
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Restart failed." }, 409)); }
+      }
       if (manual && url.pathname === "/api/updates/install" && request.method === "POST") return cors(request, await manual.install(request, identity));
       if (manual && url.pathname === "/api/updates/repair" && request.method === "POST") return cors(request, await manual.repair(request, identity));
       if (!admitted()) return cors(request, json({ error: "The TV is preparing an update. Controls are paused." }, 503));
@@ -283,6 +314,7 @@ export function createHub(options: HubOptions) {
         };
         if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
+        if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
         if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
@@ -378,7 +410,12 @@ export function createHub(options: HubOptions) {
             session.command({ type: "enqueue", entry });
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
-            session.command(action, authorize);
+            if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
+            else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
+            else {
+              if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              session.command(action, authorize);
+            }
           }
           if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
             session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize);
@@ -394,7 +431,7 @@ export function createHub(options: HubOptions) {
 
   const port = server.port!;
   const allowedHosts = new Set([...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
-  const allowedOrigins = new Set([...allowedHosts].map(host => `http://${host}`));
+  const allowedOrigins = new Set([...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
   const urls: string[] = advertised.length ? [...new Set(advertised)] : hostname === "0.0.0.0" || hostname === "::"
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
@@ -415,6 +452,7 @@ export function createHub(options: HubOptions) {
     catch (error) { progressError = error; }
     const toolsStopped = toolHealth.close();
     sound?.close();
+    soundRouting?.close();
     appearance.close();
     guide.close();
     providers.close();
@@ -433,6 +471,15 @@ export function createHub(options: HubOptions) {
   return {
     server, session, pairingCode, urls, origin, idleReason, idleAdmission, verifyTools: toolHealth.verify,
     close: () => close(),
+    prepareRestart: () => {
+      if (!admitted()) throw new Error("The TV is already preparing an update or restart.");
+      // The strict write happens before any irreversible shutdown. On failure the
+      // authenticated listener and playback remain usable and the dirty save is retained.
+      session.checkpoint();
+      session.quiesce();
+      restarting = true;
+      return { progressSaved: true, admissionClosed: true };
+    },
     quiesce: async () => {
       if (closing && !requiredCheckpoint) throw new Error("The TV was stopped without an update checkpoint.");
       await close(true);

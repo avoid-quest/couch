@@ -72,6 +72,13 @@ The default port is `4100`. Settings, pairings, and the queue survive restarts;
 playback waits for you to press Play. The [usage guide](docs/usage.md) covers
 subtitles, profiles, saved playlists, playback settings, and media helpers.
 
+## Marketing site
+
+`apps/web` is a static Astro workspace using the existing UI styles.
+Run `bun install` from the repository root, then `bun run web:dev`.
+`bun run web:build` builds the site; `bun run web:deploy` publishes it to
+Cloudflare Workers at `couch.avoid.quest` with Wrangler authenticated.
+
 ## Develop
 
 Couch uses React for the TV and browser remote, Bun for the shared queue and

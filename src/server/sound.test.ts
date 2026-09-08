@@ -95,3 +95,15 @@ test("muted outputs and audio-server failures never launch a tone", async () => 
     expect(f.counts().launches).toBe(0);
   } finally { f.sound.close(); }
 });
+
+test("Ubuntu JSON card profiles expose output-only choices and retain active duplex for rollback", async () => {
+  const { soundProfiles } = await import("./sound-pulse");
+  const profiles = soundProfiles([{ index: 3, name: "alsa_card.pci-stable", active_profile: "output:hdmi+input:analog", properties: { "device.description": "Built-in Audio" }, profiles: {
+    "output:analog": { description: "Analog Stereo Output", sinks: 1, sources: 0, available: true },
+    "output:hdmi": { description: "HDMI", sinks: 1, sources: 0, available: false },
+    "output:hdmi+input:analog": { description: "Duplex", sinks: 1, sources: 1, available: true },
+  } }]);
+  expect(profiles[0]).toMatchObject({ card: "alsa_card.pci-stable", id: "output:analog", available: true, selectable: true });
+  expect(profiles[1]!.available).toBe(false);
+  expect(profiles[2]).toMatchObject({ active: true, selectable: false });
+});

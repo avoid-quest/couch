@@ -15,6 +15,18 @@ on:
         description: Build attempt within that run
         type: number
         default: 1
+      general-restart:
+        description: Qualify General restart and failure recovery (requires a build containing General restart)
+        type: boolean
+        default: false
+      general-startup:
+        description: Qualify General startup controls on the installed final build
+        type: boolean
+        default: false
+      recovery-faults:
+        description: Qualify disposable installed recovery interruptions, storage and feed failures
+        type: boolean
+        default: false
       update-artifact:
         description: Qualified main AppImage artifact ID for signed A to B and repair (requires build-run for A)
         type: number
@@ -143,6 +155,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE_ARTIFACT: ${{ inputs.update-artifact }}
+          COUCH_QUALIFY_GENERAL_RESTART: ${{ inputs.general-restart && '1' || '0' }}
+          COUCH_QUALIFY_GENERAL_STARTUP: ${{ inputs.general-startup && '1' || '0' }}
+          COUCH_QUALIFY_RECOVERY_FAULTS: ${{ inputs.recovery-faults && '1' || '0' }}
         run: |
           appimage=$(realpath .artifacts/package-release/*.AppImage)
           evidence="$PWD/.artifacts/appimage-qualification/installed"

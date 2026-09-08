@@ -2,7 +2,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 /** Official startup API: https://jellyfin.org/docs/general/installation/container/ */
-export async function startJellyfinFixture({ root, image, artifacts }: { root: string; image: string; artifacts: string }) {
+export async function startJellyfinFixture({ root, image, artifacts, continuity }: { root: string; image: string; artifacts: string; continuity?: { fixtures: string; tracks: string } }) {
   const name = `couch-jellyfin-${crypto.randomUUID().slice(0, 8)}`;
   const directory = resolve(artifacts, name);
   const configPath = join(directory, "connection.json");
@@ -31,13 +31,20 @@ export async function startJellyfinFixture({ root, image, artifacts }: { root: s
     // Public-image pulls need no registry credentials. Keep the selected local Docker daemon.
     const endpoint = process.env.DOCKER_HOST || await run(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]);
     docker = ["docker", "--config", dockerConfig, "--host", endpoint];
-    await mkdir(join(directory, "generated"));
-    await run(["run", "--rm", "--mount", `type=bind,source=${root},target=/source,readonly`, "--mount", `type=bind,source=${join(directory, "generated")},target=/mnt/fixtures`, image, "bun", "/source/tests/linux/fixtures.ts"]);
+    const generated = continuity?.fixtures ?? join(directory, "generated");
+    if (!continuity) {
+      await mkdir(generated);
+      await run(["run", "--rm", "--mount", `type=bind,source=${root},target=/source,readonly`, "--mount", `type=bind,source=${generated},target=/mnt/fixtures`, image, "bun", "/source/tests/linux/fixtures.ts"]);
+    }
     for (const [folder, filename] of [["Movies/Fixture", "multitrack.mkv"], ["Music/Fixture/Fixture", "radio.mp3"]] as const) {
       await mkdir(join(media, folder), { recursive: true });
-      await Bun.write(join(media, folder, filename), Bun.file(join(directory, "generated", filename)));
+      await Bun.write(join(media, folder, filename), Bun.file(join(generated, filename)));
     }
-    await Bun.write(join(media, "Movies/Fixture/multitrack.ita.srt"), Bun.file(join(directory, "generated/jellyfin-italian.srt")));
+    await Bun.write(join(media, "Movies/Fixture/multitrack.ita.srt"), Bun.file(join(generated, "jellyfin-italian.srt")));
+    if (continuity) {
+      await mkdir(join(media, "Music/Continuity"), { recursive: true });
+      for (const part of [1, 2]) await Bun.write(join(media, `Music/Continuity/part-${part}.flac`), Bun.file(join(continuity.tracks, `part-${part}.flac`)));
+    }
     await run(["pull", jellyfinImage]);
     await run(["network", "create", name]);
     networkCreated = true;

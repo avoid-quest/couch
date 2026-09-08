@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+[ "$(id -u)" = 0 ] || { echo 'Run through couch-session as the SSH administrator.' >&2; exit 1; }
+[ "$#" = 1 ] || exit 2
+case "$1" in enable) user=couch-tv ;; disable) user= ;; *) exit 2 ;; esac
+# Fixed installer-owned destination. Never follow a substituted directory or file.
+for directory in /etc /etc/lightdm /etc/lightdm/lightdm.conf.d; do
+    [ ! -L "$directory" ] || { echo 'Refusing symbolic link in LightDM configuration.' >&2; exit 1; }
+    if [ ! -e "$directory" ]; then install -d -o root -g root -m 0755 "$directory"; fi
+    [ -d "$directory" ] && [ "$(stat -c %u "$directory")" = 0 ] && [ -z "$(find "$directory" -maxdepth 0 -perm /022 -print)" ] || { echo 'LightDM configuration directory must be owned and writable only by root.' >&2; exit 1; }
+done
+file=/etc/lightdm/lightdm.conf.d/90-couch-autostart.conf
+[ ! -L "$file" ] && { [ ! -e "$file" ] || [ -f "$file" ]; } || { echo 'Refusing nonregular LightDM configuration.' >&2; exit 1; }
+exec 9>/run/couch-autostart.lock
+flock -x 9
+temporary=$(mktemp /etc/lightdm/lightdm.conf.d/.couch-autostart.XXXXXX)
+trap 'rm -f "$temporary"' EXIT HUP INT TERM
+printf '[Seat:seat0]\nautologin-user=%s\nautologin-user-timeout=0\nautologin-session=couch\n' "$user" > "$temporary"
+chmod 0644 "$temporary"
+sync -f "$temporary"
+mv -fT "$temporary" "$file"
+sync -f /etc/lightdm/lightdm.conf.d

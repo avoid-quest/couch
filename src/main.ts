@@ -43,6 +43,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
+  ...(appimage ? { restart: appimageUpdates.restart } : {}),
   ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
   nativeDisplay: nativeDisplay.request,
   ...(appimage ? {
@@ -130,6 +131,14 @@ if (native) {
         else if (message.type === "readiness") nativeReadiness.receive(message.nonce, message.ok, message.build);
         else if (message.type === "appimageQuiesce") {
           void (async () => {
+            if (message.restart) {
+              try {
+                if (!message.confirmInterrupt) throw new Error("Confirm interruption before restarting Couch.");
+                hub.prepareRestart();
+                send({ type: "appimageQuiesced", nonce: message.nonce, closed: true, error: null });
+              } catch (error) { send({ type: "appimageQuiesced", nonce: message.nonce, closed: false, error: error instanceof Error ? error.message : "The checkpoint failed." }); }
+              return;
+            }
             // Let the accepted HTTP response leave before closing its listener.
             await Bun.sleep(250);
             const result = await checkpointAppImage({ ...message, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });

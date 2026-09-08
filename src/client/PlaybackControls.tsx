@@ -43,6 +43,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
+  const audioReady = !state?.systemAudio || state.systemAudio.volume !== null;
   const transportReady = available && !!player?.playbackId && ["playing", "paused"].includes(player.status);
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
 
@@ -58,6 +59,12 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>
       {player?.status === "error" && current && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button>}
     </div>}
+    {state?.webRetry && <div className="radio-retry" role="status">
+      <p>Checking the expired stream. Recovery is limited to one attempt. Stop cancels recovery.</p>
+      {player?.playbackId && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "pause", playbackId: player.playbackId!, paused: !state.webRetry!.paused })}>{state.webRetry.paused ? "Resume after recovery" : "Stay paused after recovery"}</Button>}
+    </div>}
+    {state?.systemAudio?.error && <p role="alert">{state.systemAudio.error}</p>}
+    {player?.status === "error" && current && state?.systemAudio && <Button disabled={!available || !audioReady} onClick={() => void run({ type: "play", entryId: current.id })}>Resume playback</Button>}
     {player?.error && player.status !== "unavailable" && <p className="playback-error" role="alert">{player.error}</p>}
     <div className="seek-control" hidden={!current}>
       <RangeControl key={player?.playbackId || "idle"} label="Playback position" value={player?.position || 0} max={player?.duration || 1} showValue={false}
@@ -75,8 +82,8 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
           onClick={() => void run({ type: "stop" })}><Icon name="stop" /></Button>
         {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp /></Button>}
       </div>
-      <div className="volume-control"><Icon name="volume" /><RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available}
-        onCommit={async volume => { await run({ type: "volume", volume }); }} /><span>{Math.round(player?.volume ?? 100)}%</span></div>
+      <div className="volume-control"><Icon name="volume" /><RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
+        onCommit={async volume => { await run({ type: "volume", volume }); }} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>{state?.systemAudio && <Button variant="outline" disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? "Unmute TV" : "Mute TV"}</Button>}</div>
     </div>
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
     <div className="player-settings">

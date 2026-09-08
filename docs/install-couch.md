@@ -20,6 +20,9 @@ The installer does not reboot the machine or change its network configuration.
 Running it selects Couch as the LightDM session and enables LightDM startup,
 including removing a previous LightDM mask. It refuses a different configured
 display manager and does not replace an administrator's custom systemd unit.
+Fresh installs enable passwordless Couch startup. Reinstallation preserves the
+General startup choice in the installer-owned LightDM override. See
+[TV startup and SSH recovery](appliance-session.md) before disabling it.
 After APT installs the Xorg input rules, it refreshes input devices so the first
 graphical login uses the existing system keyboard configuration.
 
@@ -47,6 +50,8 @@ remains available. Fix the reported APT error and rerun the installer.
 
 After installation the session starts without a network dependency. Offline boot
 can display Couch and use local media; online services still require connectivity.
+For a named HTTP address on port 80 or local HTTPS on port 443, see
+[named LAN address configuration](lan-origin.md).
 See [session operation and recovery](appliance-session.md) for supervision,
 administrator recovery, AC/lid behavior and returning to a console.
 
