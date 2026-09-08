@@ -51,6 +51,9 @@ export function createSoundRouting(options: Options) {
     const sink = output(inventory);
     if (!sink) { lost("The selected audio output is unavailable. Reconnect it or choose another output, then resume playback."); return; }
     if (sink.testBlocked) { lost("This audio server couples stream and system volume. Disable flat volumes before playback."); return; }
+    // Ubuntu's volume keys address its default sink. Reconcile that default
+    // after restart/hotplug so those keys still control the saved TV output.
+    if (inventory.defaultOutput !== selected) await backend.default(selected!);
     const observed = await backend.route();
     if (closed) return;
     if (observed && observed !== selected) { lost("Couch left the selected audio output. Playback stopped. Choose an output and resume explicitly."); return; }

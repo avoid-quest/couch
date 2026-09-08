@@ -48,6 +48,8 @@ test("missing output, wrong route and audio-server failure interrupt playback an
     f.inventory.outputs[0]!.availability = "available";
     await f.sound.check();
     expect(f.sound.prepare()).toBe("hdmi"); expect(f.lost()).toBe(1); expect(f.pins).toEqual([]);
+    f.inventory.defaultOutput = "analog"; await f.sound.check();
+    expect(f.inventory.defaultOutput).toBe("hdmi"); expect(f.lost()).toBe(1);
     f.active(); f.stream("analog"); await f.sound.check(); expect(f.lost()).toBe(2);
     f.active(); f.backend.inventory = async () => { throw new Error("offline"); };
     await f.sound.check(); expect(f.lost()).toBe(3); expect(f.sound.state.volume).toBeNull();
