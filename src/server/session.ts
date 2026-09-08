@@ -426,11 +426,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         case "pause":
           currentPlayback(action.playbackId);
           pendingPause = action.paused;
-          if (webRecovery) {
-            webRecovery.paused = action.paused;
+          if (state.webRetry) {
             state.webRetry = { paused: action.paused };
             broadcast();
-          } else send(action);
+          }
+          if (webRecovery) webRecovery.paused = action.paused;
+          else send(action);
           break;
         case "speed": case "subtitleDelay":
           currentPlayback(action.playbackId);

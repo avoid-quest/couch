@@ -116,3 +116,17 @@ test("unconfirmed expiry remains terminal without a replacement load", async () 
   expect(f.session.state.webRetry).toBeNull();
   f.store.close();
 });
+
+test("recovery controls reflect both pause choices while the replacement native load settles", async () => {
+  const f = fixture();
+  f.fail();
+  f.pending.resolve(f.fresh);
+  await Bun.sleep(0);
+  const playbackId = f.session.state.player.playbackId!;
+  for (const paused of [false, true]) {
+    f.session.command({ type: "pause", playbackId, paused });
+    expect(f.session.state.webRetry).toEqual({ paused });
+    expect(f.commands.at(-1)).toEqual({ type: "pause", playbackId, paused });
+  }
+  f.store.close();
+});
