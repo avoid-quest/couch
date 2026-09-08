@@ -18,5 +18,5 @@ exec dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24 +extension GLX' 
   pipewire-pulse > /artifacts/pipewire-pulse.log 2>&1 &
   openbox > /artifacts/openbox.log 2>&1 &
   for attempt in {1..50}; do pactl info > /artifacts/audio-server.txt 2>/dev/null && break; sleep .1; done
-  exec bun tests/linux/sound-routing.ts
+  exec timeout 180 bun tests/linux/sound-routing.ts
 '
