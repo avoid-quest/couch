@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { remoteSocketUrl } from "./build";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
-import { UiDriver } from "./ui";
+import { UiDriver, keys } from "./ui";
 import { addTVFolder } from "./folder-settings";
 import type { LibraryItem } from "../../src/shared/library";
 
@@ -98,6 +98,7 @@ try {
   await command({ type: "pause", playbackId: state!.player.playbackId!, paused: false });
   await until("explicit resume restores native audio on HDMI", () => state?.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_hdmi");
   await command({ type: "stop" }); await until("idle before restart", () => state?.player.status === "idle");
+  await ui.key(keys.escape);
   await addTVFolder(ui, until, "sound-fixtures");
   let tracks: LibraryItem[] = [];
   await until("lossless boundary sources scanned", async () => {
