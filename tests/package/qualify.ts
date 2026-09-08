@@ -62,6 +62,8 @@ store.selectProfile(profile.id);
 const previousToken = store.pair("Existing remote");
 store.createControllerClaim("fixture-administrator", false);
 store.consumeControllerClaim(store.controllerForToken(previousToken)!.id, "fixture-administrator");
+// This package fixture represents an already configured installation.
+for (const step of ["general", "display", "sound", "sources"]) store.advanceSetup(step);
 store.close();
 await createLibrary({ databasePath }).close();
 const db = new Database(databasePath);

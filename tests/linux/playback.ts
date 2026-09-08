@@ -1,3 +1,5 @@
+import { seedConfiguredFixture } from "./configured-fixture";
+seedConfiguredFixture();
 import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
@@ -177,6 +179,7 @@ try {
   } } })).sessionId;
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   await assertTvFullscreen(ui, until, "startup");
+  await ui.button("Settings");
   await until("an unclaimed TV shows its separate administrator setup code and address QR", () => execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '') && !!document.querySelector('[role=dialog] svg title')"));
   await ui.key(keys.escape);
   await until("setup dismisses to the fullscreen TV browser", () => execute("return !document.querySelector('[role=dialog]')"));

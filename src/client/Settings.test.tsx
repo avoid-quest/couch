@@ -9,10 +9,10 @@ let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: { url: string; body: unknown }[] = [];
 const admin: ControllerIdentity = { authority: "administrator", controller: { id: "owner", name: "Phone", role: "administrator", createdAt: 1, lastSeenAt: 1 }, claimAvailable: false };
-const render = async (step: SetupStep, identity = admin, connected = true) => act(async () => root.render(<Settings
+const render = async (step: SetupStep, identity = admin, connected = true, native = false) => act(async () => root.render(<Settings
   setupStep={step} credentials={{ origin: "http://localhost", token: "admin" }} connected={connected} identity={identity}
   videoQualityPreference={{ quality: "auto", save: () => {}, error: null }} status="Connected" details={null} pairingRequired={false} reachable={true}
-  host={null} administratorClaimed={true} name="Living room" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => true}
+  host={native ? { origin: "http://localhost", token: "host", pairingCode: "123456", urls: ["http://couch.local:4100"] } : null} administratorClaimed={identity.claimAvailable === false} name="Living room" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => true}
   libraryVersion={0} jellyfinVersion={0} radioVersion={0}
 />));
 beforeEach(async () => {
@@ -24,6 +24,7 @@ beforeEach(async () => {
   }
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     calls.push({ url: String(input), body: init?.body });
+    if (String(input).endsWith("/claim-code")) return Response.json({ code: "1234567890", expiresAt: Date.now() + 60_000 });
     if (String(input).endsWith("/api/controllers")) return Response.json({ controllers: [admin.controller] });
     if (String(input).endsWith("/api/settings")) return Response.json({ name: "Living room" });
     return Response.json({});
@@ -66,4 +67,18 @@ test("failed progress saves remain retryable and disconnected setup cannot advan
   expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!.disabled).toBe(false);
   await render("general", admin, false);
   expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!.disabled).toBe(true);
+});
+test("the TV welcome shows its address QR and separate codes, then follows its administrator's saved step", async () => {
+  await render("general", { controller: null, authority: "host", claimAvailable: true }, true, true);
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Welcome to Couch");
+  expect(document.querySelector('[data-pairing-code]')?.textContent).toBe("123456");
+  expect(document.querySelector('[data-administrator-code]')?.textContent).toBe("1234567890");
+  expect(document.querySelector("svg title")?.textContent).toContain("http://couch.local:4100");
+  expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
+  await render("sound", { controller: null, authority: "host", claimAvailable: false }, true, true);
+  expect(document.body.textContent).toContain("Step 3 of 4 · Sound");
+  expect(document.body.textContent).toContain("Continue on your administrator phone");
+  expect(document.querySelector('[data-administrator-code]')).toBeNull();
+  await render("complete", { controller: null, authority: "host", claimAvailable: false }, true, true);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

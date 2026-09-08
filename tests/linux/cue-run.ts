@@ -1,3 +1,5 @@
+import { seedConfiguredFixture } from "./configured-fixture";
+seedConfiguredFixture();
 import { strict as assert } from "node:assert";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import { verifyCue, assertCueAfterRestart } from "./cue";
@@ -93,6 +95,7 @@ class Remote {
 try {
   await until("official Tauri WebDriver ready", async () => { try { return (await fetch(`${driverOrigin}/status`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } });
   await launch();
+  await ui.button("Settings");
   await until("fresh TV displays its administrator setup dialog", () => ui.execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '')"));
   await ui.key(keys.escape);
   await ui.click(".pair-shortcut");
