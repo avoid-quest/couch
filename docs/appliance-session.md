@@ -9,6 +9,10 @@ Its home is `/var/lib/couch`. It has no sudo access; the existing SSH account an
 its groups remain unchanged. PAM starts its systemd user manager and grants the
 active seat access to display/audio devices. Openbox supplies window management;
 PipeWire, its PulseAudio compatibility server and WirePlumber supply user audio.
+The companion assigns Bluetooth audio monitoring to `couch-tv`, so an active SSH
+administrator's WirePlumber cannot claim a connected speaker. Other users' ALSA
+audio remains available. The [Bluetooth policy](bluetooth.md) keeps logind
+arbitration enabled for the TV login.
 
 The user unit `couch-tv.service` starts `/var/lib/couch/application/Couch.AppImage`. That native process owns
 one bundled `couch-server` and exits nonzero when the coordinator dies. Systemd
