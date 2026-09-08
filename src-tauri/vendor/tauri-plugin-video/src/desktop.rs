@@ -2079,6 +2079,7 @@ mod linux_mpv {
                 seekable: player.loaded
                     && property::<bool>(&player.mpv, "seekable").unwrap_or(false),
                 ended: player.loaded
+                    && player.next.is_none()
                     && property::<bool>(&player.mpv, "eof-reached").unwrap_or(false),
                 loading: !player.loaded
                     || property::<bool>(&player.mpv, "idle-active").unwrap_or(true)
