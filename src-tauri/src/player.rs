@@ -635,6 +635,23 @@ mod tests {
     }
 
     #[test]
+    fn prepared_observations_change_track_identity_but_keep_the_native_session() {
+        let mut player = Player { session_key: Some("first".into()), ..Player::default() };
+        player.state.playback_id = Some("first".into());
+        let mut next = snapshot();
+        next.mpv_state.as_mut().unwrap().playback_id = Some("second".into());
+        player.apply(next.clone()).unwrap();
+        assert_eq!(player.session_key.as_deref(), Some("first"));
+        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
+        assert_eq!(player.state.status, "playing");
+        next.mpv_state.as_mut().unwrap().error = Some("Next source failed".into());
+        player.apply(next).unwrap();
+        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
+        assert_eq!(player.state.status, "error");
+        assert_eq!(player.state.error.as_deref(), Some("Next source failed"));
+    }
+
+    #[test]
     fn invalid_engine_values_do_not_replace_the_last_good_observation() {
         let mut player = Player::default();
         player.apply(snapshot()).unwrap();
