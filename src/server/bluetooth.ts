@@ -28,7 +28,7 @@ export async function bluetoothSettings(request: Request, identity: () => Contro
           action[field] = input[field];
         }
       }
-      if (["pair", "connect", "disconnect", "forget"].includes(action.op) && !/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(action.device ?? "")) throw new ControllerError("Choose a current audio device.", 400);
+      if (["pair", "connect", "disconnect", "forget"].includes(action.op) && !/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(action.device ?? "")) throw new ControllerError("Choose a current Bluetooth device.", 400);
     } else return json({ error: "Not found." }, 404);
     if (!invoke) return json({ error: "Bluetooth requires the native Ubuntu TV session." }, 503);
     const result = await invoke(action);

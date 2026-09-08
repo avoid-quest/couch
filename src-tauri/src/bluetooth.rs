@@ -24,17 +24,36 @@ impl Bluetooth {
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
-    use bluer::{agent::{Agent, ReqError}, Address, DiscoveryFilter, DiscoveryTransport};
+    use bluer::{agent::{Agent, ReqError}, Address, DiscoveryFilter};
     use futures_util::StreamExt;
     use std::{sync::{Arc, Mutex}, time::{Duration, SystemTime, UNIX_EPOCH}};
-    use tokio::{sync::{oneshot, OnceCell}, task::JoinHandle};
+    use tokio::{sync::{oneshot, OnceCell, OwnedMutexGuard}, task::JoinHandle};
     const AUDIO: uuid::Uuid = uuid::Uuid::from_u128(0x0000110b_0000_1000_8000_00805f9b34fb);
     const LIMIT: Duration = Duration::from_secs(60);
     type Answer = oneshot::Sender<String>;
     #[derive(Default)]
     struct Pending { owner: String, operation: Option<Value>, task: Option<JoinHandle<()>>, answer: Option<Answer> }
     #[derive(Default, Clone)]
-    pub struct Bluetooth { session: Arc<OnceCell<bluer::Session>>, pending: Arc<Mutex<Pending>> }
+    pub struct Bluetooth { session: Arc<OnceCell<bluer::Session>>, pending: Arc<Mutex<Pending>>, hardware: Arc<tokio::sync::Mutex<()>> }
+    struct CancelConnect { device: bluer::Device, hardware: Option<OwnedMutexGuard<()>> }
+    impl Drop for CancelConnect {
+        fn drop(&mut self) {
+            if let Some(hardware) = self.hardware.take() {
+                let device = self.device.clone();
+                tokio::spawn(async move {
+                    let _hardware = hardware;
+                    let _ = tokio::time::timeout(Duration::from_secs(5), device.disconnect()).await;
+                });
+            }
+        }
+    }
+    async fn connect(device: &bluer::Device, audio: bool, hardware: OwnedMutexGuard<()>) -> Result<(), String> {
+        // BlueZ keeps Connect running when its D-Bus caller drops the reply future.
+        let mut cancel = CancelConnect { device: device.clone(), hardware: Some(hardware) };
+        let result = if audio { device.connect_profile(&AUDIO).await } else { device.connect().await };
+        cancel.hardware.take();
+        result.map_err(|e| e.to_string())
+    }
     fn millis() -> u128 { SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() }
     fn running(pending: &Pending) -> bool { pending.operation.as_ref().is_some_and(|op| op["status"] == "running") }
     fn blocked() -> bool {
@@ -114,7 +133,7 @@ mod linux {
                     let answer = this.prompt(&id, request.device, target, "confirm", None).await?;
                     if answer == "yes" { Ok(()) } else { Err(ReqError::Rejected) }
                 }) })),
-                authorize_service: Some(Box::new(move |request| Box::pin(async move { if request.device == target && request.service == AUDIO { Ok(()) } else { Err(ReqError::Rejected) } }))),
+                authorize_service: Some(Box::new(move |request| Box::pin(async move { if request.device == target { Ok(()) } else { Err(ReqError::Rejected) } }))),
                 ..Default::default()
             }
         }
@@ -128,17 +147,17 @@ mod linux {
             let mut devices = vec![];
             for address in adapter.device_addresses().await.map_err(|e| e.to_string())?.into_iter().take(128) {
                 let device = adapter.device(address).map_err(|e| e.to_string())?;
-                if !device.uuids().await.unwrap_or_default().unwrap_or_default().contains(&AUDIO) { continue; }
                 devices.push(json!({"address":address.to_string(),"name":device.alias().await.unwrap_or_else(|_| address.to_string()).chars().take(160).collect::<String>(),"paired":device.is_paired().await.unwrap_or(false),"trusted":device.is_trusted().await.unwrap_or(false),"connected":device.is_connected().await.unwrap_or(false)}));
             }
             state["devices"] = json!(devices); Ok(state)
         }
         async fn perform(&self, action: &Action, id: &str) -> Result<(), String> {
+            let hardware = self.hardware.clone().lock_owned().await;
             let session = self.session().await?;
             let adapter = session.default_adapter().await.map_err(|e| e.to_string())?;
             if action.op == "power" { return adapter.set_powered(true).await.map_err(|e| e.to_string()); }
             if action.op == "scan" {
-                adapter.set_discovery_filter(DiscoveryFilter { transport: DiscoveryTransport::BrEdr, uuids: [AUDIO].into(), discoverable: false, ..Default::default() }).await.map_err(|e| e.to_string())?;
+                adapter.set_discovery_filter(DiscoveryFilter { discoverable: false, ..Default::default() }).await.map_err(|e| e.to_string())?;
                 let events = adapter.discover_devices().await.map_err(|e| e.to_string())?;
                 tokio::pin!(events);
                 let end = tokio::time::sleep(Duration::from_secs(30)); tokio::pin!(end);
@@ -147,18 +166,17 @@ mod linux {
             }
             let address = action.device.as_deref().ok_or("Choose a device.")?.parse::<Address>().map_err(|_| "Invalid Bluetooth address.")?;
             let device = adapter.device(address).map_err(|e| e.to_string())?;
-            if !device.uuids().await.map_err(|e| e.to_string())?.unwrap_or_default().contains(&AUDIO) { return Err("This device does not advertise stereo audio playback, or it disappeared. Scan again.".into()); }
             match action.op.as_str() {
                 "pair" => {
                     if device.is_paired().await.map_err(|e| e.to_string())? { return Err("This device is already paired. Choose Connect.".into()); }
                     let _agent = session.register_agent(self.agent(id, address)).await.map_err(|e| e.to_string())?;
                     device.pair().await.map_err(|e| e.to_string())?;
                     device.set_trusted(true).await.map_err(|e| e.to_string())?;
-                    device.connect_profile(&AUDIO).await.map_err(|e| e.to_string())
+                    connect(&device, false, hardware).await
                 },
                 "connect" | "reconnect" => {
-                    if !device.is_paired().await.map_err(|e| e.to_string())? { return Err("Pair this audio device first.".into()); }
-                    device.connect_profile(&AUDIO).await.map_err(|e| e.to_string())
+                    if !device.is_paired().await.map_err(|e| e.to_string())? { return Err("Pair this device first.".into()); }
+                    connect(&device, action.op == "reconnect", hardware).await
                 },
                 "disconnect" => device.disconnect().await.map_err(|e| e.to_string()),
                 "forget" => adapter.remove_device(address).await.map_err(|e| e.to_string()),
