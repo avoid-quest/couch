@@ -8,10 +8,12 @@ xset s off
 xset -dpms
 
 # Start on the attached TV when available, with the laptop panel as a fallback.
-output=$(xrandr --query | awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}')
+inventory=$(xrandr --query)
+connected=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+output=$(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ {print $1; exit}' <<< "$inventory")
 if [ -n "$output" ]; then
     xrandr --output "$output" --mode 1920x1080 || xrandr --output "$output" --auto
-    while read -r panel; do xrandr --output "$panel" --auto --left-of "$output"; done < <(xrandr --query | awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}')
+    while read -r panel; do xrandr --output "$panel" --auto --left-of "$output"; done < <(awk '$2 == "connected" && $1 ~ /^(eDP|LVDS)/ {print $1}' <<< "$inventory")
 fi
 
 openbox --config-file /usr/share/couch-appliance/openbox.xml &
@@ -31,6 +33,18 @@ systemctl --user start couch-tv.service || true
 # Keep LightDM's session alive after the restart limit, so it cannot reset the
 # budget by logging in again. Recovery remains visible until an admin restarts it.
 while kill -0 "$wm" 2>/dev/null; do
+    # Xorg updates its cached inventory on hotplug. Enable new outputs once,
+    # without reprobes or repeatedly resetting modes during playback.
+    if inventory=$(timeout 2 xrandr --current); then
+        anchor=$(awk '$2 == "connected" && /[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {if (!first) first=$1; if ($1 ~ /^(eDP|LVDS)/) {print $1; found=1; exit}} END {if (!found) print first}' <<< "$inventory")
+        while read -r output; do
+            [[ $'\n'$connected$'\n' != *$'\n'$output$'\n'* ]] || continue
+            placement=()
+            [ -z "$anchor" ] || placement=(--right-of "$anchor")
+            xrandr --output "$output" --mode 1920x1080 "${placement[@]}" || xrandr --output "$output" --auto "${placement[@]}" || true
+        done < <(awk '$2 == "connected" && $1 !~ /^(eDP|LVDS)/ && !/[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+/ {print $1}' <<< "$inventory")
+        connected=$(awk '$2 == "connected" {print $1}' <<< "$inventory")
+    fi
     state=$(systemctl --user show couch-tv.service --property=ActiveState --value)
     if [[ "$state" = failed || "$state" = inactive ]]; then
         if [ -z "$notice" ]; then
