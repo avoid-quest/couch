@@ -221,12 +221,20 @@ export function openStore(path: string) {
       const { profileId: _profileId, ...progress } = row;
       return progressView(progress);
     },
-    sharedHistory(limit = 40): HistoryItem[] {
-      return db.query<ProgressRow, [number]>(`SELECT ${progressColumns} FROM (
+    sharedHistory(limit = 40, include: (mediaId: string) => boolean = () => true): HistoryItem[] {
+      const items: HistoryItem[] = [];
+      const maximum = Math.max(1, Math.min(100, Math.floor(limit) || 40));
+      const statement = db.prepare<ProgressRow, []>(`SELECT ${progressColumns} FROM (
         SELECT ${progressColumns}, ROW_NUMBER() OVER (PARTITION BY mediaId ORDER BY lastPlayedAt DESC, rowid DESC) AS latest
         FROM viewing_progress WHERE lastPlayedAt IS NOT NULL
-      ) WHERE latest = 1 ORDER BY lastPlayedAt DESC, mediaId LIMIT ?`)
-        .all(Math.max(1, Math.min(100, Math.floor(limit) || 40))).map(progressView);
+      ) WHERE latest = 1 ORDER BY lastPlayedAt DESC, mediaId`);
+      try {
+        for (const row of statement.iterate()) {
+          if (include(row.mediaId)) items.push(progressView(row));
+          if (items.length === maximum) break;
+        }
+        return items;
+      } finally { statement.finalize(); }
     },
     historySource(mediaId: string): QueueEntry | null {
       const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);

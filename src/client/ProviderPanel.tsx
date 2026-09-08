@@ -1,3 +1,4 @@
+import { HistoryPanel, type HistoryPlayback } from "./HistoryPanel";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,9 @@ import { useEnqueueVideoQuality } from "./video-quality";
 
 type Props = {
   showHeading?: boolean;
+  active?: boolean;
+  historyVersion?: number;
+  onPlayHistory: HistoryPlayback;
   initialItem?: ProviderItem;
   origin: string;
   token: string;
@@ -64,13 +68,13 @@ export function ProviderPanel(props: Props) {
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
     {props.showHeading !== false && <h2 className="text-2xl font-semibold tracking-tight">Online media</h2>}
     <Tabs value={provider} onValueChange={value => { setInitialItem(undefined); setProvider(value as ProviderId); }}>
-      <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
+      <TabsList className="provider-selector group-data-horizontal/tabs:h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
       <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} initialItem={initialItem} onEnqueue={enqueue} provider={provider} quality={quality} onQualityChange={setQuality} onEnqueuePlaylist={async (url, playNow) => { const ok = await props.onEnqueuePlaylist(url, playNow, quality); if (ok) resetQuality(); return ok; }} /></TabsContent>
     </Tabs>
   </section>;
 }
 
-function ProviderBrowser({ initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
+function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
   const qualityId = useId();
   const [input, setInput] = useState("");
@@ -93,6 +97,7 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
   const browserRef = useRef<HTMLDivElement | null>(null);
   const restoreFocus = useRef<"input" | { itemId: string } | null>(null);
   const location = trail[trail.length - 1]!;
+  const atRecent = !location.request.query && !location.request.url;
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const response = await fetch(`${origin}/api/providers/${path}`, {
@@ -127,6 +132,7 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
     activeRequest.current?.abort();
     setLoadingMore(false);
     if (!connected) { setLoading(false); return; }
+    if (atRecent) { setLoading(false); setPage(null); setBrowseError(null); return; }
     const controller = new AbortController();
     activeRequest.current = controller;
     setLoading(true);
@@ -140,16 +146,16 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => { controller.abort(); };
-  }, [browse, connected, location]);
+  }, [browse, connected, location, atRecent]);
 
   useEffect(() => {
-    if (loading || !page || !restoreFocus.current) return;
+    if (loading || (!page && !atRecent) || !restoreFocus.current) return;
     if (!browserRef.current?.closest("[hidden]") && !document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]')) {
       const selector = restoreFocus.current === "input" ? "#provider-search" : `[data-provider-id="${CSS.escape(restoreFocus.current.itemId)}"]`;
       browserRef.current?.querySelector<HTMLElement>(selector)?.focus();
     }
     restoreFocus.current = null;
-  }, [page, loading]);
+  }, [page, loading, atRecent]);
 
   useEffect(() => {
     if (!connected) { setFavoritesLoading(false); return; }
@@ -279,23 +285,24 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
     </form>
     <Tabs value={view} onValueChange={value => setView(value as "browse" | "saved")}>
       <div className="provider-toolbar mb-3 flex items-center justify-between gap-3 border-b pb-4">
-        <TabsList className="provider-views h-auto" aria-label="Provider view">
+        <TabsList className="provider-views group-data-horizontal/tabs:h-auto" aria-label="Provider view">
           <TabsTrigger value="browse" className="min-h-11">Browse</TabsTrigger>
           <TabsTrigger value="saved" className="min-h-11">Saved <Badge variant="secondary">{savedItems.length}</Badge></TabsTrigger>
         </TabsList>
-        {view === "browse" && <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => { setInput(""); setTrail([{ request: {}, title: info.name }]); }}>Home</Button>}
+        {view === "browse" && !atRecent && <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => { restoreFocus.current = "input"; setInput(""); setTrail([{ request: {}, title: info.name }]); }}>Back to recent</Button>}
       </div>
       <TabsContent value={view} className="space-y-4">
         {actionError && <p className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{actionError}</p>}
         {notice && <p className="provider-notice rounded-lg border bg-muted p-4 text-sm" role="status">{notice}</p>}
         {favoriteError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">Saved items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
-        {view === "browse" && <div className="provider-location flex items-center gap-3">
+        {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={historyVersion} onPlay={onPlayHistory} provider={provider} active={active} />}
+        {view === "browse" && !atRecent && <div className="provider-location flex items-center gap-3">
           {trail.length > 1 && <Button data-back variant="outline" className="min-h-11 shrink-0" disabled={!connected} onClick={back}>Back</Button>}
           <h3 className="text-lg font-medium wrap-anywhere">{page?.title || location.title}</h3>
         </div>}
         {view === "browse" && browseError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
         {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading saved items…" : `Loading ${info.name}…`}</p>}
-        {!pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Save albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
+        {!(view === "browse" && atRecent) && !pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Save albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
         {playlistUrl && page && !pending && !browseError && !!items.length && <div className="flex flex-wrap items-center gap-2">
           <Button disabled={!canPlay || !connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, true, true)}><Play aria-hidden="true" />Play playlist</Button>
           <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, false, true)}><Plus aria-hidden="true" />Up next</Button>

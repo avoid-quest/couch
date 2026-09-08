@@ -315,3 +315,29 @@ test("every remote can play and edit shared history retained under a different l
   expect(store.history("household")).toEqual([]);
   expect(store.profiles()).toHaveLength(2);
 });
+
+
+test("provider history filters before the limit, deduplicates shared plays and keeps source URLs private", async () => {
+  const { request, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const profile = store.createProfile("Old profile");
+  const sources = ["https://youtu.be/old", "https://www.twitch.tv/videos/123", "https://www.raiplay.it/video/episode.html", "https://artist.bandcamp.com/track/song", "https://youtube.com.evil.example/watch?v=private", "file:///private/movie.mp4", "https://youtube.com/watch?v=new"];
+  const ids = sources.map((url, index) => {
+    const entry = { id: `entry-${index}`, title: `Played ${index}`, source: url.startsWith("file:") ? url : `web:${url}` };
+    const mediaId = playbackMediaId(entry)!;
+    store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 20, duration: 100, watched: false, lastPlayedAt: index + 1 }, entry);
+    return mediaId;
+  });
+  store.saveProgress("household", { mediaId: "media:" + "f".repeat(64), title: "Unavailable source", libraryItemId: null, position: 20, duration: 100, watched: false, lastPlayedAt: 11 });
+  store.saveProgress(profile.id, { mediaId: ids[0]!, title: "Played again", libraryItemId: null, position: 40, duration: 100, watched: false, lastPlayedAt: 10 });
+  for (const [provider, expected] of [["youtube", [ids[0], ids[6]]], ["twitch", [ids[1]]], ["raiplay", [ids[2]]], ["bandcamp", [ids[3]]]] as const) {
+    const response = await request(`/api/progress/history?provider=${provider}&limit=2`);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.items.map((item: { mediaId: string }) => item.mediaId)).toEqual(expected);
+    expect(JSON.stringify(data)).not.toContain("web:");
+    expect(JSON.stringify(data)).not.toContain("https:");
+  }
+  expect((await request("/api/progress/history?provider=unknown")).status).toBe(400);
+  expect((await (await request("/api/progress/history?provider=youtube&limit=1")).json()).items).toMatchObject([{ mediaId: ids[0], position: 40 }]);
+});
