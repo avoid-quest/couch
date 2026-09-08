@@ -260,6 +260,46 @@ try {
       return update.status === "ready";
     }, 30 * 60_000);
     assert.deepEqual(update.progress, { received: candidate.bytes, total: candidate.bytes });
+    if (recoveryFaults) {
+      inside("apt-get", "install", "-y", "--no-install-recommends", "strace");
+      const expectedData = preservation();
+      const pid = inside("pgrep", "-u", "couch-tv", "-x", "couch");
+      const requestId = crypto.randomUUID().replaceAll("-", "");
+      // Delay the real rename's return after the kernel moved the old AppImage,
+      // then kill the updater before it can write the replacement. No file or
+      // journal is fabricated, and the signed artifacts remain unchanged.
+      const trace = Bun.spawn(["docker", "exec", container, "strace", "-f", "-p", pid, "-o", "/qualification/interrupted-install.strace", "-P", "/var/lib/couch/application/Couch.AppImage", "-e", "trace=rename,renameat,renameat2", "-e", "inject=rename,renameat,renameat2:delay_exit=30s"], { stdout: "ignore", stderr: "ignore" });
+      try {
+        await until("Debugger attaches to the installed native updater", async () => {
+          assert.equal(trace.exitCode, null, "strace must remain attached");
+          return /TracerPid:\s+[1-9]/.test(inside("cat", `/proc/${pid}/status`));
+        });
+        await api("/api/updates/install", { install: { candidateId: candidate.id, requestId, confirmInterrupt: false } });
+        await until("Real Tauri replacement moves the current AppImage away", async () => inside("sh", "-c", "test -e /var/lib/couch/application/Couch.AppImage && echo present || echo absent") === "absent");
+        assert.equal(JSON.parse(inside("cat", `${dataDir}/updates/appimage/requests/${requestId}.json`)).phase, "installing");
+        inside("pkill", "-KILL", "-u", "couch-tv", "-x", "couch");
+        inside("couch-session", "stop");
+      } finally {
+        trace.kill();
+        await trace.exited;
+      }
+      assert.equal(preservation(), expectedData);
+      inside("couch-recover", `/var/lib/couch/application/backups/${requestId}`);
+      await retained("Recovery restores the previous AppImage after actual Tauri replacement interruption");
+      assert.equal(preservation(), expectedData);
+      assert.deepEqual(await api("/api/build"), build);
+      const interrupted = (await api(`/api/updates?requestId=${requestId}`)).installation.requestedTransaction;
+      assert.equal(interrupted.phase, "operator-required");
+      assert.match(interrupted.error, /interrupted/);
+      faultChecks.push("Real interrupted Tauri replacement preserves data and reports operator-required after previous-build recovery");
+      await api("/api/updates/check", { check: true });
+      await until("Signed candidate is available after interrupted installation", async () => {
+        const value = await api("/api/updates");
+        return ["available", "ready"].includes(value.status) && value.candidate.id === candidate.id;
+      });
+      await api("/api/updates/stage", { candidateId: candidate.id });
+      await until("Interrupted candidate can be staged again", async () => (await api("/api/updates")).status === "ready");
+    }
     for (const repair of [false, true]) {
       const beforePid = supervised();
       const requestId = crypto.randomUUID().replaceAll("-", "");
@@ -379,9 +419,6 @@ try {
       assert.equal(inside("sha256sum", `${application}/Couch.AppImage`).split(" ")[0], installed.archiveSha256);
       faultChecks.push(description);
     };
-    inside("couch-session", "stop");
-    inside("mv", `${application}/Couch.AppImage`, "/tmp/qualification-interrupted.AppImage");
-    await recovered("Recovery replaces an absent current archive at the Tauri rename/write boundary");
     // Stop the real recovery shell at its actual commands, without changing the
     // installed helper or replacing filesystem/systemd operations with doubles.
     for (const boundary of ["runuser -u couch-tv -- mv -f", 'sync -f "$application"']) {
@@ -418,6 +455,11 @@ try {
       await recovered(`Operator recovery terminates hung ${process} and preserves current data`);
       assert.ok(Date.now() - started < 60_000, "Systemd bounds stopping the hung process");
     }
+    const pid = supervised();
+    await Bun.write(`${fixtures}/runtime-faults.log`, inside("bash", "/repo/scripts/test-appliance-systemd.sh", "--runtime-faults"));
+    assert.equal(supervised(), pid, "Fixed runtime repair faults leave the application running");
+    assert.equal(preservation(), expectedData);
+    faultChecks.push("Real APT lock and interrupted dpkg failures preserve data; operator continuation repairs the same ffmpeg version");
     await Bun.write(`${fixtures}/recovery-faults.json`, JSON.stringify({ checks: faultChecks, scope: "Installed recovery process interruption, backup ENOSPC, recorded compatibility refusal and operator recovery of stopped processes. No machine power-loss or failed schema migration is implied." }, null, 2));
   }
   await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
