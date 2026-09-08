@@ -49,7 +49,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 if !player.diagnostics_pending.swap(true, Ordering::Relaxed) {
                     let pending = player.diagnostics_pending.clone();
                     let app = app.clone();
-                    let playback_id = player.state.playback_id.clone();
+                    let playback_id = player.session_key.clone();
                     tauri::async_runtime::spawn_blocking(move || {
                         let report = crate::diagnostics::collect(&app, playback_id);
                         app.state::<Host>().report_message(serde_json::json!({ "type": "diagnostics", "requestId": request_id, "report": report }));
@@ -84,6 +84,7 @@ struct Player {
     state: PlayerState,
     rect: VideoRect,
     segment: Option<PlaybackSegment>,
+    session_key: Option<String>,
 }
 
 impl Player {
@@ -105,6 +106,10 @@ impl Player {
 
     fn command(&mut self, app: &AppHandle, command: PlaybackCommand) -> Result<(), String> {
         match command {
+            PlaybackCommand::Prepare { playback_id, next } => {
+                self.prepare(app, playback_id, next)?;
+                Ok(())
+            }
             PlaybackCommand::Load {
                 playback_id,
                 source,
@@ -120,6 +125,7 @@ impl Player {
                 go_live,
             } => {
                 self.segment = segment;
+                self.session_key = Some(playback_id.clone());
                 let start_position = segment.map(|bounds| bounds.absolute(start_position.filter(|position| *position < bounds.duration()).unwrap_or(0.0))).or(start_position);
                 self.state = PlayerState {
                     playback_id: Some(playback_id),
@@ -242,6 +248,7 @@ impl Player {
             PlaybackCommand::Stop => {
                 self.segment = None;
                 let result = self.close(app);
+                self.session_key = None;
                 // The coordinator retires this playback ID before requesting stop.
                 // Report a close failure against that stopped session as well.
                 self.state = PlayerState {
@@ -256,6 +263,20 @@ impl Player {
 
 #[cfg(target_os = "linux")]
 impl Player {
+    fn prepare(&mut self, app: &AppHandle, playback_id: String, next: Option<crate::protocol::PreparedAudio>) -> Result<(), String> {
+        use tauri_plugin_video::{NativePrepareRequest, VideoExt};
+        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
+        let request: NativePrepareRequest = serde_json::from_value(serde_json::json!({
+            "sessionKey": session_key,
+            "playbackId": playback_id,
+            "next": next.map(|next| serde_json::json!({ "playbackId": next.playback_id, "uri": next.source, "headers": next.headers, "preferences": next.preferences })),
+        })).map_err(|error| error.to_string())?;
+        // An unsupported preparation falls back to the existing EOF load.
+        // It must not replace the current song's useful playback state.
+        if let Ok(snapshot) = app.video().desktop().prepare_native(request) { self.apply(snapshot)?; }
+        Ok(())
+    }
+
     fn load(
         &mut self,
         app: &AppHandle,
@@ -311,7 +332,7 @@ impl Player {
         index: i32,
     ) -> Result<(), String> {
         use tauri_plugin_video::{NativeControlRequest, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else {
+        let Some(session_key) = self.session_key.clone() else {
             return Ok(());
         };
         let snapshot = app
@@ -320,6 +341,7 @@ impl Player {
             .control_native(NativeControlRequest {
                 session_key,
                 action: action.into(),
+                playback_id: if action == "volume" { None } else { self.state.playback_id.clone() },
                 value,
                 index,
                 subtitle: None,
@@ -331,7 +353,7 @@ impl Player {
 
     fn add_subtitle(&mut self, app: &AppHandle, subtitle: ExternalSubtitle) -> Result<(), String> {
         use tauri_plugin_video::{NativeControlRequest, NativeSubtitle, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else {
+        let Some(session_key) = self.session_key.clone() else {
             return Ok(());
         };
         let snapshot = app
@@ -340,6 +362,7 @@ impl Player {
             .control_native(NativeControlRequest {
                 session_key,
                 action: "addSubtitle".into(),
+                playback_id: self.state.playback_id.clone(),
                 value: 0.0,
                 index: -1,
                 subtitle: Some(NativeSubtitle {
@@ -355,10 +378,11 @@ impl Player {
 
     fn replay_gain(&mut self, app: &AppHandle, mode: ReplayGainMode) -> Result<(), String> {
         use tauri_plugin_video::{NativeControlRequest, NativeReplayGain, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else { return Ok(()); };
+        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
         let snapshot = app.video().desktop().control_native(NativeControlRequest {
             session_key,
             action: "replayGain".into(),
+            playback_id: self.state.playback_id.clone(),
             value: 0.0,
             index: -1,
             subtitle: None,
@@ -373,7 +397,7 @@ impl Player {
 
     fn observe(&mut self, app: &AppHandle) -> Result<(), String> {
         use tauri_plugin_video::{NativeSessionRequest, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else {
+        let Some(session_key) = self.session_key.clone() else {
             return Ok(());
         };
         if self.state.status == "error" {
@@ -389,7 +413,7 @@ impl Player {
 
     fn layout(&mut self, app: &AppHandle) -> Result<(), String> {
         use tauri_plugin_video::{NativeLayoutRequest, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else {
+        let Some(session_key) = self.session_key.clone() else {
             return Ok(());
         };
         if self.state.status == "error" {
@@ -411,7 +435,7 @@ impl Player {
 
     fn close(&mut self, app: &AppHandle) -> Result<(), String> {
         use tauri_plugin_video::{NativeSessionRequest, VideoExt};
-        if let Some(session_key) = self.state.playback_id.clone() {
+        if let Some(session_key) = self.session_key.clone() {
             app.video()
                 .desktop()
                 .close_native(NativeSessionRequest { session_key })
@@ -440,7 +464,12 @@ impl Player {
         {
             return Err("Native backend reported invalid playback timing or volume".into());
         }
-        self.state.status = if observed.ended {
+        if let Some(playback_id) = observed.playback_id {
+            self.state.playback_id = Some(playback_id);
+        }
+        self.state.status = if observed.error.is_some() {
+            "error"
+        } else if observed.ended {
             "ended"
         } else if observed.loading {
             "loading"
@@ -494,13 +523,14 @@ impl Player {
                 position: self.segment.map_or(chapter.position, |bounds| bounds.relative(chapter.position)),
             })
             .collect();
-        self.state.error = None;
+        self.state.error = observed.error;
         Ok(())
     }
 }
 
 #[cfg(not(target_os = "linux"))]
 impl Player {
+    fn prepare(&mut self, _: &AppHandle, _: String, _: Option<crate::protocol::PreparedAudio>) -> Result<(), String> { Ok(()) }
     fn load(
         &mut self,
         _: &AppHandle,
@@ -602,6 +632,23 @@ mod tests {
         player.apply(ordinary).unwrap();
         assert!(player.state.now_playing.is_none());
         assert!(player.state.replay_gain.is_none());
+    }
+
+    #[test]
+    fn prepared_observations_change_track_identity_but_keep_the_native_session() {
+        let mut player = Player { session_key: Some("first".into()), ..Player::default() };
+        player.state.playback_id = Some("first".into());
+        let mut next = snapshot();
+        next.mpv_state.as_mut().unwrap().playback_id = Some("second".into());
+        player.apply(next.clone()).unwrap();
+        assert_eq!(player.session_key.as_deref(), Some("first"));
+        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
+        assert_eq!(player.state.status, "playing");
+        next.mpv_state.as_mut().unwrap().error = Some("Next source failed".into());
+        player.apply(next).unwrap();
+        assert_eq!(player.state.playback_id.as_deref(), Some("second"));
+        assert_eq!(player.state.status, "error");
+        assert_eq!(player.state.error.as_deref(), Some("Next source failed"));
     }
 
     #[test]

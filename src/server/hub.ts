@@ -107,9 +107,9 @@ export function createHub(options: HubOptions) {
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
     admitted,
-    resolveSource: (entry, playbackId, signal, fromStart, goLive) => {
+    resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
-      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart).then(media => subtitles.prepare(media, playbackId, signal));
+      if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5));
@@ -120,6 +120,7 @@ export function createHub(options: HubOptions) {
       return { source: entry.source };
     },
     deactivate: () => { void jellyfin.deactivate(); },
+    activatePrepared: (playbackId, previous) => jellyfin.activatePrepared(playbackId, previous),
     observe: player => { subtitles.observe(player); void jellyfin.observe(player); },
     stopped: playbackId => subtitles.stopped(playbackId),
   });

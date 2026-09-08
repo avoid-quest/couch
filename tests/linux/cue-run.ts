@@ -3,6 +3,10 @@ import type { Action, ServerMessage, SessionState } from "../../src/shared/proto
 import { verifyCue, assertCueAfterRestart } from "./cue";
 import { UiDriver, keys, startHttpRemote } from "./ui";
 import { assertTvFullscreen } from "./tv-remote";
+import { remoteSocketUrl } from "./build";
+import { verifyContinuity } from "./continuity";
+
+const continuity = process.argv.includes("--continuity");
 
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
@@ -56,9 +60,9 @@ class Remote {
 
   constructor(readonly token: string) { this.connect(); }
 
-  connect() {
+  async connect() {
     this.state = null;
-    this.socket = new BunWebSocket(`${origin.replace("http", "ws")}/api/ws?token=${this.token}`, { headers: { origin } });
+    this.socket = new BunWebSocket(await remoteSocketUrl(origin, this.token), { headers: { origin } });
     this.socket.onmessage = event => {
       const message = JSON.parse(String(event.data)) as ServerMessage;
       if (message.type === "state") this.state = message.state;
@@ -110,7 +114,9 @@ try {
   otherRemote = await startHttpRemote(origin, code, artifactDir, until, 4447);
   await otherRemote.minimize();
   const context = { origin, ui, until, clients, api, httpRemote, artifactDir, screenshot };
-  const saved = await verifyCue(context);
+  const saved = continuity ? null : await verifyCue(context);
+  if (continuity) await verifyContinuity(context, otherRemote);
+  if (saved) {
   await httpRemote.restore();
   await httpRemote.ui.section("Library");
   await httpRemote.ui.button("Albums", '[aria-label="Library view"]');
@@ -155,6 +161,7 @@ try {
   await otherRemote.ui.button("Stop playback", ".player-controls");
   await until("second actual browser stops the shared cue and retires its playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   await otherRemote.minimize();
+  }
   const queueIds = clients[0]!.state!.queue.map(entry => entry.id);
   clients.forEach(client => client.socket.close());
   const exitStarted = performance.now();
@@ -174,7 +181,7 @@ try {
   }
   // Dismiss the still-unclaimed installation's setup dialog after real restart.
   if (await ui.execute("return !!document.querySelector('[data-administrator-code]')")) await ui.key(keys.escape);
-  await assertCueAfterRestart(context, saved);
+  if (saved) await assertCueAfterRestart(context, saved);
   console.log("PASS focused cue native playback and restart qualification");
 } catch (error) {
   await screenshot("cue-failure").catch(() => {});

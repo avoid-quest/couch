@@ -511,8 +511,8 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     },
     async getPlayable(id: string): Promise<MediaSource & { title: string }> {
       assertOpen();
-      const item = db.query<{ title: string; path: string; root: string; sourceId: string; cuePath: string | null; cueTrack: number | null }, [string]>(`
-        SELECT i.title, i.path, i.cuePath, i.cueTrack, s.path AS root, s.id AS sourceId FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
+      const item = db.query<{ title: string; kind: string; path: string; root: string; sourceId: string; cuePath: string | null; cueTrack: number | null }, [string]>(`
+        SELECT i.title, i.kind, i.path, i.cuePath, i.cueTrack, s.path AS root, s.id AS sourceId FROM library_items i JOIN library_sources s ON s.id = i.sourceId WHERE i.id = ?`).get(id);
       if (!item) throw new Error("Library item not found.");
       try {
         await verifySource(getSource(item.sourceId)!);
@@ -533,7 +533,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         const canonical = await realpath(path);
         if (root !== item.root || !within(root, canonical) || (await lstat(path)).isSymbolicLink() || !(await lstat(canonical)).isFile()) throw new Error();
         if (!getSource(item.sourceId)) throw new Error();
-        return { source: pathToFileURL(canonical).href, title: item.title };
+        return { source: pathToFileURL(canonical).href, title: item.title, audioOnly: item.kind === "audio" };
       } catch {
         if (!closing) {
           db.query("UPDATE library_items SET available = 0 WHERE id = ?").run(id);

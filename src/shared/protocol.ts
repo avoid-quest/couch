@@ -87,6 +87,7 @@ export type ServerMessage =
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 export type PlaybackCommand =
+  | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
   | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
