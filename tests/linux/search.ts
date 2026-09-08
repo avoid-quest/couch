@@ -30,6 +30,7 @@ export async function verifySearch(context: MusicContext) {
         await query(driver, item.title);
         await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && document.querySelector(arguments[1])?.getAttribute('aria-busy') === 'false'", [opener, scope]));
         await driver.click(opener);
+        const scrollPosition = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
         const previous = first().player.playbackId;
         const prefix = source === "Library" ? `library:${item.id}` : `:${item.id}`;
         await driver.click('[role="dialog"] button[aria-label^="Play "], [role="dialog"] button[aria-label^="Resume "]');
@@ -42,6 +43,8 @@ export async function verifySearch(context: MusicContext) {
         await until(`${name} Search queue appends the ${source} item for both controllers`, () => all(state => state.queue.length === count + 1 && state.queue.at(-1)?.source.endsWith(prefix) === true));
         await driver.key(keys.escape);
         await until(`${name} Search details return directional focus to ${source} result`, () => driver.execute("return !document.querySelector('[role=dialog]') && document.activeElement === document.querySelector(arguments[0])", [opener]));
+        const returnedScroll = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
+        assert.deepEqual(returnedScroll, scrollPosition, `${name} details retain actual WebKit scroll offsets`);
         await driver.section("Queue"); await driver.section("Search");
         assert.equal(await driver.execute("return document.querySelector('#media-search').value"), item.title);
         await assertResponsive(driver, `${name} Search ${source}`);
