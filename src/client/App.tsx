@@ -292,7 +292,6 @@ export function App() {
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
-        <span className="tv-name">{state?.installationName || details?.name || "Your TV"}</span>
         <div className="header-status">
           {host && <Button variant="ghost" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>

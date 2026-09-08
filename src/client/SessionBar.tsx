@@ -50,7 +50,7 @@ export function SessionBar({ state, credentials, connected, run, onOpen, onRemot
   }}>
     <button className="session-bar-open" onClick={onOpen} aria-label={`Open current playback: ${current.title}`}>
       <span className="session-bar-art" aria-hidden="true">{current.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : <Play />}</span>
-      <span><small>{state?.installationName || "Your TV"} · {player.status === "playing" ? "Playing" : player.status === "paused" ? "Paused" : player.status === "loading" ? "Loading" : player.status === "error" ? "Playback error" : player.status === "ended" ? "Finished" : "Offline"}{state?.playedBy && ` · ${state.playedBy.name}`}</small><strong>{current.title}</strong></span>
+      <span><small>{player.status === "playing" ? "Playing" : player.status === "paused" ? "Paused" : player.status === "loading" ? "Loading" : player.status === "error" ? "Playback error" : player.status === "ended" ? "Finished" : "Offline"}{state?.playedBy && ` · From ${state.playedBy.name}`}</small><strong>{current.title}</strong></span>
     </button>
     <div className="session-bar-transport">
       <PlaybackTransport state={state!} credentials={credentials} connected={connected} run={run} compact />
