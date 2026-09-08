@@ -1,6 +1,6 @@
 import { remoteSocketUrl } from "../linux/build";
 import { strict as assert } from "node:assert";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { openStore } from "../../src/server/store";
@@ -14,6 +14,8 @@ const container = `couch-package-${process.pid}`;
 const origin = "http://127.0.0.1:44100";
 const expected = await Bun.file("src-tauri/build-info.json").json();
 const checks: string[] = [];
+const liveProviders = process.env.COUCH_QUALIFY_LIVE_PROVIDERS === "1";
+const evidenceText = (text: string) => liveProviders ? text.replace(/https?:\/\/[^\s"'<>]+/g, "[redacted URL]") : text;
 assert.equal(process.platform, "linux", "Qualification uses Linux Docker host networking for the loopback-only official driver");
 assert.equal(process.arch, "x64");
 await mkdir(root, { recursive: true });
@@ -186,6 +188,7 @@ try {
   await execute("document.querySelector('#pairing-code').closest('form').requestSubmit()");
   await until("Browser pairs through the production form and renders remote controls", async () => execute("return !!document.querySelector('.remote-controller') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !document.querySelector('.video-stage')"));
   await Bun.write(`${root}/browser-remote.png`, Buffer.from(await driver(44445, `/session/${browser}/screenshot`), "base64"));
+
   socket!.close();
   // WebDriver deletes only the AppImage launcher; close the actual window to drain the sidecar.
   run(["docker", "exec", "-e", "DISPLAY=:99", container, "sh", "-c", "xdotool search --onlyvisible --class '^Couch$' windowactivate --sync && xdotool key alt+F4"]);
@@ -202,21 +205,109 @@ try {
   await Bun.write(`${root}/coordinator-processes.txt`, run(["docker", "exec", container, "ps", "-C", "couch-server", "-o", "pid,ppid,stat,comm"]));
   assert.equal(run(["docker", "exec", container, "sh", "-c", "pgrep -x couch-server | wc -l"]), "1");
   record("Restart preserves profiles, pairings, source, media and custom data without autoplay");
+  if (liveProviders) {
+    // Opt-in public network qualification, using this exact installed app and coordinator.
+    // Never write extracted transports, headers, whole session state or audio samples.
+    const tv = (script: string, args: unknown[] = []) => driver(44444, `/session/${native}/execute/sync`, { script, args });
+    const providerEvidence: Record<string, unknown>[] = [];
+    const audible = () => {
+      const captured = Bun.spawnSync(["docker", "exec", "-u", "qualifier", "-e", "HOME=/home/qualifier", container, "ffmpeg", "-v", "error", "-f", "pulse", "-i", "qualification.monitor", "-t", "2", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"], { timeout: 10_000, maxBuffer: 100_000 });
+      assert.equal(captured.exitCode, 0, "Native PulseAudio monitor capture failed");
+      assert.ok(captured.stdout.length >= 16_000, "Native audio monitor returned too few samples");
+      let energy = 0;
+      for (let offset = 0; offset + 1 < captured.stdout.length; offset += 2) energy += captured.stdout.readInt16LE(offset) ** 2;
+      const rms = Math.sqrt(energy / (captured.stdout.length / 2));
+      assert.ok(rms > 16, "Live sample inconclusive: native audio output was silent during the two-second sample");
+      return Math.round(rms);
+    };
+    const playing = (entryId: string, video: boolean) => {
+      if (state.player.status === "error") throw new Error("Live provider native playback failed; no transport URL was retained");
+      return state.currentEntryId === entryId && state.player.status === "playing" && state.player.position > 2
+        && state.player.tracks?.some((track: any) => track.kind === "audio" && track.selected)
+        && (!video || state.player.tracks?.some((track: any) => track.kind === "video" && track.selected));
+    };
+    for (const [label, variable, route] of [["episode", "COUCH_QUALIFY_SC_EPISODE_URL", /\/watch\/\d+$/], ["film", "COUCH_QUALIFY_SC_FILM_URL", /\/titles\/\d+(?:-[\w-]+)?$/]] as const) {
+      const supplied = process.env[variable];
+      assert.ok(supplied, `Set ${variable} to an explicit current public item link`);
+      const url = new URL(supplied);
+      assert.ok(url.protocol === "https:" && !url.username && !url.password && !url.hash && route.test(url.pathname), `Invalid ${label} qualification link`);
+      assert.equal(url.origin, (await api("/api/settings/streamingcommunity")).origin, "Qualification link must use the configured website origin");
+      if (label === "episode") assert.ok(/^\?e=\d+$/.test(url.search), "Episode qualification must name an explicit episode");
+      else assert.equal(url.search, "", "Film qualification must use a public title link without query parameters");
+      const entryId = crypto.randomUUID();
+      await command({ type: "enqueueWeb", url: url.href, entryId, playNow: true });
+      await until(`Packaged StreamingCommunity ${label} reaches native audio and video`, async () => playing(entryId, true), 60_000);
+      const title = state.queue.find((entry: any) => entry.id === entryId)?.title;
+      assert.ok(title && !/^https?:/.test(title), "Extractor did not supply an item title");
+      await until(`HTTP remote receives the same StreamingCommunity ${label}`, async () => execute("return document.querySelector('.media-title')?.textContent === arguments[0]", [title]));
+      await tv("Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Show playback')?.click(); return true");
+      await tv("Array.from(document.querySelectorAll('button')).find(button => button.getAttribute('aria-label') === 'Hide playback controls')?.click(); return true");
+      await until(`Native ${label} controls are hidden for rendered frame comparison`, async () => tv("return !!document.querySelector('.tv-browser[hidden]') && !!document.querySelector('.tv-playback-controls[hidden]')"));
+      const playbackId = state.player.playbackId, start = state.player.position;
+      const first = frame(`streamingcommunity-${label}-before`), audioRms = audible();
+      await until(`Native ${label} playback clock advances`, async () => playing(entryId, true) && state.player.playbackId === playbackId && state.player.position > start + 1);
+      const second = frame(`streamingcommunity-${label}-after`);
+      let changed = 0;
+      for (let offset = 0; offset < first.length; offset += 3) if (Math.abs(first[offset]! - second[offset]!) > 20) changed++;
+      assert.ok(changed > 500, "Live sample inconclusive: native video pixels were static during the two-second sample");
+      record(`Packaged StreamingCommunity ${label} renders changing native pixels and non-silent audio`);
+      providerEvidence.push({ provider: "StreamingCommunity", item: label, title, positionDelta: state.player.position - start, changedPixels: changed, audioRms });
+      await command({ type: "stop" });
+      await until(`StreamingCommunity ${label} stops`, async () => state.player.status === "idle");
+    }
+    const imported = await api("/api/radio/playlists", previousToken, { name: "Qualification avoid radio", url: "https://radio.avoid.quest/playlist.m3u" });
+    const stations = (await api(`/api/radio/playlists/${imported.playlist.id}/stations`)).stations;
+    const station = stations.find((item: any) => item.tvgId === "avoid-radio-nts-radio-channel-1");
+    assert.ok(station, "The provider M3U did not contain mapped NTS 1");
+    const playRadio = async () => {
+      const entryId = crypto.randomUUID();
+      await command({ type: "enqueueRadio", stationId: station.id, entryId, playNow: true });
+      await until("Mapped NTS 1 advances through native audio", async () => playing(entryId, false), 60_000);
+      await until("NTS 1 programme and artwork arrive for the active playback", async () => state.radioProgramme?.stationId === station.tvgId && state.radioProgramme?.playbackId === state.player.playbackId && state.radioProgramme?.provider === "radio.avoid.quest" && state.radioProgramme?.artworkUrl && state.radioProgramme.expiresAt > Date.now());
+      assert.equal(state.queue.find((entry: any) => entry.id === entryId)?.title, station.name, "Programme metadata replaced the station title");
+      return entryId;
+    };
+    await playRadio();
+    const programme = state.radioProgramme, track = state.player.nowPlaying;
+    const response = await fetch(`https://radio.avoid.quest/api/radio-metadata?stationId=${encodeURIComponent(station.tvgId)}`, { signal: AbortSignal.timeout(10_000), redirect: "error" });
+    assert.ok(response.ok, "Provider metadata lookup failed during qualification");
+    const metadata = await response.json();
+    assert.ok(metadata.ok && metadata.data.title === programme.title && metadata.data.artworkUrl === programme.artworkUrl && metadata.data.streamUrl === station.url, "Programme did not match the provider's station-owned metadata");
+    await command({ type: "navigate", key: "info" });
+    const rendered = "const p = document.querySelector('.radio-programme'); const image = p?.querySelector('img'); return document.querySelector('.media-title')?.textContent === arguments[0] && p?.getClientRects().length > 0 && p.textContent.includes(arguments[1]) && image?.complete && image.naturalWidth > 0 && (image.currentSrc || image.src) === arguments[3] && (!arguments[2] || document.querySelector('.radio-now-playing')?.textContent.includes(arguments[2]));";
+    for (const [label, inspect] of [["TV", tv], ["HTTP remote", execute]] as const) await until(`${label} renders provider programme artwork separately from station and native track`, async () => inspect(rendered, [station.name, programme.title, track?.title ?? null, new URL(programme.artworkUrl).href]));
+    const audioRms = audible();
+    providerEvidence.push({ provider: "radio.avoid.quest", stationId: station.tvgId, stationName: station.name, programmeTitle: programme.title, programmeArtworkLoaded: true, nativeTrackTagsPresent: !!track, audioRms });
+    await Bun.write(`${root}/radio-programme-remote.png`, Buffer.from(await driver(44445, `/session/${browser}/screenshot`), "base64"));
+    await command({ type: "navigate", key: "info" });
+    frame("radio-programme-native");
+    await command({ type: "enqueueWeb", url: "http://127.0.0.1:44212/fixture.html", entryId: crypto.randomUUID(), playNow: true });
+    await until("Switching away from NTS 1 clears programme on coordinator and both screens", async () => !state.radioProgramme && await tv("return !document.querySelector('.radio-programme')") && await execute("return !document.querySelector('.radio-programme')"));
+    await command({ type: "stop" });
+    await playRadio();
+    await command({ type: "stop" });
+    await until("Stopping NTS 1 clears programme on coordinator and both screens", async () => state.player.status === "idle" && !state.radioProgramme && await tv("return !document.querySelector('.radio-programme')") && await execute("return !document.querySelector('.radio-programme')"));
+    await Bun.write(`${root}/live-providers.json`, JSON.stringify(providerEvidence, (_key, value) => typeof value === "string" ? evidenceText(value) : value, 2));
+  }
+
   await Bun.write(`${root}/result.json`, JSON.stringify({ build: expected, packageSha256: new Bun.CryptoHasher("sha256").update(new Uint8Array(await Bun.file(artifact).arrayBuffer())).digest("hex"), checks, display: "Xvfb software rendering with PulseAudio null output", format: appimage ? "AppImage" : "deb", upgradeFixture: appimage ? null : "Same binary repacked with older Debian version; no prior production release exists" }, null, 2));
 } catch (error) {
   const diagnostics = browser ? await driver(44445, `/session/${browser}/execute/sync`, { script: "return { status: document.querySelector('.header-status')?.textContent, alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), codeLength: document.querySelector('#pairing-code')?.value.length, connectDisabled: document.querySelector('.pair-form button')?.disabled }", args: [] }).catch(() => null) : null;
-  await Bun.write(`${root}/failure.json`, JSON.stringify({ build: expected, checks, error: String(error), diagnostics }, null, 2));
+  await Bun.write(`${root}/failure.json`, JSON.stringify({ build: expected, checks, error: String(error), diagnostics }, (_key, value) => typeof value === "string" ? evidenceText(value) : value, 2));
   if (browser) {
     const masked = await driver(44445, `/session/${browser}/execute/sync`, { script: "const input = document.querySelector('#pairing-code'); if (input) input.type = 'password'; return !input || input.type === 'password'", args: [] }).catch(() => false);
     const screenshot = masked ? await driver(44445, `/session/${browser}/screenshot`).catch(() => null) : null;
     if (screenshot) await Bun.write(`${root}/browser-failure.png`, Buffer.from(screenshot, "base64"));
   }
-  throw error;
+  throw liveProviders ? new Error(evidenceText(String(error))) : error;
 } finally {
   socket?.close();
   if (browser) await driver(44445, `/session/${browser}`, undefined, "DELETE").catch(() => {});
   if (native) await driver(44444, `/session/${native}`, undefined, "DELETE").catch(() => {});
-  await Bun.write(`${root}/container.log`, run(["docker", "logs", container]));
+  await Bun.write(`${root}/container.log`, evidenceText(run(["docker", "logs", container])));
   run(["docker", "rm", "-f", container]);
+  if (liveProviders) for (const name of await readdir(root)) {
+    if (name.endsWith(".log")) await Bun.write(`${root}/${name}`, evidenceText(await Bun.file(`${root}/${name}`).text()));
+  }
   await media.stop(true);
 }
