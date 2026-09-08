@@ -206,7 +206,7 @@ test("a refreshed administrator page reopens Updates for its durable pending req
   window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify({ candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision }));
   await act(async () => root.render(<Settings credentials={{ origin: "http://localhost", token: "admin" }} connected={false} status="reconnecting" identity={{ authority: "administrator", controller: null, claimAvailable: false }} host={null} details={null} administratorClaimed pairingRequired={false} reachable={false} name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
   expect(document.querySelector('[role="dialog"]')).toBeTruthy();
-  expect(document.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Updates");
+  expect(document.querySelector('[data-settings-page="updates"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.body.textContent).toContain("Retry same request");
   expect(calls.some(call => call.url.endsWith("/install"))).toBe(false);
 });
@@ -284,6 +284,44 @@ test("an unattended failed trial displays the authenticated restored release", a
   expect(outcome.nextElementSibling!.textContent).toBe("0.1.0+build.1.1");
 });
 
+for (const intent of ["install", "repair-current"] as const) test(`a historical successful ${intent} receipt does not promise a future matching build`, async () => {
+  report.status = "idle"; report.candidate = null;
+  report.running = { version: "0.1.0+build.34172088342.1", revision: "ff18f91dcedf6135aaf088f467830ea61227a680" };
+  report.installation = { enabled: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: "c".repeat(64), version: "0.1.0+build.34172088324.1", revision: "older-source", phase: "succeeded", intent, error: null, createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain("Update committed. The running build differs from this release.");
+  expect(document.body.textContent).toContain(report.installation.transaction!.version!);
+  expect(document.body.textContent).toContain(report.running.version);
+  expect(document.body.textContent).toContain(report.running.revision!);
+  expect(document.body.textContent).toContain("No newer release found");
+  expect(document.body.textContent).not.toContain("Waiting for the matching running build");
+  expect(document.body.textContent).not.toContain("Current release repaired and verified");
+  expect(document.body.textContent).not.toContain("Update installed and running");
+  expect(calls.every(call => call.body === undefined)).toBe(true);
+});
+
+for (const mismatch of ["version", "revision"] as const) test(`a committed update with a running ${mismatch} mismatch stays explicit`, async () => {
+  report.installation = { enabled: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: mismatch === "version" ? report.candidate!.version : report.running.version, revision: mismatch === "revision" ? "different-source" : report.running.revision, phase: "succeeded", error: null, createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain("Update committed. The running build differs from this release.");
+  expect(document.body.textContent).not.toContain("Update installed and running");
+});
+
+for (const intent of ["install", "repair-current"] as const) test(`a successful ${intent} receipt confirms its exact running identity`, async () => {
+  report.installation = { enabled: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: "c".repeat(64), ...report.running, phase: "succeeded", intent, error: null, createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain(intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running");
+  expect(document.body.textContent).not.toContain("The running build differs");
+});
+
+for (const [phase, outcome] of [["trial", "Updating the TV"], ["failed", "Update stopped before installation"], ["restored", "Previous release restored"], ["operator-required", "Update needs SSH recovery"]] as const) test(`${phase} keeps its outcome when a different release is running`, async () => {
+  report.installation = { enabled: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase, error: phase === "trial" ? null : "Original update error", restoredVersion: report.running.version, createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain(outcome);
+  expect(document.body.textContent).not.toContain("Update committed");
+  if (phase !== "trial") expect(document.body.textContent).toContain("Original update error");
+});
+
 test("controller pointer and keyboard input report activity, with no idle heartbeat", async () => {
   const { useUpdateActivity } = await import("./update-activity");
   const Activity = () => { useUpdateActivity({ origin: "http://localhost", token: "admin" }, true); return null; };
@@ -312,11 +350,10 @@ test("manual installation stays discoverable when maintenance support is disable
 for (const authority of ["host", "controller"] as const) test(`${authority} can discover Updates without accessing administrator operations`, async () => {
   const { Settings } = await import("./Settings");
   await act(async () => root.render(<Settings initialOpen credentials={{ origin: "http://localhost", token: "admin" }} connected status="connected" identity={{ authority, controller: null, claimAvailable: false }} host={authority === "host" ? { urls: [], pairingCode: "fixture" } as never : null} details={null} administratorClaimed pairingRequired={false} reachable name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
-  await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-group="tv"]')!.click());
-  const updates = document.querySelector('[role="tab"][id$="-trigger-updates"]') as HTMLElement;
+  const updates = document.querySelector<HTMLElement>('[data-settings-page="updates"]');
   expect(updates).toBeTruthy();
-  await act(async () => { updates.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })); updates.click(); });
-  expect(document.body.textContent).toContain("Open Settings > TV & sources > Updates on an administrator remote");
+  await act(async () => updates!.click());
+  expect(document.body.textContent).toContain("Use an administrator remote to install updates");
   expect(button("Install update")).toBeUndefined();
   expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
 });
