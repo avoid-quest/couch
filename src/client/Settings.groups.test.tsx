@@ -157,9 +157,11 @@ test("linked settings pages preserve URLs, Back focus and hidden-page focus", as
   await select("playback");
   expect(window.location.pathname).toBe("/settings/playback");
   expect(document.activeElement?.textContent).toBe("Playback");
-  await all();
-  expect(window.location.pathname).toBe("/settings");
-  expect(document.activeElement).toBe(page("playback"));
+  expect(document.querySelector(".settings-back")).toBeNull();
+  const category = document.querySelector<HTMLSelectElement>(".settings-category select")!;
+  expect(category.value).toBe("playback");
+  await act(async () => { category.value = "appearance"; category.dispatchEvent(new Event("change", { bubbles: true })); });
+  expect(window.location.pathname).toBe("/settings/appearance");
   await act(async () => { window.history.back(); await new Promise(resolve => setTimeout(resolve, 20)); });
   expect(window.location.pathname).toBe("/settings/playback");
   expect(document.querySelector("#default-video-quality")).not.toBeNull();

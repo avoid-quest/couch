@@ -31,3 +31,7 @@
 .settings-source-list > div { border-bottom: 1px solid var(--border); }
 .settings-source-back { width: auto; justify-content: flex-start; margin-left: -.75rem; }
 .settings-content h3:focus-visible { outline: 2px solid var(--ring); outline-offset: 6px; }
+
+.settings-category select { width: 100%; min-height: 44px; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); color: var(--foreground); font: inherit; }
+.settings-category select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (min-width: 1024px) { .settings-category { display: none; } }

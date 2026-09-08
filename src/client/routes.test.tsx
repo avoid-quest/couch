@@ -49,7 +49,7 @@ test("browser direct links and page navigation keep one session and preserve sea
   expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("initial");
   await click("Submit search");
   expect(window.location.pathname + window.location.search).toBe("/search?q=moon+%26+stars&source=TV+folders");
-  for (const page of ["Saved", "Queue", "Settings", "Home"]) { await click(page); expect(window.location.pathname).toBe(pagePaths[page]); }
+  for (const page of ["Saved", "Queue", "Settings", "Home"]) { await click(page); expect(window.location.pathname).toBe(page === "Settings" ? "/settings/playback" : pagePaths[page]); }
   expect(document.querySelector<HTMLAnchorElement>('a[href^="/search"]')?.getAttribute("href")).toBe("/search?q=moon+%26+stars&source=TV+folders");
   await click("Search");
   expect(document.querySelector("[data-query]")?.getAttribute("data-source")).toBe("TV folders");
@@ -72,6 +72,7 @@ test("native hash direct links, navigation and remote Back stay in the webview d
   window.history.replaceState(null, "", "/index.html#/settings");
   await render(true);
   expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
+  expect(window.location.hash).toBe("#/settings/playback");
   await click("Search"); await click("Submit search"); await click("Queue");
   expect(window.location.pathname).toBe("/index.html"); expect(window.location.hash).toBe("#/up-next");
   await click("Back");
@@ -104,8 +105,8 @@ test("settings direct links and browser history keep the session mounted", async
   await act(async () => window.history.forward()); await flush();
   expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
   await click("All settings");
-  expect(window.location.pathname).toBe("/settings");
-  expect(document.title).toBe("Settings · Couch");
+  expect(window.location.pathname).toBe("/settings/playback");
+  expect(document.title).toBe("Playback · Settings · Couch");
   expect(mounts).toBe(1); expect(unmounts).toBe(0);
 });
 
@@ -145,4 +146,14 @@ test("source settings direct links retain their page and browser history", async
   await click("Back");
   expect(window.location.pathname).toBe("/settings/sources/folders");
   expect(mounts).toBe(1); expect(unmounts).toBe(0);
+});
+
+test("Settings entry selects Playback and Back skips the index", async () => {
+  await render();
+  await click("Settings");
+  expect(window.location.pathname).toBe("/settings/playback");
+  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
+  await click("Back");
+  expect(window.location.pathname).toBe("/search");
+  expect(mounts).toBe(1);
 });

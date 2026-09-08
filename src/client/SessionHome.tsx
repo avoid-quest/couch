@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Bookmark, ChevronRight, Play, Search, X } from "lucide-react";
+import { ChevronRight, Play, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SaveForLater } from "./SaveForLater";
@@ -49,7 +49,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
       if (event.target.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
     }}>
       <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" onRemote={() => onBrowse("Remote")} />
-      {!current && <div className="session-idle-actions"><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button><Button variant="outline" onClick={() => onBrowse("Saved")}><Bookmark aria-hidden="true" />Saved</Button><Button variant="ghost" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button><Button variant="outline" className="session-remote-button" onClick={() => onBrowse("Remote")}><Icon name="remote" />Remote</Button></div>}
+      {!current && <div className="session-idle-actions"><Button variant="ghost" className="session-remote-button" onClick={() => onBrowse("Remote")}><Icon name="remote" />Remote</Button></div>}
     </div>
     <div className="session-following">
       <section className="session-next" aria-labelledby="session-next-title">

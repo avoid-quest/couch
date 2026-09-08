@@ -14,6 +14,7 @@ import { BrowseHome } from "./BrowseHome";
 import { SavedSection } from "./SavedSection";
 import { SessionHome } from "./SessionHome";
 import { WatchingProfile } from "./WatchingProfile";
+import { DigitalClock } from "./DigitalClock";
 import { SessionBar } from "./SessionBar";
 import type { HistoryPlayback } from "./HistoryPanel";
 import { SearchPanel } from "./SearchPanel";
@@ -34,7 +35,7 @@ import { useInterfaceSize } from "./interface-size";
 import { TvAppearancePreview } from "./AppearanceSettings";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
-import { House, Search, Bookmark, ListMusic, Settings2, ArrowLeft } from "lucide-react";
+import { House, Search, LibraryBig, Bookmark, ListMusic, Settings2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -289,6 +290,7 @@ export function App() {
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <span className="tv-name">{state?.installationName || details?.name || "Your TV"}</span>
         <div className="header-status">
+          <DigitalClock />
           {host && <Button variant="ghost" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && <WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} />}
@@ -319,10 +321,10 @@ export function App() {
             {player?.status === "unavailable" && <p className="notice">{player.error || "The TV player is unavailable. You can still prepare the queue."}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
-                {([{name:"Home", label:"Home", icon:House}, {name:"Search", label:"Search", icon:Search}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} data-source={name} aria-current={(section === name || name === "Home" && !["Search","Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
+                {([{name:"Home", label:"Home", icon:House}, {name:"Search", label:"Search", icon:Search}, {name:"Library", label:"Library", icon:LibraryBig}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} data-source={name} aria-current={(section === name || name === "Home" && !["Search","Library","Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
               </nav>
               <div className="media-browser">
-                {!["Home","Search","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection("Home")}><ArrowLeft aria-hidden="true" />Home</Button>}
+                {!["Home","Search","Library","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection("Home")}><ArrowLeft aria-hidden="true" />Home</Button>}
                 {(visited.has("Browse") || section === "Browse") && <section data-page="Browse" hidden={section !== "Browse"}><h1 className="page-title">Browse sources</h1><nav className="browse-source-list" aria-label="Browse media">{["Library","Online","Guide","Radio","Jellyfin"].map(name => <Button key={name} variant="outline" onClick={() => browseSection(name)}>{name}</Button>)}</nav></section>}
                 {(visited.has("Home") || section === "Home") && <section data-page="Home" hidden={section !== "Home"}>{nativeHost ? <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && tv.browsing} onBrowse={browseSection} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} /> : <SessionHome state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onPlay={playHistory} active={section === "Home"} />}</section>}
                 <section data-page="Queue" hidden={section !== "Queue"}>

@@ -27,7 +27,7 @@ export function usePageRoute() {
   const location = useLocation();
   const navigate = useNavigate();
   const section = sectionForPath(location.pathname) ?? "Home";
-  const settingsSection = settingsPageForPath(location.pathname);
+  const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "playback" : null);
   const [visited, setVisited] = useState(() => new Set([section]));
   const rememberedSearch = useRef("");
   if (section === "Search") rememberedSearch.current = location.search;
@@ -35,6 +35,7 @@ export function usePageRoute() {
     setVisited(previous => previous.has(section) ? previous : new Set([...previous, section]));
     document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Home" ? "Couch" : `${section === "Queue" ? "Up next" : section} · Couch`;
     if (!sectionForPath(location.pathname)) void navigate("/", { replace: true });
+    else if (location.pathname.replace(/\/$/, "") === "/settings") void navigate("/settings/playback", { replace: true });
   }, [section, settingsSection, location.pathname, navigate]);
   const sectionUrl = (name: string) => pathForSection(name) + (name === "Search" ? rememberedSearch.current : "");
   return {

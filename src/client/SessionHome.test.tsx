@@ -64,8 +64,8 @@ test("Stop preserves the durable queue cursor and disconnected controls cannot s
   expect(document.querySelector(".session-next-list")?.textContent).not.toContain("current");
   expect(button("Resume")).toBeUndefined();
   expect(document.querySelector(".session-current-art")).toBeNull();
-  expect(button("Find something to play").disabled).toBe(false);
-  expect(button("Saved").disabled).toBe(false);
+  expect(button("Remote").disabled).toBe(false);
+  expect(document.querySelectorAll(".session-idle-actions button")).toHaveLength(1);
   await render(state, false);
   for (const label of ["Pause", "Next in queue", "Stop playback", "Remove next from Up next"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
   await act(async () => button("Details for next").click());
@@ -107,9 +107,8 @@ test("loading keeps Stop available, unavailable audio stays honest, and idle has
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
   expect(document.querySelector('.transport-row')).toBeNull();
   expect(document.querySelector('.now-heading')).toBeNull();
-  await act(async () => button("Saved").click());
-  await act(async () => button("Find something to play").click());
-  expect(browsed).toEqual(["Saved", "Search"]);
+  await act(async () => button("Remote").click());
+  expect(browsed).toEqual(["Remote"]);
 });
 
 
@@ -119,7 +118,7 @@ test("removed playback controls restore focus to a useful action without taking 
   button("Stop playback").focus();
   await act(async () => button("Stop playback").click());
   await render(idle);
-  expect(document.activeElement).toBe(button("Find something to play"));
+  expect(document.activeElement).toBe(button("Remote"));
   expect(actions).toEqual([{ type: "stop" }]);
 
   await render();

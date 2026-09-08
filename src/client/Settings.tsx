@@ -242,12 +242,13 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
 
   const content = <>
       {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
+      {!setup && page && <label className="settings-category"><span className="sr-only">Settings category</span><select value={sourcePage ? "sources" : section ?? "playback"} onChange={event => setSection(event.target.value as SettingsPage)}>{visiblePages.map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>}
       {!setup && <nav className="settings-nav" aria-label="Settings pages">
         {visiblePages.map(([id, item]) => <div key={id}>{pageLink(id, <><span>{item.label}</span><ChevronRight aria-hidden="true" className="settings-link-arrow" /></>)}</div>)}
       </nav>}
       <div ref={sectionContent} className="settings-content min-w-0">
         {!setup && section && <header className="settings-section-header">
-          {!sourcePage && pageLink(null, <><ArrowLeft aria-hidden="true" />All settings</>, "settings-back", true)}
+          {!page && !sourcePage && pageLink(null, <><ArrowLeft aria-hidden="true" />All settings</>, "settings-back", true)}
           {sourcePage ? pageLink("sources", <><ArrowLeft aria-hidden="true" />Sources</>, "settings-source-back", true) : <h2 ref={sectionHeading} tabIndex={-1}>{settingsPages[section as SettingsPage]?.label}</h2>}
         </header>}
         {administrator && credentials && <SettingsSection section={section} value="updates" className="min-w-0">{open && section === "updates" && <UpdatesSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</SettingsSection>}
