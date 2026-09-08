@@ -447,6 +447,7 @@ mod linux_surface {
             overlay.add_overlay(&fixed);
             overlay.add_overlay(&child);
             gtk_window.add(&overlay);
+            gtk_window.set_app_paintable(true);
             gtk_window.show_all();
             // Reparenting clears GTK's focused child even while the TV window is active.
             window
