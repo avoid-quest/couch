@@ -59,7 +59,7 @@ test("an HTTP remote can start discovery without randomUUID and cancel its exact
     expect(actions[0]?.op).toBe("scan");
     const token = actions[0]!.token;
     expect(token).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    expect(document.body.textContent).toContain("Searching…");
+    expect(document.body.textContent).toContain("Stop search");
     await act(async () => click("Stop search"));
     expect(actions.at(-1)).toEqual({ op: "cancel", token });
     expect(document.body.textContent).not.toContain("Searching…");
@@ -110,7 +110,7 @@ test("polls append new Bluetooth results without moving the focused device and r
   await act(async () => poll());
   expect(rows()).toEqual(["Audio device", "C39S", "New headphones"]);
   expect(select.disabled).toBe(true);
-  expect(select.closest("li")!.textContent).toContain("Not currently available");
+  expect(select.closest("li")!.textContent).toContain("Unavailable");
   state.devices = [speaker, ...state.devices];
   await act(async () => poll());
   expect(document.querySelector('[aria-label="Connect C39S"]')).toBe(select);
@@ -150,4 +150,19 @@ test("changing TV origin clears the previous TV's discovery results", async () =
   state.devices = [];
   await act(async () => root.render(<Component credentials={{ origin: "http://another-tv", token: "admin" }} connected />));
   expect(document.querySelectorAll('[aria-label="Bluetooth devices"] li').length).toBe(0);
+});
+
+
+test("Search and Stop search use the same control when discovery starts and finishes", async () => {
+  await render();
+  const search = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Search")!;
+  await act(async () => search.click());
+  expect(search.textContent).toBe("Stop search");
+  expect(search.disabled).toBe(false);
+  expect(document.querySelector('[role="status"] button')).toBeNull();
+  state.operation!.status = "finished";
+  await act(async () => poll());
+  expect(search.textContent).toBe("Search");
+  expect(search.isConnected).toBe(true);
+  expect(search.disabled).toBe(false);
 });
