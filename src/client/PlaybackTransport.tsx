@@ -23,6 +23,25 @@ export function playbackCapabilities(state: SessionState | null, connected: bool
   };
 }
 
+function playbackTime(seconds: number) {
+  const value = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(value / 3_600);
+  const minutes = Math.floor((value % 3_600) / 60);
+  return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(value % 60).padStart(2, "0")}`;
+}
+
+export function PlaybackTimeline({ state, connected, run }: Props) {
+  const player = state.player;
+  const current = state.queue.find(entry => entry.id === state.currentEntryId);
+  const { seekable, transportReady } = playbackCapabilities(state, connected);
+  if (!current || !seekable) return null;
+  return <div className="seek-control playback-timeline">
+    {player.duration ? <RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false} disabled={!transportReady}
+      onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} /> : null}
+    <div className="time-labels"><span>{playbackTime(player.position || 0)}</span><span>{player.duration || current.duration ? playbackTime(player.duration || current.duration || 0) : ""}</span></div>
+  </div>;
+}
+
 export function PlaybackTransport({ state, credentials, connected, run, compact = false, onExpand }: Props & { credentials: Credentials; compact?: boolean; onExpand?: () => void }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);

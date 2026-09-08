@@ -6,21 +6,12 @@ import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
-import { RangeControl } from "./RangeControl";
-import { WatchingProfile } from "./WatchingProfile";
-import { playbackCapabilities, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
+import { playbackCapabilities, PlaybackTimeline, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
 
 const playbackLabels: Record<PlayerState["status"], string> = {
   unavailable: "No player", idle: "Ready", loading: "Loading…", playing: "Playing",
   paused: "Paused", ended: "Finished", error: "Playback error",
 };
-
-function time(seconds: number) {
-  const value = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(value / 3_600);
-  const minutes = Math.floor((value % 3_600) / 60);
-  return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(value % 60).padStart(2, "0")}`;
-}
 
 export function sourceLabel(source: string) {
   try {
@@ -46,7 +37,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
 }) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, active, audioReady, transportReady, seekable } = playbackCapabilities(state, connected);
+  const { available, audioReady, transportReady } = playbackCapabilities(state, connected);
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
   const hasMedia = !!current;
   const artwork = connected && radio ? state?.radioProgramme?.artworkUrl || current?.thumbnail : current?.thumbnail;
@@ -80,17 +71,12 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     {state?.systemAudio?.error && <p role="alert">{state.systemAudio.error}</p>}
     {player?.status === "error" && current && state?.systemAudio && <Button disabled={!available || !audioReady} onClick={() => void run({ type: "play", entryId: current.id })}>Resume playback</Button>}
     {player?.error && player.status !== "unavailable" && <p className="playback-error" role="alert">{player.error}</p>}
-    {hasMedia && seekable && <div className="seek-control">
-      {player?.duration ? <RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false}
-        disabled={!transportReady}
-        onCommit={async position => { if (!player.playbackId) return false; return run({ type: "seek", playbackId: player.playbackId, position }); }} /> : null}
-      <div className="time-labels"><span>{time(player?.position || 0)}</span><span>{player?.duration || current?.duration ? time(player?.duration || current?.duration || 0) : ""}</span></div>
-    </div>}
+    {state && <PlaybackTimeline state={state} connected={connected} run={run} />}
     {hasMedia && <div className="transport-row">
       {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} onExpand={onExpand} />}
       {session ? <div className="session-volume-row">{volume}{onRemote && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
-    {!session && <div className="player-settings">{!hasMedia && settings}<WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} /></div>}
+    {!session && !hasMedia && <div className="player-settings">{settings}</div>}
   </div>;
 }

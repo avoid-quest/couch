@@ -124,10 +124,10 @@ test("footer volume uses the observed output and keeps keyboard edits through li
   expect(actions.at(-1)).toEqual({ type: "mute", muted: false });
   await render({ ...state, systemAudio: { ...systemAudio, volume: null } });
   expect(button("Mute TV").disabled).toBe(true);
-  expect(document.querySelector('[data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(true);
+  expect(document.querySelector('.session-bar-volume [data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(true);
   await render(state);
   expect(button("Mute TV")).toBeUndefined();
-  expect(document.querySelector('[data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(false);
+  expect(document.querySelector('.session-bar-volume [data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(false);
 });
 
 test("footer seek clamps to the item and current quality is available in its gear", async () => {
@@ -139,4 +139,24 @@ test("footer seek clamps to the item and current quality is available in its gea
   await render({ ...state, queue: [{ ...state.queue[1]!, source: "web:https://www.youtube.com/watch?v=abc", quality: "auto" }], player: { ...state.player, tracks: [{ id: "1", index: 0, kind: "video", label: "Video", language: "", selected: true }] } });
   await act(async () => button("Playback settings").click());
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Quality");
+});
+
+test("footer timeline shows current time and preserves a focused seek through live observations", async () => {
+  await render();
+  const position = document.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]')!;
+  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:121:40");
+  position.focus();
+  await act(async () => position.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  expect(actions.at(-1)).toEqual({ type: "seek", playbackId: "playback", position: 13 });
+  await render({ ...state, player: { ...state.player, position: 14 } });
+  expect(document.activeElement === position).toBe(true);
+  expect(position.getAttribute("aria-valuenow")).toBe("13");
+  await act(async () => button("Pause").focus());
+  expect(position.getAttribute("aria-valuenow")).toBe("14");
+  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:141:40");
+  await render({ ...state, queue: [{ ...state.queue[1]!, live: true }], player: { ...state.player, seekable: false } });
+  expect(document.querySelector('.playback-timeline')).toBeNull();
+  await render({ ...state, player: { ...state.player, duration: null } });
+  expect(document.querySelector('.playback-timeline [role="slider"]')).toBeNull();
+  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:12");
 });
