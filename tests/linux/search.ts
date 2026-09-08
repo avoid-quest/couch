@@ -35,7 +35,7 @@ export async function verifySearch(context: MusicContext) {
         const prefix = source === "Library" ? `library:${item.id}` : `:${item.id}`;
         await driver.click('[role="dialog"] button[aria-label^="Play "], [role="dialog"] button[aria-label^="Resume "]');
         await until(`${name} Search ${source} play reaches native player and both controllers`, () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source.endsWith(prefix) === true));
-        await context.clients[1]!.command({ type: "pause" });
+        await context.clients[1]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
         await until(`${name} Search playback pauses through the other paired controller`, () => all(state => state.player.status === "paused"));
         await until(`${name} Search details survive the playback progress broadcast`, () => driver.execute("return document.querySelector('[role=dialog]')?.textContent.includes(arguments[0])", [item.title]));
         const count = first().queue.length;
