@@ -1,14 +1,14 @@
-// Reuse qualified GitHub bytes and the production publisher with a disposable key.
+// Reuse qualified local bytes and the production publisher with a disposable key.
 import { strict as assert } from "node:assert";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { download, publish } from "./publish-appimage";
+import { publish } from "./publish-appimage";
 
-const [appimage, artifactId, directory] = process.argv.slice(2);
-assert.ok(process.argv.length === 5 && appimage && artifactId && directory, "Usage: bun scripts/test-installed-update.ts APPIMAGE QUALIFIED_B_ARTIFACT_ID EVIDENCE_DIRECTORY");
-assert.match(artifactId, /^[1-9]\d*$/);
+const [appimage, qualified, directory] = process.argv.slice(2);
+assert.ok(process.argv.length === 5 && appimage && qualified && directory, "Usage: bun scripts/test-installed-update.ts APPIMAGE QUALIFIED_B_DIRECTORY EVIDENCE_DIRECTORY");
 assert.ok(await Bun.file(appimage).exists(), "Installed A AppImage must exist");
+const target = resolve(qualified);
 const evidence = resolve(directory);
 await mkdir(evidence, { recursive: true });
 const temporary = await mkdtemp(join(tmpdir(), "couch-installed-update-"));
@@ -24,8 +24,6 @@ let server: ReturnType<typeof Bun.serve> | undefined;
 try {
   await run(["bunx", "--no-install", "tauri", "signer", "generate", "--ci", "-p", "", "-w", key], true);
   await chmod(key, 0o600);
-  const target = join(temporary, "target");
-  await download(artifactId, target);
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     const path = resolve(feed, `.${decodeURIComponent(new URL(request.url).pathname)}`);
     if (!path.startsWith(`${feed}${sep}`)) return new Response(null, { status: 404 });
@@ -44,7 +42,7 @@ try {
     return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
   } });
   const endpoint = `http://127.0.0.1:${server.port}/`;
-  // Publication retains releases/RUN.ATTEMPT/release.json and its signed archive
+  // Publication retains releases/BUILD.ATTEMPT/release.json and its signed archive
   // alongside Preview, so the installed B can request its exact-current repair.
   const release = await publish(target, feed, endpoint, "preview", "Disposable installed update qualification");
   await rm(key);

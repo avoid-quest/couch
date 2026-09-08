@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { publish } from "./publish-appimage";
@@ -54,4 +54,45 @@ test("official signing, promotion and renewal preserve bytes; rollback and tampe
   await Bun.write(evidence, JSON.stringify(forged));
   await expect(release(second)).rejects.toThrow("Release bytes cannot change");
   expect(await Bun.file(join(feed, "releases/10.1/Couch.AppImage")).text()).toBe("fixture AppImage 10");
+}, 30_000);
+
+test("local publisher and installed-update CLIs need no GitHub download", async () => {
+  const artifact = await fixture(20260908123456), localFeed = join(directory, "local-feed");
+  const bin = join(directory, "bin"), evidence = join(directory, "installed"), called = join(directory, "gh-called");
+  await mkdir(bin);
+  await Bun.write(join(bin, "gh"), `#!/bin/sh\ntouch '${called}'\nexit 97\n`);
+  // Exercise real local feed/signing orchestration without starting the systemd Docker fixture.
+  await Bun.write(join(bin, "bash"), `#!${process.execPath}
+import { strict as assert } from "node:assert";
+const [script, mode, appimage, evidence] = Bun.argv.slice(2);
+assert.equal(script, "scripts/test-appliance-systemd.sh");
+assert.equal(mode, "--appimage");
+assert.ok(await Bun.file(appimage).exists());
+const target = await Bun.file(process.env.COUCH_QUALIFY_UPDATE_RECEIPT).json();
+const enrollment = await Bun.file(evidence + "/appimage-update.json").json();
+const metadata = await (await fetch(enrollment.endpoint + "preview.json")).json();
+assert.equal(metadata.version, target.version);
+assert.equal(metadata.revision, target.revision);
+assert.ok(enrollment.pubkey.length > 50 && metadata.platforms["linux-x86_64"].signature.length > 50);
+const bytes = await (await fetch(metadata.platforms["linux-x86_64"].url)).arrayBuffer();
+assert.equal(new Bun.CryptoHasher("sha256").update(bytes).digest("hex"), target.archiveSha256);
+assert.equal(process.env.TAURI_SIGNING_PRIVATE_KEY_PATH, undefined);
+await Bun.write(evidence + "/fixture-invoked", "local signed target accepted");
+`);
+  await Promise.all(["gh", "bash"].map(name => chmod(join(bin, name), 0o700)));
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  const execute = async (script: string, args: string[]) => {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, script), ...args], { cwd: join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" });
+    const errors = await new Response(child.stderr).text();
+    expect(await child.exited, errors).toBe(0);
+  };
+  const retained = await fixture(34172088324);
+  await publish(retained, localFeed, "http://localhost:8765/tauri/", "preview", "Retained build");
+  await execute("publish-appimage.ts", [artifact, localFeed, "http://localhost:8765/tauri/", "preview", "Local qualification"]);
+  expect((await Bun.file(join(localFeed, "preview.json")).json()).releaseId).toBe("20260908123456.1");
+  await expect(publish(retained, localFeed, "http://localhost:8765/tauri/", "preview", "Older build")).rejects.toThrow("backwards");
+  await execute("test-installed-update.ts", [join(artifact, "Couch.AppImage"), artifact, evidence]);
+  expect(await Bun.file(join(evidence, "fixture-invoked")).text()).toBe("local signed target accepted");
+  expect(await Bun.file(called).exists()).toBe(false);
+  expect(await Bun.file(join(artifact, "Couch.AppImage")).text()).toBe("fixture AppImage 20260908123456");
 }, 30_000);
