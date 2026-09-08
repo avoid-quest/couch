@@ -1,5 +1,4 @@
 import { Database } from "bun:sqlite";
-import { createAntRecordings } from "./ant-recordings";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -19,7 +18,7 @@ const knownCauses = new Map([["No free adapter", "No free recording input."], ["
 const errorCauses = new Map([[200, "No free adapter"], [209, "No assigned adapters"], [402, "No input detected"], [403, "Not enough disk space"]]);
 const method = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "no-store" } });
 
-export function createRecordings({ databasePath, selection, channel, onChange = () => {}, onConnectionChanged = () => {}, enqueue = () => {}, fetch: request = globalThis.fetch, pollMs = 10_000, admitted = () => true, mediaUrl = (path: string) => path }: {
+export function createRecordings({ databasePath, selection, channel, onChange = () => {}, onConnectionChanged = () => {}, enqueue = () => {}, fetch: request = globalThis.fetch, pollMs = 10_000, admitted = () => true }: {
   databasePath: string;
   selection: (programId: string) => Selection;
   channel: (channelId: string) => GuideChannel;
@@ -29,7 +28,6 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   fetch?: typeof fetch;
   pollMs?: number;
   admitted?: () => boolean;
-  mediaUrl?: (path: string) => string;
 }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
@@ -48,8 +46,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   const save = (job: Job) => db.query("INSERT OR REPLACE INTO recording_jobs VALUES (?, ?)").run(job.id, JSON.stringify(job));
   const configured = () => { const value = setup(); if (value?.qualificationVersion !== 2) throw new RecordingError("An administrator must verify recording backend setup first, including Failed view for both accounts.", 409); return value; };
   const backend = (value = configured()) => createTvheadend(value.connection, shutdown.signal, request);
-  const ant = createAntRecordings(db, { request, shutdown: shutdown.signal, assertOpen, publish: () => onChange(), connectionChanged: onConnectionChanged, mediaUrl });
-  const snapshot = (): RecordingsPage => ({ antConfigured: ant.snapshot().configured, configured: setup()?.qualificationVersion === 2, revision: setup()?.revision ?? 0, checkedAt, error, jobs: [...jobs().map(publicJob), ...ant.snapshot().jobs] });
+  const snapshot = (): RecordingsPage => ({ configured: setup()?.qualificationVersion === 2, revision: setup()?.revision ?? 0, checkedAt, error, jobs: jobs().map(publicJob) });
   const serial = <T>(work: () => Promise<T>): Promise<T> => {
     const next = tail.then(() => { assertOpen(); return work(); });
     tail = next.catch(() => {});
@@ -63,8 +60,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   }
   async function reconcile() {
     assertOpen();
-    await ant.refresh(shutdown.signal);
-    if (!setup()) { checkedAt = Date.now(); publish(); return; }
+    if (!setup()) return;
     try {
       const rows = await backend().jobs();
       assertOpen();
@@ -98,7 +94,7 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
     }
   }
   let polling = false;
-  const timer = pollMs > 0 ? setInterval(() => { if (admitted() && !polling && (setup() || ant.snapshot().configured)) { polling = true; void serial(reconcile).catch(() => {}).finally(() => { polling = false; }); } }, pollMs) : undefined;
+  const timer = pollMs > 0 ? setInterval(() => { if (admitted() && !polling && setup()) { polling = true; void serial(reconcile).catch(() => {}).finally(() => { polling = false; }); } }, pollMs) : undefined;
   timer?.unref();
   async function body(req: Request) {
     if (req.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") throw new RecordingError("Send a JSON object.", 415);
@@ -110,12 +106,10 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
   }
   return {
     snapshot,
-    media: ant.media,
     refresh: () => serial(reconcile),
     async resolve(id: string, signal: AbortSignal) {
       assertOpen();
       const combined = AbortSignal.any([signal, shutdown.signal, connectionGeneration.signal]);
-      if (ant.has(id)) return ant.resolve(id, combined);
       const job = get(id);
       if (job.status !== "completed" || !job.backendId) throw new RecordingError("Wait for this recording to complete.", 409);
       try {
@@ -139,18 +133,6 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         if (path === "/api/recordings/refresh") {
           if (req.method !== "POST") return method("POST");
           await serial(async () => { guard(); await reconcile(); }); caller(); return json(snapshot());
-        }
-        if (path === "/api/recordings/ant/setup" || path === "/api/recordings/ant/attach") {
-          administrator();
-          if (path.endsWith("/setup") && req.method === "GET") return json(ant.settings());
-          if (req.method !== "POST") return method(path.endsWith("/setup") ? "GET, POST" : "POST");
-          const value = await body(req);
-          return await serial(async () => {
-            const authorize = () => { administrator(); guard(); };
-            authorize();
-            const result = path.endsWith("/setup") ? await ant.configure(value, authorize, req.signal) : { job: await ant.attach(value, authorize, req.signal) };
-            authorize(); return json(result);
-          });
         }
         if (path === "/api/recordings/setup") {
           administrator();
@@ -230,11 +212,6 @@ export function createRecordings({ databasePath, selection, channel, onChange = 
         const jobPath = /^\/api\/recordings\/([a-f0-9-]{36})\/(cancel|play)$/.exec(path);
         if (jobPath) {
           if (req.method !== "POST") return method("POST");
-          if (jobPath[2] === "play" && ant.has(jobPath[1]!)) {
-            guard(); const job = ant.snapshot().jobs.find(job => job.id === jobPath[1])!;
-            if (!["running", "completed"].includes(job.status)) throw new RecordingError("Refresh this Ant recording before playing it.", 409);
-            enqueue(job, () => { caller(); }); return json({ ok: true });
-          }
           if (jobPath[2] === "play") { guard(); const job = get(jobPath[1]!); if (job.status !== "completed") throw new RecordingError("Wait for this recording to complete.", 409); enqueue(publicJob(job), () => { caller(); }); return json({ ok: true }); }
           const value = await body(req);
           return await serial(async () => {

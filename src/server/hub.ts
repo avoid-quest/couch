@@ -162,7 +162,7 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize);
     },
   });
-  const recordings = createRecordings({ mediaUrl: path => `http://127.0.0.1:${server.port}${path}`, databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
+  const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
     onChange: () => session.invalidate("recordings"),
     onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
     enqueue: (job, authorize) => {
@@ -303,11 +303,6 @@ export function createHub(options: HubOptions) {
     },
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname.startsWith("/api/recording-media/")) {
-        const address = server.requestIP(request)?.address;
-        if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address ?? "") || request.headers.has("origin")) return new Response(null, { status: 403 });
-        return recordings.media(request);
-      }
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));

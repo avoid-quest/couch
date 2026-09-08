@@ -16,7 +16,7 @@ export function localMediaId(entry: QueueEntry): string | null {
   return null;
 }
 
-type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; canComplete: (ended: boolean) => boolean; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
+type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
 
 // Only native observations may change position. Commands merely request a checkpoint.
 export function createProgress(store: Store, committed: () => void, now = Date.now) {
@@ -35,10 +35,10 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
     forgetProfile(id: string) { if (active?.profileId === id) active = null; },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
-    begin(entry: QueueEntry, playbackId: string, profileId: string, canComplete: (ended: boolean) => boolean = () => true) {
+    begin(entry: QueueEntry, playbackId: string, profileId: string) {
       const mediaId = localMediaId(entry);
       active = mediaId ? {
-        playbackId, profileId, canComplete, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
+        playbackId, profileId, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
         item: { mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
     },
@@ -57,19 +57,19 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       const checkpoint = paused !== active.paused || seekAcknowledged || now() - active.lastWrite >= 10_000;
       active.paused = paused;
       if (seekAcknowledged) active.seek = null;
-      if (player.status === "ended" && active.canComplete(true)) { active.item.watched = true; active.item.position = 0; flush(); active = null; }
+      if (player.status === "ended") { active.item.watched = true; active.item.position = 0; flush(); active = null; }
       else if (checkpoint) flush();
     },
     finish(nearEnd = false, commit?: (save: () => void) => void) {
       const save = () => {
-        if (active?.observed && active.canComplete(false) && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
+        if (active?.observed && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
           active.item.watched = true;
           active.item.position = 0;
         }
         flush();
       };
       if (commit) {
-        const previous = active && { ...active, item: structuredClone(active.item), seek: active.seek && { ...active.seek } };
+        const previous = active && structuredClone(active);
         try { commit(save); }
         catch (error) { active = previous; throw error; }
       } else save();

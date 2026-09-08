@@ -153,7 +153,7 @@ test("completed playback uses only the read-only account and refuses writable or
   const app = fixture(); await app.setup(); const pending = await job(await app.schedule());
   Object.assign(app.rows[0]!, { sched_status: "completed", filesize: 188_000, status: "Completed OK" }); await app.recordings.refresh();
   const media = await app.recordings.resolve(pending.id, new AbortController().signal);
-  expect(media.source).toContain("/dvrfile/"); expect(Buffer.from(media.headers!.Authorization.slice(6), "base64").toString()).toBe("viewer:private-viewer");
+  expect(media.source).toContain("/dvrfile/"); expect(Buffer.from(media.headers.Authorization.slice(6), "base64").toString()).toBe("viewer:private-viewer");
   const probe = app.calls.findLast(call => call.path === "/api/idnode/save")!;
   expect(probe.account).toBe("viewer"); expect(JSON.parse(probe.body.get("node")!)).toEqual({ uuid: app.rows[0]!.uuid });
   app.writeAllowed = true;

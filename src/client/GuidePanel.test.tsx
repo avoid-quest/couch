@@ -259,12 +259,3 @@ test("recording requests permit multi-step workflows and still honor caller canc
     await expect(call!("setup", { method: "POST", signal: controller.signal })).rejects.toThrow("Caller left");
   } finally { timeout.mockRestore(); }
 });
-
-test("a paired remote can play a running Ant recording without Tvheadend setup or capture cancellation", async () => {
-  recordingPage = { configured: false, antConfigured: true, revision: 0, checkedAt: Date.now(), error: null, jobs: [{ id: "ant-job", backend: "ant", programId: "saved", channelId: "news", channelName: "Ant recording", title: "Growing programme", start: Date.now(), end: Date.now() + 60_000, status: "running", cause: null, revision: 1, cancelRequested: false }] };
-  const { GuidePanel } = await import("./GuidePanel");
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} recordingsVersion={9} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
-  await click("Recordings"); expect(document.body.textContent).toContain("Growing programme");
-  expect(document.body.textContent).not.toContain("Cancel pending recording");
-  await click("Play on TV"); expect(recordingPosts.at(-1)?.path).toBe("/api/recordings/ant-job/play");
-});

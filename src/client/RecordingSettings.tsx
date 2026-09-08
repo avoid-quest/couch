@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AntRecordingSettings } from "./AntRecordingSettings";
 import type { RecordingRequest } from "./RecordingsPanel";
 
 type Setup = { configured: boolean; revision: number; mappings: RecordingMapping[] };
@@ -73,6 +72,5 @@ export function RecordingSettings({ request, channels, connected, onUpdated }: {
       <Button disabled={!connected || busy || !channels.some(channel => channel.id === channelId) || !backendChannels.some(channel => channel.uuid === backendChannel)}>Save channel mapping</Button>
       <ul className="space-y-2 text-sm">{setup.mappings.map(mapping => <li key={mapping.channelId} className="break-all rounded border p-2">{channels.find(channel => channel.id === mapping.channelId)?.name ?? "Saved guide channel"} · {mapping.tvgId}<br /><span className="text-muted-foreground">{mapping.backendChannel}</span></li>)}</ul>
     </form>}
-    <AntRecordingSettings key={refresh} request={request} connected={connected} onUpdated={onUpdated} />
   </section>;
 }
