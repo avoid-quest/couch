@@ -2317,7 +2317,10 @@ mod linux_mpv {
     }
 
     fn mpv_error(error: libmpv2::Error) -> Error {
-        Error::Pipeline(format!("mpv backend: {error}"))
+        Error::Pipeline(match error {
+            libmpv2::Error::Raw(libmpv2::mpv_error::LoadingFailed) => "This source could not be opened. Play another queue item or retry it.".into(),
+            _ => format!("mpv backend: {error}"),
+        })
     }
 
     fn open_gl_proc_address(_: &(), name: &str) -> *mut c_void {
@@ -2340,6 +2343,26 @@ mod linux_mpv {
             process::Command,
             time::{Duration, SystemTime, UNIX_EPOCH},
         };
+
+        #[test]
+        fn failed_native_open_has_a_useful_error() {
+            let mut mpv = Mpv::with_initializer(|init| {
+                init.set_option("vo", "null")?;
+                init.set_option("ao", "null")?;
+                Ok(())
+            }).unwrap();
+            let missing = std::env::temp_dir().join(format!("couch-missing-{}.flac", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+            mpv.command("loadfile", &[missing.to_str().unwrap(), "replace"]).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                assert!(Instant::now() < deadline, "Missing native source did not report its error");
+                if let Some(Err(error)) = mpv.wait_event(0.05) {
+                    assert_eq!(error, libmpv2::Error::Raw(libmpv2::mpv_error::LoadingFailed));
+                    assert!(mpv_error(error).to_string().contains("source could not be opened"));
+                    break;
+                }
+            }
+        }
 
         #[test]
         fn cue_bounds_limit_decoded_lossless_audio_and_reset_for_replacement() {
