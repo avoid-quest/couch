@@ -40,7 +40,7 @@ export function SearchPanel(props: Props) {
     </form>
     <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>Search other catalogs:</span>{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>{section}</Button>)}</div>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
-    {!search.query ? <Card className="p-5 text-sm text-muted-foreground">Enter a title or artist to search both libraries. Public online services are searched in their own catalogs.</Card> : <div className="space-y-6">{(["Library", "Jellyfin"] as const).map(source => <SearchSource key={source} {...props} source={source} query={search.query} attempt={search.attempt} />)}</div>}
+    {!search.query ? <Card className="p-5 text-sm text-muted-foreground">Enter a title or artist to search both libraries. Public online services are searched in their own catalogs.</Card> : <div className="space-y-6">{(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.attempt}`} {...props} source={source} query={search.query} attempt={search.attempt} />)}</div>}
   </section>;
 }
 
@@ -57,9 +57,6 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
   const trigger = useRef<HTMLButtonElement | null>(null);
   const requested = useRef("");
   const pageSize = source === "Library" ? 30 : 50;
-  // A new submitted search resets pagination before any request for that query.
-  const [submitted, setSubmitted] = useState({ query, attempt });
-  if (submitted.query !== query || submitted.attempt !== attempt) { setSubmitted({ query, attempt }); setOffset(0); setDetail(null); setNotice(""); setActionError(null); }
 
   useEffect(() => {
     if (!props.connected) { setLoading(false); return; }
