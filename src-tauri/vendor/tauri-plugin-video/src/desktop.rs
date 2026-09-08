@@ -47,6 +47,11 @@ impl<R: Runtime> DesktopVideo<R> {
         self.run_on_main(move |app| linux::open(app, payload))
     }
 
+    #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+    pub fn prepare_native(&self, payload: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> {
+        self.run_on_main(move |_| linux_mpv::prepare(payload))
+    }
+
     #[cfg(target_os = "linux")]
     pub fn control_native(
         &self,
@@ -1234,6 +1239,11 @@ mod linux_mpv {
 
     struct MpvPlayer {
         session_key: String,
+        playback_id: String,
+        playback_error: Option<String>,
+        source_headers: std::collections::BTreeMap<String, String>,
+        next: Option<crate::NativeNextSource>,
+        event_source: Option<gtk::glib::SourceId>,
         cue: bool,
         radio: bool,
         replay_gain: crate::mpv_replaygain::ReplayGain,
@@ -1268,6 +1278,9 @@ mod linux_mpv {
     impl Drop for MpvPlayer {
         fn drop(&mut self) {
             let _ = self.mpv.command("stop", &[]);
+            if let Some(source) = self.event_source.take() {
+                source.remove();
+            }
             if let Some(source) = self.update_source.take() {
                 source.remove();
             }
@@ -1407,6 +1420,23 @@ mod linux_mpv {
         mpv.disable_deprecated_events().map_err(mpv_error)?;
         mpv.disable_event(mpv_event_id::Tick).map_err(mpv_error)?;
         mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
+        // A preload hook cannot wait for the host's 250 ms snapshot poll: that
+        // can exhaust the output buffer between two already prepared tracks.
+        #[allow(deprecated)]
+        let (event_sender, event_receiver) = gtk::glib::MainContext::sync_channel::<()>(gtk::glib::Priority::DEFAULT, 1);
+        mpv.set_wakeup_callback(move || { let _ = event_sender.try_send(()); });
+        let event_source = event_receiver.attach(None, |_| {
+            PLAYER.with(|slot| {
+                if let Ok(mut slot) = slot.try_borrow_mut() {
+                    if let Some(player) = slot.as_mut() {
+                        if let Err(error) = drain_events(player) {
+                            player.playback_error = Some(error.to_string());
+                        }
+                    }
+                }
+            });
+            gtk::glib::ControlFlow::Continue
+        });
         let default_buffer = MpvBufferDefaults::read(&mpv);
         let startup_buffer = crate::mpv_startup::StartupBuffer::read(&mpv)?;
         let default_network = crate::mpv_radio::NetworkDefaults::read(&mpv)?;
@@ -1501,6 +1531,11 @@ mod linux_mpv {
 
         let player = MpvPlayer {
             session_key: String::new(),
+            playback_id: String::new(),
+            playback_error: None,
+            source_headers: std::collections::BTreeMap::new(),
+            next: None,
+            event_source: Some(event_source),
             cue: false,
             radio: false,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
@@ -1536,6 +1571,8 @@ mod linux_mpv {
     }
 
     fn load_source(player: &mut MpvPlayer, payload: &NativeOpenRequest) -> Result<()> {
+        player.next = None;
+        player.mpv.set_property("prefetch-playlist", false).map_err(mpv_error)?;
         player.mpv.command("stop", &[]).map_err(mpv_error)?;
         // Discard the stopped source's queued events before assigning a new session.
         discard_events(&mut player.mpv)?;
@@ -1595,6 +1632,9 @@ mod linux_mpv {
         )?;
         schedule_layout_render(player);
         player.session_key.clone_from(&payload.session_key);
+        player.playback_id.clone_from(&payload.session_key);
+        player.source_headers.clone_from(&payload.headers);
+        player.playback_error = None;
         player.tracks.clear();
         player.track_targets.clear();
         player.tracks_dirty = true;
@@ -1605,6 +1645,40 @@ mod linux_mpv {
         player.layout_commits.set(0);
         player.layout_sample_at.set(Instant::now());
         Ok(())
+    }
+
+    pub fn prepare(payload: crate::NativePrepareRequest) -> Result<NativePlaybackSnapshot> {
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let player = slot.as_mut().ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
+            ensure_session(&player.session_key, &payload.session_key)?;
+            drain_events(player)?;
+            player.next = None;
+            player.mpv.set_property("prefetch-playlist", false).map_err(mpv_error)?;
+            player.mpv.command("playlist-clear", &[]).map_err(mpv_error)?;
+            if player.playback_id != payload.playback_id {
+                // A queue edit that races a transition must silence the retired
+                // successor, even before its first host observation arrives.
+                player.mpv.command("stop", &[]).map_err(mpv_error)?;
+                discard_events(&mut player.mpv)?;
+                player.playback_id = payload.playback_id;
+                player.playback_error = Some("The queue changed during the track transition. Play a queue item to continue.".into());
+                return snapshot(player);
+            }
+            if let Some(next) = payload.next {
+                // mpv's prefetch reads with current demuxer options. Restrict it
+                // to identical credentials; other transitions retain EOF load.
+                if !player.loaded || player.cue || player.radio || next.headers != player.source_headers {
+                    return Err(Error::InvalidRequest("This source requires an ordinary queue transition.".into()));
+                }
+                player.mpv.set_property("prefetch-playlist", true).map_err(mpv_error)?;
+                configure_start(&player.mpv, None, false)?;
+                // append never starts an idle player. Bun owns the only next item.
+                player.mpv.command("loadfile", &[&next.uri, "append"]).map_err(mpv_error)?;
+                player.next = Some(next);
+            }
+            snapshot(player)
+        })
     }
 
     fn configure_start(mpv: &Mpv, position: Option<f64>, cue: bool) -> Result<()> {
@@ -1921,6 +1995,8 @@ mod linux_mpv {
             // changes. Destroying and immediately recreating a native GL child
             // can invalidate WebKit's transparent composited layer on Wayland,
             // leaving a live DOM whose pixels are no longer presented.
+            player.next = None;
+            player.mpv.set_property("prefetch-playlist", false).map_err(mpv_error)?;
             player.mpv.command("stop", &[]).map_err(mpv_error)?;
             discard_events(&mut player.mpv)?;
             player.widget.hide();
@@ -1993,6 +2069,8 @@ mod linux_mpv {
             property::<String>(&player.mpv, "hwdec-current").unwrap_or_else(|| "software".into());
         Ok(NativePlaybackSnapshot {
             mpv_state: Some(crate::MpvPlaybackState {
+                playback_id: Some(player.playback_id.clone()),
+                error: player.playback_error.clone(),
                 volume: property::<f64>(&player.mpv, "volume").unwrap_or(100.0) / 100.0,
                 seekable: player.loaded
                     && property::<bool>(&player.mpv, "seekable").unwrap_or(false),
@@ -2160,6 +2238,17 @@ mod linux_mpv {
             })? {
                 Event::Shutdown => return Err(Error::Pipeline("mpv shut down".into())),
                 Event::StartFile => {
+                    if let Some(next) = player.next.take() {
+                        player.playback_id = next.playback_id;
+                        player.loaded = false;
+                        player.tracks.clear();
+                        player.track_targets.clear();
+                        player.pending_subtitles.clear();
+                        player.subtitle_error = None;
+                        player.playback_error = None;
+                        crate::mpv_subtitles::reset(&player.mpv, &next.preferences)?;
+                        player.replay_gain.reset(&player.mpv, next.preferences.replay_gain)?;
+                    }
                     player.start_seen = true;
                     player.tracks_dirty = true;
                 }
@@ -2188,6 +2277,9 @@ mod linux_mpv {
                     selection?;
                 }
                 Event::VideoReconfig | Event::AudioReconfig => player.tracks_dirty = true,
+                Event::EndFile(libmpv2::mpv_end_file_reason::Error) => {
+                    player.playback_error = Some("This audio source could not be opened. Play another queue item or retry it.".into());
+                }
                 Event::EndFile(_) => {}
                 _ => {}
             }

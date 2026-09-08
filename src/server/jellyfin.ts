@@ -87,6 +87,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
   const http = axios.create({ adapter: "fetch", timeout: 10_000, maxRedirects: 0, maxContentLength: 4 * 1024 * 1024 });
   let api: Api | null = configuration ? client.createApi(configuration.url, configuration.accessToken, http) : null;
   let active: ActivePlayback | null = null;
+  let prepared: ActivePlayback | null = null;
   let generation = 0;
   let configurationGeneration = 0;
   let closed = false;
@@ -115,6 +116,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
   };
   const deactivate = () => {
     generation++;
+    prepared = null;
     const previous = active;
     active = null;
     if (!previous?.started) return reporting;
@@ -252,7 +254,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       if (current.api !== api) throw new Error("The Jellyfin connection changed. Refresh the library.");
       return { id: entryId, source: `jellyfin:${current.configuration.scope}:${item.id}`, title: item.detail && item.kind !== "Movie" ? `${item.detail} · ${item.title}`.slice(0, 300) : item.title };
     },
-    async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false) {
+    async resolve(reference: string, playbackId: string, signal?: AbortSignal, fromStart = false, preparing = false) {
       signal?.throwIfAborted();
       const [scope, itemId, extra] = reference.split(":");
       if (!scope || !itemId || extra !== undefined) throw new Error("Invalid Jellyfin item.");
@@ -279,14 +281,25 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       const media = data.MediaSources?.find(source => source.SupportsDirectPlay && !source.RequiresOpening && !source.IsInfiniteStream && source.Id);
       if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("This item needs a playback format that is not supported yet. Jellyfin direct play is currently supported; remuxing and transcoding are not enabled.");
       const { subtitles, subtitleWarning } = externalSubtitles(current.api, itemId, media);
-      active = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, last: null, observedAt: 0, reportedAt: 0 };
+      const playback = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, last: null, observedAt: 0, reportedAt: 0 };
+      if (preparing) {
+        prepared = playback;
+        signal?.addEventListener("abort", () => { if (prepared === playback) prepared = null; }, { once: true });
+      } else active = playback;
       return {
+        audioOnly: item.kind === "Audio",
         source: current.api.getUri(`/${item.kind === "Audio" ? "Audio" : "Videos"}/${itemId}/stream`, { Static: true, MediaSourceId: media.Id, PlaySessionId: data.PlaySessionId, DeviceId: row.device_id }),
         headers: { Authorization: current.api.authorizationHeader },
         ...(subtitles.length ? { subtitles } : {}),
         ...(subtitleWarning ? { subtitleWarning } : {}),
         ...(startPosition > 0 ? { startPosition } : {}),
       };
+    },
+    activatePrepared(playbackId: string) {
+      if (prepared?.playbackId !== playbackId) return;
+      const next = prepared;
+      void deactivate();
+      active = next;
     },
     observe(player: PlayerState) {
       if (player.status === "unavailable") return deactivate();

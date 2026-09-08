@@ -253,6 +253,10 @@ pub struct NativePlaybackSnapshot {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MpvPlaybackState {
+    #[serde(default)]
+    pub playback_id: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
     pub volume: f64,
     pub seekable: bool,
     pub ended: bool,
@@ -267,6 +271,25 @@ pub struct MpvPlaybackState {
     #[serde(default)]
     pub now_playing: Option<MpvNowPlaying>,
     pub chapters: Vec<MpvChapter>,
+}
+
+/// One successor selected by the host queue. Credentials remain native-only.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeNextSource {
+    pub playback_id: String,
+    pub uri: String,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    pub preferences: NativePlaybackPreferences,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePrepareRequest {
+    pub session_key: String,
+    pub playback_id: String,
+    pub next: Option<NativeNextSource>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
