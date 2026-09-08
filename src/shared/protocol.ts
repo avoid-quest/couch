@@ -47,6 +47,7 @@ export type SessionState = {
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;
+  forLaterVersion?: number;
   controllerVersion?: number;
   installationName?: string;
   setupStep?: import("./setup").SetupStep;

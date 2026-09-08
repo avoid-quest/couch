@@ -7,6 +7,7 @@ import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
 import { createId, useSession, type Credentials } from "./session";
 import { knownConnection } from "./connection";
 import { BrowseHome } from "./BrowseHome";
+import { ForLaterSection } from "./ForLaterSection";
 import type { HistoryPlayback } from "./HistoryPanel";
 import { SearchPanel } from "./SearchPanel";
 import { JellyfinPanel } from "./JellyfinPanel";
@@ -294,13 +295,14 @@ export function App() {
 
               <Tabs value={section} onValueChange={changeSection} className="media-browser">
                 <TabsList className="source-nav" aria-label="Media sources">
-                  {["Home", "Queue", "Search", "Online", "Library", "Guide", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name === "Home" ? "Browse" : name === "Queue" && !nativeHost ? "On TV" : name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
+                  {["Home", "Queue", "Search", "Online", "Library", "Guide", "Radio", "Jellyfin", "For later"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name === "Home" ? "Browse" : name === "Queue" && !nativeHost ? "On TV" : name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
                 </TabsList>
                 {visited.has("Home") && <TabsContent value="Home" forceMount hidden={section !== "Home"}><BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && (!nativeHost || tv.browsing)} onBrowse={browseSection} onPlay={playHistory} /></TabsContent>}
                 <TabsContent value="Queue" forceMount hidden={section !== "Queue"}>
                   <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </TabsContent>
                 {visited.has("Search") && <TabsContent value="Search" forceMount hidden={section !== "Search"}><SearchPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search" && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} /></TabsContent>}
+                {visited.has("For later") && <TabsContent value="For later" forceMount hidden={section !== "For later"}><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.forLaterVersion ?? 0} /></TabsContent>}
                 {visited.has("Guide") && <TabsContent value="Guide" forceMount hidden={section !== "Guide"}><GuidePanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} host={nativeHost} version={state?.iptvVersion ?? 0} recordingsVersion={state?.recordingsVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} currentSource={state?.queue.find(entry => entry.id === state.currentEntryId)?.source} onGoLive={() => { if (state?.player.playbackId) void run({ type: "goLive", playbackId: state.player.playbackId }); }} active={section === "Guide"} /></TabsContent>}
                 {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={(item, playNow, quality) =>
                   run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(quality ? { quality } : {}), playNow })

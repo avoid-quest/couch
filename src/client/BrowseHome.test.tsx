@@ -54,8 +54,8 @@ test("browse home offers only unfinished local history and preserves resume and 
   await act(async () => button("Resume Halfway home").click());
   await act(async () => button("Play Halfway home from start").click());
   expect(played).toEqual([[unfinished, { fromStart: false }], [unfinished, { fromStart: true }]]);
-  for (const source of ["Search", "Library", "Online", "Guide", "Radio", "Jellyfin"]) await act(async () => button(source).click());
-  expect(browsed).toEqual(["Search", "Library", "Online", "Guide", "Radio", "Jellyfin"]);
+  for (const source of ["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"]) await act(async () => button(source).click());
+  expect(browsed).toEqual(["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"]);
 });
 test("hidden home does not fetch and unavailable playback does not prevent browsing", async () => {
   await renderHome(true, false); expect(requests).toEqual([]);
@@ -86,6 +86,10 @@ test("a paired remote starts with its current TV session and can browse and sear
   await act(async () => searchShortcut.click());
   expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-selected")).toBe("true");
   expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
+  request.mockImplementation((async () => Response.json({ items: [{ id: "saved", title: "Saved evening film" }] })) as typeof fetch);
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-source="For later"]')!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true })));
+  expect(document.querySelector('[data-source="For later"]')?.getAttribute("aria-selected")).toBe("true");
+  expect(document.querySelector('[aria-label="Saved for later"]')?.textContent).toContain("Saved evening film");
   await act(async () => button("On TV", document.querySelector('[aria-label="Controller views"]')!).click());
   expect(document.querySelector(".app-shell")?.classList.contains("remote-session")).toBe(true);
   expect(state.queue).toHaveLength(1); expect(played).toEqual([]);

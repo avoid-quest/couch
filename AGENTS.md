@@ -1,3 +1,5 @@
 - Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
 - Prefer first class solutions. Check official docs when uncertain.
 - Before PR operations, read `gh-stack` and `unslop` if available. Open PRs ready for review.
+- Run tests and builds on this Mac, using local Docker for the T480's Linux package. Sign and serve updates through the existing Mac feed.
+- Keep GitHub Actions disabled and stay on the free tier unless the owner explicitly changes this policy.

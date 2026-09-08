@@ -22,7 +22,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, playing, ac
     <HistoryPanel key={state?.activeProfile.id} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.libraryVersion ?? 0} onPlay={onPlay} continueOnly active={active} />
     <nav className="space-y-3" aria-label="Browse media">
       <h2>Find something to play</h2>
-      <div className="flex flex-wrap gap-3">{["Search", "Library", "Online", "Guide", "Radio", "Jellyfin"].map(name => <Button key={name} variant={name === "Search" ? "default" : "outline"} className="min-h-12" onClick={() => onBrowse(name)}>{name}</Button>)}</div>
+      <div className="flex flex-wrap gap-3">{["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"].map(name => <Button key={name} variant={name === "Search" ? "default" : "outline"} className="min-h-12" onClick={() => onBrowse(name)}>{name}</Button>)}</div>
     </nav>
   </section>;
 }

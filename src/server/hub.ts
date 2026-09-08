@@ -28,6 +28,7 @@ import { createProviders } from "./providers";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
+import { createForLater } from "./for-later";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers, settingField } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -169,6 +170,33 @@ export function createHub(options: HubOptions) {
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
+  const forLater = createForLater({
+    databasePath: options.databasePath, onChange: () => session.invalidate("forLater"),
+    lookup: async reference => {
+      if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
+      if (reference.kind === "queue") {
+        const entry = session.state.queue.find(item => item.id === reference.id);
+        if (!entry) throw new ControllerError("This item is no longer in the queue.", 404);
+        return entry;
+      }
+      const item = library.getItem(reference.id);
+      if (!item) throw new ControllerError("This item is no longer in the library.", 404);
+      return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) };
+    },
+    prepare: async entry => {
+      if (entry.source.startsWith("library:")) await library.getPlayable(entry.source.slice(8));
+      if (entry.source.startsWith("jellyfin:")) {
+        const current = await jellyfin.entry(entry.source.split(":")[2]!, entry.id);
+        if (current.source !== entry.source) throw new ControllerError("This item belongs to another Jellyfin server or account. Save it again from the current library.", 409);
+      }
+      if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
+    },
+    reservePlay: () => session.reservePlay(),
+    enqueue: (entry, intent, authorize) => {
+      session.command({ type: "enqueue", entry }, authorize);
+      if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize);
+    },
+  });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
     session.invalidate("controller");
@@ -346,6 +374,7 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
         if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
         if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize));
         if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
         return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
@@ -476,6 +505,7 @@ export function createHub(options: HubOptions) {
     providers.close();
     subtitles.close();
     playlists.close();
+    forLater.close();
     collections.close();
     radioProgramme?.close();
     radio.close();

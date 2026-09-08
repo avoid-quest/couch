@@ -153,7 +153,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
         <Button variant="ghost" size="icon" className="queue-play" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
         {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork" />}
         <div className="queue-entry-copy"><span className="queue-entry-title" title={entry.title}>{entry.title}</span><span className="source-label" title={label}>{current && <span className="queue-current-label">On TV · </span>}{label}</span></div>
-        <QueueActions entry={entry} index={index} queue={queue} connected={connected} canPlay={available} run={run} />
+        <QueueActions credentials={credentials} entry={entry} index={index} queue={queue} connected={connected} canPlay={available} run={run} />
       </li>;
     })}</ol> : <div className="queue-empty"><ListMusic aria-hidden="true" /><h3>What should play first?</h3><p>Browse your library, find a station, or add a link.</p></div>}
   </section>;
