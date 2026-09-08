@@ -87,7 +87,7 @@ test("a paired remote starts with its current TV session and can browse and sear
   expect(document.querySelector(".session-home .media-title")?.textContent).toBe("Evening radio");
   expect(document.querySelector(".mode-switch, .source-nav")).toBeNull();
   const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Saved", "Up next", "Settings"]);
+  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Library", "Saved", "Up next", "Settings"]);
   await act(async () => button("Find something").click());
   expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
