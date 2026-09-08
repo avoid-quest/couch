@@ -27,7 +27,7 @@ const frontend = await Bun.build({
   entrypoints: ["src/client/index.html"],
   outdir: "dist",
   target: "browser",
-  define: { "process.env.COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
+  define: { "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
   minify: true,
   plugins: [tailwind],
 });
@@ -42,7 +42,7 @@ const server = await Bun.build({
   },
   minify: true,
   plugins: [tailwind],
-  define: { "process.env.NODE_ENV": JSON.stringify("production"), "process.env.COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
+  define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
 console.log(`Built frontend and Bun sidecar for ${target}`);
