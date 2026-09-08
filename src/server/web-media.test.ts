@@ -286,3 +286,50 @@ test.skipIf(!Bun.which("yt-dlp"))("actual yt-dlp passes DASH height limits to na
     }
   } finally { server.stop(true); }
 }, 35_000);
+
+test("Bandcamp recovery requires an aged selected MP3, HTTP 410, and fresh identical media", async () => {
+  const { spyOn } = await import("bun:test");
+  const old = { url: "https://t4.bcbits.com/stream/track/mp3-128?ts=1&token=old-secret", protocol: "https", vcodec: "none", acodec: "mp3", extractor: "Bandcamp", format_id: "mp3-128", id: "track", duration: 120 };
+  const fresh = { ...old, url: `https://t4.bcbits.com/stream/track/mp3-128?ts=${Math.floor(Date.now() / 1000) + 1000}&token=fresh-secret` };
+  const { directory, resolve } = await fixture("console.log(await Bun.file(import.meta.dir + '/info.json').text());");
+  await Bun.write(join(directory, "info.json"), JSON.stringify(old));
+  const media = await resolve("https://artist.bandcamp.com/track/track");
+  expect(media.expiry?.at).toBe(1000);
+  await Bun.write(join(directory, "info.json"), JSON.stringify(fresh));
+  const fetcher = spyOn(globalThis, "fetch").mockResolvedValue(new Response("Gone", { status: 410 }));
+  try {
+    expect(await media.expiry!.recover(new AbortController().signal)).toMatchObject({ source: fresh.url });
+    expect(fetcher.mock.calls[0]).toMatchObject([old.url, { headers: { Range: "bytes=0-0" }, redirect: "error" }]);
+    for (const status of [200, 206, 401, 403, 404, 500]) {
+      fetcher.mockResolvedValue(new Response("Other", { status }));
+      expect(await media.expiry!.recover(new AbortController().signal)).toBeNull();
+    }
+    fetcher.mockRejectedValue(new Error(old.url));
+    await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("Could not confirm stream expiry");
+    fetcher.mockResolvedValue(new Response("Gone", { status: 410 }));
+    for (const changed of [{ ...fresh, url: fresh.url.replace("/track/", "/different/") }, { ...fresh, duration: 200 }, old]) {
+      await Bun.write(join(directory, "info.json"), JSON.stringify(changed));
+      await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("same track");
+    }
+    const cancelled = new AbortController();
+    cancelled.abort();
+    fetcher.mockClear();
+    await expect(media.expiry!.recover(cancelled.signal)).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+    await Bun.write(join(directory, "info.json"), JSON.stringify(fresh));
+    const current = await resolve("https://artist.bandcamp.com/track/track");
+    expect(await current.expiry!.recover(new AbortController().signal)).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally { fetcher.mockRestore(); }
+});
+
+test("other providers, formats and deceptive hosts cannot enable Bandcamp recovery", async () => {
+  const base = { url: "https://t4.bcbits.com/stream/track/mp3-128?ts=1&token=private", protocol: "https", vcodec: "none", acodec: "mp3", extractor: "Bandcamp", format_id: "mp3-128", id: "track", duration: 120 };
+  const { directory, resolve } = await fixture("console.log(await Bun.file(import.meta.dir + '/info.json').text());");
+  for (const info of [{ ...base, extractor: "Generic" }, { ...base, format_id: "other" }, { ...base, url: base.url.replace("t4.bcbits.com", "t4.bcbits.com.evil.example") }, { ...base, is_live: true }, { ...base, url: base.url.replace("ts=1", "ts=invalid") }]) {
+    await Bun.write(join(directory, "info.json"), JSON.stringify(info));
+    expect((await resolve("https://artist.bandcamp.com/track/track")).expiry).toBeUndefined();
+  }
+  await Bun.write(join(directory, "info.json"), JSON.stringify(base));
+  expect((await resolve("https://bandcamp.com.evil.example/track/track")).expiry).toBeUndefined();
+});

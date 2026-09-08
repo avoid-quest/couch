@@ -112,6 +112,7 @@ impl Player {
                 audio_source,
                 max_video_height,
                 start_position,
+                paused,
                 segment,
                 preferences,
                 subtitles,
@@ -133,6 +134,7 @@ impl Player {
                     audio_source.as_deref(),
                     max_video_height,
                     start_position,
+                    paused,
                     &preferences,
                     &subtitles,
                     radio,
@@ -262,6 +264,7 @@ impl Player {
         audio_source: Option<&str>,
         max_video_height: Option<u16>,
         start_position: Option<f64>,
+        paused: bool,
         preferences: &PlaybackPreferences,
         subtitles: &[ExternalSubtitle],
         radio: bool,
@@ -288,7 +291,7 @@ impl Player {
             "y": self.rect.y,
             "width": self.rect.width.max(1.0),
             "height": self.rect.height.max(1.0),
-            "autoplay": true,
+            "autoplay": !paused,
             "volume": self.state.volume / 100.0
         }))
         .map_err(|error| error.to_string())?;
@@ -506,6 +509,7 @@ impl Player {
         _: Option<&str>,
         _: Option<u16>,
         _: Option<f64>,
+        _: bool,
         _: &PlaybackPreferences,
         _: &[ExternalSubtitle],
         _: bool,
