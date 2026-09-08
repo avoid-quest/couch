@@ -18,7 +18,7 @@ import type { ProviderId, VideoQuality } from "../shared/providers";
 import { SearchOnlineResults, providerNames } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { QualitySelect } from "./QualitySelect";
-import { useEnqueueVideoQuality } from "./video-quality";
+import { useEnqueueVideoQuality, videoQualityLabels } from "./video-quality";
 import { createId } from "./session";
 
 type Source = "Library" | "Jellyfin";
@@ -78,7 +78,7 @@ export function SearchPanel(props: Props) {
       <Button variant="ghost" type="submit" disabled={!props.connected}>Search</Button>
     </form>
     <p className="text-sm text-muted-foreground">Search your sources or paste a media link.</p>
-    <p className="text-sm text-muted-foreground">Video default: {props.defaultQuality === "auto" ? "Auto" : props.defaultQuality ?? "Auto"}. <Button variant="link" onClick={() => props.onBrowse("Settings")}>Change in Settings</Button> You can choose another quality before adding a video.</p>
+    <p className="text-sm text-muted-foreground">Video default: {videoQualityLabels[props.defaultQuality ?? "auto"]}. <Button variant="link" onClick={() => props.onBrowse("Settings")}>Change in Settings</Button> You can choose another quality before adding a video.</p>
     <nav className="search-scopes" aria-label="Search sources">{scopes.map(scope => <Button key={scope} variant={filter === scope ? "secondary" : "ghost"} aria-pressed={filter === scope} onClick={() => setFilter(scope)}>{scope}</Button>)}</nav>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
     {!search.query ? <Card className="search-start"><h2>What would you like to play?</h2><p>Find videos, music and radio, including media saved on your TV. Paste a Bandcamp album or track link to open it.</p><div className="flex flex-wrap gap-2">{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>{section === "Guide" ? "Live TV" : `Browse ${section.toLowerCase()}`}</Button>)}</div></Card> : <>

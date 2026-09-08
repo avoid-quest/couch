@@ -28,9 +28,9 @@ async function search(query: string) {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await flush();
 }
-async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost") {
+async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost", defaultQuality: "auto" | "1080p" = "1080p") {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality="1080p" onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  await act(async () => root.render(<SearchPanel origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
   await flush();
 }
 beforeEach(async () => {
@@ -280,4 +280,12 @@ test("RaiPlay searches include matching live channels even when the programme ca
   await render(); await search("rai1");
   expect(button("Play Rai 1")).toBeDefined();
   await click("Play Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
+});
+
+test("Search explains the recommended default before a query and opens its Settings override", async () => {
+  await render(true, true, true, 1, 1, "http://localhost", "auto");
+  expect(document.body.textContent).toContain("Video default: 1080p (recommended)");
+  await click("Change in Settings");
+  expect(browsed).toEqual(["Settings"]);
+  expect(commands).toEqual([]);
 });
