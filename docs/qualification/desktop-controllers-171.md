@@ -81,9 +81,4 @@ in its SSH configuration. CrossOver is installed, but was not used as Windows
 acceptance. The browser inventory offered only the Codex in-app browser;
 native Safari was available through the application API.
 
-The owner or coordinator must provide a real Windows machine or VM with Edge
-and access to the intended Ubuntu TV. Verify the documented app install/pin
-steps, named pairing, ordinary controller authority, library/Search and queue
-use, TV play/pause/seek, and reconnect after app and TV restarts. Record Windows
-and Edge versions and the final TV build. Until that evidence and the target
-Mac-to-TV journey exist, issue 171 remains open.
+The [owner deferred Windows verification for this delivery](https://github.com/avoid-quest/couch/issues/171#issuecomment-5583604794) because no Windows PC is available. Windows and Edge remain unqualified; this check is not a delivery prerequisite. A future Windows check should cover app installation, pairing, controller authority, library/Search, queue, TV playback and reconnect. The final Mac-to-TV journey remains in scope before issue 171 can close.
