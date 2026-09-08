@@ -18,6 +18,8 @@ The native run exposed an actual recovery defect: setting the unchanged `audio-d
 
 Local evidence is retained under `/tmp/couch-sound-route-20260908/.artifacts/sound-native/`: `run-final.log`, `sound-routing-result.json`, `fallback-monitor.pcm`, `build-info.json`, binary hashes and `bin-4a166ef/`. The container was stopped after qualification. No T480 settings or user data changed.
 
+The same exact binaries subsequently passed 84 native/HTTP continuity checks in the coordinator's gapless run, including local, mounted and Jellyfin boundaries, failed-source controls and restart. All three normal sources measured zero boundary shift and zero inserted silence.
+
 Focused source checks passed for routing/profile rollback, administrative revocation, stable identities, actual volume, paused provider reports, canceled source recovery, and loss across queued adoption. The native build and 31 application Rust checks passed; the integrated native failed-open regression also passed.
 
 ## Remaining physical acceptance
