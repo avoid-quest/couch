@@ -12,6 +12,7 @@ import { QualityOptions } from "./QualitySelect";
 import { useEnqueueVideoQuality } from "./video-quality";
 
 type Props = {
+  showHeading?: boolean;
   initialItem?: ProviderItem;
   origin: string;
   token: string;
@@ -61,7 +62,7 @@ export function ProviderPanel(props: Props) {
     return ok;
   };
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
-    <h2 className="text-2xl font-semibold tracking-tight">Online media</h2>
+    {props.showHeading !== false && <h2 className="text-2xl font-semibold tracking-tight">Online media</h2>}
     <Tabs value={provider} onValueChange={value => { setInitialItem(undefined); setProvider(value as ProviderId); }}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
       <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} initialItem={initialItem} onEnqueue={enqueue} provider={provider} quality={quality} onQualityChange={setQuality} onEnqueuePlaylist={async (url, playNow) => { const ok = await props.onEnqueuePlaylist(url, playNow, quality); if (ok) resetQuality(); return ok; }} /></TabsContent>
