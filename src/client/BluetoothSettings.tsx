@@ -5,8 +5,18 @@ import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import type { SoundState } from "../shared/sound";
 import { createId } from "./session";
 
+type ListedBluetoothState = Omit<BluetoothState, "devices"> & { devices: (BluetoothState["devices"][number] & { available: boolean })[] };
+
+function updateDevices(previous: ListedBluetoothState | null, next: BluetoothState, reset = false): ListedBluetoothState {
+  // BlueZ inventory order changes on every read. Keep each result in its first-seen position.
+  const devices = new Map((previous?.devices ?? []).filter(device => !reset || device.paired).map(device => [device.address, { ...device, available: false, connected: false }]));
+  for (const device of next.devices) devices.set(device.address, { ...device, available: true });
+  if (next.operation?.kind === "forget" && next.operation.status === "finished" && next.operation.device && (previous?.operation?.id !== next.operation.id || previous.operation.status !== "finished")) devices.delete(next.operation.device);
+  return { ...next, devices: [...devices.values()] };
+}
+
 export function BluetoothSettings({ credentials: { origin, token }, connected }: { credentials: { origin: string; token: string }; connected: boolean }) {
-  const [state, setState] = useState<BluetoothState | null>(null);
+  const [state, setState] = useState<ListedBluetoothState | null>(null);
   const [sound, setSound] = useState<SoundState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -25,7 +35,7 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
         const response = await fetch(`${origin}/api/bluetooth`, { headers, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(7_000)]) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
-        if (!controller.signal.aborted) setState(result);
+        if (!controller.signal.aborted) setState(previous => updateDevices(previous, result));
         const audio = await fetch(`${origin}/api/sound`, { headers, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]) });
         if (audio.ok) { const result = await audio.json(); if (!controller.signal.aborted) setSound(result); }
       } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Bluetooth did not answer."); }
@@ -56,7 +66,7 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
       if (controller.signal.aborted) return;
       if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
       const result = await send(action);
-      if (!controller.signal.aborted) setState(result);
+      if (!controller.signal.aborted) setState(previous => updateDevices(previous, result, action.op === "scan"));
     } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Bluetooth request failed."); }
     finally { if (!controller.signal.aborted) setPending(false); }
   }
@@ -86,8 +96,8 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
       const outputs = sound?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
       const selected = sound?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound?.routing?.selectedOutput);
       return <li key={device.address} className="flex flex-wrap items-center justify-between gap-3 rounded border p-3">
-        <div><p>{device.name}</p><p className="text-sm text-muted-foreground">{device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""} · {device.address}</p></div>
-        <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => change({ op: device.connected ? "disconnect" : device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled} aria-label={`Forget ${device.name}`} onClick={() => change({ op: "forget", device: device.address })}>Forget</Button>}</div>
+        <div><p>{device.name}</p><p className="text-sm text-muted-foreground">{!device.available ? "Not currently available · Search again" : device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""} · {device.address}</p></div>
+        <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => change({ op: device.connected ? "disconnect" : device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => change({ op: "forget", device: device.address })}>Forget</Button>}</div>
       </li>;
     })}</ul>
     <p className="text-sm text-muted-foreground">For speakers and headphones, choose the connected output in Sound. Connecting does not change your sound output or start playback.</p>
