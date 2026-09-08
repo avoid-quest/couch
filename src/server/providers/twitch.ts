@@ -44,6 +44,18 @@ function channel(value: unknown): ProviderItem | null {
   };
 }
 
+function video(value: unknown): ProviderItem | null {
+  if (!object(value) || typeof value.id !== "string" || !/^\d{1,20}$/.test(value.id) || !text(value.title)) return null;
+  const url = `https://www.twitch.tv/videos/${value.id}`;
+  const date = typeof value.publishedAt === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.publishedAt) ? value.publishedAt.slice(0, 10) : "";
+  return {
+    id: providerItemId("twitch", url), provider: "twitch", kind: "media", url,
+    title: text(value.title), live: false, thumbnail: thumbnail(value.previewThumbnailURL),
+    subtitle: ["Past broadcast", date].filter(Boolean).join(" · "),
+    ...(typeof value.lengthSeconds === "number" && Number.isSafeInteger(value.lengthSeconds) && value.lengthSeconds > 0 ? { duration: value.lengthSeconds } : {}),
+  };
+}
+
 function category(value: unknown): ProviderItem | null {
   if (!object(value) || typeof value.slug !== "string" || !categoryPattern.test(value.slug) || !text(value.name)) return null;
   const url = `https://www.twitch.tv/directory/category/${encodeURIComponent(value.slug)}`;
@@ -86,7 +98,7 @@ function destination(input: string) {
     if (["/directory", "/directory/categories"].includes(path)) return { kind: "categories" } as const;
     const slug = path.startsWith("/directory/category/") ? path.slice("/directory/category/".length) : "";
     if (categoryPattern.test(slug)) return { kind: "category", slug } as const;
-    const login = path.slice(1);
+    const login = path.slice(1).replace(/\/videos$/, "");
     if (loginPattern.test(login) && !["directory", "videos", "search", "settings", "downloads", "login", "signup", "subscriptions"].includes(login.toLowerCase())) {
       return { kind: "channel", login: login.toLowerCase() } as const;
     }
@@ -115,11 +127,14 @@ export async function browseTwitch(request: BrowseRequest, signal?: AbortSignal)
   }
   const target = request.url ? destination(request.url) : { kind: "live" } as const;
   if (target.kind === "channel") {
-    const data = await query(`query Channel($login:String!) { user(login:$login) { ${channelFields} stream { ${streamFields} } } }`, { login: target.login }, signal);
+    // Archive cursors trigger Twitch integrity checks. Request recent broadcasts
+    // in one bounded public query rather than offering pagination that fails.
+    const data = await query(`query Channel($login:String!) { user(login:$login) { ${channelFields} stream { ${streamFields} } videos(first:50,type:ARCHIVE,sort:TIME) { edges { node { id title lengthSeconds previewThumbnailURL(width:640,height:360) publishedAt } } } } }`, { login: target.login }, signal);
     if (data.user === null) throw new ProviderError("Twitch channel not found.", 404);
     const item = channel(data.user);
-    if (!item) throw unavailable();
-    return { title: item.title, items: [item] };
+    if (!item || !object(data.user)) throw unavailable();
+    const broadcasts = items(data.user.videos, video);
+    return { title: item.title, items: [item, ...broadcasts] };
   }
   if (target.kind === "categories") {
     const data = await query(`{ games(first:20) { edges { node { ${categoryFields} } } } }`, {}, signal);

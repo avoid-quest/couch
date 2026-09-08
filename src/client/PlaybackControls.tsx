@@ -35,12 +35,13 @@ export function sourceLabel(source: string) {
   } catch { return "Media"; }
 }
 
-export function PlaybackControls({ state, credentials, connected, run, onExpand, presentation = "default" }: {
+export function PlaybackControls({ state, credentials, connected, run, onExpand, onRemote, presentation = "default" }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
   run: (action: Action) => Promise<boolean>;
   onExpand?: () => void;
+  onRemote?: () => void;
   presentation?: "default" | "session";
 }) {
   const player = state?.player;
@@ -67,10 +68,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     <RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
       onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>
   </div>;
-  const settings = <div className="player-settings">
-    {player && state?.preferences && <PlaybackSettings player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
-    {!session && <WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} />}
-  </div>;
+  const settings = player && state?.preferences && <PlaybackSettings player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
   return <div className={`player-controls${session ? " session-playback" : ""}`}>
     {!session && <div className="now-heading">
@@ -113,12 +111,12 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
         {hasNext && <Button variant="ghost" size="icon" className="icon-button" aria-label="Next in queue" title="Next in queue" disabled={!transportReady}
           onClick={() => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" /></Button>}
         {stop}
+        {settings}
         {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp aria-hidden="true" /></Button>}
       </div>
-      {volume}
+      {session ? <div className="session-volume-row">{volume}{onRemote && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
-    {session && hasMedia && settings}
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
-    {!session && settings}
+    {!session && <div className="player-settings">{!hasMedia && settings}<WatchingProfile origin={credentials.origin} token={credentials.token} connected={connected} profile={state?.activeProfile} playing={active} version={state?.libraryVersion ?? 0} /></div>}
   </div>;
 }

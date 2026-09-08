@@ -33,7 +33,7 @@ import { SetupProgress } from "./SetupProgress";
 
 type ClaimCode = { code: string; expiresAt: number };
 const settingsGroups = [
-  { id: "profile", title: "Watching profile", description: "Saved audio, subtitle and playback defaults", section: "playback" },
+  { id: "profile", title: "Profile defaults", description: "Saved audio, subtitle and playback defaults", section: "playback" },
   { id: "device", title: "This device", description: "Appearance, connection and online-video quality", section: "appearance" },
   { id: "tv", title: "TV & sources", description: "Sources, shared TV settings and administrator access", section: "general" },
 ];
@@ -259,8 +259,8 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>
-            <p id="tv-name-help" className="text-muted-foreground">Applies now to the TV and every connected remote.</p>
-            <Button type="submit" className="min-h-11" disabled={!canWrite || !draftName.trim() || draftName.trim() === savedName}>{pending ? "Saving…" : "Save name"}</Button>
+            <p id="tv-name-help" className="text-muted-foreground">Name shown for this TV.</p>
+            <Button type="submit" className="min-h-11" disabled={!canWrite || !draftName.trim() || draftName.trim() === savedName}>{pending ? "Saving…" : "Save TV name"}</Button>
           </form> : <div className="space-y-1">
             <p className="font-medium">TV name</p><p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
             <p className="text-muted-foreground">{host ? "Use an administrator remote to change this TV's settings." : credentials ? "An administrator can change this TV's name." : "Pair this browser to control the TV."}</p>

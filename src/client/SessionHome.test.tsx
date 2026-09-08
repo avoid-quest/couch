@@ -10,6 +10,7 @@ const actions: Action[] = [], browsed: string[] = [];
 const state: SessionState = {
   queue: ["past", "current", "next"].map(id => ({ id, title: id, source: `library:${id}` })), currentEntryId: "current", queueCursorEntryId: "current",
   activeProfile: { id: "household", name: "Household" },
+  preferences: { profile: { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1, replayGain: "off" }, device: { audioDelay: 0 } },
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
@@ -141,4 +142,35 @@ test("removed playback controls restore focus to a useful action without taking 
   button("Stop playback").focus();
   await render(idle, true, false);
   expect(document.activeElement).toBe(document.body);
+});
+
+
+test("settings gear and Remote stay with the player and do not send playback commands", async () => {
+  await render();
+  const settings = button("Playback settings");
+  expect(settings.textContent).toBe("");
+  expect(settings.querySelector("svg")).not.toBeNull();
+  expect(settings.closest(".transport-buttons")).toBe(button("Stop playback").closest(".transport-buttons"));
+  expect(button("Remote").querySelector("svg")).not.toBeNull();
+  expect(button("Remote").closest(".transport-row")).not.toBeNull();
+  expect(document.body.textContent).not.toContain("TV navigation controls");
+  settings.focus();
+  await render({ ...state, player: { ...state.player, position: 13 } });
+  expect(button("Playback settings")).toBe(settings);
+  expect(document.activeElement).toBe(settings);
+  await act(async () => settings.click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Playback settings");
+  await act(async () => button("Done").click());
+  await act(async () => new Promise(resolve => setTimeout(resolve, 10)));
+  expect(document.activeElement).toBe(settings);
+  await act(async () => button("Remote").click());
+  expect(browsed).toEqual(["Remote"]);
+  expect(actions).toEqual([]);
+
+  await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  expect(button("Playback settings")).toBeUndefined();
+  expect(button("Remote").disabled).toBe(false);
+  expect(button("Remote").closest(".session-idle-actions")).not.toBeNull();
+  await act(async () => button("Remote").click());
+  expect(browsed).toEqual(["Remote", "Remote"]);
 });

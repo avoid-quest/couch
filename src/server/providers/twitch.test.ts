@@ -9,7 +9,7 @@ const liveStream = {
 };
 const liveChannel = {
   login: "lofigirl", displayName: "LofiGirl", description: "Study - Chill - Sleep - Repeat",
-  profileImageURL: "https://static-cdn.jtvnw.net/jtv_user_pictures/lofigirl.png", stream: liveStream,
+  profileImageURL: "https://static-cdn.jtvnw.net/jtv_user_pictures/lofigirl.png", stream: liveStream, videos: { edges: [], pageInfo: { hasNextPage: false } },
 };
 const offlineChannel = { ...liveChannel, login: "lofigirlie", displayName: "LofiGirlie", stream: null };
 const searchResult = (channels: unknown[], cursor = "", hasNextPage = false) => ({
@@ -87,6 +87,63 @@ test("direct channel lookup keeps a stable item ID when a channel goes offline",
   expect(JSON.parse(String(fetch.mock.calls[0]![1]?.body)).variables).toEqual({ login: "lofigirl" });
 });
 
+const broadcast = {
+  id: "2868067605", title: "Legacy of Kain: Defiance w/Sabaku #5", lengthSeconds: 7472,
+  previewThumbnailURL: "https://static-cdn.jtvnw.net/cf_vods/example/thumb-640x360.jpg", publishedAt: "2026-09-07T19:33:40Z",
+};
+const videoCursor = "2846192531|13831|2026-08-14T19:01:51Z|8538";
+const channelVideos = (nodes: unknown[], cursor = videoCursor, hasNextPage = true) => ({ data: { user: {
+  ...offlineChannel, videos: { edges: nodes.map(node => ({ node, cursor })), pageInfo: { hasNextPage } },
+} } });
+
+test("offline channel opens available past broadcasts with artwork and duration", async () => {
+  const fetch = respond(channelVideos([broadcast]));
+  const page = await browseTwitch({ url: "https://www.twitch.tv/lofigirlie/videos?filter=archives" });
+  expect(page.items[0]).toMatchObject({ kind: "channel", live: false });
+  expect(page.items[1]).toMatchObject({ kind: "media", live: false, title: broadcast.title,
+    url: "https://www.twitch.tv/videos/2868067605", duration: 7472, subtitle: "Past broadcast · 2026-09-07",
+    thumbnail: broadcast.previewThumbnailURL,
+  });
+  expect(page.nextCursor).toBeUndefined();
+  const payload = JSON.parse(String(fetch.mock.calls[0]![1]?.body));
+  expect(payload.variables).toEqual({ login: "lofigirlie" });
+  expect(payload.query).toContain("type:ARCHIVE,sort:TIME");
+});
+
+test("live channels keep live playback alongside distinct archived broadcasts", async () => {
+  const response = channelVideos([broadcast]);
+  const user = { ...response.data.user, stream: liveStream };
+  respond({ data: { user } });
+  const page = await browseTwitch({ url: "https://www.twitch.tv/lofigirlie" });
+  expect(page.items[0]).toMatchObject({ kind: "media", live: true, url: "https://www.twitch.tv/lofigirlie" });
+  expect(page.items[1]).toMatchObject({ kind: "media", live: false, url: "https://www.twitch.tv/videos/2868067605" });
+  expect(page.items[0]!.id).not.toBe(page.items[1]!.id);
+});
+
+test("archive pagination is not offered when Twitch requires an integrity challenge", async () => {
+  const fetch = respond(channelVideos([broadcast]));
+  const url = "https://www.twitch.tv/lofigirlie";
+  expect((await browseTwitch({ url })).nextCursor).toBeUndefined();
+  expect(JSON.parse(String(fetch.mock.calls[0]![1]?.body)).query).toContain("videos(first:50");
+  await expect(browseTwitch({ url, cursor: videoCursor })).rejects.toMatchObject({ status: 400 });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("malformed broadcast entries are skipped without inventing media", async () => {
+  respond(channelVideos([{ ...broadcast, id: "../private" }, null, { ...broadcast, title: "" }]));
+  const page = await browseTwitch({ url: "https://www.twitch.tv/lofigirlie" });
+  expect(page.items).toHaveLength(1);
+  expect(page.nextCursor).toBeUndefined();
+});
+
+test("broadcast metadata stays bounded and foreign artwork is omitted", async () => {
+  respond(channelVideos([{ ...broadcast, lengthSeconds: -5, previewThumbnailURL: "https://example.com/a.jpg", publishedAt: "bad" }], "", false));
+  const item = (await browseTwitch({ url: "https://www.twitch.tv/lofigirlie" })).items[1]!;
+  expect(item.duration).toBeUndefined();
+  expect(item.thumbnail).toBeUndefined();
+  expect(item.subtitle).toBe("Past broadcast");
+});
+
 test("invalid URLs and unsupported cursors fail before any network request", async () => {
   const fetch = respond({});
   for (const url of [
@@ -157,3 +214,12 @@ test.skipIf(process.env.COUCH_PROVIDER_NETWORK_TESTS !== "1")("actual Twitch pub
   expect(music.title).toBe("Music");
   expect(music.items.some(item => item.live && item.kind === "media")).toBe(true);
 }, 60_000);
+
+test.skipIf(process.env.COUCH_PROVIDER_NETWORK_TESTS !== "1")("actual offline Sabaku channel lists recent past broadcasts", async () => {
+  const url = "https://www.twitch.tv/sabaku_no_sutoriimaa";
+  const page = await browseTwitch({ url });
+  expect(page.items.some(item => item.kind === "media" && item.live === false && item.url.startsWith("https://www.twitch.tv/videos/"))).toBe(true);
+  expect(page.items.length).toBeGreaterThan(20);
+  expect(page.items.length).toBeLessThanOrEqual(51);
+  expect(page.nextCursor).toBeUndefined();
+}, 30_000);

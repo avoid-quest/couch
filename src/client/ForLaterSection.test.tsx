@@ -45,7 +45,6 @@ afterEach(async () => {
 
 test("saved shared items display without queue writes; explicit actions retain the saved entry", async () => {
   await render();
-  expect(document.body.textContent).toContain("Media saved from your library or Up next");
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
   await click("Add Evening movie to Up next"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);

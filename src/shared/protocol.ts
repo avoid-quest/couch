@@ -66,6 +66,7 @@ export type Action =
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
   | { type: "enqueueAlbum"; albumId: string; playNow?: boolean }
+  | { type: "enqueueProviderPlaylist"; provider: "youtube"; url: string; playNow?: boolean; quality?: VideoQuality }
   | { type: "enqueueProviderAlbum"; provider: "bandcamp"; url: string; playNow?: boolean }
   | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean }

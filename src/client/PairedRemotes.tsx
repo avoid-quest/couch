@@ -22,7 +22,7 @@ function Remote({ device, currentId, disabled, update, lastAdministrator }: Omit
     <div className="flex flex-wrap items-center gap-2"><p className="min-w-0 break-words font-medium">{device.name}{device.id === currentId ? " · This browser" : ""}</p><Badge variant="secondary">{device.role === "administrator" ? "Administrator" : "Controller"}</Badge></div>
     <p className="text-muted-foreground">Last seen {device.lastSeenAt === null ? "unknown" : new Date(device.lastSeenAt).toLocaleString()}</p>
     <form className="space-y-2" onSubmit={event => void update(event, `/api/controllers/${device.id}/name`, { name: name.trim() }, "Remote name saved.")}>
-      <Label htmlFor={`remote-${device.id}`}>Remote name</Label>
+      <Label htmlFor={`remote-${device.id}`}>Name this remote</Label>
       <Input className="min-h-11" id={`remote-${device.id}`} value={name} onChange={event => setName(event.target.value)} maxLength={60} disabled={disabled} required />
       <Button className="min-h-11" variant="outline" disabled={disabled || !name.trim() || name.trim() === device.name}>Save remote name</Button>
     </form>

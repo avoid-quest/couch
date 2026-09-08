@@ -1,6 +1,4 @@
 .saved-section { min-width: 0; }
-.saved-intro { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-.saved-intro p { max-width: 65ch; }
 .saved-items .saved-favorite-items { display: grid; gap: 8px; }
 .saved-favorite-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); }
 .saved-favorite-title { display: grid; gap: 6px; flex: 1; min-width: 100px; overflow-wrap: anywhere; }
@@ -8,7 +6,7 @@
 .saved-favorite-title small { color: var(--muted-foreground); font-size: 12px; }
 .saved-item-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .saved-section .history-panel { margin-top: 20px; }
-.saved-section > h1 { margin: 12px 0 26px; font-size: 34px; font-weight: 600; line-height: 1.15; letter-spacing: -1.2px; }
+.saved-section > h1 { margin: 0 0 20px; font-size: 34px; font-weight: 600; line-height: 1.15; letter-spacing: -1.2px; }
 .saved-section .saved-tabs { width: 100%; height: auto; justify-content: flex-start; gap: 8px; padding: 0 0 14px; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
 .saved-section .saved-tabs > button { flex: 0 1 auto; min-height: 44px; padding: 0 15px; font-size: 14px; }
 .saved-section .saved-tabs > button[data-state="active"] { background: var(--secondary); box-shadow: none; }

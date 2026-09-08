@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { WatchingProfile as Profile } from "../shared/library";
-import { personalProfileName, profileDisplayName } from "./profile-name";
+import { storedProfileName, profileDisplayName } from "./profile-name";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -13,7 +13,7 @@ const mutations: { path: string; body: unknown }[] = [];
 const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === name || node.textContent?.trim() === name)!;
 async function render(profile: Profile = legacy, playing = false, version = 0) {
   const { WatchingProfile } = await import("./WatchingProfile");
-  await act(async () => root.render(<WatchingProfile origin="http://localhost" token="paired" connected profile={profile} playing={playing} version={version} caption />));
+  await act(async () => root.render(<WatchingProfile origin="http://localhost" token="paired" connected profile={profile} playing={playing} version={version} />));
 }
 const click = (name: string) => act(async () => button(name).click());
 async function type(selector: string, value: string) {
@@ -48,41 +48,44 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("only the legacy placeholder is unnamed; stored personal names remain intact", () => {
-  expect(personalProfileName(legacy)).toBeNull();
-  expect(profileDisplayName(undefined)).toBe("Your profile");
-  expect(personalProfileName({ ...legacy, name: "Francesco" })).toBe("Francesco");
-  expect(personalProfileName(alex)).toBe("Alex");
-  expect(personalProfileName({ id: "chosen", name: "Household" })).toBe("Household");
+test("only the legacy placeholder is unnamed; stored labels remain intact", () => {
+  expect(storedProfileName(legacy)).toBeNull();
+  expect(profileDisplayName(undefined)).toBe("Default profile");
+  expect(storedProfileName({ ...legacy, name: "Francesco" })).toBe("Francesco");
+  expect(storedProfileName(alex)).toBe("Alex");
+  expect(storedProfileName({ id: "chosen", name: "Household" })).toBe("Household");
 });
 
 test("name entry renames the existing profile during playback without selection, creation or deletion", async () => {
-  await render(legacy, true); await click("Set your name");
+  await render(legacy, true); await click("Profiles");
   expect(document.body.textContent).not.toContain("Household");
   expect(document.body.textContent).not.toContain("Shared default");
   expect(document.body.textContent).toContain("existing history and preferences");
-  expect(document.activeElement?.id).toBe("watching-profile-person-name");
+  expect(document.activeElement?.id).toBe("watching-profile-default-name");
   for (const control of document.querySelectorAll<HTMLButtonElement>("button[aria-pressed], [data-action=remove]")) expect(control.disabled).toBe(true);
-  await type("#watching-profile-person-name", "  Francesco  "); await click("Save name");
+  await type("#watching-profile-default-name", "  Francesco  "); await click("Save name");
   expect(mutations).toEqual([{ path: "/api/profiles/household/rename", body: { name: "Francesco", expectedName: "Household" } }]);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await render({ ...legacy, name: "Francesco" }, true, 1);
-  expect(button("Watching profile: Francesco").textContent).toContain("Francesco");
+  profiles = [{ ...legacy, name: "Francesco" }, alex];
+  await render(profiles[0]!, true, 1);
+  expect(button("Profiles").textContent).toBe("");
+  await click("Profiles");
+  expect(document.body.textContent).toContain("Francesco");
 });
 
-test("an existing person can be chosen without claiming or renaming the unnamed profile", async () => {
-  await render(); await click("Set your name"); await click("Alex");
+test("an existing profile can be selected without renaming the default", async () => {
+  await render(); await click("Profiles"); await click("Alex");
   expect(mutations).toEqual([{ path: "/api/profiles/alex/select", body: {} }]);
-  await render(alex); await click("Watching profile: Alex");
-  expect(document.querySelector("#watching-profile-person-name")).toBeNull();
+  await render(alex); await click("Profiles");
+  expect(document.querySelector("#watching-profile-default-name")).toBeNull();
   expect(document.body.textContent).not.toContain("Household");
 });
 
 test("name entry keeps its draft and focus through live refresh and explains a conflicting rename", async () => {
-  await render(); await click("Set your name"); await type("#watching-profile-person-name", "Francesco");
-  const input = document.querySelector<HTMLInputElement>("#watching-profile-person-name")!;
+  await render(); await click("Profiles"); await type("#watching-profile-default-name", "Francesco");
+  const input = document.querySelector<HTMLInputElement>("#watching-profile-default-name")!;
   input.focus(); await render(legacy, false, 1);
-  expect(document.querySelector("#watching-profile-person-name")).toBe(input);
+  expect(document.querySelector("#watching-profile-default-name")).toBe(input);
   expect(document.activeElement).toBe(input);
   expect(input.value).toBe("Francesco");
   fail = true; await click("Save name");
@@ -90,4 +93,23 @@ test("name entry keeps its draft and focus through live refresh and explains a c
   expect(input.value).toBe("Francesco");
   expect(document.body.textContent).toContain("renamed on another remote");
   expect(mutations).toHaveLength(1);
+});
+
+
+test("a stored device-like label stays a profile label and is never presented as a person", async () => {
+  const mbp = { ...legacy, name: "MBP" };
+  profiles = [mbp, alex];
+  await render(mbp, true);
+  expect(button("Profiles")).toBeDefined();
+  expect(document.body.textContent).not.toContain("MBP");
+  await click("Profiles");
+  expect(document.body.textContent).toContain("MBP");
+  expect(document.body.textContent).not.toContain("Watching as");
+  expect(document.body.textContent).not.toContain("Who is watching");
+  expect(document.querySelector("#watching-profile-default-name")).toBeNull();
+  expect(mutations).toEqual([]);
+  await click("Rename MBP");
+  await type("#watching-profile-rename", "Alex's profile");
+  await click("Save name");
+  expect(mutations).toEqual([{ path: "/api/profiles/household/rename", body: { name: "Alex's profile", expectedName: "MBP" } }]);
 });

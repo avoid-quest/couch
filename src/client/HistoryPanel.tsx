@@ -1,4 +1,4 @@
-import { personalProfileName } from "./profile-name";
+import { profileDisplayName } from "./profile-name";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -116,7 +116,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
   const summary = (item: HistoryItem) => `${item.position > 0 ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}${item.watched ? " · Watched" : ""}`;
 
   return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label={continueOnly ? "Continue watching" : "Viewing history"}>
-    <div><h3 className="text-xl font-semibold">{continueOnly ? "Continue watching" : "Recently played"}</h3><p className="mt-1 text-sm text-muted-foreground">{personalProfileName(profile) ? `${personalProfileName(profile)}'s local history.` : "Your local history."} Jellyfin history stays with your Jellyfin account.</p></div>
+    <div><h3 className="text-xl font-semibold">{continueOnly ? "Continue watching" : "Recently played"}</h3><p className="mt-1 text-sm text-muted-foreground">Profile: {profileDisplayName(profile)}</p></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="text-sm text-muted-foreground" role="status">Loading history…</p>}
@@ -142,7 +142,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
       </Card></li>;
     })}</ul>
     {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="history-inspect-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
-      {detail && <><span className="history-inspect-art history-inspect-detail-art" aria-hidden="true"><History /></span><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{personalProfileName(profile) ? `${personalProfileName(profile)}'s local history` : "Your local history"}</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
+      {detail && <><span className="history-inspect-art history-inspect-detail-art" aria-hidden="true"><History /></span><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>History · {profileDisplayName(profile)}</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
         {!detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
         {playbackActions(detail)}<ProgressActions origin={origin} token={token} connected={connected} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={() => setRefresh(value => value + 1)} />
         {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}

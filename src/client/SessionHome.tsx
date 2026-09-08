@@ -6,6 +6,7 @@ import { SaveForLater } from "./SaveForLater";
 import type { Action, SessionState } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { HistoryPanel, type HistoryPlayback } from "./HistoryPanel";
+import { Icon } from "./Icon";
 import { PlaybackControls, sourceLabel } from "./PlaybackControls";
 import { MediaArtwork } from "./ProviderPanel";
 import type { Credentials } from "./session";
@@ -39,7 +40,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
     focusedControl.current = null;
     if (document.activeElement !== document.body) return;
     const replacement = hero.current?.querySelector<HTMLButtonElement>(".session-idle-actions button, .play-button:not(:disabled)")
-      ?? hero.current?.querySelector<HTMLButtonElement>(".transport-buttons button:not(:disabled), .session-remote-link");
+      ?? hero.current?.querySelector<HTMLButtonElement>(".transport-buttons button:not(:disabled), .session-remote-button");
     replacement?.focus({ preventScroll: true });
   });
 
@@ -47,9 +48,8 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
     <div ref={hero} className="session-current" onFocusCapture={event => { focusedControl.current = event.currentTarget.contains(event.target) ? event.target : null; }} onBlurCapture={event => {
       if (event.target.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
     }}>
-      <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" />
-      {!current && <div className="session-idle-actions"><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button><Button variant="outline" onClick={() => onBrowse("Saved")}><Bookmark aria-hidden="true" />Saved</Button><Button variant="ghost" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>}
-      <Button variant="ghost" className="session-remote-link" onClick={() => onBrowse("Remote")}>TV navigation controls <ChevronRight aria-hidden="true" /></Button>
+      <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" onRemote={() => onBrowse("Remote")} />
+      {!current && <div className="session-idle-actions"><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button><Button variant="outline" onClick={() => onBrowse("Saved")}><Bookmark aria-hidden="true" />Saved</Button><Button variant="ghost" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button><Button variant="outline" className="session-remote-button" onClick={() => onBrowse("Remote")}><Icon name="remote" />Remote</Button></div>}
     </div>
     <div className="session-following">
       <section className="session-next" aria-labelledby="session-next-title">

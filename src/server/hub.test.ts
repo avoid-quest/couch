@@ -11,6 +11,7 @@ import { buildKey } from "../shared/build";
 import * as recordingsModule from "./recordings";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
+import * as youtubeModule from "./providers/youtube";
 import * as bandcampModule from "./providers/bandcamp";
 import * as webMediaModule from "./web-media";
 import type { ProviderPage } from "../shared/providers";
@@ -1363,4 +1364,37 @@ test("page deep links and refresh serve the frontend while unknown APIs stay una
     expect(asset.headers.get("Content-Type")).toContain("javascript");
   }
   expect((await fetch(`${hub.origin}/api/not-a-page`)).status).not.toBe(200);
+});
+
+
+test("YouTube playlist queue is atomic, ordered and applies the selected quality", async () => {
+  const page: ProviderPage = { title: "Playlist", items: ["abcdefghijk", "zyxwvutsrqp"].map((id, index) => ({ id, title: `Episode ${index + 1}`, kind: "media", provider: "youtube", url: `https://www.youtube.com/watch?v=${id}` })) };
+  const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockResolvedValue(page);
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "720p" })).toMatchObject({ ok: true });
+    expect(hub.session.state.queue.map(entry => [entry.title, entry.source, entry.quality])).toEqual(page.items.map(item => [item.title, `web:${item.url}`, "720p"]));
+    expect(hub.session.state.currentEntryId).toBeNull();
+    playlist.mockRejectedValue(new Error("Playlist unavailable"));
+    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
+    expect(hub.session.state.queue).toHaveLength(2);
+  } finally { playlist.mockRestore(); }
+});
+
+test("a later Stop cancels playlist play intent without losing resolved queue entries", async () => {
+  const loading = Promise.withResolvers<ProviderPage>();
+  const started = Promise.withResolvers<void>();
+  const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockImplementation(async () => { started.resolve(); return loading.promise; });
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    const pending = remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true });
+    await started.promise;
+    expect(await remote.command({ type: "stop" })).toMatchObject({ ok: true });
+    loading.resolve({ items: [{ id: "first", title: "First", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });
+    expect(await pending).toMatchObject({ ok: false, error: "Added to the queue. Playback was canceled by a newer control." });
+    expect(hub.session.state.queue).toHaveLength(1);
+    expect(hub.session.state.currentEntryId).toBeNull();
+  } finally { loading.resolve({ items: [] }); playlist.mockRestore(); }
 });

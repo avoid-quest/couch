@@ -31,6 +31,8 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueProviderPlaylist": return value.provider === "youtube" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean")
+      && (value.quality === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value.quality)));
     case "enqueueProviderAlbum": return value.provider === "bandcamp" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean");
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))

@@ -1,3 +1,4 @@
+import { Settings } from "lucide-react";
 import { profileDisplayName } from "./profile-name";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -176,11 +177,11 @@ export function PlaybackSettings({ player, ready, connected, credentials, prefer
   return (
     <div className="playback-settings">
       <Dialog>
-        <DialogTrigger asChild><Button variant="outline" className="min-h-11">Playback settings</Button></DialogTrigger>
+        <DialogTrigger asChild><Button variant="ghost" size="icon" className="icon-button min-h-11 min-w-11" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
-            <DialogDescription>Track, speed, ReplayGain and subtitle changes last for this item. Save as default uses that choice for {profileDisplayName(profile)} on the next item. All remotes see the TV's current choices.</DialogDescription>
+            <DialogDescription>Changes apply to this item. Save as default keeps them for profile {profileDisplayName(profile)}.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 pt-2">
                 <div className="grid gap-5 sm:grid-cols-2">

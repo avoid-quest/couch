@@ -206,7 +206,7 @@ test("provider URL opens its existing catalogue, Bandcamp album commands remain 
   expect(paths.some(path => path.includes("youtube/items") || path.includes("library/items"))).toBe(false);
   await click("Play album"); expect(commands.at(-1)).toEqual({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/public", playNow: true });
   await click("Play Album track"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://artist.bandcamp.com/track/one" }); expect(commands.at(-1)).not.toHaveProperty("quality");
-  await search("https://streamingcommunityz.taxi/watch/public"); await click("Play link on TV"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.taxi/watch/public", playNow: true });
+  await search("https://streamingcommunityz.taxi/watch/public"); await click("Play link"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.taxi/watch/public", playNow: true });
 });
 test("filters retain query and source results, and broadcasts refresh saved state without repeating online searches", async () => {
   integrated = true; await render(); await search("Evening");
@@ -219,10 +219,12 @@ test("filters retain query and source results, and broadcasts refresh saved stat
 });
 test("Search applies a temporary online quality override once and returns to the default", async () => {
   integrated = true; await render(); await search("Evening");
-  await act(async () => document.querySelector<HTMLButtonElement>("#search-quality")!.click()); await flush();
+  await click("Video quality for Evening video");
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] [role="combobox"]')!.click()); await flush();
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(item => item.textContent === "Up to 720p")!;
   expect(option).toBeDefined();
   await act(async () => option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush();
+  await act(async () => document.querySelector<HTMLElement>('[data-slot="popover-content"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))); await flush();
   await click("Play Evening video"); expect(commands.at(-1)).toMatchObject({ quality: "720p" });
   await click("Add Evening video to Up next"); expect(commands.at(-1)).toMatchObject({ quality: "1080p" });
 });
@@ -282,10 +284,11 @@ test("RaiPlay searches include matching live channels even when the programme ca
   await click("Play Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
 });
 
-test("Search explains the recommended default before a query and opens its Settings override", async () => {
+test("Search starts with direct browsing actions and no page-level quality control", async () => {
   await render(true, true, true, 1, 1, "http://localhost", "auto");
-  expect(document.body.textContent).toContain("Video default: 1080p (recommended)");
-  await click("Change in Settings");
-  expect(browsed).toEqual(["Settings"]);
+  expect(document.querySelector('[role="combobox"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Video default");
+  await click("Online");
+  expect(browsed).toEqual(["Online"]);
   expect(commands).toEqual([]);
 });

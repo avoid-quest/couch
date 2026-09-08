@@ -14,7 +14,7 @@
 
 .radio-grid, .provider-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 12px; }
 .radio-actions, .provider-item-actions { display: grid; align-items: center; gap: 8px; }
-.radio-actions, .provider-media-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+.radio-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
 .provider-browse-actions { grid-template-columns: minmax(0, 1fr) 44px; }
 .radio-actions > button, .provider-item-actions > button { min-width: 0; padding-inline: 8px; font-size: .875rem; }
 .radio-station-heading { min-height: 56px; }
@@ -26,9 +26,6 @@
 .radio-playlist-heading > h3 { font-size: 1rem; }
 .radio-directory > button { max-width: 100%; white-space: normal; height: auto; min-height: 44px; }
 
-.provider-heading .quality-select { width: 170px; flex-shrink: 0; }
-.provider-heading .quality-select > label { font-size: .75rem; color: var(--muted-foreground); }
-.provider-heading .quality-select > button { font-size: .875rem; }
 .provider-selector { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .provider-selector [role="tab"] { min-width: 0; }
 .provider-open:focus-visible { outline-offset: -4px; }
@@ -58,9 +55,6 @@
   .catalog-row-actions { justify-content: flex-end; }
 }
 @container catalog (max-width: 420px) {
-  .provider-heading .quality-select { width: 100%; }
-  .provider-heading .quality-select { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; }
-  .provider-heading .quality-select > button { min-width: 0; }
   .provider-selector [role="tab"] { padding-inline: 2px; font-size: .75rem; }
   .provider-album { grid-template-columns: 64px minmax(0, 1fr); gap: 12px; }
   .provider-album-actions > button { flex: 1 0 auto; }
@@ -76,3 +70,11 @@
   .catalog-panel { padding: 16px; }
   .queue-artwork { width: 40px; height: 32px; }
 }
+
+.quality-select { min-width: 0; width: 100%; }
+.quality-select > button { min-width: 0; width: 100%; }
+
+.provider-media-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px 44px; }
+.provider-media-actions:not(:has([data-slot="popover-trigger"])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+.provider-broadcasts-link { grid-column: 1 / -1; }
+.provider-channel-summary { grid-column: 1 / -1; }

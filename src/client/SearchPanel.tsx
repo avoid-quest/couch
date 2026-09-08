@@ -17,8 +17,8 @@ import type { Action } from "../shared/protocol";
 import type { ProviderId, VideoQuality } from "../shared/providers";
 import { SearchOnlineResults, providerNames } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
-import { QualitySelect } from "./QualitySelect";
-import { useEnqueueVideoQuality, videoQualityLabels } from "./video-quality";
+import { QualityOptions } from "./QualitySelect";
+import { useEnqueueVideoQuality } from "./video-quality";
 import { createId } from "./session";
 
 type Source = "Library" | "Jellyfin";
@@ -77,19 +77,16 @@ export function SearchPanel(props: Props) {
       <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search your sources</Label><Input id="media-search" type="search" maxLength={4096} value={draft} disabled={!props.connected} onChange={event => setDraft(event.target.value)} placeholder="Title, artist, station or link" /></div>
       <Button variant="ghost" type="submit" disabled={!props.connected}>Search</Button>
     </form>
-    <p className="text-sm text-muted-foreground">Search your sources or paste a media link.</p>
-    <p className="text-sm text-muted-foreground">Video default: {videoQualityLabels[props.defaultQuality ?? "auto"]}. <Button variant="link" onClick={() => props.onBrowse("Settings")}>Change in Settings</Button> You can choose another quality before adding a video.</p>
     <nav className="search-scopes" aria-label="Search sources">{scopes.map(scope => <Button key={scope} variant={filter === scope ? "secondary" : "ghost"} aria-pressed={filter === scope} onClick={() => setFilter(scope)}>{scope}</Button>)}</nav>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
-    {!search.query ? <Card className="search-start"><h2>What would you like to play?</h2><p>Find videos, music and radio, including media saved on your TV. Paste a Bandcamp album or track link to open it.</p><div className="flex flex-wrap gap-2">{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>{section === "Guide" ? "Live TV" : `Browse ${section.toLowerCase()}`}</Button>)}</div></Card> : <>
-      {linkedProvider !== "bandcamp" && (filter === "All" || ["YouTube", "RaiPlay", "Twitch"].includes(filter)) && <div className="search-quality"><QualitySelect id="search-quality" label="Next video quality" value={quality} disabled={!props.connected} onChange={setQuality} /><p className="text-xs text-muted-foreground">Overrides your default for the next video you play or add.</p></div>}
-      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onEnqueued={resetQuality} /></div>)}
+    {!search.query ? <div className="search-shortcuts">{[["Online", "Online"], ["Radio", "Radio"], ["Guide", "Live TV"]].map(([section, label]) => <Button key={section} variant="outline" onClick={() => props.onBrowse(section!)}>{label}</Button>)}</div> : <>
+      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
         <div hidden={!visible("Radio")}><SearchRadioResults key={`radio:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} /><SearchRadioResults key={`directory:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} directory /></div>
         {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
-        {(filter === "All" || filter === "Bandcamp") && <p className="search-capability">Bandcamp: paste a public album or track link to open its tracks.</p>}
+        {filter === "Bandcamp" && <p className="search-capability">Paste a Bandcamp album or track link.</p>}
       </>}
-      {url && !linkedProvider && <Card className="search-start"><h2>Open a media link</h2><p>Send this link to the TV using the existing website player. Supported pages and direct streams can play here.</p><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play link on TV</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
+      {url && !linkedProvider && <Card className="search-start"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play link</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button><QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} /></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
       {url && linkedProvider && !visible(providerNames[linkedProvider]) && <p>Choose {providerNames[linkedProvider]} or All to open this link.</p>}
     </>}
   </section>;

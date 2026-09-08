@@ -12,7 +12,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const played: unknown[] = [], browsed: string[] = [], requests: string[] = [];
 const added: HistoryItem[] = [];
 let failed = false;
-const profile = { id: "household", name: "Household", createdAt: 1 };
+const profile = { id: "household", name: "MBP", createdAt: 1 };
 const unfinished = { mediaId: "library:movie", libraryItemId: "movie", title: "Halfway home", position: 120, duration: 600, watched: false, lastPlayedAt: 1 } satisfies HistoryItem;
 const libraryItem = { id: "next", title: "A library film", kind: "video", duration: 120, artist: null, album: null, available: true } satisfies LibraryItem;
 const state: SessionState = {
@@ -49,7 +49,9 @@ afterEach(async () => {
 });
 test("browse home offers only unfinished local history and preserves resume and restart commands", async () => {
   await renderHome();
-  expect(document.body.textContent).not.toContain("Household");
+  expect(document.body.textContent).not.toContain("MBP");
+  expect(document.body.textContent).not.toContain("Good morning");
+  expect(document.body.textContent).not.toContain("Watching as");
   expect(document.body.textContent).toContain("Halfway home");
   expect(document.body.textContent).not.toContain("Finished film");
   expect(document.body.textContent).not.toContain("No progress");
