@@ -90,7 +90,7 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled }: {
   </div>;
 }
 
-function DelayControl({ id, label, value, disabled, onApply }: {
+export function DelayControl({ id, label, value, disabled, onApply }: {
   id: string;
   label: string;
   value: number;

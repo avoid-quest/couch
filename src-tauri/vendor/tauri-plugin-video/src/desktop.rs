@@ -1387,6 +1387,7 @@ mod linux_mpv {
 
         let mut mpv = Mpv::with_initializer(|init| {
             init.set_option("vo", "libmpv")?;
+            init.set_option("audio-client-name", "Couch playback")?;
             init.set_option("hwdec", "auto-safe")?;
             init.set_option("gpu-api", "opengl")?;
             if matches!(
@@ -1585,6 +1586,10 @@ mod linux_mpv {
         player.pending_subtitles.clone_from(&payload.subtitles);
         player.subtitle_error = None;
         player.max_video_height = payload.max_video_height;
+        if let Some(output) = payload.audio_output.as_deref() {
+            player.mpv.set_property("audio-device", format!("pulse/{output}")).map_err(mpv_error)?;
+            player.mpv.set_property("audio-fallback-to-null", true).map_err(mpv_error)?;
+        }
         configure_network(player, payload)?;
         player.default_live_start.configure(&player.mpv, payload.go_live)?;
         // Append takes one unescaped item, preserving URL colons and commas.
@@ -1814,7 +1819,7 @@ mod linux_mpv {
             }
             match payload.action.as_str() {
                 "play" => player.mpv.set_property("pause", false).map_err(mpv_error)?,
-                "pause" => player.mpv.set_property("pause", true).map_err(mpv_error)?,
+                "pause" | "audioPause" => player.mpv.set_property("pause", true).map_err(mpv_error)?,
                 "seek" => player
                     .mpv
                     .command(
@@ -1822,6 +1827,14 @@ mod linux_mpv {
                         &[&crate::mpv_cue::timestamp(payload.value.max(0.0), player.cue).to_string(), "absolute+exact"],
                     )
                     .map_err(mpv_error)?,
+                "audioOutput" => {
+                    let output = payload.audio_output.as_deref().filter(|output| !output.is_empty() && output.len() <= 512)
+                        .ok_or_else(|| Error::Pipeline("Invalid audio output".into()))?;
+                    player.mpv.set_property("audio-device", format!("pulse/{output}")).map_err(mpv_error)?;
+                    // Re-setting the same device does not reopen null fallback after hotplug.
+                    player.mpv.command("ao-reload", &[]).map_err(mpv_error)?;
+                    player.mpv.set_property("volume", 100.0_f64).map_err(mpv_error)?;
+                }
                 "volume" => player
                     .mpv
                     .set_property("volume", payload.value.clamp(0.0, 1.0) * 100.0)

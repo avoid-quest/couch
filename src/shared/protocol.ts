@@ -52,6 +52,7 @@ export type SessionState = {
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
   webRetry?: { paused: boolean } | null;
+  systemAudio?: import("./sound").SoundRouteState;
 };
 
 export type Action =
@@ -69,6 +70,7 @@ export type Action =
   | { type: "goLive"; playbackId: string }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }
+  | { type: "mute"; muted: boolean }
   | { type: "volume"; volume: number }
   | { type: "preferences"; profileId: string; preferences: Partial<ProfilePlaybackPreferences> }
   | { type: "savePlaybackDefault"; profileId: string; playbackId: string; setting: "audio" | "subtitles" | "speed" | "replayGain" }
@@ -87,8 +89,10 @@ export type ServerMessage =
   | { type: "result"; requestId: string; ok: boolean; error?: string };
 
 export type PlaybackCommand =
+  | { type: "audioPause" }
+  | { type: "audioOutput"; output: string }
   | { type: "prepare"; playbackId: string; next?: { playbackId: string; source: string; headers?: Record<string, string>; preferences: ProfilePlaybackPreferences & { audioDelay: number } } }
-  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean }
+  | { type: "load"; playbackId: string; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; paused?: boolean; segment?: { start: number; end: number }; preferences?: ProfilePlaybackPreferences & { audioDelay: number }; subtitles?: ExternalSubtitle[]; radio?: boolean; goLive?: boolean; audioOutput?: string }
   | ({ type: "addSubtitle"; playbackId: string } & ExternalSubtitle)
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

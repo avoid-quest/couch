@@ -110,7 +110,10 @@ impl Player {
                 self.prepare(app, playback_id, next)?;
                 Ok(())
             }
+            PlaybackCommand::AudioOutput { output } => self.audio_output(app, &output),
+            PlaybackCommand::AudioPause => self.control(app, "audioPause", 0.0, -1),
             PlaybackCommand::Load {
+                audio_output,
                 playback_id,
                 source,
                 headers,
@@ -138,6 +141,7 @@ impl Player {
                     &source,
                     &headers,
                     audio_source.as_deref(),
+                    audio_output.as_deref(),
                     max_video_height,
                     start_position,
                     paused,
@@ -283,6 +287,7 @@ impl Player {
         source: &str,
         headers: &BTreeMap<String, String>,
         audio_source: Option<&str>,
+        audio_output: Option<&str>,
         max_video_height: Option<u16>,
         start_position: Option<f64>,
         paused: bool,
@@ -300,6 +305,7 @@ impl Player {
             "uri": source,
             "headers": headers,
             "audioUri": audio_source,
+            "audioOutput": audio_output,
             "maxVideoHeight": max_video_height,
             "startPosition": start_position,
             "endPosition": self.segment.map(|bounds| bounds.end),
@@ -313,7 +319,7 @@ impl Player {
             "width": self.rect.width.max(1.0),
             "height": self.rect.height.max(1.0),
             "autoplay": !paused,
-            "volume": self.state.volume / 100.0
+            "volume": if audio_output.is_some() { 1.0 } else { self.state.volume / 100.0 }
         }))
         .map_err(|error| error.to_string())?;
         let snapshot = app
@@ -321,6 +327,16 @@ impl Player {
             .desktop()
             .open_native(request)
             .map_err(|error| error.to_string())?;
+        self.apply(snapshot)
+    }
+
+    fn audio_output(&mut self, app: &AppHandle, output: &str) -> Result<(), String> {
+        use tauri_plugin_video::{NativeControlRequest, VideoExt};
+        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
+        let snapshot = app.video().desktop().control_native(NativeControlRequest {
+            session_key, playback_id: None, action: "audioOutput".into(), value: 0.0, index: -1,
+            subtitle: None, replay_gain: None, audio_output: Some(output.into()),
+        }).map_err(|error| error.to_string())?;
         self.apply(snapshot)
     }
 
@@ -341,11 +357,12 @@ impl Player {
             .control_native(NativeControlRequest {
                 session_key,
                 action: action.into(),
-                playback_id: if action == "volume" { None } else { self.state.playback_id.clone() },
+                playback_id: if matches!(action, "volume" | "audioPause") { None } else { self.state.playback_id.clone() },
                 value,
                 index,
                 subtitle: None,
                 replay_gain: None,
+                audio_output: None,
             })
             .map_err(|error| error.to_string())?;
         self.apply(snapshot)
@@ -371,6 +388,7 @@ impl Player {
                     language: subtitle.language,
                 }),
                 replay_gain: None,
+                audio_output: None,
             })
             .map_err(|error| error.to_string())?;
         self.apply(snapshot)
@@ -386,6 +404,7 @@ impl Player {
             value: 0.0,
             index: -1,
             subtitle: None,
+            audio_output: None,
             replay_gain: Some(match mode {
                 ReplayGainMode::Off => NativeReplayGain::Off,
                 ReplayGainMode::Track => NativeReplayGain::Track,
@@ -537,6 +556,7 @@ impl Player {
         _: &str,
         _: &BTreeMap<String, String>,
         _: Option<&str>,
+        _: Option<&str>,
         _: Option<u16>,
         _: Option<f64>,
         _: bool,
@@ -549,6 +569,7 @@ impl Player {
         self.state.error = PlayerState::default().error;
         Ok(())
     }
+    fn audio_output(&mut self, _: &AppHandle, _: &str) -> Result<(), String> { Ok(()) }
     fn control(&mut self, _: &AppHandle, _: &str, _: f64, _: i32) -> Result<(), String> {
         Ok(())
     }

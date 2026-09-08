@@ -37,6 +37,7 @@ import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
+import { createSoundRouting } from "./sound-routing";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -99,6 +100,8 @@ export function createHub(options: HubOptions) {
     const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
     return value === "true" ? true : value === "false" ? false : null;
   });
+  let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
+  const systemAudio = !!options.nativeDiagnostics && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
@@ -106,7 +109,8 @@ export function createHub(options: HubOptions) {
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
   }, {
-    admitted,
+    admitted, systemAudio,
+    ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
@@ -161,7 +165,13 @@ export function createHub(options: HubOptions) {
     }
   } });
   const updateDirectory = join(dirname(options.databasePath), "updates");
-  sound = createSound({ available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
+  if (systemAudio) soundRouting = createSoundRouting({
+    saved: store.audioOutput, savedProfile: store.audioProfile, save: store.saveAudioOutput,
+    active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
+    pin: output => options.sendPlayer({ type: "audioOutput", output }),
+    lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
+  });
+  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const idleReason = () => {
@@ -400,7 +410,12 @@ export function createHub(options: HubOptions) {
             session.command({ type: "enqueue", entry });
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
-            session.command(action, authorize);
+            if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
+            else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
+            else {
+              if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
+              session.command(action, authorize);
+            }
           }
           if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
             session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize);
@@ -437,6 +452,7 @@ export function createHub(options: HubOptions) {
     catch (error) { progressError = error; }
     const toolsStopped = toolHealth.close();
     sound?.close();
+    soundRouting?.close();
     appearance.close();
     guide.close();
     providers.close();
