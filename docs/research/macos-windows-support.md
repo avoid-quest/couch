@@ -2,6 +2,11 @@
 
 Assessment for [Support for MacOs and Windows](https://github.com/avoid-quest/couch/issues/171), checked on 2026-09-08 against `d6eb731db859da3013c37cf6225b4da984ff7117`.
 
+The owner subsequently chose [controllers for the Ubuntu TV first](https://github.com/avoid-quest/couch/issues/171#issuecomment-5581948822).
+This increment uses the existing paired browser remote. Follow the
+[desktop controller guide](../desktop-controllers.md) and its linked qualification
+record. The native playback and server work below remains a later scope decision.
+
 Couch can run its compiled coordinator on this Apple Silicon Mac. Native playback remains Linux-only, and Windows has neither a supported build path nor runtime evidence in this repository. Tauri's platform support alone does not establish Couch's support.
 
 ## What client and server mean today
@@ -46,4 +51,4 @@ This session used the installed Apple Silicon Rust target and Command Line Tools
 
 No GUI launch, audible/video playback, signed macOS package, Windows build or Windows runtime was tested. No mpv or ffmpeg executable was found in the inspected Mac tool paths. This evidence leaves the parent issue open.
 
-Once client mode is decided, the next bounded increment should prove one real local media file with pause, seek, resize/fullscreen and audio on macOS, using the chosen native engine. Windows needs a real Windows environment for the equivalent acceptance. Platform packaging, helpers and OS settings then need their own installation and restart evidence. Headless media delivery is a separate dependency when the selected client mode requires it.
+If local desktop playback is selected in a later increment, prove one real local media file with pause, seek, resize/fullscreen and audio on macOS using the chosen native engine. Windows needs a real Windows environment for the equivalent acceptance. Platform packaging, helpers and OS settings then need their own installation and restart evidence. Headless media delivery is a separate dependency if selected.
