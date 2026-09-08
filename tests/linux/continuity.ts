@@ -53,6 +53,7 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
     let mode: "normal" | "slow" | "failed" = "normal";
     let secondId = "";
     const reports: { path: string; itemId?: string; session?: string; position?: number }[] = [];
+    let normalReports: typeof reports = [];
     const opens: { item: string; mode: string; at: string; authorized: boolean }[] = [];
     const responses: { path: string; status: number }[] = [];
     const proxy = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
@@ -98,7 +99,7 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
     measurements.push({ name: "jellyfin", version: config.version, ...result });
     assert.ok(!JSON.stringify(clients.map(client => client.state)).includes(config.accessToken), "Jellyfin credentials stay off paired snapshots");
     await until("Jellyfin reports one lifecycle for preflight and each measured track", () => reports.filter(report => report.path === "/Sessions/Playing").length === 3 && reports.filter(report => report.path === "/Sessions/Playing/Stopped").length === 3);
-    const normalReports = structuredClone(reports);
+    normalReports = structuredClone(reports);
     for (const start of normalReports.filter(report => report.path === "/Sessions/Playing")) {
       assert.equal(normalReports.filter(report => report.session === start.session && report.path === "/Sessions/Playing").length, 1);
       assert.equal(normalReports.filter(report => report.session === start.session && report.path === "/Sessions/Playing/Stopped").length, 1);
@@ -128,8 +129,8 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
     assert.ok(all(state => state.player.status === "ended" && state.queue.length === 1));
     await stop();
     assert.ok(opens.every(open => open.authorized), "Both current and prepared native Jellyfin opens retain host authentication");
-    await Bun.write(`${artifactDir}/jellyfin-continuity-lifecycle.json`, JSON.stringify({ version: config.version, normalReports, reports, opens }, null, 2));
     } finally {
+      await Bun.write(`${artifactDir}/jellyfin-continuity-lifecycle.json`, JSON.stringify({ version: config.version, normalReports, reports, opens }, null, 2));
       await Bun.write(`${artifactDir}/jellyfin-continuity-responses.json`, JSON.stringify(responses, null, 2));
       await proxy.stop(true);
     }
