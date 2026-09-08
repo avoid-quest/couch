@@ -24,6 +24,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const hero = useRef<HTMLDivElement | null>(null);
+  const queuedPlay = useRef<{ entryId: string; trigger: HTMLButtonElement } | null>(null);
   const focusedControl = useRef<HTMLElement | null>(null);
   const queue = state?.queue ?? [];
   const detail = queue.find(entry => entry.id === detailId);
@@ -32,6 +33,13 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
   const upcoming = queue.slice(cursorIndex + 1);
   const current = queue.find(entry => entry.id === state?.currentEntryId);
   const canPlay = connected && !!state?.player && state.player.status !== "unavailable";
+
+  useLayoutEffect(() => {
+    const pending = queuedPlay.current;
+    if (!pending || state?.currentEntryId !== pending.entryId) return;
+    queuedPlay.current = null;
+    if (active && !pending.trigger.isConnected && document.activeElement === document.body) hero.current?.querySelector<HTMLButtonElement>(".play-button:not(:disabled), .transport-buttons button:not(:disabled)")?.focus({ preventScroll: true });
+  }, [state?.currentEntryId, active]);
 
   useLayoutEffect(() => {
     const previous = focusedControl.current;
@@ -57,6 +65,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
         {upcoming.length ? <ol className="session-next-list">{upcoming.slice(0, 3).map(entry => <li key={entry.id}>
           {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="session-next-art" video={entry.kind !== "radio"} /> : <MediaArtwork key={entry.thumbnail || entry.id} thumbnail={entry.thumbnail} title={entry.title} className="session-next-art" />}
           <Button variant="ghost" className="session-next-copy" aria-label={`Details for ${entry.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(entry.id); }}><strong>{entry.title}</strong><small>{sourceLabel(entry.source)}{entry.live ? " · LIVE" : ""}</small></Button>
+          <Button variant="secondary" size="icon" className="session-next-play" aria-label={`Play ${entry.title}`} title="Play now" disabled={!canPlay} onClick={async event => { queuedPlay.current = { entryId: entry.id, trigger: event.currentTarget }; if (!await run({ type: "play", entryId: entry.id })) queuedPlay.current = null; }}><Play aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from Up next`} disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}><X aria-hidden="true" /></Button>
         </li>)}</ol> : <p className="session-empty">Your queue is empty. Add items from Search or Saved to play them next.</p>}
         {current && <div className="session-browse-actions"><Button variant="outline" className="session-find" onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something</Button><Button variant="ghost" className="session-find" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>}

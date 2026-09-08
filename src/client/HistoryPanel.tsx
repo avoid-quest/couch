@@ -112,7 +112,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     <Button disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`${item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending === item.mediaId ? "Starting…" : item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"}</Button>
     {item.position > 0 && <Button variant="outline" disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
   </div>;
-  const summary = (item: HistoryItem) => `${item.position > 0 ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}${item.watched ? " · Watched" : ""}`;
+  const summary = (item: HistoryItem) => `${item.position > 0 ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}${item.watched ? " · Watched" : ""}${item.playedBy ? ` · Started from ${item.playedBy.name}` : ""}`;
 
   return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label="Playback history">
     <div><h3 className="text-xl font-semibold">Recently played</h3></div>
@@ -132,7 +132,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
           <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary"><History aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-base font-medium">{item.title}</strong>{item.watched && <Badge variant="secondary"><Check aria-hidden="true" />Watched</Badge>}</div>
-            <p className="mt-1 text-sm text-muted-foreground">{resumable ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}{item.lastPlayedAt && ` · ${new Date(item.lastPlayedAt).toLocaleDateString()}`}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{resumable ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}{item.lastPlayedAt && ` · ${new Date(item.lastPlayedAt).toLocaleDateString()}`}{item.playedBy && ` · Started from ${item.playedBy.name}`}</p>
           </div>
           <ProgressActions origin={origin} token={token} connected={connected} mediaId={item.mediaId} title={item.title} progress={item} onUpdated={() => setRefresh(value => value + 1)} />
         </div>

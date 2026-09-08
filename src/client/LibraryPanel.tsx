@@ -88,7 +88,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
 
   return <section className="library-panel catalog-panel space-y-5" aria-label="Media library">
     <div className="library-heading flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0"><h2 className="text-2xl font-semibold">Your library</h2><p className="mt-1 text-sm text-muted-foreground">Music and video, ready to play.</p></div>
+      <div className="min-w-0"><h2 className="text-2xl font-semibold">TV folders</h2><p className="mt-1 text-sm text-muted-foreground">Media stored on this TV.</p></div>
       <div className="library-folder-controls flex flex-wrap gap-2">
         <Button variant="outline" data-action="folder-settings" data-tv-local-only={host || undefined} onClick={onManage}>Manage folders in Sources</Button>
         {sources.length > 0 && <Dialog open={foldersOpen} onOpenChange={setFoldersOpen}>

@@ -38,7 +38,7 @@
 .session-next-list .session-next-copy { display: flex; flex: 1; min-width: 0; height: auto; min-height: 44px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; padding: 0; text-align: left; white-space: normal; }
 .session-next-copy strong { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .session-next-copy small { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
-.session-next-list > li > button:last-child { width: 44px; height: 44px; flex-shrink: 0; }
+.session-next-list .session-next-play, .session-next-list > li > button:last-child { width: 44px; height: 44px; flex-shrink: 0; }
 .session-empty { margin-block: 12px; color: var(--muted-foreground); font-size: 13px; line-height: 1.6; }
 .session-home .session-find { min-height: 44px; margin-top: 20px; font-size: 13px; }
 .session-home .history-panel { margin-top: 32px; }

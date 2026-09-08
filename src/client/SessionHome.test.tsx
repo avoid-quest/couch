@@ -255,3 +255,17 @@ test("Home keeps finished album tracks beside resumable online history without a
   expect(button("Play again Finished album track").disabled).toBe(false);
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Open this file");
 });
+
+
+test("Home queue plays directly and moves focus into transport when the chosen row disappears", async () => {
+  await render();
+  const play = button("Play next");
+  play.focus();
+  await act(async () => play.click());
+  expect(actions).toEqual([{ type: "play", entryId: "next" }]);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await render({ ...state, currentEntryId: "next", queueCursorEntryId: "next", player: { ...state.player, playbackId: "next-play", status: "loading" } });
+  expect(document.activeElement).toBe(button("Stop playback"));
+  await render(state, false);
+  expect(button("Play next").disabled).toBe(true);
+});

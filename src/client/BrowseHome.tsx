@@ -134,6 +134,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     <Dialog open={active && currentProfile && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="browse-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}
+        {detail.playedBy && <p className="browse-quiet">Started from {detail.playedBy.name}</p>}
         {detail.position > 0 && <p className="browse-quiet">Continue from {progressTime(detail.position)}{detail.duration ? ` of ${progressTime(detail.duration)}` : ""}</p>}
         {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Your resume point is saved.</p>}
         {selected?.available === false && <p>This file is unavailable. Check its TV folder.</p>}
