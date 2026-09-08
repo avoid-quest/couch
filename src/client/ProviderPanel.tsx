@@ -57,7 +57,7 @@ export function ProviderPanel(props: Props) {
     return ok;
   };
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
-    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" label="Next video quality" value={quality} disabled={!props.connected} onChange={setQuality} />}</div>
+    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" label="Next video quality" description="Overrides your default for the next video you play or add." value={quality} disabled={!props.connected} onChange={setQuality} />}</div>
     <Tabs value={provider} onValueChange={value => setProvider(value as ProviderId)}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
       <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} onEnqueue={enqueue} provider={provider} /></TabsContent>

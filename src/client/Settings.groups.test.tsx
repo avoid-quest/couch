@@ -54,6 +54,7 @@ test("three groups lead to profile defaults and preserve entry and back focus wi
     await render();
     expect([...document.querySelectorAll<HTMLElement>("[data-settings-group]")].map(button => button.dataset.settingsGroup)).toEqual(["profile", "device", "tv"]);
     expect(document.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    expect(document.querySelector("#default-video-quality")?.textContent).toBe("1080p (recommended)");
     await enter("profile");
     expect(document.activeElement).toBe(tab("playback"));
     expect(document.body.textContent).toContain("Watching profile: Household");
@@ -104,4 +105,19 @@ test("source deep links select the TV group and native sources remain local-only
   await all(); await enter("device");
   expect(document.querySelector("#tv-interface-size")?.closest("[data-tv-local-only]")).not.toBeNull();
   expect(document.querySelector("#remote-interface-size")).toBeNull();
+});
+
+
+test("the landing quality control preserves an unrestricted choice and saves a new default", async () => {
+  const save = spyOn(props.videoQualityPreference, "save");
+  try {
+    await render({ videoQualityPreference: { ...props.videoQualityPreference, quality: "best" } });
+    expect(document.querySelectorAll("#default-video-quality")).toHaveLength(1);
+    const control = document.querySelector<HTMLButtonElement>("#default-video-quality")!;
+    expect(control.textContent).toBe("Unrestricted quality");
+    expect(save).not.toHaveBeenCalled();
+    await act(async () => control.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Up to 720p")!.click());
+    expect(save).toHaveBeenCalledWith("720p");
+  } finally { save.mockRestore(); }
 });

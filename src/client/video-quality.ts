@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
 import { audioExtensions } from "../shared/media";
 
-export const videoQualityLabels: Record<VideoQuality, string> = { auto: "Automatic (up to 1080p)", best: "Unrestricted quality", "1080p": "Up to 1080p", "720p": "Up to 720p", "480p": "Up to 480p" };
+export const videoQualityLabels: Record<VideoQuality, string> = { auto: "1080p (recommended)", best: "Unrestricted quality", "1080p": "Up to 1080p", "720p": "Up to 720p", "480p": "Up to 480p" };
 const storageKey = "couch.online-video-quality";
 
 export function readVideoQuality(storage?: Pick<Storage, "getItem">): VideoQuality {
