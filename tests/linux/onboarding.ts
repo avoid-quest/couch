@@ -99,7 +99,7 @@ try {
     const response = await fetch(origin + "/api/library/items?q=First%20local%20video", { headers: { Authorization: `Bearer ${token}` } });
     return (await response.json() as { items: unknown[] }).items.length === 1;
   });
-  await phone.ui.section("Library"); await phone.ui.button("All media", ".library-views");
+  await phone.ui.section("Files"); await phone.ui.button("All media", ".library-views");
   await phone.ui.type("#library-query", "First local video"); await phone.ui.button("Search", ".library-search");
   await until("phone offers its first scanned local video", () => phone!.ui.execute("return !!document.querySelector('.library-play-button:not(:disabled)')"));
   const playLabel = await phone.ui.execute("return document.querySelector('.library-play-button').getAttribute('aria-label')") as string;

@@ -8,11 +8,17 @@ import { keys, type UiDriver, type Wait } from "./ui";
 export const folderSettings = '[aria-label="TV folder settings"]';
 export const folderCard = (id: string) => `${folderSettings} [data-folder-source="${id}"]`;
 export async function openFolderSources(ui: UiDriver, until: Wait) {
-  await ui.section("Library");
+  await ui.section("Files");
   await ui.click('[data-action="folder-settings"]');
+  await until("Sources offers its folder manager", () => ui.execute("return !!document.querySelector('[data-settings-page=source-folders], [aria-label=\"TV folder settings\"]')"));
+  if (await ui.execute("return !!document.querySelector('[data-settings-page=source-folders]')")) await ui.click('[data-settings-page="source-folders"]');
   await until("Library opens its canonical Sources folder manager", () => ui.execute("return document.querySelectorAll(arguments[0]).length === 1 && [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === 'Add TV folder' && !button.disabled)", [folderSettings]));
 }
 export async function closeFolderSources(ui: UiDriver, until: Wait) {
+  if (await ui.execute("return !!document.querySelector('.settings-page:not([hidden])')")) {
+    await ui.section("Files");
+    return;
+  }
   await ui.key(keys.escape);
   await until("folder Sources closes before browsing", () => ui.execute("return !document.querySelector('[role=dialog]')"));
 }
@@ -66,7 +72,7 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
     await phone.button(label, folderCard(sourceId));
   };
   const play = async () => {
-    await phone.section("Library");
+    await phone.section("Files");
     await phone.button("All media", '.library-views');
     await phone.type("#library-query", "Folder acceptance");
     await phone.button("Search", ".library-search");

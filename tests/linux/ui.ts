@@ -115,6 +115,7 @@ export class UiDriver {
   }
 
   async button(label: string, scope = "") {
+    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
     const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
@@ -123,12 +124,40 @@ export class UiDriver {
 
   async section(label: string) {
     await this.browse();
-    const matches = await this.execute("return [...document.querySelectorAll('.source-nav [role=tab]')].filter(tab => tab.getAttribute('data-source') === arguments[0])", [label]);
+    if (await this.execute("return !!document.querySelector('.primary-nav')")) {
+      const destination = label === "For later" ? "Saved" : label === "Online" ? "Library" : label;
+      const libraryLabel = ({ Files: "TV folders", Radio: "Radio", Guide: "Live TV", Jellyfin: "Jellyfin" } as Record<string, string>)[destination];
+      await this.click(`.primary-nav a[data-source="${libraryLabel ? "Library" : destination}"]`);
+      if (libraryLabel) {
+        await this.waitFor("Library page opens before choosing its source", () => this.execute('return !!document.querySelector(\'[data-page="Library"]:not([hidden])\')'));
+        await this.button(libraryLabel, '[data-page="Library"]:not([hidden])');
+      }
+      await this.waitFor(`${label} page opens`, () => this.execute('return !!document.querySelector(arguments[0])', [`[data-page="${destination}"]:not([hidden])`]));
+      return;
+    }
+    // The installed update fixture still exercises the retained older release.
+    const matches = await this.execute("return [...document.querySelectorAll('.source-nav [role=tab]')].filter(tab => tab.getAttribute('data-source') === arguments[0])", [label === "Files" ? "Library" : label]);
     assert.equal(matches.length, 1, `One ${label} source tab exists`);
     await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
   async settingsSection(section: string) {
+    if (await this.execute("return !!document.querySelector('[aria-label=\"Settings pages\"]')")) {
+      const destination = section === "remotes" ? "connection" : section === "remote" ? "playback" : section;
+      const category = ".settings-page:not([hidden]) .settings-category select";
+      if (await this.execute("return !!document.querySelector(arguments[0])?.getClientRects().length", [category])) {
+        const option = await this.element(`${category} option[value="${destination}"]`);
+        // WebDriver's option click selects the native option and dispatches input/change.
+        await this.request(`/session/${this.session()}/element/${option}/click`, {});
+      } else {
+        const target = `[aria-label="Settings pages"] [data-settings-page="${destination}"]`;
+        if (await this.execute("return !!document.querySelector('[role=dialog] .settings-back')")) await this.button("All settings", '[role="dialog"]');
+        await this.click(target);
+      }
+      await this.waitFor(`Settings selects ${section}`, () => this.execute('return document.querySelector(arguments[0])?.getAttribute("aria-current") === "page"', [`[aria-label="Settings pages"] [data-settings-page="${destination}"]`]));
+      return;
+    }
+    // A/B update qualification retains its original flat and grouped Settings.
     const selector = (value: string) => `[aria-label="Settings sections"] [role="tab"][id$="-trigger-${value}"]`;
     await this.waitFor("Settings navigation is rendered", () => this.execute('return !!document.querySelector(\'[role="dialog"] [aria-label="Settings sections"]\')'));
     const grouped = await this.execute('return !!document.querySelector("[data-settings-group]") || [...document.querySelectorAll(\'[role="dialog"] button\')].some(button => button.textContent.trim() === "All settings")');
