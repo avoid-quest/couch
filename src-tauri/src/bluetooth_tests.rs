@@ -35,7 +35,9 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
         builder.property::<String, _>("Address").get(|_, _: &mut Data| Ok("11:22:33:44:55:66".into()));
         builder.property::<bool, _>("Powered").get(|_, data: &mut Data| Ok(data.lock().unwrap().powered)).set(|_, data: &mut Data, value| { data.lock().unwrap().powered = value; Ok(Some(value)) });
         builder.method("SetDiscoveryFilter", ("filter",), (), |_, _: &mut Data, (filter,): (dbus::arg::PropMap,)| {
-            assert!(filter.get("Discoverable").is_none_or(|value| value.0.as_i64() == Some(0))); Ok(())
+            assert!(filter.get("Discoverable").is_none_or(|value| value.0.as_i64() == Some(0)));
+            assert!(filter.get("UUIDs").is_none_or(|value| value.0.as_iter().unwrap().next().is_none()), "Discovery must include devices whose services are not resolved yet");
+            assert!(filter.get("Transport").is_none_or(|value| value.0.as_str() == Some("auto"))); Ok(())
         });
         builder.method("StartDiscovery", (), (), |_, data: &mut Data, (): ()| { data.lock().unwrap().scanning = true; Ok(()) });
         builder.method("StopDiscovery", (), (), |_, data: &mut Data, (): ()| { let mut state = data.lock().unwrap(); state.scanning = false; state.stopped += 1; Ok(()) });
@@ -51,7 +53,7 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
     let device = cr.register("org.bluez.Device1", move |builder| {
         builder.property::<String, _>("Address").get(|_, _: &mut Data| Ok(ADDRESS.into()));
         builder.property::<String, _>("Alias").get(|_, _: &mut Data| Ok("C39S test double".into()));
-        builder.property::<Vec<String>, _>("UUIDs").get(|_, _: &mut Data| Ok(vec![AUDIO.into()]));
+        builder.property::<Vec<String>, _>("UUIDs").get(|_, data: &mut Data| Ok(if data.lock().unwrap().paired { vec![AUDIO.into()] } else { vec![] }));
         builder.property::<bool, _>("Paired").get(|_, data: &mut Data| Ok(data.lock().unwrap().paired));
         builder.property::<bool, _>("Connected").get(|_, data: &mut Data| Ok(data.lock().unwrap().connected));
         builder.property::<bool, _>("Trusted").get(|_, data: &mut Data| Ok(data.lock().unwrap().trusted)).set(|_, data: &mut Data, value| { data.lock().unwrap().trusted = value; Ok(Some(value)) });
@@ -61,6 +63,10 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
                 let (mode, agent) = { let state = data.lock().unwrap(); (state.mode.clone(), state.agent.clone().unwrap()) };
                 if mode == "error" { return context.reply(Err(dbus::MethodErr::from(("org.bluez.Error.AuthenticationFailed", "Authentication failed")))); }
                 let proxy = Proxy::new(agent.0, agent.1, Duration::from_secs(70), connection);
+                let selected_service: Result<(), dbus::Error> = proxy.method_call("org.bluez.Agent1", "AuthorizeService", (Path::new(DEVICE).unwrap(), "00001124-0000-1000-8000-00805f9b34fb".to_string())).await;
+                assert!(selected_service.is_ok(), "An explicitly selected device may authorize its supported profiles");
+                let foreign_service: Result<(), dbus::Error> = proxy.method_call("org.bluez.Agent1", "AuthorizeService", (Path::new("/org/bluez/hci0/dev_11_22_33_44_55_66").unwrap(), AUDIO.to_string())).await;
+                assert!(foreign_service.is_err(), "Pairing must not authorize another device");
                 let reply: Result<(), dbus::Error> = if mode == "pin" {
                     let result: Result<(String,), _> = proxy.method_call("org.bluez.Agent1", "RequestPinCode", (Path::new(DEVICE).unwrap(),)).await;
                     result.map(|(pin,)| assert_eq!(pin, "0000"))
@@ -74,6 +80,7 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
             }
         });
         builder.method("CancelPairing", (), (), |_, data: &mut Data, (): ()| { data.lock().unwrap().cancelled += 1; Ok(()) });
+        builder.method("Connect", (), (), |_, data: &mut Data, (): ()| { let mut state = data.lock().unwrap(); state.connects.push("all".into()); state.connected = true; Ok(()) });
         builder.method("ConnectProfile", ("uuid",), (), |_, data: &mut Data, (uuid,): (String,)| { let mut state = data.lock().unwrap(); state.connects.push(uuid); state.connected = true; Ok(()) });
         builder.method("Disconnect", (), (), |_, data: &mut Data, (): ()| { data.lock().unwrap().connected = false; Ok(()) });
     });
@@ -85,6 +92,7 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
     connection.start_receive(dbus::message::MatchRule::new_method_call(), Box::new(move |message, connection| { dispatch.lock().unwrap().handle_message(message, connection).unwrap(); true }));
     let client = Bluetooth::default();
     let read = tokio::spawn({ let client = client.clone(); async move { client.request(action("read")).await } }).await.unwrap().unwrap();
+    assert_eq!(read["devices"][0]["name"], "C39S test double", "A device without inquiry-time UUIDs must be selectable");
     assert_eq!(read["devices"][0]["paired"], false);
     data.lock().unwrap().powered = false;
     assert_eq!(client.request(action("read")).await.unwrap()["adapter"], "off");
@@ -133,13 +141,14 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
     client.request(answer).await.unwrap();
     operation(&client, |op| op["status"] == "finished").await;
     assert!(data.lock().unwrap().trusted && data.lock().unwrap().connected);
-    assert_eq!(data.lock().unwrap().connects, vec![AUDIO]);
+    assert_eq!(data.lock().unwrap().connects, vec!["all"]);
     client.request(action("disconnect")).await.unwrap(); operation(&client, |op| op["status"] == "finished").await;
     assert!(!data.lock().unwrap().connected);
     // The daemon owns saved bonds across a fresh native client.
     let restarted = Bluetooth::default();
     restarted.request(action("reconnect")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
     assert!(data.lock().unwrap().connected);
+    assert_eq!(data.lock().unwrap().connects, vec!["all", AUDIO], "Startup reconnect still targets the saved audio profile");
     restarted.request(action("forget")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
     assert!(restarted.request(action("read")).await.unwrap()["devices"].as_array().unwrap().is_empty());
     // An object disappearing before a command cannot be paired or connected.
