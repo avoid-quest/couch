@@ -64,15 +64,15 @@ export function TvAppearancePreview({ appearance, credentials, connected }: { ap
   </Dialog>;
 }
 
-export function AppearanceSettings({ native, credentials, connected, administrator, appearance = defaultTvAppearance }: {
-  native: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance;
+export function AppearanceSettings({ native, credentials, connected, administrator, appearance = defaultTvAppearance, scope = "all" }: {
+  native: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance; scope?: "all" | "device" | "tv";
 }) {
   const size = useRemoteInterfaceSize();
   const [notice, setNotice] = useState<string | null>(null);
   const change = (value: InterfaceSize) => setNotice(saveRemoteInterfaceSize(value) ? null : "Changed for this visit. Allow browser storage to keep this size after reloading.");
   return <div className="space-y-5">
-    <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={native} />
-    {!native && <section className="space-y-3" aria-labelledby="remote-interface-size">
+    {(native || scope !== "device") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={native} />}
+    {!native && scope !== "tv" && <section className="space-y-3" aria-labelledby="remote-interface-size">
       <h3 id="remote-interface-size">This remote interface size</h3>
       <p className="text-muted-foreground">Text and controls in this browser. Other remotes keep their own size.</p>
       <InterfaceSizeChoices label="This remote interface size" value={size} onChange={change} />

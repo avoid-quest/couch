@@ -312,10 +312,11 @@ test("manual installation stays discoverable when maintenance support is disable
 for (const authority of ["host", "controller"] as const) test(`${authority} can discover Updates without accessing administrator operations`, async () => {
   const { Settings } = await import("./Settings");
   await act(async () => root.render(<Settings initialOpen credentials={{ origin: "http://localhost", token: "admin" }} connected status="connected" identity={{ authority, controller: null, claimAvailable: false }} host={authority === "host" ? { urls: [], pairingCode: "fixture" } as never : null} details={null} administratorClaimed pairingRequired={false} reachable name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-group="tv"]')!.click());
   const updates = document.querySelector('[role="tab"][id$="-trigger-updates"]') as HTMLElement;
   expect(updates).toBeTruthy();
   await act(async () => { updates.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })); updates.click(); });
-  expect(document.body.textContent).toContain("Open Settings > Updates on an administrator remote");
+  expect(document.body.textContent).toContain("Open Settings > TV & sources > Updates on an administrator remote");
   expect(button("Install update")).toBeUndefined();
   expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
 });
