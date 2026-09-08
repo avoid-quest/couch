@@ -21,13 +21,14 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
   let tracks: LibraryItem[] = [];
   for (const [name, folder] of [["local", "music-fixtures"], ["mounted", "continuity-mounted"]]) {
     await clear();
+    const previousIds = new Set((await api("/api/library/items?q=Transition&limit=30")).items.map((item: LibraryItem) => item.id));
     const sourceId = await addTVFolder(ui, until, folder!);
     await until(`${name} lossless reference files are scanned`, async () => {
-      tracks = (await api("/api/library/items?q=Transition&limit=30")).items.filter((item: LibraryItem) => item.sourceId === sourceId).sort((a: LibraryItem, b: LibraryItem) => a.title.localeCompare(b.title));
+      tracks = (await api("/api/library/items?q=Transition&limit=30")).items.filter((item: LibraryItem) => !previousIds.has(item.id)).sort((a: LibraryItem, b: LibraryItem) => a.title.localeCompare(b.title));
       return tracks.length === 2;
     });
     const result = await verifyMusicTransition(context, tracks, { artifactDir: `${artifactDir}/${name}`, folder: name === "local" ? undefined : `/mnt/${folder}` });
-    measurements.push({ name, ...result });
+    measurements.push({ name, sourceId, ...result });
   }
 
   // Exercise the two actual browser controls, in addition to the two sockets.
@@ -68,6 +69,7 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
       }
       const headers = new Headers(request.headers);
       headers.delete("host");
+      headers.set("accept-encoding", "identity");
       return fetch(`${config.containerUrl}${url.pathname}${url.search}`, { method: request.method, headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body, signal: request.signal, redirect: "manual" });
     } });
     try {
