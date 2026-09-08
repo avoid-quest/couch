@@ -564,6 +564,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.player = { ...state.player, playbackId: player.playbackId, status: "loading" };
         progress.begin(next, player.playbackId!, state.activeProfile.id);
       }
+      // Native Stop can acknowledge the retired source while another source is still resolving.
+      if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status === "unavailable") audioInterrupted = false;
       if (audioInterrupted) {
         if (player.playbackId === state.player.playbackId && player.status === "paused") {
@@ -573,8 +575,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         }
         return;
       }
-      // Native Stop can acknowledge the retired source while another source is still resolving.
-      if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
       // libmpv can report EOF after an interrupted HTTP range response. An early
