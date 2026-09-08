@@ -79,14 +79,15 @@ try {
   await api("/api/sound/output", { output: "couch_sound_hdmi" });
   await Bun.sleep(500);
   // Read only a synthetic output monitor, never a microphone.
-  const capture = Bun.spawn(["parec", "--device=couch_sound_analog.monitor", "--format=s16le", "--rate=48000", "--channels=2"], { stdout: Bun.file("/artifacts/fallback-monitor.pcm"), stderr: "ignore" });
+  const silence = Bun.spawn(["pacat", "--playback", "--raw", "--device=couch_sound_analog", "--format=s16le", "--rate=48000", "--channels=2", "/dev/zero"], { stdout: "ignore", stderr: Bun.file("/artifacts/silence-clock.log") });
+  const capture = Bun.spawn(["parec", "--device=couch_sound_analog.monitor", "--format=s16le", "--rate=48000", "--channels=2"], { stdout: Bun.file("/artifacts/fallback-monitor.pcm"), stderr: Bun.file("/artifacts/fallback-monitor.log") });
   await Bun.sleep(250);
   await pactl("unload-module", hdmi);
   await until("selected sink loss pauses seekable native media", () => state?.player.status === "paused" && !!state.player.error && !!state.systemAudio?.error);
   hdmi = await pactl("load-module", "module-null-sink", "sink_name=couch_sound_hdmi", "sink_properties=device.description=HDMI_Test");
   await until("reconnected output stays paused", () => state?.systemAudio?.error === null && state.player.status === "paused");
   await Bun.sleep(1_000); assert.equal(state!.player.status, "paused");
-  capture.kill(); await capture.exited;
+  capture.kill(); await capture.exited; silence.kill(); await silence.exited;
   const samples = new Int16Array(await Bun.file("/artifacts/fallback-monitor.pcm").arrayBuffer());
   assert.ok(samples.length > 0, "The alternate output monitor returned samples");
   assert.ok(samples.every(sample => sample === 0), "No audio may fall back to analog after HDMI disappears");
