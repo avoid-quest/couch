@@ -261,11 +261,11 @@ try {
   await ui.section("Queue");
   await xdotool("key", "Right");
   await xdotool("key", "Return");
-  await until("source tabs support real arrow-key navigation", async () => await execute("return document.querySelector('.source-nav [data-state=active]')?.textContent.trim()") === "Online");
+  await until("source tabs support real arrow-key navigation", async () => await execute("return document.querySelector('.source-nav [data-state=active]')?.textContent.trim()") === "Search");
   await xdotool("key", "Escape");
-  await until("Escape closes TV Home while retaining its browsed source", async () => await execute("return !!document.querySelector('.tv-browser[hidden]') && document.querySelector('.source-nav [data-state=active]')?.textContent.trim() === 'Online'"));
+  await until("Escape closes TV Home while retaining its browsed source", async () => await execute("return !!document.querySelector('.tv-browser[hidden]') && document.querySelector('.source-nav [data-state=active]')?.textContent.trim() === 'Search'"));
   await ui.home();
-  await until("TV Home restores source-tab focus without resetting browsing", async () => await execute("return document.activeElement?.getAttribute('role') === 'tab' && document.activeElement?.textContent.trim() === 'Online'"));
+  await until("TV Home restores source-tab focus without resetting browsing", async () => await execute("return document.activeElement?.getAttribute('role') === 'tab' && document.activeElement?.textContent.trim() === 'Search'"));
   await ui.section("Queue");
   await until("VideoStage retains DOM identity and playback across source navigation", async () => await execute("return window.__videoStageBeforeNavigation === document.querySelector('.video-stage')") && all(state => state.player.playbackId === playbackId && state.player.status === "paused"));
 

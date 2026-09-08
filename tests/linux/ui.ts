@@ -42,7 +42,7 @@ export class UiDriver {
   async controls() {
     if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show TV controls");
     else if (await this.execute("return !!document.querySelector('.tv-playback-controls[hidden]')")) await this.key("i");
-    else if (await this.execute("return !!document.querySelector('.remote-browse') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
+    else if (await this.execute("return !!document.querySelector('.remote-browse, .remote-session') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
     await this.waitFor("Playback controls become visible", () => this.execute("const element = document.querySelector('.player-controls'); return !!element && element.getClientRects().length > 0 && !element.closest('[hidden]')"));
   }
 
@@ -57,6 +57,7 @@ export class UiDriver {
   async addMedia() {
     await this.browse();
     if (await this.execute("const input = document.querySelector('#media-url'); return !!input && input.getClientRects().length > 0 && !input.closest('[hidden]')")) return;
+    await this.section("Queue");
     await this.button("Add media");
     await this.waitFor("Add media dialog opens", () => this.execute("return !!document.querySelector('[role=dialog] #media-url')"));
   }
@@ -122,7 +123,7 @@ export class UiDriver {
 
   async section(label: string) {
     await this.browse();
-    const matches = await this.execute("return [...document.querySelectorAll('.source-nav [role=tab]')].filter(tab => tab.textContent.trim().startsWith(arguments[0]))", [label]);
+    const matches = await this.execute("return [...document.querySelectorAll('.source-nav [role=tab]')].filter(tab => tab.getAttribute('data-source') === arguments[0])", [label]);
     assert.equal(matches.length, 1, `One ${label} source tab exists`);
     await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }

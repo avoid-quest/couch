@@ -136,7 +136,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
     <DialogContent className="saved-playlists sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle className="break-words pr-12">{playlist?.name ?? "Saved playlists"}</DialogTitle>
-        <DialogDescription>{selectedId ? "Edit this playlist or load it into the shared TV queue." : "Save the queue and keep your favorite mixes ready for everyone paired with this TV."}</DialogDescription>
+        <DialogDescription>{selectedId ? "Edit this playlist or load it into the shared TV queue." : "Playlists are shared on this TV and stay available when the watching profile changes. Save the queue to reuse it later."}</DialogDescription>
       </DialogHeader>
       {selectedId && <Button ref={backRef} variant="ghost" className="justify-self-start" disabled={pending} onClick={() => select(null)}><ArrowLeft aria-hidden="true" />All playlists</Button>}
       {!connected && <Alert><AlertDescription>Reconnect to load or edit playlists.</AlertDescription></Alert>}

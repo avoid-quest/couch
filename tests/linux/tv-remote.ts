@@ -49,7 +49,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await until("phone Home restores focus to the selected TV Queue tab", () => ui.execute("return document.activeElement?.getAttribute('data-source') === 'Queue' && document.activeElement?.getAttribute('aria-selected') === 'true'"));
   await phone.button("TV right");
   await phone.button("TV select");
-  await until("phone direction and OK activate the TV Online tab", () => ui.execute("return document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Online' && document.activeElement?.getAttribute('data-source') === 'Online'"));
+  await until("phone direction and OK activate the TV Search tab", () => ui.execute("return document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Search' && document.activeElement?.getAttribute('data-source') === 'Search'"));
   // The test phone shares the TV's X11 display. WebKit suppresses :focus while
   // that other window is active; real phones do not take the TV's window focus.
   await httpRemote.minimize();
@@ -58,7 +58,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await until("phone D-pad gives the TV a visible keyboard focus ring", () => ui.execute("const style = getComputedStyle(document.activeElement); return document.documentElement.hasAttribute('data-keyboard') && ((parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none')"));
   await httpRemote.restore();
   await phone.button("TV back");
-  await until("phone Back leaves TV browsing and retains its Online selection", () => ui.execute("return !!document.querySelector('.tv-browser[hidden]') && document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Online'"));
+  await until("phone Back leaves TV browsing and retains its Search selection", () => ui.execute("return !!document.querySelector('.tv-browser[hidden]') && document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Search'"));
   await phone.button("TV back");
   await until("a second phone Back hides the playback overlay", () => ui.execute("return !!document.querySelector('.tv-playback-controls[hidden]') && !!document.querySelector('.tv-browser[hidden]')"));
   await phone.button("TV info");

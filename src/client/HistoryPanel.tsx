@@ -54,13 +54,15 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   </Popover>;
 }
 
-export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay }: {
+export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, continueOnly = false, active = true }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
   version: number;
   onPlay: HistoryPlayback;
+  continueOnly?: boolean;
+  active?: boolean;
 }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [profile, setProfile] = useState<WatchingProfile | null>(null);
@@ -71,7 +73,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || !active) return;
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -85,7 +87,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load viewing history.");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [origin, token, connected, version, refresh]);
+  }, [origin, token, connected, active, version, refresh]);
 
   const play = async (item: HistoryItem, fromStart = false) => {
     setPending(item.mediaId);
@@ -97,13 +99,15 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     finally { setPending(null); }
   };
 
-  return <section className="history-panel space-y-4" aria-label="Viewing history">
-    <div><h3 className="text-xl font-semibold">Recently played</h3><p className="mt-1 text-sm text-muted-foreground">{profile ? `${profile.name}'s local history.` : "Your local history."} Jellyfin history stays with your Jellyfin account.</p></div>
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+  const visibleItems = continueOnly ? items.filter(item => item.position > 0 && !item.watched).slice(0, 6) : items;
+
+  return <section className="history-panel space-y-4" aria-label={continueOnly ? "Continue watching" : "Viewing history"}>
+    <div><h3 className="text-xl font-semibold">{continueOnly ? "Continue watching" : "Recently played"}</h3><p className="mt-1 text-sm text-muted-foreground">{profile ? `${profile.name}'s local history.` : "Your local history."} Jellyfin history stays with your Jellyfin account.</p></div>
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="text-sm text-muted-foreground" role="status">Loading history…</p>}
-    {!loading && !items.length && <Card className="p-5 text-sm text-muted-foreground">Play a local file to begin this profile's history.</Card>}
-    <ul className="history-items space-y-3" aria-busy={loading}>{items.map(item => {
+    {!loading && !error && !visibleItems.length && <Card className="p-5 text-sm text-muted-foreground">{continueOnly ? "No unfinished local media for this profile. Browse below to choose something." : "Play a local file to begin this profile's history."}</Card>}
+    <ul className="history-items space-y-3" aria-busy={loading}>{visibleItems.map(item => {
       const available = !!(item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;
       return <li key={item.mediaId}><Card className="catalog-row gap-3 p-3">

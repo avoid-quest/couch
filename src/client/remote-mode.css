@@ -39,7 +39,7 @@
   .remote-shell .header-status { flex-wrap: nowrap; gap: 4px; }
   .remote-shell .header-status [role="status"] { display: none; }
   .remote-shell .header-status button { padding-inline: 8px; }
-  .remote-shell .mode-switch { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: var(--radius-lg); background: var(--muted); }
+  .remote-shell .mode-switch { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; border-radius: var(--radius-lg); background: var(--muted); }
   .remote-shell .mode-switch button { min-height: 44px; font-size: 14px; }
   .remote-shell .mode-switch button[aria-pressed="true"] { background: var(--background); }
   .remote-shell .workspace { display: block; padding: 16px 0; }
@@ -59,6 +59,8 @@
   .remote-browse .player-controls .radio-retry { grid-column: 1 / -1; margin: 0; }
   .remote-browse .player-controls .radio-retry:not(:has(button)), .remote-browse .player-controls .radio-retry > p { display: none; }
   .remote-browse .player-controls .playback-error { grid-column: 1 / -1; max-height: 48px; overflow: auto; }
+  .remote-session .remote-controller { margin-bottom: 16px; }
+  .remote-session .remote-pad { display: none; }
   .remote-control .media-browser { display: none; }
   .remote-control .remote-controller { max-width: 400px; margin: 0 auto; }
 }

@@ -2,10 +2,12 @@ import { useUpdateActivity } from "./update-activity";
 import { loadedBuild } from "../shared/build";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
 import { createId, useSession, type Credentials } from "./session";
 import { knownConnection } from "./connection";
+import { BrowseHome } from "./BrowseHome";
+import type { HistoryPlayback } from "./HistoryPanel";
 import { SearchPanel } from "./SearchPanel";
 import { JellyfinPanel } from "./JellyfinPanel";
 import { LibraryPanel } from "./LibraryPanel";
@@ -61,12 +63,21 @@ export function App() {
   const [remoteName, setRemoteName] = useState("My remote");
   const [pairing, setPairing] = useState(false);
   const videoQualityPreference = useVideoQualityPreference();
-  const [section, setSection] = useState("Queue");
+  const homeSection = nativeHost ? "Home" : "Queue";
+  const [section, setSection] = useState(homeSection);
   const [sourcesRequest, setSourcesRequest] = useState(0);
   const [remoteMode, setRemoteMode] = useState<"browse" | "control">("browse");
   const [pairingOpen, setPairingOpen] = useState(false);
-  const [visited, setVisited] = useState(new Set(["Queue"]));
-  const changeSection = (name: string) => { setSection(name); setVisited(previous => new Set([...previous, name])); };
+  const [visited, setVisited] = useState(new Set([homeSection]));
+  const shortcutFocus = useRef<string | null>(null);
+  const changeSection = (name: string) => { shortcutFocus.current = null; setSection(name); setVisited(previous => new Set([...previous, name])); };
+  const browseSection = (name: string) => { changeSection(name); shortcutFocus.current = name; };
+  useLayoutEffect(() => {
+    if (shortcutFocus.current !== section) return;
+    shortcutFocus.current = null;
+    const tab = document.querySelector<HTMLButtonElement>(`[data-source="${section}"]`);
+    if (tab && !tab.closest("[hidden]")) tab.focus({ preventScroll: true });
+  }, [section]);
   const navigation = useRef<(key: NavigationKey) => void>(() => {});
   const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
   useUpdateActivity(credentials, connected);
@@ -109,9 +120,9 @@ export function App() {
   useNavigation(() => {
     if (nativeHost && tv.dismissLayer()) return;
     if (!nativeHost && remoteMode === "control") { setRemoteMode("browse"); return; }
-    if (section !== "Queue") {
-      changeSection("Queue");
-      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-source="Queue"]')?.focus());
+    if (section !== homeSection) {
+      changeSection(homeSection);
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-source="${homeSection}"]`)?.focus());
     }
   });
   const currentCredentials = useRef(credentials);
@@ -206,6 +217,13 @@ export function App() {
   const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean }) =>
     run({ type, itemId, entryId: createId(), ...options });
 
+  const playHistory: HistoryPlayback = (item, options) => {
+    if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });
+    if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
+    setError("Open this local file on the TV again to resume it.");
+    return Promise.resolve(false);
+  };
+
   const player = state?.player;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
@@ -215,7 +233,7 @@ export function App() {
   }[status];
 
   return (
-    <div className={`app-shell ${nativeHost ? `tv-shell${tv.browsing ? " tv-browsing" : ""}${tv.controlsVisible ? " tv-controls-visible" : ""}` : `remote-shell remote-${remoteMode}`}`}>
+    <div className={`app-shell ${nativeHost ? `tv-shell${tv.browsing ? " tv-browsing" : ""}${tv.controlsVisible ? " tv-controls-visible" : ""}` : `remote-shell remote-${remoteMode === "browse" && section === "Queue" ? "session" : remoteMode}`}`}>
 
       <main id="main">
         {nativeHost && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
@@ -226,7 +244,7 @@ export function App() {
           artwork={current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
-        <a className="brand" href="#main" aria-label="Couch, go to player" onClick={() => nativeHost ? tv.openHome() : setRemoteMode("browse")}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>couch<span className="brand-light">.avoid.quest</span></span></a>
+        <a className="brand" href="#main" aria-label="Couch, go home" onClick={() => { changeSection(homeSection); if (nativeHost) tv.openHome(); else setRemoteMode("browse"); }}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>couch<span className="brand-light">.avoid.quest</span></span></a>
         <div className="header-status">
           {nativeHost && credentials && <Button variant="ghost" aria-label="Show TV controls" onClick={() => tv.showControls({ keyboard: true, fromHome: true })}><SlidersHorizontal aria-hidden="true" />Controls</Button>}
           {host && <Button variant="outline" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
@@ -234,7 +252,8 @@ export function App() {
           {(!nativeHost || state) && <Settings setupStep={state?.setupStep} libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} />}
         </div>
         {!nativeHost && credentials && <nav className="mode-switch" aria-label="Controller views">
-          <Button variant="ghost" aria-pressed={remoteMode === "browse"} onClick={() => setRemoteMode("browse")}><LayoutGrid aria-hidden="true" />Browse</Button>
+          <Button variant="ghost" aria-pressed={remoteMode === "browse" && section === "Queue"} onClick={() => { changeSection("Queue"); setRemoteMode("browse"); }}><House aria-hidden="true" />On TV</Button>
+          <Button variant="ghost" aria-pressed={remoteMode === "browse" && section !== "Queue"} onClick={() => { changeSection("Home"); setRemoteMode("browse"); }}><LayoutGrid aria-hidden="true" />Browse</Button>
           <Button variant="ghost" aria-pressed={remoteMode === "control"} onClick={() => setRemoteMode("control")}><Gamepad2 aria-hidden="true" />Remote</Button>
         </nav>}
       </header>
@@ -274,8 +293,9 @@ export function App() {
 
               <Tabs value={section} onValueChange={changeSection} className="media-browser">
                 <TabsList className="source-nav" aria-label="Media sources">
-                  {["Queue", "Search", "Online", "Library", "Guide", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
+                  {["Home", "Queue", "Search", "Online", "Library", "Guide", "Radio", "Jellyfin"].map(name => <TabsTrigger key={name} value={name} data-source={name}>{name === "Home" ? "Browse" : name === "Queue" && !nativeHost ? "On TV" : name}{name === "Queue" && !!state?.queue.length && <Badge variant="secondary" className="source-count">{state.queue.length}</Badge>}</TabsTrigger>)}
                 </TabsList>
+                {visited.has("Home") && <TabsContent value="Home" forceMount hidden={section !== "Home"}><BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && (!nativeHost || tv.browsing)} onBrowse={browseSection} onPlay={playHistory} /></TabsContent>}
                 <TabsContent value="Queue" forceMount hidden={section !== "Queue"}>
                   <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </TabsContent>
@@ -284,12 +304,7 @@ export function App() {
                 {visited.has("Online") && <TabsContent value="Online" forceMount hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={(item, playNow, quality) =>
                   run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(quality ? { quality } : {}), playNow })
                 } onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></TabsContent>}
-                {visited.has("Library") && <TabsContent value="Library" forceMount hidden={section !== "Library"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} onPlayHistory={(item, options) => {
-                  if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });
-                  if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
-                  setError("Open this local file on the TV again to resume it.");
-                  return Promise.resolve(false);
-                }} /></TabsContent>}
+                {visited.has("Library") && <TabsContent value="Library" forceMount hidden={section !== "Library"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} onPlayHistory={playHistory} /></TabsContent>}
                 {visited.has("Radio") && <TabsContent value="Radio" forceMount hidden={section !== "Radio"}><RadioPanel host={nativeHost} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={(station, playNow) => run(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow })} /></TabsContent>}
                 {visited.has("Jellyfin") && <TabsContent value="Jellyfin" forceMount hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></TabsContent>}
               </Tabs>
