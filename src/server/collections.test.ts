@@ -8,7 +8,7 @@ import { createCollections } from "./collections";
 import { createLibrary } from "./library";
 import { createMediaFolders } from "./media-folders";
 import type { CollectionDefinition, CollectionPreview } from "../shared/collections";
-import type { QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 
 const cleanups: Array<() => unknown> = [];
 afterEach(async () => { while (cleanups.length) await cleanups.pop()!(); });
@@ -27,7 +27,7 @@ async function fixture() {
   await Bun.write(join(media, "Song.mp3"), "authorized generated audio fixture");
   const source = await library.addSource(media);
   await library.scan(source.id);
-  const loaded = mock((_entries: QueueEntry[], _mode: "append" | "play") => {});
+  const loaded = mock((_entries: QueueEntry[], _mode: "append" | "play", _authorize?: () => void, _playedBy?: PlaybackActor) => {});
   const changed = mock(() => {});
   let queue: QueueEntry[] = [];
   const open = () => {
@@ -38,8 +38,8 @@ async function fixture() {
   const service = open();
   return { service, open, library, media, source, loaded, changed, databasePath, setQueue: (entries: QueueEntry[]) => { queue = entries; } };
 }
-async function request(service: ReturnType<typeof createCollections>, method = "GET", path = "", body?: unknown) {
-  return service.handle(new Request(`http://localhost/api/collections${path}`, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) }));
+async function request(service: ReturnType<typeof createCollections>, method = "GET", path = "", body?: unknown, playedBy?: PlaybackActor) {
+  return service.handle(new Request(`http://localhost/api/collections${path}`, { method, ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) }), undefined, playedBy);
 }
 const filtered: CollectionDefinition = { name: "Drama", sort: "year", descending: true, filter: { kind: "movie", genre: "Drama" }, members: [] };
 async function create(service: ReturnType<typeof createCollections>, definition = filtered) {
@@ -90,7 +90,9 @@ test("filters bound fields, preserve literal matching and require the current vi
   const f = await fixture();
   const saved = await create(f.service);
   expect(saved.items.map(item => item.title)).toEqual(["Alpha", "Zulu"]);
-  expect((await request(f.service, "POST", `/${saved.collection.id}/load`, { revision: 1, digest: saved.digest, mode: "play" })).status).toBe(200);
+  const playedBy = { deviceId: "phone", name: "Phone" };
+  expect((await request(f.service, "POST", `/${saved.collection.id}/load`, { revision: 1, digest: saved.digest, mode: "play" }, playedBy)).status).toBe(200);
+  expect(f.loaded.mock.calls[0]![3]).toEqual(playedBy);
   expect(f.loaded.mock.calls[0]![0].map(entry => entry.title)).toEqual(["Alpha", "Zulu"]);
   f.setQueue(Array.from({ length: 499 }, (_, i) => ({ id: String(i), title: "Existing", source: "library:existing" })));
   expect((await request(f.service, "POST", `/${saved.collection.id}/load`, { revision: 1, digest: saved.digest, mode: "append" })).status).toBe(400);

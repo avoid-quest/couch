@@ -31,6 +31,8 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueProviderPlaylist": return value.provider === "youtube" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean")
+      && (value.quality === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value.quality)));
     case "enqueueProviderAlbum": return value.provider === "bandcamp" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean");
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
@@ -54,6 +56,7 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "speed": return id(value.playbackId) && number(value.speed, 4) && value.speed >= 0.25;
     case "replayGain": return id(value.playbackId) && typeof value.mode === "string" && ["off", "track", "album"].includes(value.mode);
     case "audioDelay": case "subtitleDelay": return id(value.playbackId) && typeof value.delay === "number" && Number.isFinite(value.delay) && Math.abs(value.delay) <= 60;
+    case "videoQuality": return id(value.playbackId) && typeof value.quality === "string" && ["auto", "best", "1080p", "720p", "480p"].includes(value.quality);
     case "goLive": case "next": return id(value.playbackId);
     case "stop": return true;
     default: return false;
@@ -64,6 +67,10 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
   let value: unknown;
   try { value = JSON.parse(message); } catch { throw new Error("Invalid JSON command."); }
   if (!object(value) || value.type !== "command" || !id(value.requestId) || !validAction(value.action, trusted)) throw new Error("Invalid command or unsupported media source.");
+  if (value.action.type === "videoQuality") {
+    const { playbackId, quality } = value.action;
+    return { type: "command", requestId: value.requestId, action: { type: "videoQuality", playbackId, quality } };
+  }
   if (value.action.type === "goLive") return { type: "command", requestId: value.requestId, action: { type: "goLive", playbackId: value.action.playbackId } };
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
   if (value.action.type === "enqueueProviderAlbum") {

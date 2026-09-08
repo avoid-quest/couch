@@ -11,6 +11,7 @@ import { buildKey } from "../shared/build";
 import * as recordingsModule from "./recordings";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
+import * as youtubeModule from "./providers/youtube";
 import * as bandcampModule from "./providers/bandcamp";
 import * as webMediaModule from "./web-media";
 import type { ProviderPage } from "../shared/providers";
@@ -653,7 +654,7 @@ test("HTTP viewing profiles, observed history and resume stay shared across cont
   await first.command({ type: "stop" });
   hub.session.observe(idle);
   await api("/api/profiles/household/select", "POST");
-  expect(await (await api("/api/progress/history")).json()).toMatchObject({ items: [] });
+  expect(await (await api("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId: history.items[0]!.mediaId, position: 8, queueEntryId: file.id }] });
   await api(`/api/profiles/${profile.id}/select`, "POST");
   await Promise.all([first.close(), second.close(), host.close()]);
   await hub.close();
@@ -1348,10 +1349,10 @@ test("paired controllers share For later across profile changes and restart with
 
 
 test("page deep links and refresh serve the frontend while unknown APIs stay unavailable", async () => {
-  const { pagePaths } = await import("../shared/page-paths");
+  const { frontendPaths } = await import("../shared/page-paths");
   const frontend = (await import("../client/index.html")).default;
   const { hub } = fixture(undefined, undefined, undefined, { frontend });
-  for (const path of Object.values(pagePaths)) {
+  for (const path of frontendPaths) {
     const response = await fetch(`${hub.origin}${path}?q=evening&source=Radio`);
     expect(response.status).toBe(200);
     const html = await response.text();
@@ -1363,4 +1364,133 @@ test("page deep links and refresh serve the frontend while unknown APIs stay una
     expect(asset.headers.get("Content-Type")).toContain("javascript");
   }
   expect((await fetch(`${hub.origin}/api/not-a-page`)).status).not.toBe(200);
+  expect((await fetch(`${hub.origin}/settings/not-a-page`)).status).not.toBe(200);
+});
+
+
+test("YouTube playlist queue is atomic, ordered and applies the selected quality", async () => {
+  const page: ProviderPage = { title: "Playlist", items: ["abcdefghijk", "zyxwvutsrqp"].map((id, index) => ({ id, title: `Episode ${index + 1}`, kind: "media", provider: "youtube", url: `https://www.youtube.com/watch?v=${id}` })) };
+  const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockResolvedValue(page);
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "720p" })).toMatchObject({ ok: true });
+    expect(hub.session.state.queue.map(entry => [entry.title, entry.source, entry.quality])).toEqual(page.items.map(item => [item.title, `web:${item.url}`, "720p"]));
+    expect(hub.session.state.currentEntryId).toBeNull();
+    playlist.mockRejectedValue(new Error("Playlist unavailable"));
+    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
+    expect(hub.session.state.queue).toHaveLength(2);
+  } finally { playlist.mockRestore(); }
+});
+
+test("a later Stop cancels playlist play intent without losing resolved queue entries", async () => {
+  const loading = Promise.withResolvers<ProviderPage>();
+  const started = Promise.withResolvers<void>();
+  const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockImplementation(async () => { started.resolve(); return loading.promise; });
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    const pending = remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true });
+    await started.promise;
+    expect(await remote.command({ type: "stop" })).toMatchObject({ ok: true });
+    loading.resolve({ items: [{ id: "first", title: "First", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });
+    expect(await pending).toMatchObject({ ok: false, error: "Added to the queue. Playback was canceled by a newer control." });
+    expect(hub.session.state.queue).toHaveLength(1);
+    expect(hub.session.state.currentEntryId).toBeNull();
+  } finally { loading.resolve({ items: [] }); playlist.mockRestore(); }
+});
+
+test("current quality commands await resolution, preserve paused position and share only public queue quality", async () => {
+  const gate = Promise.withResolvers<Awaited<ReturnType<typeof webMediaModule.resolveWebMedia>>>();
+  const started = Promise.withResolvers<void>();
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockImplementation(async (_url, _signal, quality) => {
+    if (quality === "720p") { started.resolve(); return gate.promise; }
+    return { source: "https://stream.example/original" };
+  });
+  try {
+    const { hub, commands, waitForCommand } = fixture();
+    hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub));
+    const other = new Peer(hub, await pair(hub));
+    await Promise.all([remote.ready(), other.ready()]);
+    expect(await remote.command({ type: "enqueueWeb", entryId: "video", title: "Video", url: "https://youtube.com/watch?v=one", playNow: true })).toMatchObject({ ok: true });
+    const loaded = await waitForCommand(command => command.type === "load");
+    if (loaded.type !== "load") throw new Error("Expected load");
+    hub.session.observe({ ...idle, playbackId: loaded.playbackId, status: "paused", seekable: true, position: 84, duration: 200 });
+    let complete = false;
+    const result = remote.command({ type: "videoQuality", playbackId: loaded.playbackId, quality: "720p" }).then(value => { complete = true; return value; });
+    await started.promise;
+    expect(complete).toBe(false);
+    expect(commands.filter(command => command.type === "load")).toHaveLength(1);
+    gate.resolve({ source: "https://stream.example/private", headers: { Authorization: "secret" }, maxVideoHeight: 720 });
+    expect(await result).toMatchObject({ ok: true });
+    await other.waitFor(message => message.type === "state" && message.state.queue[0]?.quality === "720p");
+    expect(commands.at(-1)).toMatchObject({ type: "load", paused: true, startPosition: 84, maxVideoHeight: 720 });
+    expect(other.state.queue[0]).toMatchObject({ id: "video", source: "web:https://youtube.com/watch?v=one", quality: "720p" });
+    expect(JSON.stringify(other.messages)).not.toContain("secret");
+    expect(JSON.stringify(other.messages)).not.toContain("stream.example");
+    expect(await remote.command({ type: "videoQuality", playbackId: loaded.playbackId, quality: "480p" })).toMatchObject({ ok: false });
+  } finally { resolve.mockRestore(); }
+});
+
+
+test("the authorized pairing QR uses the existing code and grants only controller access", async () => {
+  const { hub } = fixture();
+  const owner = await pair(hub), guest = await pair(hub);
+  await claimAdministrator(hub, owner);
+  for (const token of [hostToken, owner]) {
+    const response = await controllerApi(hub, token, "/api/controllers/pairing-code");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toEqual({ code: hub.pairingCode });
+  }
+  expect((await controllerApi(hub, guest, "/api/controllers/pairing-code")).status).toBe(403);
+  expect((await controllerApi(hub, "unpaired", "/api/controllers/pairing-code")).status).toBe(401);
+  const { code } = await (await controllerApi(hub, owner, "/api/controllers/pairing-code")).json() as { code: string };
+  const paired = await fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code, name: "QR phone" }) });
+  expect(paired.status).toBe(200);
+  const result = await paired.json() as { token: string; controller: { id: string; role: string } };
+  expect(result.controller.role).toBe("controller");
+  expect(result.token).not.toBe(owner);
+  expect((await controllerApi(hub, result.token, `/api/controllers/${result.controller.id}/name`, "POST", { name: "Frank's phone" })).status).toBe(200);
+  expect(await (await controllerApi(hub, result.token, "/api/controllers/me")).json()).toMatchObject({ authority: "controller", controller: { name: "Frank's phone" } });
+});
+
+test("manual playback uses authenticated device names across sockets, history, Saved and playlists", async () => {
+  const { hub } = fixture();
+  hub.session.observe(idle);
+  const firstToken = await pair(hub), secondToken = await pair(hub);
+  const firstIdentity = await (await controllerApi(hub, firstToken, "/api/controllers/me")).json();
+  const secondIdentity = await (await controllerApi(hub, secondToken, "/api/controllers/me")).json();
+  await controllerApi(hub, firstToken, `/api/controllers/${firstIdentity.controller.id}/name`, "POST", { name: "Phone" });
+  await controllerApi(hub, secondToken, `/api/controllers/${secondIdentity.controller.id}/name`, "POST", { name: "Laptop" });
+  const first = new Peer(hub, firstToken), second = new Peer(hub, secondToken), host = new Peer(hub, hostToken);
+  await Promise.all([first.ready(), second.ready(), host.ready()]);
+  const phone = { deviceId: firstIdentity.controller.id, name: "Phone" };
+  const laptop = { deviceId: secondIdentity.controller.id, name: "Laptop" };
+  // Extra client fields never become attribution, including on raw queue entries.
+  expect(await first.command({ type: "enqueue", entry: { id: "attributed", title: "Video", source: "https://media.example/video", playedBy: { deviceId: "fake", name: "Fake" } }, playNow: true, playedBy: { deviceId: "fake", name: "Fake" } } as Action)).toMatchObject({ ok: true });
+  expect(hub.session.state.playedBy).toEqual(phone);
+  expect(hub.session.state.queue[0]).not.toHaveProperty("playedBy");
+  const observe = () => hub.session.observe({ ...idle, playbackId: hub.session.state.player.playbackId, status: "playing", position: 20, duration: 120, seekable: true });
+  observe();
+  await controllerApi(hub, firstToken, `/api/controllers/${phone.deviceId}/name`, "POST", { name: "Renamed phone" });
+  expect(hub.session.state.playedBy).toEqual(phone);
+  let history = await (await controllerApi(hub, secondToken, "/api/progress/history")).json();
+  expect(history.items[0].playedBy).toEqual(phone);
+  expect(JSON.stringify(history)).not.toContain(firstToken);
+  const saved = await (await controllerApi(hub, firstToken, "/api/for-later", "POST", { reference: { kind: "queue", id: "attributed" } })).json();
+  const playlist = await (await controllerApi(hub, firstToken, "/api/playlists", "POST", { name: "Videos" })).json();
+  await second.command({ type: "stop" });
+  expect((await controllerApi(hub, secondToken, `/api/progress/${encodeURIComponent(history.items[0].mediaId)}/play`, "POST", { profileId: hub.session.state.activeProfile.id })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual(laptop);
+  observe();
+  history = await (await controllerApi(hub, firstToken, "/api/progress/history")).json();
+  expect(history.items[0].playedBy).toEqual(laptop);
+  expect((await controllerApi(hub, firstToken, `/api/for-later/${saved.item.id}/load`, "POST", { mode: "play" })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual({ ...phone, name: "Renamed phone" });
+  expect((await controllerApi(hub, secondToken, `/api/playlists/${playlist.playlist.id}/load`, "POST", { revision: playlist.playlist.revision, mode: "play" })).status).toBe(200);
+  expect(hub.session.state.playedBy).toEqual(laptop);
+  expect(await host.command({ type: "play", entryId: hub.session.state.currentEntryId! })).toMatchObject({ ok: true });
+  expect(hub.session.state.playedBy).toEqual({ deviceId: "host", name: "Couch" });
 });

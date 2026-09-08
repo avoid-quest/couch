@@ -45,7 +45,6 @@ afterEach(async () => {
 
 test("saved shared items display without queue writes; explicit actions retain the saved entry", async () => {
   await render();
-  expect(document.body.textContent).toContain("Media saved from your library or Up next");
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
   await click("Add Evening movie to Up next"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
@@ -61,7 +60,7 @@ test("failed source keeps its saved item removable and removal returns focus to 
   expect(document.activeElement).toBe(button("Play Evening song"));
   await click("Remove Evening song from For later");
   expect(document.activeElement?.id).toBe("for-later-title");
-  expect(document.body.textContent).toContain("Use Save on a title");
+  expect(document.body.textContent).toContain("No saved titles");
 });
 
 test("unavailable native playback still allows append and remove; disconnected controllers cannot mutate", async () => {

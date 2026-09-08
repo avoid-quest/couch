@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Action } from "../shared/protocol";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
+import { QualityOptions } from "./QualitySelect";
+import { isYouTubePlaylistUrl } from "../shared/providers";
 import { createId } from "./session";
 
 export type SearchPlaybackProps = {
@@ -22,13 +24,14 @@ export async function readSearch<T>(props: Pick<SearchPlaybackProps, "origin" | 
 type SearchPage = ProviderPage & { warning?: string };
 type Location = { request: BrowseRequest; title: string; opener?: string };
 type Props = SearchPlaybackProps & {
-  provider: ProviderId; query: string; url?: string; version: number; quality: VideoQuality; onEnqueued: () => void;
+  provider: ProviderId; query: string; url?: string; version: number; quality: VideoQuality; onQualityChange?: (quality: VideoQuality) => void; onEnqueued: () => void;
 };
 export function SearchOnlineResults(props: Props) {
   return <OnlineResults key={`${props.origin}:${props.token}:${props.provider}`} {...props} />;
 }
 function OnlineResults(props: Props) {
   const { provider } = props;
+  const qualityId = useId();
   const [trail, setTrail] = useState<Location[]>([{ request: props.url ? { url: props.url } : { query: props.query }, title: providerNames[provider] }]);
   const location = trail[trail.length - 1]!;
   const [page, setPage] = useState<SearchPage | null>(null);
@@ -102,8 +105,8 @@ function OnlineResults(props: Props) {
     } catch (reason) { if (!controller.signal.aborted) setError(searchError(reason)); }
     finally { if (!controller.signal.aborted) setLoading(false); }
   }
-  function open(item: ProviderItem) { const container = section.current?.closest(".tv-browser") ?? document.scrollingElement;
-    views.current.set(key, { visible, top: container?.scrollTop ?? 0 }); restore.current = "back"; setTrail(current => [...current, { request: { url: item.url }, title: item.title, opener: item.id }]); }
+  function open(item: ProviderItem, opener = item.id) { const container = section.current?.closest(".tv-browser") ?? document.scrollingElement;
+    views.current.set(key, { visible, top: container?.scrollTop ?? 0 }); restore.current = "back"; setTrail(current => [...current, { request: { url: item.url }, title: item.title, opener }]); }
   function back() { restore.current = location.opener; setTrail(current => current.slice(0, -1)); }
   async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done: string) {
     if (busy || !props.connected || !lifetime.current) return;
@@ -126,6 +129,7 @@ function OnlineResults(props: Props) {
       if (!signal.aborted) setFavorites(current => saved ? current?.filter(entry => entry.id !== item.id) ?? [] : [...current?.filter(entry => entry.id !== item.id) ?? [], item]);
     }, `${item.title} ${saved ? "removed from" : "added to"} Saved.`);
   }
+  const playlistUrl = provider === "youtube" && isYouTubePlaylistUrl(location.request.url ?? location.request.query ?? "") ? location.request.url ?? location.request.query : undefined;
   const album = provider === "bandcamp" && /\/album\//.test(location.request.url ?? "") && !!page?.items.length && page.items.every(item => item.kind === "media");
   return <section ref={section} aria-label={`${providerNames[provider]} search results`} aria-busy={loading} className="search-source" onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented && trail.length > 1 && props.active) { event.preventDefault(); back(); } }}>
     <div className="search-source-heading"><h2>{providerNames[provider]}</h2>{trail.length > 1 && <Button variant="outline" data-back onClick={back}>Back to results</Button>}</div>
@@ -136,11 +140,14 @@ function OnlineResults(props: Props) {
     {page?.warning && <p role="status">{page.warning}</p>}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
+    {playlistUrl && page?.items.length && !loading && !error && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, playNow: true, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playing playlist on the TV.")}>Play playlist</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playlist added to Up next.")}>Up next: playlist</Button>{props.onQualityChange && <QualityOptions id={`${qualityId}-playlist`} label="Playlist video quality" value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}</div>}
     {album && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url!, playNow: true }), "Starting album on the TV.")}>Play album</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url! }), "Album added to Up next.")}>Up next: album</Button></div>}
     <ul className="search-online-grid">{page?.items.slice(0, visible).map(item => {
       const saved = !!favorites?.some(entry => entry.id === item.id);
       return <li key={item.id} className="search-online-card"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="search-online-copy"><h3>{item.title}</h3><p>{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</p></div><div className="search-item-actions">
         {item.kind === "media" ? <><Button data-search-item={item.id} aria-label={`Play ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play</Button><Button variant="secondary" aria-label={`Add ${item.title} to Up next`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Up next</Button></> : <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => open(item)}>Open</Button>}
+        {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => open(item, `${item.id}-broadcasts`)}>Past broadcasts</Button>}
+        {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
         <Button variant="ghost" aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Saved" : "Save"}</Button>
       </div></li>;
     })}</ul>

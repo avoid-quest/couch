@@ -41,7 +41,7 @@ export async function settingField(request: Request, field: string) {
   return (value as Record<string, unknown>)[field];
 }
 
-export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode }: { store: Store; onChange: (controller?: import("../shared/controllers").Controller) => void; onRevoke?: (id: string) => void; recoveryCode?: string }) {
+export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (controller?: import("../shared/controllers").Controller) => void; onRevoke?: (id: string) => void; recoveryCode?: string; pairingCode?: string }) {
   if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("The administrator recovery code must contain 32 to 256 hexadecimal characters.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
@@ -78,10 +78,20 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
           administrator();
           return json({ controllers: store.controllers() });
         }
+        if (path === "/api/controllers/pairing-code") {
+          if (request.method !== "GET") return methods("GET");
+          administrator();
+          if (!pairingCode) throw new ControllerError("Pairing is unavailable.", 503);
+          return json({ code: pairingCode });
+        }
         const device = /^\/api\/controllers\/([\w-]{1,80})(?:\/(name|role))?$/.exec(path);
         if (device && !["claim", "claim-code"].includes(device[1]!)) {
-          administrator();
           const id = device[1]!;
+          const authorizeDevice = () => {
+            const current = requireIdentity();
+            if (device[2] !== "name" || current.controller?.id !== id) administrator();
+          };
+          authorizeDevice();
           if (!device[2]) {
             if (request.method !== "DELETE") return methods("DELETE");
             store.revokeController(id);
@@ -91,7 +101,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
           }
           if (request.method !== "POST") return methods("POST");
           const value = await settingField(request, device[2]);
-          administrator();
+          authorizeDevice();
           const controller = device[2] === "name" ? store.renameController(id, value) : store.setControllerRole(id, value);
           onChange(controller);
           return json({ controller });

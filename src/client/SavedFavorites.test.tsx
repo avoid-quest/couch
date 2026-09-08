@@ -29,7 +29,7 @@ beforeEach(async () => {
   calls.length = 0; played.length = 0; opened.length = 0; failOnline = false;
   online = [video, album]; radios = [station];
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "HTMLSelectElement", "KeyboardEvent", "PointerEvent", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -110,29 +110,17 @@ test("without native playback saved media remains queueable, while disconnect cl
   expect(document.body.textContent).toContain("Reconnect");
 });
 
-test("Saved starts with every existing save store together and keeps viewing history separate", async () => {
+test("Saved keeps saved collections together without a separate history destination", async () => {
   const { SavedSection } = await import("./SavedSection");
   const browsed: string[] = [];
-  await act(async () => root.render(<SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active onPlay={async () => true}
+  await act(async () => root.render(<SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} />));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
   expect([...document.querySelectorAll('[role="tab"]')].map(node => node.textContent)).toEqual(["Items", "Playlists"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
-  await click("Find something to save");
-  expect(browsed).toEqual(["Search"]);
-  await click("Your viewing history");
-  expect(document.querySelector("h1")?.textContent).toBe("Viewing history");
-  expect(document.body.textContent).toContain("Your local history");
-  expect(calls.some(call => call.path === "/api/progress/history")).toBe(true);
-  expect(document.activeElement).toBe(button("Back to Saved"));
-  expect(document.querySelector("button[data-back]")).toBe(button("Back to Saved"));
-  await act(async () => document.querySelector<HTMLButtonElement>("button[data-back]")!.click());
-  await flush();
-  expect(document.querySelector("h1")?.textContent).toBe("Saved");
-  expect(document.activeElement).toBe(button("Your viewing history"));
-  expect(calls.every(call => call.method === "GET")).toBe(true);
+  expect([...document.querySelectorAll("button")].some(node => node.textContent === "History")).toBe(false);
 });
 
 
@@ -152,7 +140,7 @@ test("opening a saved collection browses its provider and URL, with Back returni
     const [selected, setSelected] = useState<ProviderItem | null>(null);
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
-      ? <ProviderPanel {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} onEnqueueAlbum={async () => true} />
+      ? <ProviderPanel {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />
       : <SavedFavorites {...connection} providerVersion={1} radioVersion={1} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />;
   }
   await act(async () => root.render(<SavedCollection />));
@@ -164,4 +152,56 @@ test("opening a saved collection browses its provider and URL, with Back returni
   await flush();
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
   expect(browsed.at(-1)?.searchParams.has("url")).toBe(false);
+});
+
+
+test("an opened YouTube playlist plays or queues the full collection with a quality override beside its controls", async () => {
+  const { ProviderPanel } = await import("./ProviderPanel");
+  const playlist: ProviderItem = { id: "list", provider: "youtube", kind: "collection", title: "Evening playlist", url: "https://www.youtube.com/playlist?list=PL1234567890" };
+  const queued: unknown[] = [];
+  request.mockImplementation((async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith("/items")
+    ? Response.json({ title: playlist.title, items: [video], nextCursor: "24" }) : Response.json({ favorites: [] })) as typeof fetch);
+  const props = { origin: "http://localhost", token: "paired", connected: true, canPlay: true, initialItem: playlist, version: 1, defaultQuality: "1080p" as const, onEnqueue: async () => true, onEnqueueAlbum: async () => true, onEnqueuePlaylist: async (...args: unknown[]) => { queued.push(args); return true; } };
+  await act(async () => root.render(<ProviderPanel {...props} />)); await flush();
+  expect(document.querySelector('[role="combobox"]')).toBeNull();
+  expect(document.body.textContent).not.toContain("Next video quality");
+  await click("Play playlist");
+  expect(queued).toEqual([[playlist.url, true, "1080p"]]);
+  await click("Video quality for Evening playlist");
+  const trigger = document.querySelector<HTMLElement>('[role="combobox"]')!;
+  await act(async () => trigger.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }) as unknown as Event)); await flush();
+  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Up to 720p")!;
+  await act(async () => { option.focus(); option.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }) as unknown as Event); }); await flush();
+  await act(async () => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event)); await flush();
+  await click("Up next");
+  expect(queued.at(-1)).toEqual([playlist.url, false, "720p"]);
+  await click("Play playlist");
+  expect(queued.at(-1)).toEqual([playlist.url, true, "1080p"]);
+  await act(async () => root.render(<ProviderPanel {...props} connected={false} />)); await flush();
+  expect(button("Play playlist").disabled).toBe(true);
+});
+
+test("Back from a live Twitch channel restores focus to its Past broadcasts button", async () => {
+  const { ProviderPanel } = await import("./ProviderPanel");
+  const channel: ProviderItem = { id: "twitch-live", provider: "twitch", kind: "media", title: "Live channel", url: "https://www.twitch.tv/live_channel", live: true };
+  const browsed: URL[] = [];
+  request.mockImplementation((async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/items")) return Response.json({ favorites: [] });
+    browsed.push(url);
+    return Response.json({ title: "Twitch", items: [channel] });
+  }) as typeof fetch);
+  await act(async () => root.render(<ProviderPanel origin="http://localhost" token="paired" connected canPlay initialItem={channel} version={1} defaultQuality="auto"
+    onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />));
+  await flush();
+  await click("Back");
+  const opener = button("Past broadcasts");
+  await act(async () => { opener.focus(); opener.click(); });
+  await flush();
+  expect(browsed.at(-1)?.searchParams.get("url")).toBe(channel.url);
+  expect(button("Past broadcasts")).toBeUndefined();
+  await click("Back");
+  expect(browsed.at(-1)?.searchParams.has("url")).toBe(false);
+  expect(document.activeElement === button("Past broadcasts")).toBe(true);
+  expect(document.querySelectorAll('[data-provider-id="twitch-live"]')).toHaveLength(1);
 });

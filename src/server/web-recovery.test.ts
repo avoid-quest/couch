@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
+import { playbackMediaId } from "./progress";
 import type { Action, PlaybackCommand, PlayerState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
@@ -15,7 +16,7 @@ function fixture() {
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "web:https://artist.bandcamp.com/track/one", quality: "480p", automaticTitle: true } });
   session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" } });
-  session.command({ type: "play", entryId: "one" });
+  session.command({ type: "play", entryId: "one" }, undefined, { deviceId: "phone", name: "Phone" });
   const playbackId = session.state.player.playbackId!;
   session.observe({ ...idle, playbackId, status: "paused", position: 47.25, duration: 120, seekable: true, speed: 1.25, replayGain: "track" });
   const fail = () => session.observe({ ...idle, playbackId, status: "error", error: "Native transport failed" });
@@ -37,6 +38,7 @@ test("one private recovery preserves observed position, settings, queue metadata
   expect(f.commands.at(-1)).not.toHaveProperty("expiry");
   expect(f.commands.at(-1)).not.toHaveProperty("metadata");
   expect(f.session.state.queue).toEqual(queue);
+  expect(f.session.state.playedBy).toEqual({ deviceId: "phone", name: "Phone" });
   expect(JSON.stringify(f.session.state)).not.toContain("secret");
   const playbackId = f.session.state.player.playbackId;
   f.session.observe({ ...idle, playbackId, status: "playing", position: 50 });
@@ -166,4 +168,22 @@ test("queue changes and playback reservations stop a replacement while its nativ
     expect(f.session.state.player.status).toBe("error");
     f.store.close();
   }
+});
+
+
+for (const outcome of ["observed", "loading", "failed"] as const) test(`history survives expiry recovery when the replacement is ${outcome}`, async () => {
+  const f = fixture();
+  try {
+    const mediaId = playbackMediaId(f.session.state.queue[0]!)!;
+    f.fail();
+    f.pending.resolve(outcome === "failed" ? null : f.fresh);
+    await Bun.sleep(0);
+    if (outcome === "observed") {
+      f.session.observe({ ...idle, playbackId: f.session.state.player.playbackId, status: "paused", position: 70, duration: 120, seekable: true });
+      f.session.observe({ ...idle, playbackId: f.playbackId, status: "playing", position: 99, duration: 120, seekable: true });
+    }
+    f.session.command({ type: "stop" });
+    expect(f.store.progress("household", mediaId)?.position).toBe(outcome === "observed" ? 70 : 47.25);
+    expect(f.store.historySource(mediaId)?.source).toBe("web:https://artist.bandcamp.com/track/one");
+  } finally { f.session.close(); f.store.close(); }
 });

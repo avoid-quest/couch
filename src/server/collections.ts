@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import type { CollectionDefinition, CollectionFilter, CollectionPreview, SavedCollection } from "../shared/collections";
 import type { LibraryItem } from "../shared/library";
-import type { QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 import type { createLibrary } from "./library";
 
@@ -11,7 +11,7 @@ type Options = {
   library: Pick<ReturnType<typeof createLibrary>, "getItem" | "collectionItems">;
   onChange: () => void;
   queue: () => QueueEntry[];
-  loadQueue: (entries: QueueEntry[], mode: "append" | "play", authorize: () => void) => void;
+  loadQueue: (entries: QueueEntry[], mode: "append" | "play", authorize: () => void, playedBy?: PlaybackActor) => void;
 };
 type Row = { id: string; revision: number; updatedAt: number; definition: string };
 class CollectionError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
@@ -113,7 +113,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
     return { collection, items, total, digest };
   };
   return {
-    async handle(request: Request, authorize = () => {}): Promise<Response> {
+    async handle(request: Request, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       try {
         assertOpen();
         const path = new URL(request.url).pathname;
@@ -152,7 +152,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
           const available = current.items.filter(item => item.available);
           if (!available.length) throw new CollectionError("No available items in this preview.");
           if (input.mode === "append" && queue().length + available.length > 500) throw new CollectionError("The queue can contain up to 500 entries. Remove some entries first.");
-          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize);
+          loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize, playedBy);
           return Response.json({ ok: true, loaded: available.length, missing: current.items.length - available.length });
         }
         if (request.method === "GET") return Response.json(preview(get(id)));

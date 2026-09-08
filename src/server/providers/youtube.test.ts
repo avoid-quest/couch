@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
+import { isYouTubePlaylistUrl } from "../../shared/providers";
 import type { BrowseRequest } from "../../shared/providers";
 import type { YtDlpOptions } from "../yt-dlp";
 import { parseCommand } from "../validation";
 import { providerItemId } from "./http";
 import { createProviders } from "./index";
-import { createYouTubeBrowser } from "./youtube";
+import { createYouTubeBrowser, createYouTubePlaylistLoader } from "./youtube";
 
 const video = { id: "BaW_jenozKc", title: "Public video", url: "https://www.youtube.com/watch?v=BaW_jenozKc", duration: 42, channel: "Creator" };
 const playlist = "https://www.youtube.com/playlist?list=PLZHQObOWTQDMsr9K-rj53DwVRMYO3t5Yr";
@@ -167,4 +168,47 @@ test("forwards cancellation, rejects stale output, and never starts with an abor
   const { browse: noStart, calls } = fixture();
   await expect(noStart({ query: "NASA" }, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   expect(calls).toHaveLength(0);
+});
+
+
+test("playlist loader resolves every entry in order with a 500 item bound", async () => {
+  const entries = Array.from({ length: 26 }, (_, index) => ({ ...video, url: `https://www.youtube.com/watch?v=${String(index).padStart(11, "0")}` }));
+  let args: string[] = [];
+  const load = createYouTubePlaylistLoader(async input => { args = input; return JSON.stringify({ _type: "playlist", title: "All episodes", webpage_url: playlist, playlist_count: entries.length, entries }); });
+  const page = await load(playlist);
+  expect(page.items.map(item => item.url)).toEqual(entries.map(entry => entry.url));
+  expect(args).toEqual(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", "1:501", "--", playlist]);
+});
+
+test("playlist loader rejects nonplaylists, partial or unavailable entries without returning a partial queue", async () => {
+  let calls = 0;
+  const load = createYouTubePlaylistLoader(async () => { calls++; return "{}"; });
+  for (const url of [video.url, "https://www.youtube.com/@NASA/videos", "https://example.org/playlist?list=PL1234567890"]) await expect(load(url)).rejects.toThrow();
+  expect(calls).toBe(0);
+  for (const metadata of [
+    { _type: "playlist", entries: [] },
+    { _type: "playlist", entries: [video], playlist_count: 2 },
+    { _type: "playlist", entries: [video], playlist_count: 501 },
+    { _type: "playlist", entries: Array(501).fill(video) },
+    { _type: "playlist", entries: [video, { ...video, availability: "private" }] },
+    { _type: "playlist", entries: [{ title: "Channel", url: "https://www.youtube.com/@NASA" }] },
+    { _type: "playlist", entries: [video], webpage_url: "https://www.youtube.com/playlist?list=PL1234567890" },
+    { entries: [video] },
+  ]) await expect(createYouTubePlaylistLoader(async () => JSON.stringify(metadata))(playlist)).rejects.toThrow();
+});
+
+test("playlist loading discards cancelled output", async () => {
+  const controller = new AbortController();
+  const load = createYouTubePlaylistLoader(async () => { controller.abort(); return JSON.stringify({ _type: "playlist", entries: [video] }); });
+  await expect(load(playlist, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+});
+
+
+test("playlist action eligibility accepts the same trailing slash forms as browsing", async () => {
+  const url = playlist.replace("/playlist?", "/playlist/?");
+  expect(isYouTubePlaylistUrl(url)).toBe(true);
+  const { browse, calls } = fixture();
+  await browse({ url });
+  expect(calls[0]!.args.at(-1)).toBe(playlist);
+  expect(isYouTubePlaylistUrl("https://www.youtube.com/@NASA/videos/")).toBe(false);
 });

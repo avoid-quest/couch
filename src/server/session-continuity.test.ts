@@ -162,3 +162,21 @@ test("a queue-position write failure still adopts the track already started by t
     expect(f.session.state.queueError).toBeNull();
   } finally { save.mockRestore(); f.close(); }
 });
+
+test("a prepared successor keeps its shared history owner and existing watched mark", async () => {
+  const f = fixture();
+  try {
+    const older = f.store.createProfile("Older history");
+    const mediaId = "library:second";
+    f.store.saveProgress(older.id, { mediaId, libraryItemId: "second", title: "second", position: 0, duration: 3, watched: true, lastPlayedAt: 100 });
+    await tick();
+    const prepared = f.commands.find(command => command.type === "prepare" && command.next);
+    if (prepared?.type !== "prepare" || !prepared.next) throw new Error("Missing prepared successor");
+    f.session.observe({ ...idle, playbackId: prepared.next.playbackId, status: "playing", position: 0.1, duration: 3, seekable: true });
+    expect(f.store.sharedProgress(mediaId)).toMatchObject({ watched: true, position: 0.1 });
+    expect(f.store.progress(older.id, mediaId)).toMatchObject({ watched: true, position: 0.1 });
+    expect(f.store.progress("household", mediaId)).toBeNull();
+    expect(f.session.state.activeProfile.id).toBe("household");
+    expect(f.transitions).toEqual([prepared.next.playbackId]);
+  } finally { f.close(); }
+});

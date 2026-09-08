@@ -13,19 +13,14 @@ type Props = {
 };
 
 function Remote({ device, currentId, disabled, update, lastAdministrator }: Omit<Props, "devices"> & { device: Controller; lastAdministrator: boolean }) {
-  const [name, setName] = useState(device.name);
   const [confirmation, setConfirmation] = useState<"role" | "revoke" | null>(null);
-  useEffect(() => { setName(device.name); setConfirmation(null); }, [device.name, device.role]);
+  useEffect(() => { setConfirmation(null); }, [device.name, device.role]);
   const nextRole = device.role === "administrator" ? "controller" : "administrator";
   const roleAction = nextRole === "administrator" ? "Approve administrator" : "Remove administration";
   return <li className="min-w-0 space-y-3 rounded-lg border p-3" data-controller-id={device.id}>
-    <div className="flex flex-wrap items-center gap-2"><p className="min-w-0 break-words font-medium">{device.name}{device.id === currentId ? " · This browser" : ""}</p><Badge variant="secondary">{device.role === "administrator" ? "Administrator" : "Controller"}</Badge></div>
+    <div className="flex flex-wrap items-center gap-2"><p className="min-w-0 break-words font-medium">{device.name}{device.id === currentId ? " · This device" : ""}</p><Badge variant="secondary">{device.role === "administrator" ? "Administrator" : "Controller"}</Badge></div>
     <p className="text-muted-foreground">Last seen {device.lastSeenAt === null ? "unknown" : new Date(device.lastSeenAt).toLocaleString()}</p>
-    <form className="space-y-2" onSubmit={event => void update(event, `/api/controllers/${device.id}/name`, { name: name.trim() }, "Remote name saved.")}>
-      <Label htmlFor={`remote-${device.id}`}>Remote name</Label>
-      <Input className="min-h-11" id={`remote-${device.id}`} value={name} onChange={event => setName(event.target.value)} maxLength={60} disabled={disabled} required />
-      <Button className="min-h-11" variant="outline" disabled={disabled || !name.trim() || name.trim() === device.name}>Save remote name</Button>
-    </form>
+    {device.id !== currentId && <RemoteName device={device} disabled={disabled} update={update} />}
     <div className="flex flex-wrap gap-2">
       <Button className="min-h-11" variant="outline" disabled={disabled || lastAdministrator} onClick={() => setConfirmation("role")}>{roleAction}</Button>
       <Button className="min-h-11" variant="destructive" disabled={disabled || lastAdministrator} onClick={() => setConfirmation("revoke")}>Revoke access</Button>
@@ -48,4 +43,14 @@ export function PairedRemotes({ devices, ...props }: Props) {
     <p className="text-muted-foreground">Administrators manage this TV and every paired remote. Controller pairing grants browsing and playback only.</p>
     <ul className="space-y-3">{devices.map(device => <Remote key={device.id} device={device} lastAdministrator={device.role === "administrator" && administrators === 1} {...props} />)}</ul>
   </section>;
+}
+
+export function RemoteName({ device, disabled, update }: Pick<Props, "disabled" | "update"> & { device: Controller }) {
+  const [name, setName] = useState(device.name);
+  useEffect(() => setName(device.name), [device.name]);
+  return <form className="space-y-2" onSubmit={event => void update(event, `/api/controllers/${device.id}/name`, { name: name.trim() }, "Remote name saved.")}>
+      <Label htmlFor={`remote-${device.id}`}>Device name</Label>
+      <Input className="min-h-11" id={`remote-${device.id}`} value={name} onChange={event => setName(event.target.value)} maxLength={60} disabled={disabled} required />
+      <Button className="min-h-11" variant="outline" disabled={disabled || !name.trim() || name.trim() === device.name}>Save device name</Button>
+    </form>;
 }

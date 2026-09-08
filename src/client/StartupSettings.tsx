@@ -34,20 +34,20 @@ export function StartupSettings({ credentials: { origin, token }, connected }: P
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save TV startup. Refresh to check the effective setting.");
       if (controller.signal.aborted) return;
-      setState(result); setNotice("Saved and read back from LightDM. Applies at the next boot or graphical session. Current playback continues.");
+      setState(result); setNotice("Saved. Applies at the next startup.");
     } catch (reason) { if (controller.signal.aborted) return; setState(null); setError(reason instanceof Error ? reason.message : "Could not save TV startup. Refresh to check the effective setting."); }
     finally { if (!controller.signal.aborted) setPending(false); if (mutation.current === controller) mutation.current = null; }
   };
   return <div className="space-y-3">
-    <p className="font-medium">Start Couch automatically without a login password</p>
-    <p className="text-muted-foreground">Applies to the dedicated TV session at the next boot or graphical session. Your SSH administrator password stays the same.</p>
+    <p className="font-medium">Automatic startup</p>
+    <p className="text-muted-foreground">Start Couch when the TV computer turns on, without a login prompt.</p>
     {state && <>
       <p data-startup-mode>Effective startup: {state.enabled ? "Couch starts automatically" : "Login screen; Couch does not start automatically"}.</p>
       <p data-startup-fullscreen>{state.enabled && state.fullscreenAtLaunch ? "Couch starts fullscreen at boot." : state.fullscreenAtLaunch ? "Couch opens fullscreen when its TV session is launched." : "Couch opens in a window."} Current TV window: {state.fullscreenNow === null ? "unavailable" : state.fullscreenNow ? "fullscreen" : "windowed"}.</p>
       <Button variant="outline" className="min-h-11" disabled={!connected || pending} onClick={() => void save()}>{pending ? "Saving startup…" : state.enabled ? "Disable automatic startup" : "Enable automatic startup"}</Button>
     </>}
     {!state && !error && <p className="text-muted-foreground">{connected ? "Reading TV startup…" : "Reconnect to read TV startup."}</p>}
-    <p className="text-muted-foreground">After disabling, launch Couch again from SSH with your administrator account: run <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. The second command ends the current graphical session. For app recovery, use <code>sudo couch-session logs</code> and <code>sudo couch-session restart</code> from SSH.</p>
+    <details><summary className="min-h-11 cursor-pointer content-center" tabIndex={0}>Startup recovery</summary><p className="text-muted-foreground">After disabling, launch Couch again from SSH with your administrator account: run <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. The second command ends the current graphical session. For app recovery, use <code>sudo couch-session logs</code> and <code>sudo couch-session restart</code> from SSH.</p></details>
     {notice && <p role="status">{notice}</p>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     <Button variant="outline" className="min-h-11" disabled={!connected || pending} onClick={() => setRefresh(value => value + 1)}>Refresh startup</Button>

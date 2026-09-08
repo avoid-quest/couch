@@ -1,22 +1,23 @@
 import type { HistoryItem } from "../shared/library";
-import type { PlayerState, QueueEntry } from "../shared/protocol";
+import type { PlaybackActor, PlayerState, QueueEntry } from "../shared/protocol";
 import type { Store } from "./store";
 
 export class ViewingError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-export function localMediaId(entry: QueueEntry): string | null {
-  if (entry.live) return null;
+export function playbackMediaId(entry: QueueEntry): string | null {
+  if (entry.live || entry.kind === "radio" || /^(radio|iptv):/.test(entry.source)) return null;
   if (/^recording:[a-f0-9-]{36}$/.test(entry.source)) return entry.source;
   if (/^library:[\w-]{1,80}$/.test(entry.source)) return entry.source;
   if (entry.source.startsWith("file:")) {
     return `file:${new Bun.CryptoHasher("sha256").update(new URL(entry.source).href).digest("hex")}`;
   }
+  if (/^(web:https?:|https?:|jellyfin:)/.test(entry.source)) return `media:${new Bun.CryptoHasher("sha256").update(entry.source).digest("hex")}`;
   return null;
 }
 
-type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
+type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem; entry: QueueEntry; observed: boolean; lastSaved: string; lastWrite: number; paused: boolean; seek: { target: number; from: number } | null };
 
 // Only native observations may change position. Commands merely request a checkpoint.
 export function createProgress(store: Store, committed: () => void, now = Date.now) {
@@ -25,7 +26,7 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
     if (!active?.observed) return;
     const snapshot = JSON.stringify([active.item.position, active.item.duration, active.item.watched]);
     if (snapshot === active.lastSaved) return;
-    store.saveProgress(active.profileId, active.item);
+    store.saveProgress(active.profileId, active.item, active.entry);
     active.lastWrite = now();
     active.lastSaved = snapshot;
     committed();
@@ -35,19 +36,27 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
     forgetProfile(id: string) { if (active?.profileId === id) active = null; },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
-    begin(entry: QueueEntry, playbackId: string, profileId: string) {
-      const mediaId = localMediaId(entry);
+    begin(entry: QueueEntry, playbackId: string, profileId: string, playedBy?: PlaybackActor) {
+      const mediaId = playbackMediaId(entry);
       active = mediaId ? {
-        playbackId, profileId, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
-        item: { mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
+        playbackId, profileId, entry: { ...entry }, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
+        item: { ...(playedBy ? { playedBy: { ...playedBy } } : {}), mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
+    },
+    replaceTransport(previousPlaybackId: string | null, playbackId: string, entry?: QueueEntry) {
+      if (!active || active.playbackId !== previousPlaybackId) return;
+      active.playbackId = playbackId;
+      if (entry && playbackMediaId(entry) === active.item.mediaId) {
+        active.entry = { ...entry };
+        active.lastSaved = "";
+      }
     },
     seek(position: number) { if (active) active.seek = { target: position, from: active.item.position }; },
     observe(player: PlayerState) {
       if (!active || player.playbackId !== active.playbackId || !["playing", "paused", "ended"].includes(player.status)) return;
       if (!Number.isFinite(player.position) || player.position < 0) return;
       const duration = player.duration !== null && Number.isFinite(player.duration) && player.duration > 0 ? player.duration : active.item.duration;
-      active.item.position = duration === null ? player.position : Math.min(player.position, duration);
+      active.item.position = active.item.mediaId.startsWith("media:") && !player.seekable ? 0 : duration === null ? player.position : Math.min(player.position, duration);
       active.item.duration = duration;
       active.item.lastPlayedAt = now();
       active.observed = true;

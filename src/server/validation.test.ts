@@ -81,3 +81,21 @@ test("Go live requires a current playback identity and exposes no native option 
 test("web queue accepts automatic quality alongside explicit unrestricted playback", () => {
   for (const quality of ["auto", "best"]) expect(parse({ type: "enqueueWeb", entryId: "video", url: "https://www.youtube.com/watch?v=123", quality }).action).toMatchObject({ quality });
 });
+
+
+test("YouTube playlist commands validate quality and play intent", () => {
+  const action = { type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "1080p", playNow: true } as const;
+  const parse = (value: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "playlist", action: value }), false);
+  expect(parse(action).action).toEqual(action);
+  for (const change of [{ provider: "twitch" }, { url: "file:///private" }, { quality: "4k" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
+});
+
+test("current video quality requires a playback ID and a known quality and strips private fields", () => {
+  for (const quality of ["auto", "best", "1080p", "720p", "480p"] as const) {
+    const action = { type: "videoQuality", playbackId: "current", quality } as const;
+    expect(parse({ ...action, source: "file:///private", headers: { Authorization: "secret" } }).action).toEqual(action);
+  }
+  for (const change of [{ playbackId: null }, { quality: "4k" }, { quality: ["720p"] }, { quality: 720 }, { quality: null }]) {
+    expect(() => parse({ type: "videoQuality", playbackId: "current", quality: "720p", ...change })).toThrow();
+  }
+});

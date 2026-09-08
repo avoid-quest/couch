@@ -57,12 +57,12 @@ export function AdvancedSettings({ credentials, connected }: { credentials: { or
   useEffect(() => { setExporting(false); }, [connected, origin, token]);
 
   return <div className="min-w-0 space-y-4" data-advanced-settings>
-    <p className="text-muted-foreground">Read-only details for this TV installation. Refresh to collect a snapshot. Unknown means the system has not reported that detail.</p>
+    <p className="text-muted-foreground">System details and diagnostics.</p>
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" className="min-h-11" disabled={!connected || loading || exporting} onClick={() => setRefresh(value => value + 1)}><RefreshCw aria-hidden="true" />Refresh</Button>
       <Button variant="outline" className="min-h-11" disabled={!connected || loading || exporting || !report} onClick={() => setExporting(true)}><Download aria-hidden="true" />{exporting ? "Exporting…" : "Export diagnostics"}</Button>
     </div>
-    <p className="text-xs text-muted-foreground">Export downloads a sanitized JSON file, up to 128 KiB, with the latest 80 errors from this session. URLs and credentials are removed. Review the file before sharing it. Nothing is uploaded.</p>
+    <p className="text-xs text-muted-foreground">Downloads diagnostics with URLs and credentials removed.</p>
     {!connected && <p role="status">Connect to the TV to load diagnostics.</p>}
     {loading && <p role="status">Loading diagnostics…</p>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
@@ -83,7 +83,7 @@ export function AdvancedSettings({ credentials, connected }: { credentials: { or
       <section className="space-y-2"><h3 className="font-medium">Media helpers</h3><Facts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
       <section className="space-y-2"><h3 className="font-medium">Effective configuration</h3><Facts facts={report.configuration} /></section>
       <section className="space-y-2"><h3 className="font-medium">Sources</h3>{report.sources.length ? <Facts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
-      <section className="space-y-2"><h3 className="font-medium">Recent errors</h3><p className="text-xs text-muted-foreground">Bounded observations since this coordinator started. Source and helper errors are added when a snapshot is collected.</p>{report.recent.length ? <ol className="max-h-72 space-y-3 overflow-y-auto rounded-lg border p-3">{report.recent.map((entry, index) => <li key={index} className="min-w-0 break-words"><p className="text-xs text-muted-foreground">{new Date(entry.at).toLocaleTimeString()} · {entry.source}</p><p>{entry.message}</p></li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}</section>
+      <section className="space-y-2"><h3 className="font-medium">Recent errors</h3><p className="text-xs text-muted-foreground">Errors from this session.</p>{report.recent.length ? <ol className="max-h-72 space-y-3 overflow-y-auto rounded-lg border p-3">{report.recent.map((entry, index) => <li key={index} className="min-w-0 break-words"><p className="text-xs text-muted-foreground">{new Date(entry.at).toLocaleTimeString()} · {entry.source}</p><p>{entry.message}</p></li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}</section>
     </>}
   </div>;
 }

@@ -1,4 +1,4 @@
-import { pagePaths } from "../shared/page-paths";
+import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
@@ -11,7 +11,7 @@ import { createUpdates } from "./updates";
 import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
-import type { PlaybackCommand, ServerMessage } from "../shared/protocol";
+import type { PlaybackActor, PlaybackCommand, ServerMessage } from "../shared/protocol";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -27,6 +27,7 @@ import { createJellyfinSettings } from "./jellyfin-settings";
 import { createCatalog } from "./catalog";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
+import { loadYouTubePlaylist } from "./providers/youtube";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
@@ -143,10 +144,10 @@ export function createHub(options: HubOptions) {
     stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
-  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
+  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); } });
   const folders = createMediaFolders();
   const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
-  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
+  const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
   radioProgramme = createRadioProgramme({ station: radio.programmeStation, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
   const folderSettings = createFolderSettings(library, folders);
@@ -157,19 +158,19 @@ export function createHub(options: HubOptions) {
       const current = state.queue.find(entry => entry.id === state.currentEntryId);
       if (current && channelIds.some(id => current.source === `iptv:${id}`)) session.command({ type: "stop" });
     },
-    enqueue: (channel, playNow, authorize) => {
+    enqueue: (channel, playNow, authorize, playedBy) => {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
-      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize); }
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize);
+      if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize, playedBy); }
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
   const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
     onChange: () => session.invalidate("recordings"),
     onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
-    enqueue: (job, authorize) => {
+    enqueue: (job, authorize, playedBy) => {
       const existing = session.state.queue.find(entry => entry.source === `recording:${job.id}`);
-      if (existing) session.command({ type: "play", entryId: existing.id }, authorize);
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize);
+      if (existing) session.command({ type: "play", entryId: existing.id }, authorize, playedBy);
+      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize, playedBy);
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
@@ -195,12 +196,12 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
     },
     reservePlay: () => session.reservePlay(),
-    enqueue: (entry, intent, authorize) => {
-      session.command({ type: "enqueue", entry }, authorize);
-      if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize);
+    enqueue: (entry, intent, authorize, playedBy) => {
+      session.command({ type: "enqueue", entry }, authorize, playedBy);
+      if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize, playedBy);
     },
   });
-  const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: controller => {
+  const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
     session.invalidate("controller");
   }, onRevoke: id => {
@@ -270,13 +271,19 @@ export function createHub(options: HubOptions) {
     return response;
   };
 
+  const playbackActor = (controllerId: string | null): PlaybackActor | undefined => {
+    if (controllerId === null) return { deviceId: "host", name: store.installationName() };
+    const device = store.controller(controllerId);
+    return device ? { deviceId: device.id, name: device.name } : undefined;
+  };
+
   const server = Bun.serve({
     hostname,
     port: options.port ?? 3800,
     development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
     routes: {
-      ...Object.fromEntries(Object.values(pagePaths).map(path => [path, options.frontend ?? new Response("Couch media server")])),
+      ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), urls: connectionUrls, player: session.state.player.status })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
@@ -355,6 +362,7 @@ export function createHub(options: HubOptions) {
       }
       const finishWork = !websocket && !["GET", "HEAD"].includes(request.method) ? idle.begin("Waiting for a settings, scan or import request to finish.") : undefined;
       try {
+        const playedBy = caller.controller ? { deviceId: caller.controller.id, name: caller.controller.name } : playbackActor(null);
         const currentIdentity = () => admitted() ? identity() : null;
         const authorize = () => {
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
@@ -372,14 +380,14 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
         if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
         if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity, playedBy));
+        if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
         if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
         if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
         if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
         if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize));
-        if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
+        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize, playedBy));
+        if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
         return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
     },
@@ -413,9 +421,10 @@ export function createHub(options: HubOptions) {
         const finishWork = idle.begin("Waiting for a controller command to finish.");
         let result: ServerMessage = { type: "result", requestId: command.requestId, ok: true };
         try {
+          const playedBy = playbackActor(socket.data.controllerId);
           const authorize = socket.data.authorize;
           const action = command.action;
-          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueRadio") && action.playNow
+          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist" || action.type === "enqueueRadio") && action.playNow
             ? session.reservePlay() : undefined;
           if (action.type === "navigate") {
             if (server.subscriberCount("navigation") === 0) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
@@ -443,17 +452,17 @@ export function createHub(options: HubOptions) {
             const { items } = library.albumTracks(action.albumId);
             if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
             const entries = session.loadQueue(items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })), "append");
-            if (action.playNow && entries[0]) session.command({ type: "play", entryId: entries[0].id, fromStart: true }, authorize);
-          } else if (action.type === "enqueueProviderAlbum") {
-            const page = await loadBandcampAlbum(action.url, shutdown.signal);
+            if (action.playNow && entries[0]) session.command({ type: "play", entryId: entries[0].id, fromStart: true }, authorize, playedBy);
+          } else if (action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist") {
+            const page = await (action.type === "enqueueProviderPlaylist" ? loadYouTubePlaylist : loadBandcampAlbum)(action.url, shutdown.signal);
             if (closed) return;
             authorize();
-            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
-            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize);
+            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(action.type === "enqueueProviderPlaylist" && action.quality ? { quality: action.quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
+            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy);
           } else if (action.type === "enqueueRadio") {
             const station = radio.getPlayable(action.stationId);
             session.command({ type: "enqueue", entry: { id: action.entryId, title: station.title, source: `radio:${action.stationId}`, kind: "radio", live: true, ...station.metadata } });
-            if (action.playNow) session.command({ type: "play", entryId: action.entryId }, authorize);
+            if (action.playNow) session.command({ type: "play", entryId: action.entryId }, authorize, playedBy);
           } else if (action.type === "enqueueJellyfin") {
             const entry = await jellyfin.entry(action.itemId, action.entryId);
             if (closed) return;
@@ -465,11 +474,11 @@ export function createHub(options: HubOptions) {
             else if (soundRouting && action.type === "mute") await soundRouting.mute(action.muted, authorize);
             else {
               if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
-              session.command(action, authorize);
+              await session.command(action, authorize, playedBy);
             }
           }
           if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
-            session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize);
+            session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize, playedBy);
           }
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };

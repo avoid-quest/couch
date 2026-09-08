@@ -272,6 +272,8 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   await wait(() => commands.at(-1)?.type === "load");
   const old = commands.findLast(item => item.type === "load")!;
   expect(old).toMatchObject({ type: "load", source: `${source.origin}/live.m3u8?secret=stream` });
+  const { controller: requester } = await (await api("controllers/me", "GET", undefined, secondToken)).json();
+  expect(hub.session.state.playedBy).toEqual({ deviceId: requester.id, name: requester.name });
   expect(hub.session.state.player.status).toBe("loading");
   source.m3u = playlist(source.origin) + playlist(source.origin, "Second", "second").split("\n").slice(1).join("\n");
   source.xml = xml().replace("</tv>", xml("Second program", "second").replace(/^<tv>|<\/tv>$/g, "") + "</tv>");

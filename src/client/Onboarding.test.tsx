@@ -24,6 +24,7 @@ beforeEach(async () => {
   }
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     calls.push({ url: String(input), body: init?.body });
+    if (String(input).endsWith("/pairing-code")) return Response.json({ code: "123456" });
     if (String(input).endsWith("/claim-code")) return Response.json({ code: "1234567890", expiresAt: Date.now() + 60_000 });
     if (String(input).endsWith("/api/controllers")) return Response.json({ controllers: [admin.controller] });
     if (String(input).endsWith("/api/settings")) return Response.json({ name: "Living room" });
@@ -43,7 +44,7 @@ afterEach(async () => {
 test("a paired administrator resumes setup automatically and completion returns to normal Settings", async () => {
   await render("general");
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Claim and name");
-  expect(document.querySelector('[aria-label="Settings sections"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Settings pages"]')).toBeNull();
   const next = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!;
   expect(next.disabled).toBe(false);
   await act(async () => next.click());
@@ -51,7 +52,7 @@ test("a paired administrator resumes setup automatically and completion returns 
   await render("complete");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Settings"]')!.click());
-  expect(document.querySelector('[aria-label="Settings sections"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Settings pages"]')).not.toBeNull();
 });
 test("a second controller cannot advance the owner's setup", async () => {
   await render("sound", { ...admin, authority: "controller", controller: { ...admin.controller!, role: "controller" } });
@@ -68,12 +69,12 @@ test("failed progress saves remain retryable and disconnected setup cannot advan
   await render("general", admin, false);
   expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!.disabled).toBe(true);
 });
-test("the TV welcome shows its address QR and separate codes, then follows its administrator's saved step", async () => {
+test("the TV welcome shows its pairing QR and separate codes, then follows its administrator's saved step", async () => {
   await render("general", { controller: null, authority: "host", claimAvailable: true }, true, true);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Welcome to Couch");
   expect(document.querySelector('[data-pairing-code]')?.textContent).toBe("123456");
   expect(document.querySelector('[data-administrator-code]')?.textContent).toBe("1234567890");
-  expect(document.querySelector("svg title")?.textContent).toContain("http://couch.local:4100");
+  expect(document.querySelector("svg title")?.textContent).toBe("Pair another device");
   expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
   await render("sound", { controller: null, authority: "host", claimAvailable: false }, true, true);
   expect(document.body.textContent).toContain("Step 3 of 4 · Sound");

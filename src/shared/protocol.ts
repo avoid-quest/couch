@@ -3,6 +3,7 @@ import type { WatchingProfile } from "./library";
 import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
+export type PlaybackActor = { deviceId: string; name: string };
 export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio" };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
@@ -36,6 +37,8 @@ export type PlayerState = {
 export type SessionState = {
   queue: QueueEntry[];
   currentEntryId: string | null;
+  presentationId?: string | null;
+  playedBy?: PlaybackActor;
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;
@@ -66,6 +69,7 @@ export type Action =
   | { type: "enqueue"; entry: QueueEntry; playNow?: boolean }
   | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
   | { type: "enqueueAlbum"; albumId: string; playNow?: boolean }
+  | { type: "enqueueProviderPlaylist"; provider: "youtube"; url: string; playNow?: boolean; quality?: VideoQuality }
   | { type: "enqueueProviderAlbum"; provider: "bandcamp"; url: string; playNow?: boolean }
   | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean }
@@ -73,6 +77,7 @@ export type Action =
   | { type: "remove"; entryId: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
+  | { type: "videoQuality"; playbackId: string; quality: VideoQuality }
   | { type: "goLive"; playbackId: string }
   | { type: "pause"; playbackId: string; paused: boolean }
   | { type: "seek"; playbackId: string; position: number }

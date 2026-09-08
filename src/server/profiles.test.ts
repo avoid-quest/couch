@@ -215,3 +215,109 @@ test("forgetting a different profile retains the current viewer's checkpoint", (
   progress.finish();
   expect(store.progress("household", history.mediaId)?.position).toBe(32);
 });
+
+
+test("legacy databases keep labels and data unconfirmed until explicit naming on the same ID", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-person-name-"));
+  cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "state.sqlite");
+  const legacy = new Database(path);
+  legacy.run("CREATE TABLE watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE); INSERT INTO watching_profiles VALUES ('household', 'MBP'), ('older', 'Other');");
+  legacy.close();
+  const store = openStore(path);
+  cleanup.push(() => store.close());
+  expect(store.activeProfile()).toEqual({ id: "household", name: "MBP" });
+  expect(store.profiles().every(profile => profile.personName === undefined)).toBe(true);
+  store.saveProgress("household", history);
+  store.saveProfilePreferences("household", preferences);
+  const token = store.pair("MBP");
+  const device = store.controllerForToken(token);
+  const named = store.namePerson("household", "  Francesco  ", "MBP");
+  expect(named).toEqual({ id: "household", name: "Francesco", personName: "Francesco" });
+  const reopened = openStore(path);
+  cleanup.push(() => reopened.close());
+  expect(reopened.activeProfile()).toEqual(named);
+  expect(reopened.profiles()).toHaveLength(2);
+  expect(reopened.selectProfile("household")).toEqual(named);
+  expect(reopened.progress("household", history.mediaId)).toEqual(history);
+  expect(reopened.playbackPreferences("household").profile).toEqual(preferences);
+  expect(reopened.controllerForToken(token)).toEqual(device);
+  expect(reopened.renameProfile("household", "MBP", "Francesco")).toEqual({ id: "household", name: "MBP" });
+  expect(reopened.activeProfile().personName).toBeUndefined();
+});
+
+test("person naming validates, refuses stale writes and publishes without changing playback", () => {
+  const { store } = fixture();
+  for (const value of [null, "", " ", "x".repeat(61), "bad\nname"]) expect(() => store.namePerson("household", value, "Household")).toThrow("Enter your name");
+  store.createProfile("Existing");
+  expect(() => store.namePerson("household", "Existing", "Household")).toThrow("already has a saved history");
+  const commands: PlaybackCommand[] = [];
+  const session = createSession(store, command => commands.push(command), () => {});
+  session.observe(idle);
+  session.command({ type: "enqueue", entry: { id: "movie", title: "Movie", source: "library:movie" } });
+  session.command({ type: "play", entryId: "movie" });
+  session.observe({ ...idle, status: "paused", playbackId: session.state.player.playbackId, position: 24, duration: 120 });
+  const before = structuredClone(session.state), count = commands.length;
+  const named = session.namePerson("household", "Francesco", "Household");
+  expect(session.state).toEqual({ ...before, activeProfile: named, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(commands).toHaveLength(count);
+  expect(() => session.namePerson("household", "Stale", "Household")).toThrow("renamed on another remote");
+  expect(session.state.activeProfile).toEqual(named);
+  session.close();
+});
+
+
+test("person naming refuses an inactive history without mutation or broadcast", () => {
+  const { store } = fixture();
+  const first = store.activeProfile(), second = store.createProfile("Other");
+  store.saveProgress(first.id, history);
+  store.saveProfilePreferences(first.id, preferences);
+  let published = 0;
+  const session = createSession(store, () => {}, () => published++);
+  session.selectProfile(second.id);
+  const before = structuredClone(session.state), count = published;
+  expect(() => session.namePerson(first.id, "Francesco", first.name)).toThrow("active history changed");
+  expect(session.state).toEqual(before);
+  expect(published).toBe(count);
+  expect(store.profiles()).toContainEqual(first);
+  expect(store.progress(first.id, history.mediaId)).toEqual(history);
+  expect(store.playbackPreferences(first.id).profile).toEqual(preferences);
+  expect(session.renameProfile(first.id, "Older history", first.name)).toEqual({ ...first, name: "Older history" });
+  expect(session.state.activeProfile).toEqual(second);
+  session.close();
+});
+
+test("shared history selects the latest record per item without merging legacy rows or changing identities", () => {
+  const { store, path } = fixture();
+  const older = store.createProfile("Older history");
+  const active = store.createProfile("Current history");
+  store.selectProfile(active.id);
+  store.saveProfilePreferences(older.id, preferences);
+  const token = store.pair("Kitchen tablet");
+  const controller = store.controllerForToken(token);
+  store.saveProgress("household", history);
+  store.saveProgress(older.id, { ...history, position: 42, watched: false, lastPlayedAt: 200 });
+  store.saveProgress(older.id, { ...history, mediaId: "library:second", position: 0, watched: true, lastPlayedAt: 300 });
+  const profiles = store.profiles();
+  const rows = profiles.map(profile => store.history(profile.id));
+  const shared = store.sharedHistory();
+  expect(shared.map(item => item.mediaId)).toEqual(["library:second", history.mediaId]);
+  expect(shared[1]).toMatchObject({ position: 42, watched: false });
+  expect(store.sharedProgress(history.mediaId)).toEqual(shared[1]!);
+  expect(store.sharedHistory(1)).toEqual([shared[0]!]);
+  expect(JSON.stringify(shared)).not.toContain("profileId");
+  expect(profiles.map(profile => store.history(profile.id))).toEqual(rows);
+  const reopened = openStore(path);
+  cleanup.push(() => reopened.close());
+  expect(reopened.sharedHistory()).toEqual(shared);
+  expect(reopened.profiles()).toEqual(profiles);
+  expect(reopened.activeProfile()).toEqual(active);
+  expect(reopened.controllerForToken(token)).toEqual(controller);
+  expect(reopened.playbackPreferences(older.id).profile).toEqual(preferences);
+  expect(profiles.map(profile => reopened.history(profile.id))).toEqual(rows);
+  reopened.editSharedProgress(active.id, history.mediaId, { clearResume: true, watched: true }, history);
+  expect(reopened.sharedProgress(history.mediaId)).toMatchObject({ position: 0, watched: true });
+  expect(reopened.progress("household", history.mediaId)).toEqual(history);
+  expect(reopened.history(active.id)).toEqual([]);
+  expect(reopened.profiles()).toEqual(profiles);
+});

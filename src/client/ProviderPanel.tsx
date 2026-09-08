@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Play, Plus, Star } from "lucide-react";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
-import { QualitySelect } from "./QualitySelect";
+import { isYouTubePlaylistUrl } from "../shared/providers";
+import { QualityOptions } from "./QualitySelect";
 import { useEnqueueVideoQuality } from "./video-quality";
 
 type Props = {
+  showHeading?: boolean;
   initialItem?: ProviderItem;
   origin: string;
   token: string;
@@ -19,14 +21,15 @@ type Props = {
   version: number;
   defaultQuality: VideoQuality;
   onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
+  onEnqueuePlaylist: (url: string, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueueAlbum: (provider: "bandcamp", url: string, playNow: boolean) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
-const providers: Record<ProviderId, { name: string; placeholder: string; help: string }> = {
-  youtube: { name: "YouTube", placeholder: "Search YouTube, @channel, or paste a link", help: "Browse channels, playlists, videos, and live streams." },
-  twitch: { name: "Twitch", placeholder: "Search channels, categories, or paste a link", help: "Find live channels and browse categories." },
-  raiplay: { name: "RaiPlay", placeholder: "Search programs or paste a RaiPlay link", help: "Browse live TV, programs, and recent broadcasts." },
-  bandcamp: { name: "Bandcamp", placeholder: "https://artist.bandcamp.com/album/…", help: "Open a public album or track link, or try an album below." },
+const providers: Record<ProviderId, { name: string; placeholder: string }> = {
+  youtube: { name: "YouTube", placeholder: "Search YouTube, @channel, or paste a link" },
+  twitch: { name: "Twitch", placeholder: "Search channels, categories, or paste a link" },
+  raiplay: { name: "RaiPlay", placeholder: "Search programs or paste a RaiPlay link" },
+  bandcamp: { name: "Bandcamp", placeholder: "https://artist.bandcamp.com/album/…" },
 };
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request.";
 
@@ -59,16 +62,17 @@ export function ProviderPanel(props: Props) {
     return ok;
   };
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
-    <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" label="Next video quality" description="Overrides your default for the next video you play or add." value={quality} disabled={!props.connected} onChange={setQuality} />}</div>
+    {props.showHeading !== false && <h2 className="text-2xl font-semibold tracking-tight">Online media</h2>}
     <Tabs value={provider} onValueChange={value => { setInitialItem(undefined); setProvider(value as ProviderId); }}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
-      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} initialItem={initialItem} onEnqueue={enqueue} provider={provider} /></TabsContent>
+      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} initialItem={initialItem} onEnqueue={enqueue} provider={provider} quality={quality} onQualityChange={setQuality} onEnqueuePlaylist={async (url, playNow) => { const ok = await props.onEnqueuePlaylist(url, playNow, quality); if (ok) resetQuality(); return ok; }} /></TabsContent>
     </Tabs>
   </section>;
 }
 
-function ProviderBrowser({ initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum }: Props & { provider: ProviderId }) {
+function ProviderBrowser({ initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
+  const qualityId = useId();
   const [input, setInput] = useState("");
   const [trail, setTrail] = useState<Location[]>([{ request: {}, title: info.name }, ...(initialItem?.provider === provider ? [{ request: { url: initialItem.url }, title: initialItem.title }] : [])]);
   const [page, setPage] = useState<ProviderPage | null>(null);
@@ -240,15 +244,15 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
     }
   }
 
-  async function enqueueAlbum(url: string, playNow: boolean) {
+  async function enqueueCollection(url: string, playNow: boolean, playlist = false) {
     if (busy || !connected || !lifetime.current) return;
     const controller = lifetime.current;
     setBusy(url);
     setActionError(null);
     setNotice("");
     try {
-      const ok = await onEnqueueAlbum("bandcamp", url, playNow);
-      if (ok && !controller.signal.aborted) setNotice(playNow ? "Album added. Playing on the TV." : "Album added to the shared queue.");
+      const ok = await (playlist ? onEnqueuePlaylist(url, playNow) : onEnqueueAlbum("bandcamp", url, playNow));
+      if (ok && !controller.signal.aborted) setNotice(playNow ? "Playing on the TV." : "Added to Up next.");
     } catch (reason) {
       if (!controller.signal.aborted) setActionError(message(reason));
     } finally {
@@ -259,6 +263,7 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
   const savedItems = favorites.filter(item => item.provider === provider);
   const items = view === "saved" ? savedItems : page?.items ?? [];
   const pending = view === "saved" ? favoritesLoading : loading;
+  const playlistUrl = provider === "youtube" && view === "browse" && isYouTubePlaylistUrl(location.request.url ?? location.request.query ?? "") ? location.request.url ?? location.request.query : undefined;
   const albumUrl = provider === "bandcamp" && view === "browse" && /^https?:\/\/[^/]+\.bandcamp\.com\/album\/[^/?#]+\/?(?:[?#].*)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
   const album = albumUrl && page && !pending && !browseError && items.length > 0 && items.every(item => item.kind === "media");
   return <div ref={browserRef} className="space-y-4" onKeyDown={event => {
@@ -268,7 +273,6 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
     event.preventDefault();
     back();
   }}>
-    <p className="provider-help text-muted-foreground text-sm leading-relaxed">{info.help}</p>
     <form className="provider-search catalog-search flex items-end gap-2" role="search" onSubmit={search}>
       <div className="grid min-w-0 flex-1 gap-2"><Label htmlFor="provider-search">{provider === "bandcamp" ? "Album or track link" : "Search or open a link"}</Label><Input id="provider-search" className="min-h-11" type={provider === "bandcamp" ? "url" : "search"} maxLength={4096} placeholder={info.placeholder} value={input} onChange={event => setInput(event.target.value)} disabled={!connected} autoCapitalize="none" autoCorrect="off" /></div>
       <Button type="submit" className="min-h-11" disabled={!connected}>{provider === "bandcamp" ? "Open" : "Search"}</Button>
@@ -292,14 +296,19 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
         {view === "browse" && browseError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
         {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading saved items…" : `Loading ${info.name}…`}</p>}
         {!pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Save albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
+        {playlistUrl && page && !pending && !browseError && !!items.length && <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={!canPlay || !connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, true, true)}><Play aria-hidden="true" />Play playlist</Button>
+          <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, false, true)}><Plus aria-hidden="true" />Up next</Button>
+          <QualityOptions id={`${qualityId}-playlist`} label={`Video quality for ${page.title || "playlist"}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />
+        </div>}
         {album && <div className="provider-album">
           <MediaArtwork key={items[0]!.thumbnail || albumUrl} thumbnail={items[0]!.thumbnail} title={page.title || "Album"} className="provider-album-artwork" />
           <div className="provider-album-copy">
             {items[0]!.subtitle && <p className="text-sm font-medium wrap-anywhere">{items[0]!.subtitle}</p>}
             <p className="text-sm text-muted-foreground">{items.length} {items.length === 1 ? "track" : "tracks"}</p>
             <div className="provider-album-actions">
-              <Button disabled={!canPlay || busy !== null} onClick={() => void enqueueAlbum(albumUrl, true)}><Play aria-hidden="true" />Play album</Button>
-              <Button variant="outline" disabled={!connected || busy !== null} onClick={() => void enqueueAlbum(albumUrl, false)}><Plus aria-hidden="true" />Add album to queue</Button>
+              <Button disabled={!canPlay || busy !== null} onClick={() => void enqueueCollection(albumUrl, true)}><Play aria-hidden="true" />Play album</Button>
+              <Button variant="outline" disabled={!connected || busy !== null} onClick={() => void enqueueCollection(albumUrl, false)}><Plus aria-hidden="true" />Add album to queue</Button>
             </div>
           </div>
         </div>}
@@ -317,25 +326,28 @@ function ProviderBrowser({ initialItem, provider, origin, token, connected, canP
         })}</ol>}
         {!!items.length && !album && <ul className={`provider-grid${provider === "bandcamp" ? " provider-music-grid" : ""}`}>{items.map(item => {
           const saved = favorites.some(entry => entry.id === item.id);
+          const channelSummary = provider === "twitch" && view === "browse" && item.url === location.request.url;
           const details = <>
-            <div className="provider-artwork-wrap relative">
+            {!channelSummary && <div className="provider-artwork-wrap relative">
               <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />
               {item.live ? <Badge variant="destructive" className="provider-badge live absolute right-2 bottom-2">LIVE</Badge> : item.duration ? <Badge variant="secondary" className="provider-badge absolute right-2 bottom-2">{duration(item.duration)}</Badge> : item.kind !== "media" ? <Badge variant="secondary" className="provider-badge absolute right-2 bottom-2">{item.kind === "channel" ? "Channel" : "Collection"}</Badge> : null}
-            </div>
+            </div>}
             <div className="provider-item-copy space-y-1 p-3 pb-0">
               <h4 className="line-clamp-2 text-base font-medium leading-snug wrap-anywhere" title={item.title}>{item.title}</h4>
               {item.subtitle && <p className="text-muted-foreground line-clamp-1 text-sm wrap-anywhere">{item.subtitle}</p>}
               {!item.subtitle && item.description && <p className="provider-description text-muted-foreground line-clamp-2 text-sm wrap-anywhere">{item.description}</p>}
             </div>
           </>;
-          return <li className="provider-item min-w-0" key={item.id}>
+          return <li className={`provider-item min-w-0${channelSummary ? " provider-channel-summary" : ""}`} key={item.id}>
             <Card className="catalog-card h-full gap-0 overflow-hidden py-0">
               {item.kind === "media" ? <div className="provider-item-main">{details}</div> : <Button variant="ghost" className="provider-item-main provider-open block h-auto w-full rounded-none p-0 text-left whitespace-normal" data-provider-id={item.id} disabled={!connected} onClick={() => open(item)} aria-label={`Open ${item.title}`}>{details}</Button>}
               <div className={`provider-item-actions mt-auto p-3 ${item.kind === "media" ? "provider-media-actions" : "provider-browse-actions"}`}>
                 {item.kind === "media" ? <>
                   <Button aria-label="Play on TV" disabled={!canPlay || busy !== null} onClick={() => void enqueue(item, true)}><Play aria-hidden="true" />Play</Button>
                   <Button variant="secondary" aria-label="Add to queue" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Queue</Button>
-                </> : <Button variant="secondary" disabled={!connected} onClick={() => open(item)}>{item.kind === "channel" && item.live === false ? "Check channel" : "Browse"}</Button>}
+                  {item.provider !== "bandcamp" && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />}
+                  {item.provider === "twitch" && item.live && !channelSummary && <Button className="provider-broadcasts-link" data-provider-id={item.id} variant="outline" disabled={!connected || busy !== null} onClick={() => open(item)}>Past broadcasts</Button>}
+                </> : !channelSummary && <Button variant="secondary" disabled={!connected} onClick={() => open(item)}>{item.provider === "twitch" && item.kind === "channel" ? "Past broadcasts" : "Browse"}</Button>}
                 <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save shrink-0" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={`${saved ? "Remove" : "Save"} ${item.title} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
               </div>
             </Card>

@@ -1,8 +1,9 @@
+import type { PlaybackActor } from "../shared/protocol";
 import type { LibrarySource } from "../shared/library";
 import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
 import { RadioError, type createRadio } from "./radio";
-import { localMediaId, ViewingError } from "./progress";
+import { playbackMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
@@ -13,6 +14,8 @@ type Services = {
   jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
 };
+
+const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
 
 class RequestError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -52,7 +55,7 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
 
 export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
   return {
-    async handle(request: Request, trusted: boolean, authorize = () => {}): Promise<Response> {
+    async handle(request: Request, trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
       try {
         if (viewing && pathname === "/api/profiles") {
@@ -62,15 +65,17 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           authorize();
           return Response.json({ profile: viewing.session.createProfile(name) }, { status: 201 });
         }
-        const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove)$/.exec(pathname);
+        const profileEdit = /^\/api\/profiles\/([\w-]{1,80})\/(rename|remove|person-name)$/.exec(pathname);
         if (viewing && profileEdit) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           const changes = await body(request);
           authorize();
-          const allowed = profileEdit[2] === "rename" ? ["name", "expectedName"] : ["expectedName"];
+          const allowed = profileEdit[2] !== "remove" ? ["name", "expectedName"] : ["expectedName"];
           if (Object.keys(changes).some(key => !allowed.includes(key))) throw new RequestError("Send only the watching profile change.");
           if (typeof changes.expectedName !== "string" || !changes.expectedName || changes.expectedName.length > 60 || /[\u0000-\u001f\u007f]/.test(changes.expectedName)) throw new RequestError("Reload watching profiles before editing.");
-          return profileEdit[2] === "rename"
+          return profileEdit[2] === "person-name"
+            ? Response.json({ profile: viewing.session.namePerson(profileEdit[1]!, changes.name, changes.expectedName) })
+            : profileEdit[2] === "rename"
             ? Response.json({ profile: viewing.session.renameProfile(profileEdit[1]!, changes.name, changes.expectedName) })
             : Response.json({ activeProfile: viewing.session.removeProfile(profileEdit[1]!, changes.expectedName) });
         }
@@ -82,31 +87,51 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         if (viewing && pathname === "/api/progress/history") {
           if (request.method !== "GET") return methodNotAllowed("GET");
           const { activeProfile, queue } = viewing.session.state;
-          const items = viewing.store.history(activeProfile.id, queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
-            const queueEntry = queue.find(entry => localMediaId(entry) === item.mediaId);
-            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}) };
+          const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
+          const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
+            const queueEntry = queued.get(item.mediaId);
+            const source = queueEntry ?? viewing.store.historySource(item.mediaId);
+            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
+            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, sourceLabel } : {}) };
           });
           return Response.json({ items, profile: activeProfile });
+        }
+        const historyPlay = /^\/api\/progress\/([^/]+)\/play$/.exec(pathname);
+        if (viewing && historyPlay) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          authorize();
+          if (Object.keys(changes).some(key => !["fromStart", "profileId"].includes(key)) || typeof changes.profileId !== "string" || changes.fromStart !== undefined && typeof changes.fromStart !== "boolean") throw new RequestError("Choose resume or play from start.");
+          const unchangedSettings = () => {
+            authorize();
+            if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("Playback settings changed. Try again.", 409);
+          };
+          unchangedSettings();
+          let mediaId: string;
+          try { mediaId = decodeURIComponent(historyPlay[1]!); }
+          catch { throw new RequestError("Invalid media identity."); }
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
+          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings, playedBy);
+          return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           let mediaId: string;
           try { mediaId = decodeURIComponent(pathname.slice("/api/progress/".length)); }
           catch { throw new RequestError("Invalid media identity."); }
-          if (!/^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
           const changes = await body(request);
           authorize();
           if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))
             || changes.watched !== undefined && typeof changes.watched !== "boolean"
             || changes.clearResume !== undefined && changes.clearResume !== true
             || changes.watched === undefined && changes.clearResume === undefined) throw new RequestError("Choose a watched state or clear the resume position.");
-          const profileId = viewing.session.state.activeProfile.id;
-          const existing = viewing.store.progress(profileId, mediaId);
+          const existing = viewing.store.sharedProgress(mediaId);
           const libraryItemId = mediaId.startsWith("library:") ? mediaId.slice(8) : null;
           const item = existing ?? (libraryItemId ? library.getItem(libraryItemId) : null);
           if (!item) throw new RequestError("Media item not found.", 404);
           viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title, libraryItemId });
-          return Response.json({ progress: viewing.store.progress(profileId, mediaId) });
+          return Response.json({ progress: viewing.store.sharedProgress(mediaId) });
         }
         if (pathname === "/api/library/sources") {
           if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });
@@ -124,9 +149,8 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             videoType: videoType || undefined, showId: showId || undefined, season,
             offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
           if (viewing) {
-            const profileId = viewing.session.state.activeProfile.id;
             result.items = result.items.map(item => {
-              const saved = viewing.store.progress(profileId, `library:${item.id}`);
+              const saved = viewing.store.sharedProgress(`library:${item.id}`);
               const progress = saved ? { position: saved.position, duration: saved.duration, watched: saved.watched, lastPlayedAt: saved.lastPlayedAt } : null;
               return { ...item, progress };
             });

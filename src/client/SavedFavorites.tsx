@@ -84,7 +84,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, providerVers
     {error && <div role="alert"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => setRefresh(value => value + 1)}>Retry saved items</Button></div>}
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
-    {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">Save a video, album, channel or station from Search or Browse to find it here.</p>}
+    {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">No favorites yet.</p>}
     <ul ref={list} className="saved-favorite-items" aria-label="Saved online items and stations" aria-busy={loading}>{favorites.map(favorite => {
       const itemTitle = title(favorite);
       const browse = favorite.kind === "provider" && favorite.item.kind !== "media";

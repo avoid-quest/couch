@@ -199,7 +199,7 @@ test("watching profiles and progress APIs validate edits and expose path-free ca
   expect((await request("/api/progress/library%3Amissing", "POST", { watched: true })).status).toBe(404);
   expect((await request("/api/progress/history?limit=101")).status).toBe(400);
   expect((await request(`/api/profiles/${profile.id}/select`, "POST")).status).toBe(200);
-  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [], profile });
+  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId, position: 0, watched: false }], profile });
   session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
   session.command({ type: "play", entryId: "queued" });
   expect((await request("/api/profiles/household/select", "POST")).status).toBe(409);
@@ -232,4 +232,86 @@ test("profile edits validate HTTP bodies consistently and leave the Jellyfin acc
   expect(await (await request("/api/jellyfin")).json()).toEqual(account);
   expect(connectCalls()).toBe(1);
   expect(invalidations).toEqual(["jellyfin"]);
+});
+
+
+test("history replay validates current playback settings and keeps durable source URLs private", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "web", title: "An album track", source: "web:https://artist.example/track", thumbnail: "https://artist.example/art.jpg" };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 21, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
+  const data = await (await request("/api/progress/history")).json();
+  expect(data.items[0]).toMatchObject({ mediaId, playable: true, sourceLabel: "Online", thumbnail: entry.thumbnail });
+  expect(JSON.stringify(data)).not.toContain(entry.source);
+  expect(JSON.stringify(data)).not.toContain("queueEntryId");
+  const endpoint = `/api/progress/${encodeURIComponent(mediaId)}/play`;
+  expect((await request(endpoint)).status).toBe(405);
+  for (const body of [{}, { profileId: "household", fromStart: "yes" }, { profileId: "household", source: "file:///private" }]) expect((await request(endpoint, "POST", body)).status).toBe(400);
+  expect((await request(endpoint, "POST", { profileId: "other" })).status).toBe(409);
+  expect(session.state.queue).toEqual([]);
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  expect((await request(endpoint, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue[0]).toMatchObject({ title: entry.title, source: entry.source });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true })).status).toBe(409);
+  session.command({ type: "stop" });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true })).status).toBe(200);
+  expect(store.progress("household", mediaId)?.position).toBe(0);
+});
+
+test("person naming requires an explicit valid request and retains generic label API compatibility", async () => {
+  const { request, store } = fixture();
+  const path = "/api/profiles/household/person-name";
+  expect((await request(path)).status).toBe(405);
+  for (const body of [{ name: "Francesco" }, { name: "", expectedName: "Household" }, { name: "Francesco", expectedName: "Household", personName: "Invented" }]) expect((await request(path, "POST", body)).status).toBe(400);
+  expect(await (await request(path, "POST", { name: "Francesco", expectedName: "Household" })).json()).toEqual({ profile: { id: "household", name: "Francesco", personName: "Francesco" } });
+  expect((await request(path, "POST", { name: "Stale", expectedName: "Household" })).status).toBe(409);
+  expect(store.profiles()).toEqual([{ id: "household", name: "Francesco", personName: "Francesco" }]);
+  expect((await request("/api/profiles/household/rename", "POST", { name: "Device", expectedName: "Francesco" })).status).toBe(200);
+  expect(store.activeProfile()).toEqual({ id: "household", name: "Device" });
+});
+
+
+test("changing active history while a person-name body loads rejects the stale name", async () => {
+  const { catalog, session, store } = fixture();
+  const first = store.activeProfile(), second = session.createProfile("Other");
+  let finish!: () => void;
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode(JSON.stringify({ name: "Francesco", expectedName: first.name })));
+    finish = () => controller.close();
+  } });
+  const request = new Request(`http://localhost/api/profiles/${first.id}/person-name`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: stream,
+  });
+  const pending = catalog.handle(request, false);
+  session.selectProfile(second.id);
+  const before = structuredClone(session.state), profiles = store.profiles();
+  finish();
+  const response = await pending;
+  expect(response.status).toBe(409);
+  expect((await response.json()).error).toContain("active history changed");
+  expect(store.profiles()).toEqual(profiles);
+  expect(session.state).toEqual(before);
+});
+
+test("every remote can play and edit shared history retained under a different legacy record", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const older = store.createProfile("Older history");
+  const entry = { id: "old-video", title: "Older video", source: "web:https://video.example/watch/old" };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress(older.id, { mediaId, title: entry.title, libraryItemId: null, position: 21, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
+  expect((await (await request("/api/progress/history")).json()).items).toMatchObject([{ mediaId, position: 21, playable: true }]);
+  expect(store.history("household")).toEqual([]);
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}/play`, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue[0]?.source).toBe(entry.source);
+  expect(session.state.activeProfile.id).toBe("household");
+  session.command({ type: "stop" });
+  const response = await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true, watched: true });
+  expect(response.status).toBe(200);
+  expect((await response.json()).progress).toMatchObject({ position: 0, watched: true });
+  expect(store.progress(older.id, mediaId)).toMatchObject({ position: 0, watched: true });
+  expect(store.history("household")).toEqual([]);
+  expect(store.profiles()).toHaveLength(2);
 });

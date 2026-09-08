@@ -7,3 +7,6 @@
 .history-inspect-detail { max-height: 85dvh; overflow-y: auto; }
 .history-inspect-detail-art { width: 100%; height: auto; aspect-ratio: 1.9; }
 .history-inspect-detail-art svg { width: 48px; height: 48px; }
+
+.history-inspect-art { overflow: hidden; }
+.history-inspect-art > .media-artwork, .history-inspect-art > .music-artwork { width: 100%; height: 100%; border-radius: inherit; }

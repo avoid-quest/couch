@@ -207,7 +207,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       const timer = setTimeout(() => {
         pending.current.delete(requestId);
         reject(new Error("No confirmation received. Check the current state before retrying."));
-      }, action.type === "enqueueProviderAlbum" ? 35_000 : 8_000);
+      }, (action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist" || action.type === "videoQuality") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action };
       try {

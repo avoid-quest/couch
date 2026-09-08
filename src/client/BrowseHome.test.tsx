@@ -12,7 +12,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const played: unknown[] = [], browsed: string[] = [], requests: string[] = [];
 const added: HistoryItem[] = [];
 let failed = false;
-const profile = { id: "household", name: "Household", createdAt: 1 };
+const profile = { id: "household", name: "MBP", createdAt: 1 };
 const unfinished = { mediaId: "library:movie", libraryItemId: "movie", title: "Halfway home", position: 120, duration: 600, watched: false, lastPlayedAt: 1 } satisfies HistoryItem;
 const libraryItem = { id: "next", title: "A library film", kind: "video", duration: 120, artist: null, album: null, available: true } satisfies LibraryItem;
 const state: SessionState = {
@@ -47,21 +47,22 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("browse home offers only unfinished local history and preserves resume and restart commands", async () => {
+test("browse home uses one history for continued and finished playback and preserves resume and restart commands", async () => {
   await renderHome();
-  expect(document.body.textContent).not.toContain("Household");
+  expect(document.body.textContent).not.toContain("MBP");
+  expect(document.body.textContent).not.toContain("Good morning");
+  expect(document.body.textContent).not.toContain("Watching as");
   expect(document.body.textContent).toContain("Halfway home");
-  expect(document.body.textContent).not.toContain("Finished film");
-  expect(document.body.textContent).not.toContain("No progress");
+  expect(document.body.textContent).toContain("Finished film");
+  expect(document.body.textContent).toContain("No progress");
   expect(played).toEqual([]);
   await act(async () => button("Resume Halfway home").click());
   await act(async () => button("Details").click());
   expect(played).toHaveLength(1);
   await act(async () => button("Play Halfway home from start").click());
   expect(played).toEqual([[unfinished, { fromStart: false }], [unfinished, { fromStart: true }]]);
-  await act(async () => button("Browse all").click());
-  for (const source of ["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"]) await act(async () => button(source).click());
-  expect(browsed).toEqual(["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"]);
+  for (const source of ["Library", "Search", "Radio", "Live TV", "Jellyfin", "TV folders"]) await act(async () => button(source).click());
+  expect(browsed).toEqual(["Library", "Search", "Radio", "Guide", "Jellyfin", "Files"]);
 });
 test("hidden home does not fetch and unavailable playback does not prevent browsing", async () => {
   await renderHome(true, false); expect(requests).toEqual([]);
@@ -77,15 +78,20 @@ test("home history failure has an independent retry", async () => {
 test("a paired remote starts with its current TV session and can browse and search without changing playback", async () => {
   localStorage.setItem("couch.remote-token", "paired");
   const command = async (...args: unknown[]) => { played.push(args); };
-  sessionMock = spyOn(session, "useSession").mockReturnValue({ state, status: "connected", details: null, identity: { authority: "controller", controller: null, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command, reconnect: () => {} });
+  sessionMock = spyOn(session, "useSession").mockReturnValue({ state, status: "connected", details: null, identity: { authority: "controller", controller: { id: "desk", name: "Desk remote", role: "controller", createdAt: 1, lastSeenAt: 1 }, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command, reconnect: () => {} });
   const { App } = await import("./App");
   const { CouchRouter } = await import("./routes");
   await act(async () => root.render(<CouchRouter native={false}><App /></CouchRouter>));
   expect(document.querySelector('[data-source="Home"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector(".session-home .media-title")?.textContent).toBe("Evening radio");
   expect(document.querySelector(".mode-switch, .source-nav")).toBeNull();
+  const header = document.querySelector(".app-header")!;
+  expect(header.textContent).toContain("Desk remote");
+  expect(header.textContent).not.toContain("MBP");
+  expect(header.querySelector('[aria-label^="Your name"], [aria-label^="Watching profile"]')).toBeNull();
+  expect(header.querySelector(".header-status")?.lastElementChild?.tagName).toBe("TIME");
   const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Saved", "Up next", "Settings"]);
+  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Library", "Saved", "Up next", "Settings"]);
   await act(async () => button("Find something").click());
   expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
@@ -100,7 +106,7 @@ test("a paired remote starts with its current TV session and can browse and sear
   expect(document.querySelector('[data-page="Home"]')?.hasAttribute('hidden')).toBe(false);
   expect(window.location.pathname).toBe("/");
   await act(async () => { window.history.back(); await Bun.sleep(20); });
-  expect(window.location.pathname).toBe("/settings");
+  expect(window.location.pathname).toBe("/settings/playback");
   expect(document.querySelector('[data-page="Settings"]')?.hasAttribute("hidden")).toBe(false);
   await act(async () => { window.history.forward(); await Bun.sleep(20); });
   expect(window.location.pathname).toBe("/");
@@ -113,7 +119,7 @@ test("library artwork cards open details without playback and retain actual libr
   await renderHome();
   await act(async () => button("Details for A library film").click());
   expect(played).toEqual([]);
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("From your local library");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("TV folders");
   await act(async () => button("Add A library film to Up next").click());
   expect(added).toEqual([{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }]);
   expect(played).toEqual([]);
@@ -124,4 +130,37 @@ test("library artwork cards open details without playback and retain actual libr
   expect(played).toEqual([]);
   await act(async () => button("Play A library film").click());
   expect(played).toEqual([[{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }, { fromStart: false }]]);
+});
+
+
+test("online album tracks and Jellyfin remain playable in the same history after leaving the queue", async () => {
+  const items: HistoryItem[] = [
+    { mediaId: "media:album", title: "Album track", libraryItemId: null, position: 45, duration: 240, watched: false, lastPlayedAt: 3, playable: true, thumbnail: "https://example.com/album.jpg", sourceLabel: "Online" },
+    { mediaId: "media:jellyfin", title: "Server movie", libraryItemId: null, position: 90, duration: 900, watched: false, lastPlayedAt: 2, playable: true, sourceLabel: "Jellyfin" },
+  ];
+  request.mockImplementation((async input => String(input).includes("/api/library/items") ? Response.json({ items: [] }) : Response.json({ profile, items })) as typeof fetch);
+  await renderHome();
+  expect(button("Resume Album track").disabled).toBe(false);
+  expect(document.querySelector<HTMLImageElement>(".browse-hero img")?.src).toBe("https://example.com/album.jpg");
+  await act(async () => button("Resume Album track").click());
+  expect(played).toEqual([[items[0], { fromStart: false }]]);
+  await act(async () => button("Details for Server movie").click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Jellyfin");
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Open this file");
+  expect(button("Resume Server movie").disabled).toBe(false);
+  await act(async () => button("Play Server movie from start").click());
+  expect(played.at(-1)).toEqual([items[1], { fromStart: true }]);
+});
+
+
+test("an empty TV home offers catalog browsing without a local-file placeholder", async () => {
+  request.mockImplementation((async (_input: RequestInfo | URL) => Response.json({ profile, items: [] })) as typeof fetch);
+  await renderHome();
+  expect(document.body.textContent).not.toContain("From your library");
+  expect(document.body.textContent).not.toContain("Library folders are managed");
+  expect(document.querySelector(".browse-empty, .browse-hero")).toBeNull();
+  expect(document.querySelector('[aria-label="Browse media"]')?.hasAttribute("hidden")).toBe(false);
+  await act(async () => button("Library").click());
+  expect(browsed).toEqual(["Library"]);
+  expect(played).toEqual([]);
 });

@@ -6,13 +6,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { HistoryItem, LibraryItem } from "../shared/library";
 import type { SessionState } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
+import { MediaArtwork } from "./ProviderPanel";
 import { progressTime, type HistoryPlayback } from "./HistoryPanel";
 import type { Credentials } from "./session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
-import { personalProfileName } from "./profile-name";
 
-const sources = ["Search", "For later", "Library", "Online", "Guide", "Radio", "Jellyfin"];
+const sources = [{ section: "Library", label: "Library" }, { section: "Search", label: "Search" }, { section: "Radio", label: "Radio" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "TV folders" }];
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
   position: item.progress?.position ?? 0, duration: item.progress?.duration ?? item.duration,
@@ -41,7 +41,6 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [detail, setDetail] = useState<HistoryItem | null>(null);
-  const [browseAll, setBrowseAll] = useState(false);
   const detailTrigger = useRef<HTMLElement | null>(null);
 
   useEffect(() => { setDetail(null); setNotice(null); }, [origin, token, profileId]);
@@ -74,7 +73,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const hero = unfinished[0];
   const cards = currentProfile ? library.filter(item => item.id !== hero?.libraryItemId).slice(0, 3) : [];
   const metadata = (item: HistoryItem) => library.find(entry => entry.id === item.libraryItemId);
-  const playable = (item: HistoryItem) => connected && canPlay && currentProfile && !loading && !pending && !!(item.libraryItemId || item.queueEntryId) && metadata(item)?.available !== false;
+  const playable = (item: HistoryItem) => connected && canPlay && currentProfile && !loading && !pending && !!(item.playable || item.libraryItemId || item.queueEntryId) && metadata(item)?.available !== false;
   const openDetail = (item: HistoryItem, trigger: HTMLElement) => { detailTrigger.current = trigger; setDetail(item); };
   const play = async (item: HistoryItem, fromStart = false) => {
     setPending(true); setNotice(null); setError(null);
@@ -91,48 +90,54 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   };
   const artwork = (item: HistoryItem, className = "") => {
     const media = metadata(item);
-    const id = media?.video?.fanartId || media?.artworkId;
+    const id = media?.video?.fanartId || media?.artworkId || item.artworkId;
     return <span className={`browse-art ${className}`}>
-      {id ? <AuthArtwork origin={origin} token={token} id={id} video={media?.kind !== "audio"} className="browse-image" /> : <><Film aria-hidden="true" /><span>{item.title}</span></>}
+      {id ? <AuthArtwork origin={origin} token={token} id={id} video={media?.kind !== "audio"} className="browse-image" /> : item.thumbnail ? <MediaArtwork thumbnail={item.thumbnail} title={item.title} className="browse-image" /> : <><Film aria-hidden="true" /><span>{item.title}</span></>}
       {item.position > 0 && !!item.duration && <span className="browse-progress" aria-label={`${Math.round(Math.min(1, item.position / item.duration) * 100)}% watched`}><i style={{ width: `${Math.min(1, item.position / item.duration) * 100}%` }} /></span>}
     </span>;
   };
   const playbackActions = (item: HistoryItem) => <div className="browse-actions">
-    <Button disabled={!playable(item)} aria-label={`${item.position ? "Resume" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending ? "Starting…" : item.position ? "Resume" : "Play"}</Button>
+    <Button disabled={!playable(item)} aria-label={`${item.position ? "Resume" : item.watched ? "Play again" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending ? "Starting…" : item.position ? "Resume" : item.watched ? "Play again" : "Play"}</Button>
     {item.position > 0 && <Button variant="outline" disabled={!playable(item)} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
     {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Add ${item.title} to Up next`} onClick={() => void add(item)}><Plus aria-hidden="true" />Up next</Button>}
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
-  const hour = new Date().getHours();
-  const personName = personalProfileName(state?.activeProfile);
   const selected = detail && metadata(detail);
 
   return <section className="browse-home" aria-label="Browse and resume">
     <div className="browse-greeting">
-      <div><p className="browse-eyebrow">Good {hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"}{personName ? `, ${personName}` : ""}</p><h1>{hero ? "Pick up where you left off." : "Find something for tonight."}</h1></div>
+      <div><h1>{hero ? "Continue watching" : "Browse"}</h1></div>
     </div>
+    <nav className="browse-sources" aria-label="Browse media"><div>{sources.map(({ section, label }) => <Button key={section} variant="outline" onClick={() => onBrowse(section)}>{label}<ChevronRight aria-hidden="true" /></Button>)}</div></nav>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p role="status" className="browse-notice">{notice}</p>}
     {loading && connected && <p role="status" className="browse-quiet">Loading your media…</p>}
     {hero ? <section className="browse-hero" aria-label="Continue watching">
       {artwork(hero, "browse-hero-art")}
-      <div className="browse-hero-copy"><p className="browse-eyebrow">Continue watching · {hero.libraryItemId ? "Local library" : "Local file"}</p><h2>{hero.title}</h2><p>{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
+      <div className="browse-hero-copy"><p className="browse-eyebrow">{hero.sourceLabel || (hero.libraryItemId ? "TV folders" : "Recently played")}</p><h2>{hero.title}</h2><p>{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
         <div className="browse-actions"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
       </div>
-    </section> : !loading && <section className="browse-hero browse-empty" aria-label="Continue watching"><div><p className="browse-eyebrow">Ready when you are</p><h2>What would you like to play?</h2><p>Search videos, music and live TV, or choose something from your library.</p><div className="browse-actions"><Button onClick={() => onBrowse("Search")}>Find something to play<ChevronRight aria-hidden="true" /></Button><Button variant="outline" onClick={() => onBrowse("Library")}>Open library</Button></div></div></section>}
-    <div className="browse-section-heading"><h2>From your library</h2><Button variant="ghost" aria-expanded={browseAll} aria-controls="browse-all-sources" onClick={() => setBrowseAll(value => !value)}>Browse all<ChevronRight aria-hidden="true" /></Button></div>
+    </section> : null}
+    {currentProfile && history.some(item => item.mediaId !== hero?.mediaId) && <section aria-label="Recently played">
+      <div className="browse-section-heading"><h2>Recently played</h2></div>
+      <ul className="browse-media-grid">{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
+        <button type="button" className="browse-media-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
+          {artwork(item)}<strong>{item.title}</strong><small>{item.position > 0 ? `Continue at ${progressTime(item.position)}` : item.watched ? "Finished" : item.sourceLabel || "Played"}</small>
+        </button>
+      </li>)}</ul>
+    </section>}
+    {!!cards.length && <div className="browse-section-heading"><h2>TV folders</h2><Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button></div>}
     {!!cards.length && <ul className="browse-media-grid">{cards.map(item => {
       const entry = asHistory(item);
       return <li key={item.id}><button type="button" className="browse-media-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong>{item.title}</strong><small>{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button></li>;
     })}</ul>}
-    {!loading && !cards.length && <p className="browse-quiet">{hero ? "Browse all your sources to choose what comes next." : "Your library titles and artwork will appear here. Library folders are managed in Settings."}</p>}
-    <nav id="browse-all-sources" className="browse-sources" aria-label="Browse media" hidden={!browseAll}><h3>Choose a source</h3><div>{sources.map(name => <Button key={name} variant="outline" onClick={() => onBrowse(name)}>{name}<ChevronRight aria-hidden="true" /></Button>)}</div></nav>
     <Dialog open={active && currentProfile && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="browse-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
-      {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || (detail.libraryItemId ? "From your local library" : "From your local files")}</DialogDescription></DialogHeader>
+      {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}
+        {detail.playedBy && <p className="browse-quiet">Started from {detail.playedBy.name}</p>}
         {detail.position > 0 && <p className="browse-quiet">Continue from {progressTime(detail.position)}{detail.duration ? ` of ${progressTime(detail.duration)}` : ""}</p>}
-        {!detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Your resume point is saved.</p>}
-        {selected?.available === false && <p>This file is unavailable. Check its folder in Library.</p>}
+        {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Your resume point is saved.</p>}
+        {selected?.available === false && <p>This file is unavailable. Check its TV folder.</p>}
         {playbackActions(detail)}
         {notice && <p role="status" className="browse-notice">{notice}</p>}
         {error && <p role="alert">{error}</p>}

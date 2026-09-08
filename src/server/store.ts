@@ -10,8 +10,8 @@ import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 
-type ProgressRow = Omit<HistoryItem, "watched"> & { watched: number };
-const progressView = (row: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched });
+type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
+const progressView = ({ playedBy, ...row }: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched, ...(playedBy ? { playedBy: JSON.parse(playedBy) } : {}) });
 
 function profileName(value: unknown) {
   if (typeof value !== "string") throw new ViewingError("Enter a watching profile name.");
@@ -35,7 +35,7 @@ export function openStore(path: string) {
     INSERT OR IGNORE INTO queue_position VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
-    INSERT OR IGNORE INTO watching_profiles VALUES ('household', 'Household');
+    INSERT OR IGNORE INTO watching_profiles (id, name) VALUES ('household', 'Household');
     CREATE TABLE IF NOT EXISTS watching_state (id INTEGER PRIMARY KEY CHECK (id = 1), profileId TEXT NOT NULL);
     INSERT OR IGNORE INTO watching_state VALUES (1, 'household');
     CREATE TABLE IF NOT EXISTS viewing_progress (
@@ -44,12 +44,22 @@ export function openStore(path: string) {
       PRIMARY KEY (profileId, mediaId)
     );
     CREATE INDEX IF NOT EXISTS viewing_history ON viewing_progress(profileId, lastPlayedAt DESC);
+    CREATE INDEX IF NOT EXISTS shared_viewing_progress ON viewing_progress(mediaId, lastPlayedAt DESC);
+    CREATE TABLE IF NOT EXISTS history_sources (mediaId TEXT PRIMARY KEY, entry TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS watching_preferences (profileId TEXT PRIMARY KEY, preferences TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS bluetooth_output (id INTEGER PRIMARY KEY CHECK (id = 1), address TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS audio_output (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, card TEXT, profile TEXT);
     CREATE TABLE IF NOT EXISTS playback_device (id INTEGER PRIMARY KEY CHECK (id = 1), audioDelay REAL NOT NULL);
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
   `);
+
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(watching_profiles)").all().some(column => column.name === "confirmedName")) {
+    db.run("ALTER TABLE watching_profiles ADD COLUMN confirmedName INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(viewing_progress)").all().some(column => column.name === "playedBy")) {
+    db.run("ALTER TABLE viewing_progress ADD COLUMN playedBy TEXT");
+  }
+  const profileView = ({ id, name, confirmedName }: WatchingProfile & { confirmedName: number }): WatchingProfile => ({ id, name, ...(confirmedName ? { personName: name } : {}) });
 
   let legacyPairedInstallation = false;
   if (!db.query<{ name: string }, []>("PRAGMA table_info(devices)").all().some(column => column.name === "id")) {
@@ -93,8 +103,9 @@ export function openStore(path: string) {
   db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
   const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
-  const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
-  const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
+  const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy";
+  const latestProgress = (mediaId: string) => db.query<ProgressRow & { profileId: string }, [string]>(`SELECT profileId, ${progressColumns} FROM viewing_progress WHERE mediaId = ? ORDER BY lastPlayedAt DESC, rowid DESC LIMIT 1`).get(mediaId);
+  const activeProfile = () => profileView(db.query<WatchingProfile & { confirmedName: number }, []>("SELECT p.id, p.name, p.confirmedName FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!);
   const availableProfileName = (value: unknown, id = "") => {
     const name = profileName(value);
     if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("A watching profile already has that name.");
@@ -138,7 +149,7 @@ export function openStore(path: string) {
       })();
     },
     volume: stored.volume,
-    profiles() { return db.query<WatchingProfile, []>("SELECT id, name FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all(); },
+    profiles() { return db.query<WatchingProfile & { confirmedName: number }, []>("SELECT id, name, confirmedName FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all().map(profileView); },
     activeProfile,
     playbackPreferences(profileId: string): PlaybackPreferences {
       const row = db.query<{ preferences: string }, [string]>("SELECT preferences FROM watching_preferences WHERE profileId = ?").get(profileId);
@@ -156,7 +167,7 @@ export function openStore(path: string) {
         const name = availableProfileName(value);
         if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM watching_profiles").get()!.count >= 20) throw new ViewingError("You can create up to 20 watching profiles.");
         const profile = { id: crypto.randomUUID(), name };
-        db.query("INSERT INTO watching_profiles VALUES (?, ?)").run(profile.id, profile.name);
+        db.query("INSERT INTO watching_profiles (id, name) VALUES (?, ?)").run(profile.id, profile.name);
         return profile;
       }).immediate();
     },
@@ -164,8 +175,18 @@ export function openStore(path: string) {
       return db.transaction(() => {
         unchangedProfile(id, expectedName);
         const name = availableProfileName(value, id);
-        db.query("UPDATE watching_profiles SET name = ? WHERE id = ?").run(name, id);
+        db.query("UPDATE watching_profiles SET name = ?, confirmedName = 0 WHERE id = ?").run(name, id);
         return { id, name };
+      }).immediate();
+    },
+    namePerson(id: string, value: unknown, expectedName: string) {
+      return db.transaction(() => {
+        unchangedProfile(id, expectedName);
+        if (typeof value !== "string" || !value.trim() || value.trim().length > 60 || /[\u0000-\u001f\u007f]/.test(value)) throw new ViewingError("Enter your name using 1 to 60 characters.");
+        const name = value.trim();
+        if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("That name already has a saved history. Choose it under Existing histories or use another name.");
+        db.query("UPDATE watching_profiles SET name = ?, confirmedName = 1 WHERE id = ?").run(name, id);
+        return { id, name, personName: name };
       }).immediate();
     },
     removeProfile(id: string, expectedName: string) {
@@ -180,10 +201,10 @@ export function openStore(path: string) {
       }).immediate();
     },
     selectProfile(id: string) {
-      const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);
+      const profile = db.query<WatchingProfile & { confirmedName: number }, [string]>("SELECT id, name, confirmedName FROM watching_profiles WHERE id = ?").get(id);
       if (!profile) throw new ViewingError("Watching profile not found.", 404);
       db.query("UPDATE watching_state SET profileId = ? WHERE id = 1").run(id);
-      return profile;
+      return profileView(profile);
     },
     progress(profileId: string, mediaId: string) {
       const row = db.query<ProgressRow, [string, string]>(`SELECT ${progressColumns} FROM viewing_progress WHERE profileId = ? AND mediaId = ?`).get(profileId, mediaId);
@@ -193,15 +214,37 @@ export function openStore(path: string) {
       return db.query<ProgressRow, [string, number]>(`SELECT ${progressColumns} FROM viewing_progress WHERE profileId = ? AND lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC, mediaId LIMIT ?`)
         .all(profileId, Math.max(1, Math.min(100, Math.floor(limit) || 40))).map(progressView);
     },
-    saveProgress(profileId: string, item: HistoryItem) {
-      db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
-        title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
-        watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt`)
-        .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt);
+    progressOwner(mediaId: string) { return latestProgress(mediaId)?.profileId ?? null; },
+    sharedProgress(mediaId: string): HistoryItem | null {
+      const row = latestProgress(mediaId);
+      if (!row) return null;
+      const { profileId: _profileId, ...progress } = row;
+      return progressView(progress);
     },
-    editProgress(profileId: string, mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
+    sharedHistory(limit = 40): HistoryItem[] {
+      return db.query<ProgressRow, [number]>(`SELECT ${progressColumns} FROM (
+        SELECT ${progressColumns}, ROW_NUMBER() OVER (PARTITION BY mediaId ORDER BY lastPlayedAt DESC, rowid DESC) AS latest
+        FROM viewing_progress WHERE lastPlayedAt IS NOT NULL
+      ) WHERE latest = 1 ORDER BY lastPlayedAt DESC, mediaId LIMIT ?`)
+        .all(Math.max(1, Math.min(100, Math.floor(limit) || 40))).map(progressView);
+    },
+    historySource(mediaId: string): QueueEntry | null {
+      const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);
+      return row ? JSON.parse(row.entry) : null;
+    },
+    saveProgress(profileId: string, item: HistoryItem, entry?: QueueEntry) {
       db.transaction(() => {
+        db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
+          title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
+          watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt, playedBy=excluded.playedBy`)
+          .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt, item.playedBy ? JSON.stringify(item.playedBy) : null);
+        if (entry) db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify(entry));
+      })();
+    },
+    editSharedProgress(profileId: string, mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
+      db.transaction(() => {
+        profileId = latestProgress(mediaId)?.profileId ?? profileId;
         db.query("INSERT OR IGNORE INTO viewing_progress (profileId, mediaId, title, libraryItemId) VALUES (?, ?, ?, ?)").run(profileId, mediaId, item.title, item.libraryItemId);
         if (changes.watched !== undefined) db.query("UPDATE viewing_progress SET watched = ? WHERE profileId = ? AND mediaId = ?").run(Number(changes.watched), profileId, mediaId);
         if (changes.clearResume) db.query("UPDATE viewing_progress SET position = 0 WHERE profileId = ? AND mediaId = ?").run(profileId, mediaId);
