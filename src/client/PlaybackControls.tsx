@@ -55,6 +55,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
       : <MediaArtwork key={artwork} thumbnail={artwork} title={current.title} />}</div>}
     <h1 className="media-title" title={current?.title}>{current?.title || (session ? "What would you like to play?" : "Nothing playing")}</h1>
     <p className="source-label">{current ? <>{sourceLabel(current.source)}{session && <> · <span className="playback-status">{!connected ? "Reconnecting" : state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</span>{current.live && " · LIVE"}</>}</> : !connected ? "Reconnecting to your TV. You can still browse." : player?.status === "unavailable" ? "Your TV player is offline. Browse now and play when it reconnects." : "Search your sources, pick something saved, or keep watching."}</p>
+    {current && state?.playedBy && <p className="source-label">Started from {state.playedBy.name}</p>}
     {connected && radio && state?.radioProgramme && <figure className="radio-programme">
       {!session && state.radioProgramme.artworkUrl && <MediaArtwork key={state.radioProgramme.artworkUrl} thumbnail={state.radioProgramme.artworkUrl} title={state.radioProgramme.title} />}
       <figcaption>Programme: {state.radioProgramme.title}<small>via radio.avoid.quest</small></figcaption>

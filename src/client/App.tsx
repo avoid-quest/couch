@@ -75,6 +75,7 @@ export function App() {
   const videoQualityPreference = useVideoQualityPreference();
   const homeSection = "Home";
   const { section, visited, sectionUrl, changePage, back, searchState, changeSearch, settingsSection, changeSettingsSection } = usePageRoute();
+  const librarySection = ["Library", "Online", "Files", "Radio", "Guide", "Jellyfin"].includes(section);
   const [sourcesRequest, setSourcesRequest] = useState(0);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
   useEffect(() => setOnlineRequest(null), [credentials?.origin, credentials?.token]);
@@ -324,10 +325,10 @@ export function App() {
             {player?.status === "unavailable" && <p className="notice">{player.error || "The TV player is unavailable. You can still prepare the queue."}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
-                {([{name:"Home", label:"Home", icon:House}, {name:"Search", label:"Search", icon:Search}, {name:"Library", label:"Library", icon:LibraryBig}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} data-source={name} aria-current={(section === name || name === "Home" && !["Search","Library","Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
+                {([{name:"Home", label:"Home", icon:House}, {name:"Search", label:"Search", icon:Search}, {name:"Library", label:"Library", icon:LibraryBig}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} data-source={name} aria-current={(section === name || name === "Library" && librarySection || name === "Home" && !librarySection && !["Search","Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
               </nav>
               <div className="media-browser">
-                {!["Home","Search","Library","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection("Home")}><ArrowLeft aria-hidden="true" />Home</Button>}
+                {!["Home","Search","Library","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection(librarySection ? "Library" : "Home")}><ArrowLeft aria-hidden="true" />{librarySection ? "Library" : "Home"}</Button>}
                 {(visited.has("Browse") || section === "Browse") && <section data-page="Browse" hidden={section !== "Browse"}><h1 className="page-title">Browse sources</h1><nav className="browse-source-list" aria-label="Browse media">{["Library","Online","Guide","Radio","Jellyfin"].map(name => <Button key={name} variant="outline" onClick={() => browseSection(name)}>{name}</Button>)}</nav></section>}
                 {(visited.has("Home") || section === "Home") && <section data-page="Home" hidden={section !== "Home"}>{nativeHost ? <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && tv.browsing} onBrowse={browseSection} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} /> : <SessionHome state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onPlay={playHistory} active={section === "Home"} />}</section>}
                 <section data-page="Queue" hidden={section !== "Queue"}>

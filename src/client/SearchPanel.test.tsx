@@ -288,8 +288,8 @@ test("Search starts with direct browsing actions and no page-level quality contr
   await render(true, true, true, 1, 1, "http://localhost", "auto");
   expect(document.querySelector('[role="combobox"]')).toBeNull();
   expect(document.body.textContent).not.toContain("Video default");
-  await click("Online");
-  expect(browsed).toEqual(["Online"]);
+  await act(async () => ([...document.querySelectorAll(".search-shortcuts button")].find(element => element.textContent === "TV folders") as HTMLButtonElement).click());
+  expect(browsed).toEqual(["Files"]);
   expect(commands).toEqual([]);
 });
 

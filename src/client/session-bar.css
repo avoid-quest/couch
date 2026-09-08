@@ -30,7 +30,7 @@
   .couch-shell.remote-shell .session-bar-controls .playback-settings > button { grid-column: 6; grid-row: 1; }
   .couch-shell.remote-shell .session-bar-volume .volume-control > button, .couch-shell.remote-shell .session-bar-volume .volume-control > svg { grid-column: 1; grid-row: 2; }
   .couch-shell.remote-shell .session-bar-volume [data-slot="slider"] { grid-column: 2 / 4; grid-row: 2; width: auto; min-width: 0; margin-inline: 6px; }
-  .couch-shell.remote-shell .session-bar-volume .volume-control > span { display: none; }
+  .couch-shell.remote-shell .session-bar-volume .volume-control > span:not([data-slot]) { display: none; }
   .couch-shell.remote-shell .session-bar-controls .transport-back { grid-column: 4; grid-row: 2; }
   .couch-shell.remote-shell .session-bar-controls .transport-forward { grid-column: 5; grid-row: 2; }
   .couch-shell.remote-shell .session-bar-remote { grid-column: 6; grid-row: 2; }
