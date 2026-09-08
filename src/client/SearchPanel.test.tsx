@@ -113,3 +113,30 @@ test("progress broadcasts retain open details and focused result nodes during re
   await act(async () => release?.()); await flush();
   expect(button("Details for Evening movie")).toBe(trigger); expect(document.activeElement).toBe(trigger);
 });
+
+test("TV playback hides details and Home restores their result focus", async () => {
+  await render(); await search("Evening"); await click("Details for Evening movie");
+  const opener = button("Details for Evening movie");
+  await click("Resume Evening movie", document.querySelector('[role="dialog"]')!);
+  await render(false);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  // TV Home first focuses its source tab. Search restores the detail opener after that render.
+  button("Search").focus();
+  await render(); await act(async () => { await Bun.sleep(30); });
+  expect(document.activeElement).toBe(opener);
+  expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+for (const invalidation of ["query", "hidden"] as const) test(`deferred return focus is cancelled by a new ${invalidation}`, async () => {
+  await render(); await search("Evening"); await click("Details for Evening movie"); await render(false);
+  const frames = new Map<number, FrameRequestCallback>(); let nextFrame = 1;
+  const schedule = spyOn(globalThis, "requestAnimationFrame").mockImplementation(callback => { const id = nextFrame++; frames.set(id, callback); return id; });
+  const cancel = spyOn(globalThis, "cancelAnimationFrame").mockImplementation(id => { frames.delete(id); });
+  try {
+    await render();
+    expect(frames.size).toBe(1);
+    if (invalidation === "query") await search("new"); else await render(false);
+    expect(frames.size).toBe(0);
+  } finally { schedule.mockRestore(); cancel.mockRestore(); }
+});

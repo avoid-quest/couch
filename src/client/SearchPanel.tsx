@@ -56,6 +56,20 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
   const [actionError, setActionError] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const requested = useRef("");
+  const restoreFocus = useRef(false);
+  useEffect(() => {
+    if (!props.active) {
+      if (detail) { restoreFocus.current = true; setDetail(null); }
+      return;
+    }
+    if (!restoreFocus.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (trigger.current?.isConnected && !trigger.current.closest("[hidden]")
+        && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) trigger.current.focus({ preventScroll: true });
+      restoreFocus.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [props.active]);
   const pageSize = source === "Library" ? 30 : 50;
 
   useEffect(() => {

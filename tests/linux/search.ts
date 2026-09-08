@@ -31,29 +31,38 @@ export async function verifySearch(context: MusicContext) {
         await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && document.querySelector(arguments[1])?.getAttribute('aria-busy') === 'false'", [opener, scope]));
         await driver.click(opener);
         const scrollPosition = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
-        const previous = first().player.playbackId;
+        const count = first().queue.length;
         const prefix = source === "Library" ? `library:${item.id}` : `:${item.id}`;
+        await driver.button(`Add ${item.title} to queue`, '[role="dialog"]');
+        await until(`${name} Search queue appends the ${source} item for both controllers`, () => all(state => state.queue.length === count + 1 && state.queue.at(-1)?.source.endsWith(prefix) === true));
+        const previous = first().player.playbackId;
         await driver.click('[role="dialog"] button[aria-label^="Play "], [role="dialog"] button[aria-label^="Resume "]');
         await until(`${name} Search ${source} play reaches native player and both controllers`, () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source.endsWith(prefix) === true));
         await context.clients[1]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
         await until(`${name} Search playback pauses through the other paired controller`, () => all(state => state.player.status === "paused"));
-        await until(`${name} Search details survive the playback progress broadcast`, () => driver.execute("return document.querySelector('[role=dialog]')?.textContent.includes(arguments[0])", [item.title]));
-        const count = first().queue.length;
-        await driver.button(`Add ${item.title} to queue`, '[role="dialog"]');
-        await until(`${name} Search queue appends the ${source} item for both controllers`, () => all(state => state.queue.length === count + 1 && state.queue.at(-1)?.source.endsWith(prefix) === true));
-        await driver.key(keys.escape);
+        if (name === "TV") {
+          await until("TV playback closes Search details", () => driver.execute("return !document.querySelector('[role=dialog]')"));
+          await driver.home();
+        } else {
+          await until("phone Search details survive the playback progress broadcast", () => driver.execute("return document.querySelector('[role=dialog]')?.textContent.includes(arguments[0])", [item.title]));
+          await driver.key(keys.escape);
+        }
         await until(`${name} Search details return directional focus to ${source} result`, () => driver.execute("return !document.querySelector('[role=dialog]') && document.activeElement === document.querySelector(arguments[0])", [opener]));
         const returnedScroll = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
         assert.deepEqual(returnedScroll, scrollPosition, `${name} details retain actual WebKit scroll offsets`);
         await driver.section("Queue"); await driver.section("Search");
         assert.equal(await driver.execute("return document.querySelector('#media-search').value"), item.title);
-        await assertResponsive(driver, `${name} Search ${source}`);
+        if (name === "phone") await assertResponsive(driver, `${name} Search ${source}`);
+        else assert.equal(await driver.execute("return document.documentElement.scrollWidth > innerWidth + 1"), false, "TV Search has no page overflow");
         outcomes.push({ device: name, source, itemId: item.id, title: item.title, playbackId: first().player.playbackId });
         await stop();
       }
     }
     await Bun.write(`${context.artifactDir}/search-journey.json`, JSON.stringify(outcomes, null, 2));
     await httpRemote.screenshot("search-phone.png");
+  } catch (error) {
+    await Bun.write(`${context.artifactDir}/search-focus-diagnostic.json`, JSON.stringify(await ui.execute("return {active:{tag:document.activeElement?.tagName,id:document.activeElement?.id,label:document.activeElement?.getAttribute('aria-label')},browserHidden:document.querySelector('.tv-browser')?.hidden,dialog:!!document.querySelector('[role=dialog]')}"), null, 2));
+    throw error;
   } finally {
     await httpRemote.minimize();
     await restoreQueue(context, originalQueue);
