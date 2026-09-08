@@ -19,9 +19,9 @@ async function search(query: string) {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await flush();
 }
-async function render(active = true, connected = true, canPlay = true) {
+async function render(active = true, connected = true, canPlay = true, libraryVersion = 1) {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={1} jellyfinVersion={1} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  await act(async () => root.render(<SearchPanel origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
   await flush();
 }
 beforeEach(async () => {
@@ -97,4 +97,19 @@ test("new queries cancel delayed old responses and disconnected playback stays d
   expect(document.body.textContent).toContain("New movie"); expect(document.body.textContent).not.toContain("Evening movie");
   await render(true, true, false); expect(button("Resume New movie").disabled).toBe(true); expect(button("Add New movie to queue").disabled).toBe(false);
   await render(true, false); expect(button("Add New movie to queue").disabled).toBe(true);
+});
+
+test("progress broadcasts retain open details and focused result nodes during refresh", async () => {
+  await render(); await search("Evening"); await click("Details for Evening movie");
+  const trigger = button("Details for Evening movie");
+  await render(true, true, true, 2);
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog).not.toBeNull(); expect(dialog.textContent).toContain("Evening movie");
+  await click("Add Evening movie to queue", dialog); await click("Close", dialog);
+  expect(document.activeElement).toBe(trigger);
+  delayedQuery = "Evening"; connectedJellyfin = false;
+  await render(true, true, true, 3);
+  expect(button("Details for Evening movie")).toBe(trigger); expect(document.activeElement).toBe(trigger);
+  await act(async () => release?.()); await flush();
+  expect(button("Details for Evening movie")).toBe(trigger); expect(document.activeElement).toBe(trigger);
 });

@@ -55,6 +55,7 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
   const [notice, setNotice] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
+  const requested = useRef("");
   const pageSize = source === "Library" ? 30 : 50;
   // A new submitted search resets pagination before any request for that query.
   const [submitted, setSubmitted] = useState({ query, attempt });
@@ -63,7 +64,9 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
   useEffect(() => {
     if (!props.connected) { setLoading(false); return; }
     const controller = new AbortController();
-    setLoading(true); setError(null); setPage(null); setDetail(null);
+    const key = JSON.stringify([props.origin, props.token, query, attempt, offset]);
+    if (requested.current !== key) { setPage(null); setDetail(null); requested.current = key; }
+    setLoading(true); setError(null);
     const read = async <T,>(path: string): Promise<T> => {
       const response = await fetch(`${props.origin}${path}`, { headers: { Authorization: `Bearer ${props.token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) });
       const body = await response.json();
@@ -84,7 +87,7 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
       return { total: result.total, warning: unavailable.length ? `${unavailable.map(folder => folder.name).join(", ")}: folder unavailable or scan failed. Saved results remain visible; an administrator can check Settings > Sources.` : folders.sources.some(folder => folder.status === "scanning") ? "A folder is still scanning. Results update as media is indexed." : !folders.sources.length ? "No TV folders configured. An administrator can add them in Settings > Sources." : undefined,
         items: result.items.map(item => ({ id: item.id, title: item.title, detail: [item.video?.show?.title, item.artist, item.album, item.video?.year, item.kind].filter(Boolean).join(" · "), plot: item.video?.plot, available: item.available, position: item.progress?.position ?? 0, duration: item.duration, watched: item.progress?.watched ?? false })) };
     };
-    void load().then(result => { if (!controller.signal.aborted) setPage(result); }).catch(reason => { if (!controller.signal.aborted) setError(message(reason)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    void load().then(result => { if (!controller.signal.aborted) { setPage(result); setDetail(current => current ? result.items.find(item => item.id === current.id) ?? null : null); } }).catch(reason => { if (!controller.signal.aborted) setError(message(reason)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [props.origin, props.token, props.connected, source === "Library" ? props.libraryVersion : props.jellyfinVersion, query, attempt, offset, retry, source]);
 
