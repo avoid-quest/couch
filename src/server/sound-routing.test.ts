@@ -101,17 +101,21 @@ test("session pauses seekable media on audio loss, suppresses stale EOF and requ
 });
 
 test("live media audio loss stops, cancels retry and rejects retired playback observations", () => {
-  const store = openStore(":memory:"); const commands: PlaybackCommand[] = [];
-  const session = createSession(store, command => commands.push(command), () => {});
+  const store = openStore(":memory:"); const commands: PlaybackCommand[] = []; const stops: (string | null)[] = [];
+  const session = createSession(store, command => commands.push(command), () => {}, { stopped: id => { stops.push(id); } });
   try {
     session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null });
     session.command({ type: "enqueue", entry: { id: "radio", title: "Radio", source: "https://example.test/live", kind: "radio" }, playNow: true });
+    stops.length = 0;
     const old = session.state.player;
     session.audioLost("Output disconnected");
     expect(commands.at(-1)).toEqual({ type: "stop" });
     session.observe({ ...old, status: "error", error: "native disconnected" });
     expect(session.state.player.error).toBe("Output disconnected"); expect(session.state.radioRetry).toBeNull();
     expect(session.state.currentEntryId).toBe("radio");
+    session.observe({ ...old, playbackId: null, status: "idle" });
+    expect(stops).toEqual([null]);
+    expect(session.state.player.error).toBe("Output disconnected");
   } finally { store.close(); }
 });
 
