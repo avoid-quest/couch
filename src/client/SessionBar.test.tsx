@@ -16,7 +16,7 @@ const state: SessionState = {
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
 async function render(value = state, connected = true, active = true, command?: (action: Action) => Promise<boolean>) {
   const { SessionBar } = await import("./SessionBar");
-  await act(async () => root.render(<SessionBar state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} onOpen={() => browsed.push("Home")} run={command ?? (async action => { actions.push(action); return true; })} />));
+  await act(async () => root.render(active ? <SessionBar state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} onOpen={() => browsed.push("Home")} run={command ?? (async action => { actions.push(action); return true; })} /> : null));
 }
 beforeEach(async () => {
   actions.length = 0; browsed.length = 0;
@@ -60,4 +60,46 @@ test("live playback can pause and stop without seek controls, and idle hides the
   expect(document.querySelector('[aria-label^="Seek"]')).toBeNull();
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
   expect(document.querySelector("footer")).toBeNull();
+});
+
+test("Next disappearing restores an available transport and loading falls back to Stop", async () => {
+  await render();
+  button("Next in queue").focus();
+  await render({ ...state, queue: [state.queue[1]!] });
+  expect(document.activeElement === button("Pause playback")).toBe(true);
+  await render({ ...state, queue: [state.queue[1]!], player: { ...state.player, status: "loading" } });
+  expect(document.activeElement === button("Stop playback")).toBe(true);
+});
+
+test("removing the focused footer returns to the active page without navigating or stealing focus", async () => {
+  const nav = document.createElement("nav");
+  nav.className = "primary-nav";
+  nav.innerHTML = '<a href="/search?q=album" aria-current="page">Search</a><a href="/saved">Saved</a>';
+  document.body.append(nav);
+  const search = nav.querySelector<HTMLAnchorElement>("a")!;
+  const saved = nav.querySelector<HTMLAnchorElement>('a[href="/saved"]')!;
+  const frame = () => act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+  for (const removeComponent of [false, true]) {
+    await render();
+    button("Stop playback").focus();
+    await act(async () => button("Stop playback").click());
+    await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } }, true, !removeComponent);
+    await frame();
+    expect(document.activeElement === search).toBe(true);
+    expect(window.location.pathname).toBe("/");
+  }
+  await render();
+  button("Next in queue").focus();
+  saved.focus();
+  await render({ ...state, queue: [state.queue[1]!] });
+  expect(document.activeElement === saved).toBe(true);
+  await render(state, true, false);
+  await frame();
+  expect(document.activeElement === saved).toBe(true);
+  await render();
+  button("Stop playback").focus();
+  await render(state, true, false);
+  saved.focus();
+  await frame();
+  expect(document.activeElement === saved).toBe(true);
 });
