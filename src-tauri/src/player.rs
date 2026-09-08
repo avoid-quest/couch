@@ -111,6 +111,7 @@ impl Player {
                 Ok(())
             }
             PlaybackCommand::AudioOutput { output } => self.audio_output(app, &output),
+            PlaybackCommand::AudioPause => self.control(app, "audioPause", 0.0, -1),
             PlaybackCommand::Load {
                 audio_output,
                 playback_id,
@@ -331,9 +332,9 @@ impl Player {
 
     fn audio_output(&mut self, app: &AppHandle, output: &str) -> Result<(), String> {
         use tauri_plugin_video::{NativeControlRequest, VideoExt};
-        let Some(session_key) = self.state.playback_id.clone() else { return Ok(()); };
+        let Some(session_key) = self.session_key.clone() else { return Ok(()); };
         let snapshot = app.video().desktop().control_native(NativeControlRequest {
-            session_key, action: "audioOutput".into(), value: 0.0, index: -1,
+            session_key, playback_id: None, action: "audioOutput".into(), value: 0.0, index: -1,
             subtitle: None, replay_gain: None, audio_output: Some(output.into()),
         }).map_err(|error| error.to_string())?;
         self.apply(snapshot)
@@ -356,7 +357,7 @@ impl Player {
             .control_native(NativeControlRequest {
                 session_key,
                 action: action.into(),
-                playback_id: if action == "volume" { None } else { self.state.playback_id.clone() },
+                playback_id: if matches!(action, "volume" | "audioPause") { None } else { self.state.playback_id.clone() },
                 value,
                 index,
                 subtitle: None,

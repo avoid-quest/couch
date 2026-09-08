@@ -87,7 +87,7 @@ test("session pauses seekable media on audio loss, suppresses stale EOF and requ
     session.observe({ playbackId, status: "playing", position: 25, duration: 100, volume: 100, seekable: true, error: null });
     session.updateSystemAudio({ selectedOutput: "hdmi", observedOutput: "hdmi", volume: 37, muted: true, error: null });
     session.audioLost("HDMI disconnected");
-    expect(commands.at(-1)).toEqual({ type: "pause", playbackId, paused: true });
+    expect(commands.at(-1)).toEqual({ type: "audioPause" });
     session.observe({ ...session.state.player, status: "paused", volume: 100 });
     expect(reported.at(-1)).toBe("paused");
     session.observe({ ...session.state.player, status: "ended", volume: 100 });

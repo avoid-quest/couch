@@ -113,6 +113,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (previous?.sent && state.player.status !== "unavailable") send({ type: "prepare", playbackId: previous.currentId });
   };
   const refreshPreparation = () => {
+    if (audioInterrupted) { if (prepared && !prepared.sent) cancelPreparation(); return; }
     const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
     const next = index >= 0 ? state.queue[index + 1] : undefined;
     if (!admitted() || !audioOnly || !next || !/^(library|jellyfin):/.test(next.source) || activePlayIntent !== playIntent || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
@@ -130,7 +131,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       pending.controller.signal.throwIfAborted();
       return options.resolveSource?.(next, pending.playbackId, pending.controller.signal, false, false, true);
     }).then(media => {
-      if (prepared !== pending || pending.controller.signal.aborted) return;
+      if (audioInterrupted || prepared !== pending || pending.controller.signal.aborted) return;
       if (!media?.audioOnly || media.segment || media.audioSource || media.startPosition || media.subtitles?.length || media.radio || media.goLive) {
         pending.controller.abort();
         return;
@@ -194,7 +195,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       webRecovery = null;
       webRetried = true;
       pendingPause = recovery.paused;
-      send({ type: "load", playbackId, ...media, startPosition: previous.position, paused: recovery.paused,
+      send({ type: "load", playbackId, ...media, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
         preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
       broadcast();
     }).catch(failed);
@@ -341,9 +342,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     audioLost(error: string) {
       if (!admitted() || audioInterrupted) return;
       audioInterrupted = true;
+      webRecovery = null; state.webRetry = null; expiry = undefined; webRetried = false; pendingPause = null;
       playIntent++; cancelRadioRetry(); resolution?.abort(); finishProgress();
       if (state.player.playbackId && state.player.seekable && ["playing", "paused"].includes(state.player.status)) {
-        send({ type: "pause", playbackId: state.player.playbackId, paused: true });
+        send({ type: "audioPause" });
         state.player = { ...state.player, status: "paused", error };
       } else {
         options.deactivate?.();
@@ -570,6 +572,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (audioInterrupted) {
         if (player.playbackId === state.player.playbackId && player.status === "paused") {
           const paused = { ...player, volume: state.player.volume };
+          state.player = { ...paused, error: state.player.error };
+          publish(state);
           persistProgress(() => progress.observe(paused));
           options.observe?.(paused);
         }

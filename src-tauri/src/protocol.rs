@@ -56,6 +56,7 @@ pub enum PlaybackCommand {
         next: Option<PreparedAudio>,
     },
     AudioOutput { output: String },
+    AudioPause,
     Load {
         #[serde(default)]
         audio_output: Option<String>,

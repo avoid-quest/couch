@@ -1819,7 +1819,7 @@ mod linux_mpv {
             }
             match payload.action.as_str() {
                 "play" => player.mpv.set_property("pause", false).map_err(mpv_error)?,
-                "pause" => player.mpv.set_property("pause", true).map_err(mpv_error)?,
+                "pause" | "audioPause" => player.mpv.set_property("pause", true).map_err(mpv_error)?,
                 "seek" => player
                     .mpv
                     .command(

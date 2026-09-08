@@ -111,3 +111,36 @@ test("failed preparation preserves the song and ordinary next-source error contr
     expect(f.session.state.currentEntryId).toBe("third");
   } finally { f.close(); }
 });
+
+test("audio loss pauses the actual native session while adopting an already started successor", async () => {
+  const f = fixture();
+  try {
+    await tick();
+    const prepared = f.commands.find(command => command.type === "prepare" && command.next);
+    if (prepared?.type !== "prepare" || !prepared.next) throw new Error("Missing successor");
+    f.session.observe({ ...f.session.state.player, seekable: true });
+    f.session.audioLost("HDMI disconnected");
+    expect(f.commands.at(-1)).toEqual({ type: "audioPause" });
+    f.session.observe({ ...idle, playbackId: prepared.next.playbackId, status: "paused", seekable: true, duration: 3 });
+    expect(f.session.state.currentEntryId).toBe("second");
+    expect(f.session.state.player.status).toBe("paused");
+    expect(f.session.state.player.error).toBe("HDMI disconnected");
+    await tick();
+    expect(f.commands.filter(command => command.type === "prepare" && command.next)).toHaveLength(1);
+    expect(f.transitions).toEqual([prepared.next.playbackId]);
+  } finally { f.close(); }
+});
+
+test("audio loss aborts unresolved successor preparation", async () => {
+  const pending = Promise.withResolvers<MediaSource>();
+  const f = fixture((_id, _signal, preparing) => preparing ? pending.promise : { source: "file:///first.flac", audioOnly: true });
+  try {
+    await tick();
+    f.session.observe({ ...f.session.state.player, seekable: true });
+    f.session.audioLost("HDMI disconnected");
+    pending.resolve({ source: "file:///second.flac", audioOnly: true });
+    await tick();
+    expect(f.commands.some(command => command.type === "prepare" && command.next)).toBe(false);
+    expect(f.session.state.player.status).toBe("paused");
+  } finally { f.close(); }
+});
