@@ -14,9 +14,9 @@ const state: SessionState = {
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
-async function render(value = state, connected = true, active = true) {
+async function render(value = state, connected = true, active = true, command?: (action: Action) => Promise<boolean>) {
   const { SessionHome } = await import("./SessionHome");
-  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBrowse={name => browsed.push(name)} onPlay={async () => true} run={async action => { actions.push(action); return true; }} />));
+  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBrowse={name => browsed.push(name)} onPlay={async () => true} run={command ?? (async action => { actions.push(action); return true; })} />));
 }
 beforeEach(async () => {
   actions.length = 0; browsed.length = 0;
@@ -204,4 +204,32 @@ test("radio playback settings omit video quality, speed, empty tracks and unavai
   for (const id of ["playback-quality", "playback-speed", "playback-audio", "playback-subtitles", "playback-chapters", "playback-replaygain", "playback-subtitle-file"]) expect(document.getElementById(id)).toBeNull();
   expect(document.querySelector("#playback-audio-delay")).not.toBeNull();
   expect(actions).toEqual([]);
+});
+
+
+test("quality reload restores the ready trigger without taking focus after user navigation", async () => {
+  const value = { ...state, queue: [{ id: "current", title: "Video", source: "web:https://www.youtube.com/watch?v=abcdefghijk", quality: "auto" as const }], player: { ...state.player, tracks: [{ id: "v", index: 0, kind: "video" as const, label: "Video", language: "", selected: true }] } };
+  for (const navigate of [false, true]) {
+    let resolve!: (ok: boolean) => void;
+    const command = () => new Promise<boolean>(done => { resolve = done; });
+    await render(value, true, true, command);
+    await act(async () => button("Playback settings").click());
+    const quality = document.querySelector<HTMLButtonElement>("#playback-quality")!;
+    quality.getClientRects = () => [{ width: 200, height: 44 }] as unknown as DOMRectList;
+    await act(async () => quality.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Up to 720p")!.click());
+    const loading = { ...value, player: { ...value.player, playbackId: "replacement", status: "loading" as const, tracks: [] } };
+    await render(loading, true, true, command);
+    await act(async () => resolve(true));
+    await act(async () => new Promise(done => setTimeout(done, 25)));
+    expect(quality.disabled).toBe(true);
+    if (navigate) {
+      await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+      button("Done").focus();
+    }
+    await render({ ...value, player: { ...value.player, playbackId: "replacement", status: "paused" } }, true, true, command);
+    await act(async () => new Promise(done => setTimeout(done, 25)));
+    expect(document.activeElement).toBe(navigate ? button("Done") : quality);
+    await act(async () => button("Done").click());
+  }
 });

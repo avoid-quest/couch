@@ -126,6 +126,19 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
   const [pending, setPending] = useState(false);
   const [defaultError, setDefaultError] = useState<string | null>(null);
   const commandPending = useRef(false);
+  const focusRequest = useRef<{ trigger: HTMLButtonElement; cancel: () => void } | null>(null);
+  useEffect(() => {
+    if (!ready || pending) return;
+    const frame = requestAnimationFrame(() => {
+      const request = focusRequest.current;
+      if (request?.trigger.isConnected && !request.trigger.disabled && request.trigger.getClientRects().length) {
+        request.trigger.focus({ preventScroll: true });
+        request.cancel();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ready, pending, player.playbackId]);
+  useEffect(() => () => focusRequest.current?.cancel(), [entry?.id, profile.id, credentials.origin, credentials.token]);
   useEffect(() => setDefaultError(null), [player.playbackId, profile.id, connected]);
   const tracks = player.tracks ?? [];
   const audio = tracks.filter((track) => track.kind === "audio");
@@ -139,14 +152,20 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
   const video = showQuality || tracks.some(track => track.kind === "video");
   const chapterIndex = chapters.findLastIndex((chapter) => chapter.position <= player.position);
   const disabled = !ready || pending;
-  const run = async (action: Action) => {
+  const run = async (action: Action, focusId?: string) => {
     if (commandPending.current) return false;
     commandPending.current = true;
     const listbox = document.activeElement?.closest('[role="listbox"]');
-    const trigger = listbox?.id ? document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-controls="${CSS.escape(listbox.id)}"]`) : null;
-    let navigated = false;
-    const cancelFocus = () => { navigated = true; };
+    const trigger = focusId ? document.getElementById(focusId) as HTMLButtonElement | null
+      : listbox?.id ? document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-controls="${CSS.escape(listbox.id)}"]`) : null;
+    focusRequest.current?.cancel();
+    const cancelFocus = () => {
+      document.removeEventListener("keydown", cancelFocus, true);
+      document.removeEventListener("pointerdown", cancelFocus, true);
+      focusRequest.current = null;
+    };
     if (trigger) {
+      focusRequest.current = { trigger, cancel: cancelFocus };
       document.addEventListener("keydown", cancelFocus, true);
       document.addEventListener("pointerdown", cancelFocus, true);
     }
@@ -156,12 +175,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
     } finally {
       commandPending.current = false;
       setPending(false);
-      if (trigger) requestAnimationFrame(() => {
-        document.removeEventListener("keydown", cancelFocus, true);
-        document.removeEventListener("pointerdown", cancelFocus, true);
-        // Radix cannot restore focus to the trigger while a command disables it.
-        if (!navigated && trigger.isConnected && !trigger.disabled && trigger.getClientRects().length) trigger.focus({ preventScroll: true });
-      });
+      // Native reload can outlast the command acknowledgement. Restore once the control is ready.
     }
   };
   const selectTrack = (kind: "audio" | "subtitle", index: number) => {
@@ -179,7 +193,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
 
   return (
     <div className="playback-settings">
-      <Dialog>
+      <Dialog onOpenChange={open => { if (!open) focusRequest.current?.cancel(); }}>
         <DialogTrigger asChild><Button variant="ghost" size="icon" className="icon-button min-h-11 min-w-11" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
@@ -189,7 +203,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
           <div className="grid gap-5">
             {showQuality && <QualitySelect id="playback-quality" label="Quality" value={entry?.quality ?? "auto"} disabled={disabled} onChange={quality => {
               setDefaultError(null);
-              if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }).then(ok => { if (!ok) setDefaultError("Could not change quality."); });
+              if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }, "playback-quality").then(ok => { if (!ok) setDefaultError("Could not change quality."); });
             }} />}
             {audio.length > 1 && <div className="grid gap-2">
               <Label htmlFor="playback-audio">Audio track</Label>
