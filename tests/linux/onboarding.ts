@@ -1,5 +1,10 @@
 import { strict as assert } from "node:assert";
 import { UiDriver, assertResponsive, startHttpRemote, type Wait } from "./ui";
+import { mkdir } from "node:fs/promises";
+import { addTVFolder } from "./folder-settings";
+import { assertNativeVideoPixels } from "./pixels";
+import { remoteSocketUrl } from "./build";
+import type { SessionState } from "../../src/shared/protocol";
 import type { SoundState } from "../../src/shared/sound";
 
 // Run on an empty COUCH_DATA_DIR with the joined native build, virtual X11
@@ -7,6 +12,9 @@ import type { SoundState } from "../../src/shared/sound";
 const origin = "http://127.0.0.1:4100", artifacts = "/artifacts";
 assert.ok(process.env.COUCH_DATA_DIR, "Set an isolated first-run data directory");
 assert.equal(await Bun.file(`${process.env.COUCH_DATA_DIR}/couch.sqlite`).exists(), false, "First-run qualification must start empty");
+await mkdir("/mnt/onboarding-fixture", { recursive: true });
+const fixture = Bun.spawn(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=blue:size=640x360:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "40", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "/mnt/onboarding-fixture/First local video.mp4"], { stdout: "ignore", stderr: "inherit" });
+assert.equal(await fixture.exited, 0);
 const checks: string[] = [];
 const until: Wait = async (description, predicate, timeout = 15_000) => {
   const end = Date.now() + timeout;
@@ -14,6 +22,8 @@ const until: Wait = async (description, predicate, timeout = 15_000) => {
   checks.push(description); console.log(`PASS ${description}`);
 };
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file(`${artifacts}/onboarding-driver.log`), stderr: Bun.file(`${artifacts}/onboarding-native.log`) });
+let socket: WebSocket | undefined;
+let state: SessionState | undefined;
 let session = "", phone: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
 const request = async (path: string, body?: unknown, method = body === undefined ? "GET" : "POST"): Promise<any> => {
   const response = await fetch(`http://127.0.0.1:4444${path}`, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
@@ -80,13 +90,34 @@ try {
   await assertResponsive(phone.ui, "First-run optional sources");
   await phone.ui.button("Finish setup");
   await until("completion opens home on TV and phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]')"));
+  const NativeSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+  socket = new NativeSocket(remoteSocketUrl(origin, token), { headers: { Origin: origin } });
+  socket.addEventListener("message", event => { const message = JSON.parse(String(event.data)); if (message.type === "state") state = message.state; });
+  await until("paired observer receives the actual native idle state", () => state?.player.status === "idle");
+  await addTVFolder(phone.ui, until, "onboarding-fixture");
+  await until("first local source scans through the existing manager", async () => {
+    const response = await fetch(origin + "/api/library/items?q=First%20local%20video", { headers: { Authorization: `Bearer ${token}` } });
+    return (await response.json() as { items: unknown[] }).items.length === 1;
+  });
+  await phone.ui.section("Library"); await phone.ui.button("All media", ".library-views");
+  await phone.ui.type("#library-query", "First local video"); await phone.ui.button("Search", ".library-search");
+  await until("phone offers its first scanned local video", () => phone!.ui.execute("return !!document.querySelector('.library-play-button:not(:disabled)')"));
+  const playLabel = await phone.ui.execute("return document.querySelector('.library-play-button').getAttribute('aria-label')") as string;
+  await phone.ui.button(playLabel, ".library-items");
+  await until("first local item plays on the native TV", () => state?.player.status === "playing" && state.player.position > 0.5 && state.queue.some(entry => entry.id === state!.currentEntryId && entry.source.startsWith("library:")), 30_000);
+  await phone.minimize(); await tv.watching();
+  await assertNativeVideoPixels(tv.execute, artifacts, "onboarding-first-local-video", [0, 0, 255]);
+  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop", ".player-controls");
+  await until("phone stops its first local item", () => state?.player.status === "idle" && !state.currentEntryId);
+  socket.close(); socket = undefined;
   await restart();
   await until("completed restart keeps home and the paired phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   await phone.restore(); await phone.ui.button("Settings");
   await until("saved name and ordinary Settings remain available", () => phone!.ui.execute("return document.querySelector('#tv-name')?.value === 'First-run fixture' && !!document.querySelector('[aria-label=\"Settings sections\"]')"));
   await phone.screenshot("onboarding-complete-settings");
-  await Bun.write(`${artifacts}/onboarding-acceptance.json`, JSON.stringify({ checks, physicalConfirmation: false, source: "optional source skipped with no Internet access required", audio: "actual test route and non-silent null-sink PCM", remaining: "Installed target, physical screen and audible sound, reboot and first local item playback" }, null, 2));
+  await Bun.write(`${artifacts}/onboarding-acceptance.json`, JSON.stringify({ checks, physicalConfirmation: false, source: "optional source skipped with no Internet access required", audio: "actual test route and non-silent null-sink PCM", localPlayback: "real phone folder registration, scan, native playback pixels and stop", remaining: "Installed target, physical screen and audible sound, machine reboot" }, null, 2));
 } finally {
+  socket?.close();
   await phone?.close();
   if (session) await request(`/session/${session}`, undefined, "DELETE").catch(() => {});
   driver.kill(); await driver.exited;

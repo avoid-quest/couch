@@ -118,7 +118,9 @@ First-run setup has its own fresh-data journey in `onboarding.ts`. Run it with
 binaries in `/work/bin`, a virtual X11 output and a Pulse-compatible null sink.
 It uses the real phone claim/name, display preview/confirm and sound selection/test
 controls, captures non-silent test PCM, skips optional sources, and restarts both
-the browser and native app. Its screen/sound confirmation clicks represent only
+the browser and native app. After completion it adds a generated local video
+through normal Folder Settings, scans and plays it from the phone, checks native
+video pixels, stops playback and checks home after another app restart. Its screen/sound confirmation clicks represent only
 the virtual fixture. Installed-target picture, audible sound, local playback and
 machine reboot remain separate acceptance gates.
 
