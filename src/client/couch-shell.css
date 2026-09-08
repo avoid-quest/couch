@@ -1,7 +1,7 @@
 /* The accepted TV rail and phone bottom navigation share the same destinations. */
 .couch-shell { --shell-header: 72px; --shell-rail: 195px; --shell-footer: 74px; --shell-gutter: 42px; }
 .couch-shell.remote-shell { max-width: 1440px; padding: 0; margin: auto; }
-.couch-shell .app-header { position: sticky; top: 0; z-index: 20; min-height: var(--shell-header); padding: 12px var(--shell-gutter); gap: 18px; border-bottom: 1px solid var(--border); }
+.couch-shell .app-header { position: sticky; top: 0; z-index: 20; background: var(--background); min-height: var(--shell-header); padding: 12px var(--shell-gutter); gap: 18px; border-bottom: 1px solid var(--border); }
 .couch-shell .brand { font-size: 26px; font-weight: 750; letter-spacing: -1.8px; gap: 4px; }
 .couch-shell .brand-dot { width: 7px; height: 7px; margin-top: 17px; border-radius: 50%; background: #c4b998; }
 .couch-shell .tv-name { color: var(--muted-foreground); font-size: 13px; }
@@ -11,7 +11,7 @@
 .couch-shell .profile-name { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; font-size: 13px; font-weight: 600; }
 .couch-shell .profile-name small { font-size: 10px; font-weight: 400; color: var(--muted-foreground); }
 .couch-shell .workspace { display: grid; grid-template-columns: var(--shell-rail) minmax(0, 1fr); gap: 0; min-height: calc(100dvh / var(--interface-scale) - var(--shell-header)); padding: 0; }
-.couch-shell .primary-nav { position: sticky; top: var(--shell-header); display: flex; flex-direction: column; gap: 8px; width: var(--shell-rail); height: calc(100dvh / var(--interface-scale) - var(--shell-header)); padding: 26px 18px 18px; border-right: 1px solid var(--border); }
+.couch-shell .primary-nav { position: sticky; top: var(--shell-header); display: flex; flex-direction: column; gap: 8px; width: var(--shell-rail); overflow-y: auto; height: calc(100dvh / var(--interface-scale) - var(--shell-header)); padding: 26px 18px 18px; border-right: 1px solid var(--border); }
 .couch-shell:has(.session-bar) .primary-nav { padding-bottom: calc(var(--shell-footer) + 18px); }
 .couch-shell .primary-nav [data-source] { position: relative; display: flex; justify-content: flex-start; align-items: center; height: 48px; min-height: 48px; border-radius: 8px; text-decoration: none; gap: 12px; padding: 12px; font-size: 14px; }
 .couch-shell .primary-nav [data-source]:last-child { margin-top: auto; }
