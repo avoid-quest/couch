@@ -1,3 +1,4 @@
+import { streamingCommunityOrigin } from "../shared/streamingcommunity";
 import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
@@ -68,6 +69,7 @@ export function openStore(path: string) {
       code_hash TEXT PRIMARY KEY, recovery INTEGER NOT NULL CHECK (recovery IN (0, 1)),
       expiresAt INTEGER NOT NULL, consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
     );
+    CREATE TABLE IF NOT EXISTS streamingcommunity_origin (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
@@ -106,6 +108,8 @@ export function openStore(path: string) {
   };
 
   return {
+    streamingCommunityOrigin: () => db.query<{ origin: string }, []>("SELECT origin FROM streamingcommunity_origin WHERE id = 1").get()?.origin ?? streamingCommunityOrigin,
+    saveStreamingCommunityOrigin: (origin: string) => { db.query("INSERT INTO streamingcommunity_origin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET origin = excluded.origin").run(origin); },
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },
     setupStep,
     advanceSetup(expected: unknown) {

@@ -1,10 +1,11 @@
+import { streamingCommunityLink } from "./streamingcommunity";
 import type { VideoQuality } from "../shared/protocol";
 import { runYtDlp, type YtDlpOptions } from "./yt-dlp";
 
 export type WebMediaMetadata = { title?: string; thumbnail?: string; duration?: number; live?: boolean };
 export type WebMediaSource = { source: string; audioSource?: string; headers?: Record<string, string>; maxVideoHeight?: number; metadata?: WebMediaMetadata; expiry?: { at: number; recover: (signal: AbortSignal) => Promise<WebMediaSource | null> } };
 
-type ResolverOptions = Omit<YtDlpOptions, "signal">;
+type ResolverOptions = Omit<YtDlpOptions, "signal" | "plugin">;
 type Metadata = Record<string, unknown>;
 const object = (value: unknown): value is Metadata => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -102,13 +103,14 @@ function formatSelector(quality: VideoQuality): string {
 }
 
 export function createWebMediaResolver(options: ResolverOptions = {}) {
-  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto"): Promise<WebMediaSource> {
+  return async function resolveWebMedia(url: string, signal?: AbortSignal, quality: VideoQuality = "auto", streamingCommunityOrigin?: string): Promise<WebMediaSource> {
     const source = mediaUrl(url);
+    const plugin = streamingCommunityLink(source, streamingCommunityOrigin) ? "streamingcommunity" : undefined;
     const selectedQuality = quality === "auto" ? "1080p" : quality;
     const host = new URL(source).hostname;
     const sort = quality === "auto" && (host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com"))
       ? ["--format-sort", "res,fps,vcodec:vp9"] : [];
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal });
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--format", formatSelector(selectedQuality), ...sort, "--", source], { ...options, signal, plugin });
     const info = parseInfo(output);
     const media = parseMedia(info, selectedQuality);
     const transport = new URL(media.source);
@@ -124,7 +126,7 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
-        const fresh = await resolveWebMedia(source, cancellation, quality);
+        const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin);
         const replacement = new URL(fresh.source);
         if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("The website did not return a fresh transport for the same track. Play it again to retry.");
         return fresh;
@@ -135,8 +137,10 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
 }
 
 export function createWebMediaInspector(options: ResolverOptions = {}) {
-  return async function inspectWebMedia(url: string, signal?: AbortSignal): Promise<WebMediaMetadata> {
-    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", mediaUrl(url)], { ...options, signal });
+  return async function inspectWebMedia(url: string, signal?: AbortSignal, streamingCommunityOrigin?: string): Promise<WebMediaMetadata> {
+    const source = mediaUrl(url);
+    const plugin = streamingCommunityLink(source, streamingCommunityOrigin) ? "streamingcommunity" : undefined;
+    const output = await runYtDlp(["--no-playlist", "--playlist-items", "1", "--dump-single-json", "--ignore-no-formats-error", "--", source], { ...options, signal, plugin });
     return publicMetadata(parseInfo(output));
   };
 }

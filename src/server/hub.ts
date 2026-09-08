@@ -1,3 +1,4 @@
+import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
@@ -101,6 +102,7 @@ export function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => {
     const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
     return value === "true" ? true : value === "false" ? false : null;
@@ -119,7 +121,7 @@ export function createHub(options: HubOptions) {
     admitted, systemAudio,
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
-      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
+      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
@@ -364,6 +366,7 @@ export function createHub(options: HubOptions) {
         };
         if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
+        if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
@@ -428,7 +431,7 @@ export function createHub(options: HubOptions) {
             if (!title) {
               const controller = new AbortController();
               inspections.set(action.entryId, controller);
-              void inspectWebMedia(action.url, controller.signal).then(metadata => {
+              void inspectWebMedia(action.url, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
                 if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(action.entryId, source, metadata); }
               }).catch(() => {}).finally(() => {
                 if (inspections.get(action.entryId) === controller) { inspections.delete(action.entryId); idle.activity(); }

@@ -41,6 +41,7 @@ for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version
 await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));
 for (const notice of inputs.notices) await download(notice, join(notices, notice.name));
 await cp("packaging/NOTICE", join(notices, "NOTICE"));
+await cp("vendor/streamingcommunity", join(notices, "streamingcommunity"), { recursive: true });
 // AppImage redistributes Ubuntu libraries that Debian normally supplies separately.
 for (const name of await readdir("/usr/share/doc")) {
   const copyright = join("/usr/share/doc", name, "copyright");
