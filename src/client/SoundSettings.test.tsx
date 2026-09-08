@@ -14,7 +14,7 @@ beforeEach(async () => {
     { id: "analog", name: "Speakers", state: "SUSPENDED", availability: "unavailable", muted: true, volume: 25 },
   ], defaultOutput: "analog", test: null, canTest: true };
   calls.length = 0; window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "Element", "Node", "MutationObserver", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
   }
@@ -34,11 +34,19 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("lists output levels and keeps sound tests in a secondary disclosure", async () => {
+const trigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Sound output"]')!;
+const openOutputs = async () => act(async () => trigger().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" })));
+const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+const choose = async (name: string) => {
+  await openOutputs();
+  const option = options().find(option => option.textContent === name)!;
+  await act(async () => { option.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); option.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+};
+
+test("keeps sound tests in a secondary disclosure", async () => {
   await render();
   expect(document.querySelector("details")?.open).toBe(false);
   expect(document.querySelector("summary")?.tabIndex).toBe(0);
-  expect(document.body.textContent).toContain("63%");
   expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Test Speakers")!.disabled).toBe(true);
   expect(document.body.textContent).toContain("does not select it for playback");
 });
@@ -51,19 +59,18 @@ test("test uses explicit output identity and Stop remains available before route
   expect(calls.find(call => call.url.endsWith("/stop"))!.body).toBe(JSON.stringify({ testId: "test-id" }));
 });
 
-test("phone selection uses the stable device name and shows saved, unconfirmed routing separately", async () => {
-  state = { ...state, audioDelay: 0.25, routing: { selectedOutput: "hdmi", observedOutput: null, volume: 63, muted: false, error: null } };
+test("selection uses the stable device name and keeps unconfirmed routing separate", async () => {
+  state = { ...state, audioDelay: 0.25, routing: { selectedOutput: "analog", observedOutput: null, volume: 63, muted: false, error: null } };
   await render();
-  expect(document.querySelector('[aria-label="Use HDMI TV"]')?.getAttribute("aria-pressed")).toBe("true");
-  expect(document.body.textContent).not.toContain("Playing here");
+  expect(trigger().textContent).toContain("Speakers · Unavailable");
+  expect(document.body.textContent).not.toContain("Playing on");
   expect(document.body.textContent).toContain("TV audio delay");
-  await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.getAttribute("aria-label") === "Use HDMI TV")!.click());
+  await choose("HDMI TV");
   expect(calls.find(call => call.url.endsWith("/output"))!.body).toBe(JSON.stringify({ output: "hdmi" }));
-  expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.getAttribute("aria-label") === "Use Speakers")!.disabled).toBe(true);
+  expect(trigger().textContent).toBe("HDMI TV");
 });
 
-
-test("puts HDMI, analog profiles and connected Bluetooth in one selectable list", async () => {
+test("offers available HDMI, analog profiles and connected Bluetooth in one select", async () => {
   state = { ...state, routing: { selectedOutput: "hdmi", observedOutput: "hdmi", volume: 63, muted: false, error: null },
     outputs: [...state.outputs, { id: "bluez.C39S", name: "C39S", state: "IDLE", availability: "unknown", volume: 40, muted: false }],
     profiles: [
@@ -74,44 +81,82 @@ test("puts HDMI, analog profiles and connected Bluetooth in one selectable list"
     ],
   };
   await render();
-  const list = document.querySelector('[aria-label="Sound outputs"]')!;
-  expect(list.querySelectorAll("li")).toHaveLength(5);
-  expect(list.textContent).toContain("Selected · Playing here");
-  expect(list.textContent).toContain("C39S");
-  expect(list.textContent).toContain("Built-in speakers");
-  expect(list.textContent).not.toContain("Microphone");
-  expect(document.querySelector<HTMLButtonElement>('[aria-label="Use HDMI 2"]')!.disabled).toBe(true);
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Use C39S"]')!.click());
+  expect(document.querySelectorAll('[role="combobox"]')).toHaveLength(1);
+  expect(document.body.textContent).toContain("Playing on HDMI TV · Volume 63%");
+  await openOutputs();
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "C39S", "Built-in speakers · Pauses playback"]);
+  const speaker = options().find(option => option.textContent === "C39S")!;
+  await act(async () => { speaker.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); speaker.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
   expect(calls.find(call => call.url.endsWith("/output"))!.body).toBe(JSON.stringify({ output: "bluez.C39S" }));
-  expect(document.querySelector('[aria-label="Use C39S"]')!.getAttribute("aria-pressed")).toBe("true");
-  expect(document.querySelector('[aria-label="Use HDMI TV"]')!.getAttribute("aria-pressed")).toBe("false");
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Use Built-in speakers"]')!.click());
+  expect(trigger().textContent).toBe("C39S");
+  await choose("Built-in speakers · Pauses playback");
   expect(calls.find(call => call.url.endsWith("/profile"))!.body).toBe(JSON.stringify({ profile: { card: "internal", profile: "output:analog" } }));
 });
 
 test("retains a disconnected selection without silently selecting another route", async () => {
   state = { ...state, routing: { selectedOutput: "missing", observedOutput: null, volume: null, muted: false, error: "Reconnect it or choose another output, then resume playback." } };
   await render();
-  expect(document.body.textContent).toContain("Selected · Disconnected");
-  expect(document.querySelector('[aria-pressed="true"]')).toBeNull();
+  expect(trigger().textContent).toContain("Previously selected output · Unavailable");
   expect(calls.every(call => call.body === undefined)).toBe(true);
+});
+
+test("hides Bluetooth codec alternatives once the same speaker has a usable output", async () => {
+  state = { ...state, routing: { selectedOutput: "hdmi", observedOutput: null, volume: 63, muted: false, error: null },
+    outputs: [{ ...state.outputs[0]!, card: "internal" }, { id: "bluez.C39S", card: "bluez_card.C39S", name: "C39S", state: "IDLE", availability: "available", volume: 40, muted: false }],
+    profiles: [
+      { card: "internal", id: "output:analog", name: "Built-in speakers", active: false, available: true, selectable: true },
+      { card: "bluez_card.C39S", bluetoothAddress: "00:11:22:33:44:55", id: "a2dp-sink-sbc_xq", name: "C39S · SBC-XQ", active: false, available: true, selectable: true },
+    ],
+  };
+  await render();
+  await openOutputs();
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "C39S", "Built-in speakers · Pauses playback"]);
+  state = { ...state, outputs: state.outputs.filter(output => output.id !== "bluez.C39S") };
+  await act(async () => { await Bun.sleep(800); });
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "Built-in speakers · Pauses playback", "C39S · SBC-XQ · Pauses playback"]);
+  const profile = options().find(option => option.textContent === "C39S · SBC-XQ · Pauses playback")!;
+  await act(async () => { profile.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); profile.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(calls.find(call => call.url.endsWith("/profile"))!.body).toBe(JSON.stringify({ profile: { card: "bluez_card.C39S", profile: "a2dp-sink-sbc_xq" } }));
 });
 
 test("does not mistake the saved output for the currently observed playback route", async () => {
   state = { ...state, routing: { selectedOutput: "hdmi", observedOutput: "analog", volume: 63, muted: false, error: "Couch left the selected audio output." } };
   await render();
-  expect(document.querySelector('[aria-label="Use HDMI TV"]')!.textContent).not.toContain("Playing here");
-  expect(document.querySelector('[aria-label="Use Speakers"]')!.textContent).toContain("Playing here");
+  expect(trigger().textContent).toBe("HDMI TV");
+  expect(document.body.textContent).toContain("Playing on Speakers · Muted");
   expect(document.querySelector('[role="status"]')!.textContent).toContain("Couch left the selected audio output");
 });
-
 
 test("a rejected selection keeps the previous output selected and reports the failure", async () => {
   state = { ...state, routing: { selectedOutput: "analog", observedOutput: null, volume: 25, muted: true, error: null } };
   request.mockImplementation((async (_input, init) => init?.method === "POST" ? Response.json({ error: "That audio output is unavailable." }, { status: 409 }) : Response.json(state)) as typeof fetch);
   await render();
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Use HDMI TV"]')!.click());
+  await choose("HDMI TV");
   expect(document.querySelector('[role="alert"]')!.textContent).toBe("That audio output is unavailable.");
-  expect(document.querySelector('[aria-label="Use Speakers"]')!.getAttribute("aria-pressed")).toBe("true");
-  expect(document.querySelector('[aria-label="Use HDMI TV"]')!.getAttribute("aria-pressed")).toBe("false");
+  expect(trigger().textContent).toContain("Speakers · Unavailable");
+});
+
+test("polling leaves open choices in place and appends newly available outputs", async () => {
+  state = { ...state, outputs: [state.outputs[0]!], routing: { selectedOutput: "hdmi", observedOutput: "hdmi", volume: 63, muted: false, error: null },
+    profiles: [{ card: "internal", id: "output:analog", name: "Built-in speakers", active: false, available: true, selectable: true }],
+  };
+  await render();
+  await openOutputs();
+  const speakers = options().find(option => option.textContent === "Built-in speakers · Pauses playback")!;
+  await act(async () => speakers.focus());
+  state = { ...state, outputs: [{ id: "bluez.C39S", name: "C39S", state: "IDLE", availability: "available", volume: 40, muted: false }, { ...state.outputs[0]!, volume: 55 }] };
+  await act(async () => { await Bun.sleep(800); });
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "Built-in speakers · Pauses playback", "C39S"]);
+  expect(document.activeElement).toBe(speakers);
+  expect(document.body.textContent).toContain("Volume 55%");
+  state = { ...state, outputs: [...state.outputs].reverse() };
+  await act(async () => { await Bun.sleep(800); });
+  expect(options().map(option => option.textContent)).toEqual(["HDMI TV", "Built-in speakers · Pauses playback", "C39S"]);
+  await act(async () => { speakers.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerType: "mouse" })); speakers.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(calls.find(call => call.url.endsWith("/profile"))!.body).toBe(JSON.stringify({ profile: { card: "internal", profile: "output:analog" } }));
+  state = { ...state, outputs: state.outputs.filter(output => output.id !== "hdmi") };
+  await act(async () => { await Bun.sleep(800); });
+  await openOutputs();
+  expect(options().map(option => option.textContent)).toEqual(["Built-in speakers · Pauses playback", "C39S"]);
+  expect(trigger().textContent).toContain("Previously selected output · Unavailable");
 });

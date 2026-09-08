@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DelayControl } from "./PlaybackSettings";
-import type { SoundState } from "../shared/sound";
+import type { SoundOutput, SoundProfile, SoundState } from "../shared/sound";
+
+type SoundChoice = { key: string; output: SoundOutput } | { key: string; profile: SoundProfile };
+type SoundView = SoundState & { choices: SoundChoice[] };
+function updateSound(previous: SoundView | null, next: SoundState): SoundView {
+  const outputs = next.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked);
+  const current = new Map<string, SoundChoice>([
+    ...outputs.map(output => [`output:${output.id}`, { key: `output:${output.id}`, output }] as const),
+    ...(next.profiles ?? []).filter(profile => profile.selectable && profile.available && !profile.active && !(profile.bluetoothAddress && outputs.some(output => output.card === profile.card))).map(profile => {
+      const key = `profile:${profile.card}/${profile.id}`;
+      return [key, { key, profile }] as const;
+    }),
+  ]);
+  // Keep existing targets in place; inventory polls may return a different order.
+  const choices = (previous?.choices ?? []).flatMap(choice => {
+    const updated = current.get(choice.key);
+    current.delete(choice.key);
+    return updated ? [updated] : [];
+  }).concat([...current.values()]);
+  return { ...next, choices };
+}
 
 export function SoundSettings({ credentials, connected }: { credentials: { origin: string; token: string }; connected: boolean }) {
-  const [state, setState] = useState<SoundState | null>(null);
+  const [state, setState] = useState<SoundView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -27,7 +47,7 @@ export function SoundSettings({ credentials, connected }: { credentials: { origi
         const response = await fetch(`${origin}/api/sound`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
-        if (!controller.signal.aborted) { setState(result); setReadError(null); }
+        if (!controller.signal.aborted) { setState(previous => updateSound(previous, result)); setReadError(null); }
       } catch (reason) { if (!controller.signal.aborted) setReadError(reason instanceof Error ? reason.message : "Cannot read the TV outputs."); }
       finally { reading = false; }
     };
@@ -43,14 +63,16 @@ export function SoundSettings({ credentials, connected }: { credentials: { origi
       const result = await response.json();
       if (controller.signal.aborted) return false;
       if (!response.ok) throw new Error(result.error);
-      setState(result); return true;
+      setState(previous => updateSound(previous, result)); return true;
     } catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not change the TV sound."); return false; }
     finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } }
   }
   const active = state?.test && ["starting", "playing"].includes(state.test.status);
   const selected = state?.routing?.selectedOutput;
-  const profiles = state?.profiles?.filter(profile => profile.selectable && !profile.active) ?? [];
-  const missingSelected = selected && !state?.outputs.some(output => output.id === selected);
+  const selectedChoice = state?.choices.find(choice => "output" in choice && choice.output.id === selected);
+  const selectedOutput = state?.outputs.find(output => output.id === selected);
+  const observedOutput = state?.outputs.find(output => output.id === state.routing?.observedOutput);
+  const unavailableSelected = selected && !selectedChoice;
   return <section className="space-y-4" aria-label="TV sound">
     <div className="space-y-1">
       <h3 className="font-medium">Sound output</h3>
@@ -60,27 +82,19 @@ export function SoundSettings({ credentials, connected }: { credentials: { origi
     {!connected && <p>Reconnect to choose a sound output.</p>}
     {connected && !state && !readError && <p role="status">Loading sound outputs…</p>}
     {state?.routing?.error && <p role="status">{state.routing.error}</p>}
-    {missingSelected && <div className="rounded-lg border p-4"><p className="font-medium">Previously selected output</p><p className="text-sm text-muted-foreground">Selected · Disconnected. Reconnect it or choose another output.</p></div>}
-    <ul className="grid gap-2" aria-label="Sound outputs">
-      {state?.outputs.map(output => {
-        const chosen = selected === output.id;
-        const playing = state.routing?.observedOutput === output.id;
-        const unavailable = output.availability === "unavailable";
-        return <li key={output.id}>
-          <Button variant="outline" className="h-auto min-h-16 w-full justify-start gap-3 whitespace-normal px-4 py-3 text-left" aria-label={`Use ${output.name}`} aria-pressed={chosen} disabled={!connected || pending || !!active || !state.routing || unavailable || !!output.testBlocked} onClick={() => change("output", { output: output.id })}>
-            {chosen ? <Check aria-hidden="true" className="shrink-0" /> : <Speaker aria-hidden="true" className="shrink-0" />}
-            <span className="min-w-0"><span className="block break-words font-medium">{output.name}</span><span className="block text-sm font-normal text-muted-foreground">{[chosen && "Selected", playing && "Playing here", unavailable ? "Unavailable" : output.availability === "unknown" ? "Connection status unknown" : "Available", output.muted ? "Muted" : output.volume !== null && `Volume ${output.volume}%`].filter(Boolean).join(" · ")}</span>{output.testBlocked && <span className="block text-sm font-normal">{output.testBlocked}</span>}</span>
-          </Button>
-        </li>;
-      })}
-      {profiles.map(profile => <li key={`${profile.card}/${profile.id}`}>
-        <Button variant="outline" className="h-auto min-h-16 w-full justify-start gap-3 whitespace-normal px-4 py-3 text-left" aria-label={`Use ${profile.name}`} aria-pressed={false} disabled={!connected || pending || !!active || !state?.routing || !profile.available} onClick={() => change("profile", { profile: { card: profile.card, profile: profile.id } })}>
-          <Speaker aria-hidden="true" className="shrink-0" /><span className="min-w-0"><span className="block break-words font-medium">{profile.name}</span><span className="block text-sm font-normal text-muted-foreground">{profile.available ? "Available · Pauses playback when selected" : "Unavailable"}</span></span>
-        </Button>
-      </li>)}
-    </ul>
-    {state && !state.outputs.length && !profiles.length && <p>No sound outputs found.</p>}
-    <p className="text-sm text-muted-foreground">Pair a speaker in Bluetooth to add it here. If an output disconnects, choose an available output and resume playback.</p>
+    <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state?.routing || !state.choices.length} onValueChange={key => {
+      const choice = state?.choices.find(choice => choice.key === key);
+      if (choice) void ("output" in choice ? change("output", { output: choice.output.id }) : change("profile", { profile: { card: choice.profile.card, profile: choice.profile.id } }));
+    }}>
+      <SelectTrigger aria-label="Sound output" className="min-h-11 w-full"><SelectValue placeholder={unavailableSelected ? `${selectedOutput?.name ?? "Previously selected output"} · Unavailable` : "Choose a sound output"} /></SelectTrigger>
+      <SelectContent position="popper">{state?.choices.map(choice => <SelectItem key={choice.key} value={choice.key} className="min-h-11">
+        {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
+      </SelectItem>)}</SelectContent>
+    </Select>
+    {unavailableSelected && <p className="text-sm text-muted-foreground">Selected output unavailable. Reconnect it or choose another output.</p>}
+    {observedOutput && <p className="text-sm text-muted-foreground">Playing on {observedOutput.name}{observedOutput.muted ? " · Muted" : observedOutput.volume !== null ? ` · Volume ${observedOutput.volume}%` : ""}</p>}
+    {state && !state.choices.length && <p>No available sound outputs found.</p>}
+    <p className="text-sm text-muted-foreground">Pair a speaker in Bluetooth to add it here.</p>
     <details className="rounded-lg border p-4">
       <summary tabIndex={0} className="min-h-11 cursor-pointer content-center rounded-md font-medium focus-visible:outline-2 focus-visible:outline-ring">Sound test and audio delay</summary>
       <div className="space-y-4 pt-3">
