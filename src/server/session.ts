@@ -42,6 +42,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const state: SessionState = {
     queue: store.queue,
     currentEntryId: null,
+    queueCursorEntryId: store.queueCursorEntryId(),
     activeProfile,
     installationName: store.installationName(),
     setupStep: store.setupStep(),
@@ -77,9 +78,25 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const finishProgress = (nearEnd = false, required = false) => persistProgress(() => progress.finish(nearEnd), required);
   const saveQueue = (queue: SessionState["queue"]) => {
-    store.saveQueue(queue);
+    // If the cursor was removed, keep the boundary at its nearest retained predecessor.
+    const cursor = state.queue.findIndex(entry => entry.id === state.queueCursorEntryId);
+    const retained = new Set(queue.map(entry => entry.id));
+    const cursorEntryId = state.queue.slice(0, cursor + 1).findLast(entry => retained.has(entry.id))?.id ?? null;
+    store.saveQueue(queue, cursorEntryId);
     state.queue = queue;
+    state.queueCursorEntryId = cursorEntryId;
+    state.queueError = null;
     cancelWebRecovery();
+  };
+  const saveQueueCursor = (entryId: string, required = true, beforeCommit?: () => void) => {
+    let completingProgress = false;
+    try { store.saveQueueCursor(entryId, () => { completingProgress = true; beforeCommit?.(); completingProgress = false; }); state.queueError = null; }
+    catch (error) {
+      if (completingProgress) throw error;
+      state.queueError = "Could not save the queue position. Check the TV's storage before restarting.";
+      if (required) { broadcast(); throw new Error(state.queueError); }
+    }
+    state.queueCursorEntryId = entryId;
   };
   const enrichEntry = (entryId: string, source: string, metadata: Metadata) => {
     assertAdmitted();
@@ -242,7 +259,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     if (!entry) throw new Error("That queue entry no longer exists.");
     audioOnly = false;
     cancelPreparation();
-    finishProgress(true, true);
+    progress.finish(true, save => saveQueueCursor(entry.id, true, () => persistProgress(save, true)));
     if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
     activePlayIntent = ++playIntent;
@@ -567,6 +584,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (prepared?.sent && player.playbackId === prepared.playbackId) {
         const next = state.queue.find(entry => entry.id === prepared!.entryId);
         if (!next) return;
+        saveQueueCursor(next.id, false);
         const previous: PlayerState = { ...state.player, status: "ended", position: state.player.duration ?? state.player.position };
         persistProgress(() => progress.observe(previous));
         options.activatePrepared?.(player.playbackId!, previous);

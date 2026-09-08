@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useRef, useState, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { FolderOpen, ListMusic, Play, Plus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { Action, SessionState, VideoQuality } from "../shared/protocol";
+import type { Action, QueueEntry, SessionState, VideoQuality } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { QualitySelect } from "./QualitySelect";
@@ -56,7 +56,22 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
   const [fileError, setFileError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const sourceRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const focusedEntry = useRef<{ element: HTMLElement; id: string; label: string | null } | null>(null);
   const queue = state?.queue ?? [];
+  const currentIndex = queue.findIndex(entry => entry.id === state?.currentEntryId);
+  const cursorIndex = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
+  const previous = queue.map((entry, index) => ({ entry, index })).filter(({ index }) => index <= cursorIndex && index !== currentIndex);
+  useLayoutEffect(() => {
+    const focused = focusedEntry.current;
+    if (!focused || focused.element.isConnected || document.activeElement !== document.body) return;
+    const row = [...panelRef.current!.querySelectorAll<HTMLElement>("[data-queue-entry-id]")].find(row => row.dataset.queueEntryId === focused.id);
+    const replacement = row?.closest("details:not([open])")?.querySelector<HTMLElement>("summary")
+      ?? [...(row?.querySelectorAll<HTMLElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
+      ?? panelRef.current!.querySelector<HTMLElement>(".queue-previous summary, .queue-play:not(:disabled)");
+    focusedEntry.current = null;
+    replacement?.focus({ preventScroll: true });
+  });
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
@@ -113,7 +128,21 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
     }
   };
 
-  return <section className="queue-panel" aria-labelledby="queue-title">
+  const renderEntry = (entry: QueueEntry, index: number) => {
+    const current = entry.id === state?.currentEntryId;
+    const label = [sourceLabel(entry.source), entry.live ? "LIVE" : entry.duration ? duration(entry.duration) : "", entry.quality ? videoQualityLabels[entry.quality] : ""].filter(Boolean).join(" · ");
+    return <li className={`queue-entry ${current ? "current" : ""}`} key={entry.id} data-queue-entry-id={entry.id} aria-current={current ? "true" : undefined}>
+      <Button variant="ghost" size="icon" className="queue-play" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
+      {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork" />}
+      <div className="queue-entry-copy"><span className="queue-entry-title" title={entry.title}>{entry.title}</span><span className="source-label" title={label}>{current && <span className="queue-current-label">On TV · </span>}{label}</span></div>
+      <QueueActions credentials={credentials} entry={entry} index={index} queue={queue} connected={connected} canPlay={available} run={run} />
+    </li>;
+  };
+
+  return <section ref={panelRef} className="queue-panel" aria-labelledby="queue-title" onFocusCapture={event => {
+    const element = event.target, row = element.closest<HTMLElement>("[data-queue-entry-id]");
+    focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, label: element.getAttribute("aria-label") } : null;
+  }}>
     <div className="queue-header">
       <div className="queue-heading"><h2 id="queue-title">Play queue <span className="count">{queue.length}</span></h2><p>Everyone can choose what plays next.</p></div>
       <div className="queue-header-actions">
@@ -145,16 +174,14 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
       </div>
     </div>
     {fileError && <Alert variant="destructive" className="queue-feedback"><AlertDescription>{fileError}</AlertDescription></Alert>}
+    {state?.queueError && <Alert variant="destructive" className="queue-feedback"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {notice && <p className="queue-feedback queue-notice" role="status">{notice}</p>}
-    {queue.length ? <ol className="queue-list" aria-label="Play queue">{queue.map((entry, index) => {
-      const current = entry.id === state?.currentEntryId;
-      const label = [sourceLabel(entry.source), entry.live ? "LIVE" : entry.duration ? duration(entry.duration) : "", entry.quality ? videoQualityLabels[entry.quality] : ""].filter(Boolean).join(" · ");
-      return <li className={`queue-entry ${current ? "current" : ""}`} key={entry.id} aria-current={current ? "true" : undefined}>
-        <Button variant="ghost" size="icon" className="queue-play" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
-        {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork" />}
-        <div className="queue-entry-copy"><span className="queue-entry-title" title={entry.title}>{entry.title}</span><span className="source-label" title={label}>{current && <span className="queue-current-label">On TV · </span>}{label}</span></div>
-        <QueueActions credentials={credentials} entry={entry} index={index} queue={queue} connected={connected} canPlay={available} run={run} />
-      </li>;
-    })}</ol> : <div className="queue-empty"><ListMusic aria-hidden="true" /><h3>What should play first?</h3><p>Browse your library, find a station, or add a link.</p></div>}
+    {queue.length ? <>
+      {currentIndex >= 0 && <section className="queue-group" aria-labelledby="queue-current-title"><h3 id="queue-current-title">Current item</h3><ol className="queue-list" aria-label="Current item">{renderEntry(queue[currentIndex]!, currentIndex)}</ol></section>}
+      <section className="queue-group" aria-labelledby="queue-next-title"><h3 id="queue-next-title">Up next <span className="count">{queue.length - cursorIndex - 1}</span></h3>
+        {cursorIndex + 1 < queue.length ? <ol className="queue-list" aria-label="Up next">{queue.slice(cursorIndex + 1).map((entry, index) => renderEntry(entry, cursorIndex + 1 + index))}</ol> : <p className="queue-group-empty">Nothing queued next. Add something to keep watching or listening.</p>}
+      </section>
+      {previous.length > 0 && <details className="queue-group queue-previous"><summary tabIndex={0}>Previously queued <span className="count">{previous.length}</span></summary><ol className="queue-list" aria-label="Previously queued">{previous.map(({ entry, index }) => renderEntry(entry, index))}</ol></details>}
+    </> : <div className="queue-empty"><ListMusic aria-hidden="true" /><h3>What should play first?</h3><p>Browse your library, find a station, or add a link.</p></div>}
   </section>;
 }

@@ -752,6 +752,24 @@ test("two controllers share queue and observed playback, reject stale controls, 
   expect(reconnected.state.queue.map(entry => entry.id)).toEqual(["one", "two"]);
 });
 
+test("paired controllers and reconnects share the queue boundary after Stop", async () => {
+  const { hub } = fixture();
+  hub.session.observe(idle);
+  const first = new Peer(hub, await pair(hub)), second = new Peer(hub, await pair(hub));
+  await Promise.all([first.ready(), second.ready()]);
+  for (const id of ["one", "two", "three"]) await first.command({ type: "enqueue", entry: { id, title: id, source: `https://media.example/${id}` } });
+  await first.command({ type: "play", entryId: "two" });
+  await second.waitFor(message => message.type === "state" && message.state.currentEntryId === "two");
+  expect(second.state.queueCursorEntryId).toBe("two");
+  await second.command({ type: "stop" });
+  await first.waitFor(message => message.type === "state" && message.state.currentEntryId === null && message.state.queueCursorEntryId === "two");
+  expect(first.state.queue).toEqual(second.state.queue);
+  expect(first.state.queue.map(entry => entry.id)).toEqual(["one", "two", "three"]);
+  const reconnected = new Peer(hub, await pair(hub));
+  await reconnected.ready();
+  expect(reconnected.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two" });
+});
+
 test("persists queue, chosen volume, and paired devices without resuming playback after restart", async () => {
   const initial = fixture();
   const token = await pair(initial.hub);

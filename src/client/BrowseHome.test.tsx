@@ -86,8 +86,8 @@ test("a paired remote starts with its current TV session and can browse and sear
   await act(async () => searchShortcut.click());
   expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-selected")).toBe("true");
   expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
-  request.mockImplementation((async () => Response.json({ items: [{ id: "saved", title: "Saved evening film" }] })) as typeof fetch);
-  await act(async () => document.querySelector<HTMLButtonElement>('[data-source="For later"]')!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true })));
+  request.mockResolvedValue(Response.json({ items: [{ id: "saved", title: "Saved evening film" }] }));
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-source="For later"]')!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
   expect(document.querySelector('[data-source="For later"]')?.getAttribute("aria-selected")).toBe("true");
   expect(document.querySelector('[aria-label="Saved for later"]')?.textContent).toContain("Saved evening film");
   await act(async () => button("On TV", document.querySelector('[aria-label="Controller views"]')!).click());

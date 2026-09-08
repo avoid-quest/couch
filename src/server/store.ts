@@ -30,6 +30,8 @@ export function openStore(path: string) {
       volume REAL NOT NULL
     );
     INSERT OR IGNORE INTO session VALUES (1, '[]', 80);
+    CREATE TABLE IF NOT EXISTS queue_position (id INTEGER PRIMARY KEY CHECK (id = 1), entryId TEXT);
+    INSERT OR IGNORE INTO queue_position VALUES (1, NULL);
     CREATE TABLE IF NOT EXISTS devices (token_hash TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS watching_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE);
     INSERT OR IGNORE INTO watching_profiles VALUES ('household', 'Household');
@@ -124,6 +126,13 @@ export function openStore(path: string) {
       db.query("UPDATE installation_appearance SET scale = ? WHERE id = 1").run(size);
     },
     queue: JSON.parse(stored.queue) as QueueEntry[],
+    queueCursorEntryId() { return db.query<{ entryId: string | null }, []>("SELECT entryId FROM queue_position WHERE id = 1").get()!.entryId; },
+    saveQueueCursor(entryId: string, beforeCommit?: () => void) {
+      db.transaction(() => {
+        db.query("UPDATE queue_position SET entryId = ? WHERE id = 1").run(entryId);
+        beforeCommit?.();
+      })();
+    },
     volume: stored.volume,
     profiles() { return db.query<WatchingProfile, []>("SELECT id, name FROM watching_profiles ORDER BY name COLLATE NOCASE, id").all(); },
     activeProfile,
@@ -194,8 +203,11 @@ export function openStore(path: string) {
         if (changes.clearResume) db.query("UPDATE viewing_progress SET position = 0 WHERE profileId = ? AND mediaId = ?").run(profileId, mediaId);
       })();
     },
-    saveQueue(queue: QueueEntry[]) {
-      db.query("UPDATE session SET queue = ? WHERE id = 1").run(JSON.stringify(queue));
+    saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) {
+      db.transaction(() => {
+        db.query("UPDATE session SET queue = ? WHERE id = 1").run(JSON.stringify(queue));
+        db.query("UPDATE queue_position SET entryId = ? WHERE id = 1").run(cursorEntryId);
+      })();
     },
     saveVolume(volume: number) {
       db.query("UPDATE session SET volume = ? WHERE id = 1").run(volume);

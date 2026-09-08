@@ -36,6 +36,8 @@ export type PlayerState = {
 export type SessionState = {
   queue: QueueEntry[];
   currentEntryId: string | null;
+  queueCursorEntryId?: string | null;
+  queueError?: string | null;
   player: PlayerState;
   activeProfile: WatchingProfile;
   preferences?: PlaybackPreferences;
