@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
+import { playbackMediaId } from "./progress";
 import type { Action, PlaybackCommand, PlayerState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
@@ -166,4 +167,22 @@ test("queue changes and playback reservations stop a replacement while its nativ
     expect(f.session.state.player.status).toBe("error");
     f.store.close();
   }
+});
+
+
+for (const outcome of ["observed", "loading", "failed"] as const) test(`history survives expiry recovery when the replacement is ${outcome}`, async () => {
+  const f = fixture();
+  try {
+    const mediaId = playbackMediaId(f.session.state.queue[0]!)!;
+    f.fail();
+    f.pending.resolve(outcome === "failed" ? null : f.fresh);
+    await Bun.sleep(0);
+    if (outcome === "observed") {
+      f.session.observe({ ...idle, playbackId: f.session.state.player.playbackId, status: "paused", position: 70, duration: 120, seekable: true });
+      f.session.observe({ ...idle, playbackId: f.playbackId, status: "playing", position: 99, duration: 120, seekable: true });
+    }
+    f.session.command({ type: "stop" });
+    expect(f.store.progress("household", mediaId)?.position).toBe(outcome === "observed" ? 70 : 47.25);
+    expect(f.store.historySource(mediaId)?.source).toBe("web:https://artist.bandcamp.com/track/one");
+  } finally { f.session.close(); f.store.close(); }
 });

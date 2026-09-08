@@ -43,6 +43,14 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
         item: { mediaId, title: entry.title, libraryItemId: mediaId.startsWith("library:") ? mediaId.slice(8) : null, position: 0, duration: null, watched: false, lastPlayedAt: null },
       } : null;
     },
+    replaceTransport(previousPlaybackId: string | null, playbackId: string, entry?: QueueEntry) {
+      if (!active || active.playbackId !== previousPlaybackId) return;
+      active.playbackId = playbackId;
+      if (entry && playbackMediaId(entry) === active.item.mediaId) {
+        active.entry = { ...entry };
+        active.lastSaved = "";
+      }
+    },
     seek(position: number) { if (active) active.seek = { target: position, from: active.item.position }; },
     observe(player: PlayerState) {
       if (!active || player.playbackId !== active.playbackId || !["playing", "paused", "ended"].includes(player.status)) return;

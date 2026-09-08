@@ -225,6 +225,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       webRecovery = null;
       webRetried = true;
       pendingPause = recovery.paused;
+      progress.replaceTransport(previous.playbackId, playbackId);
       send({ type: "load", playbackId, ...media, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), startPosition: previous.position, paused: recovery.paused,
         preferences: { ...state.preferences!.profile, ...(previous.speed !== undefined ? { speed: previous.speed } : {}), ...(previous.replayGain !== undefined ? { replayGain: previous.replayGain } : {}), ...state.preferences!.device } });
       broadcast();
@@ -359,6 +360,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       pendingPause = paused;
       subtitleWarning = warning ?? null;
       state.player = { ...previous, playbackId, status: "loading", error: null, tracks: [], chapters: [] };
+      progress.replaceTransport(previous.playbackId, playbackId, state.queue.find(item => item.id === entry!.id));
       send({ type: "load", playbackId, ...media, paused,
         ...(entry!.live || fresh.metadata?.live ? {} : { startPosition: position }),
         ...(audioOutput ? { audioOutput } : {}),

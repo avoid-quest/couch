@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
+import { playbackMediaId } from "./progress";
 import type { PlaybackCommand, PlayerState, QueueEntry } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
@@ -165,5 +166,39 @@ test("an explicit replay starts a new presentation even when the queue entry is 
     expect(session.state.presentationId).not.toBe(before.presentationId);
     session.command({ type: "stop" });
     expect(session.state.presentationId).toBeNull();
+  } finally { session.close(); store.close(); }
+});
+
+
+test("history follows a quality replacement and ignores observations from the retired transport", async () => {
+  const { store, session, requests, playbackId } = fixture();
+  try {
+    const mediaId = playbackMediaId(session.state.queue[0]!)!;
+    const result = session.command({ type: "videoQuality", playbackId, quality: "720p" });
+    requests[0]!.result.resolve({ source: "https://stream.example/new" });
+    await result;
+    const replacement = session.state.player.playbackId!;
+    session.observe({ ...idle, playbackId: replacement, status: "playing", position: 60, duration: 200, seekable: true });
+    session.observe({ ...idle, playbackId, status: "playing", position: 99, duration: 200, seekable: true });
+    session.command({ type: "stop" });
+    expect(store.progress("household", mediaId)?.position).toBe(60);
+    expect(store.historySource(mediaId)).toMatchObject({ id: "one", quality: "720p" });
+  } finally { session.close(); store.close(); }
+});
+
+for (const outcome of ["failed", "canceled", "loading"] as const) test(`history retains observed progress when quality is ${outcome}`, async () => {
+  const { store, session, requests, playbackId } = fixture();
+  try {
+    const mediaId = playbackMediaId(session.state.queue[0]!)!;
+    const result = Promise.resolve(session.command({ type: "videoQuality", playbackId, quality: "720p" })).catch(error => error);
+    session.observe({ ...session.state.player, position: 55 });
+    if (outcome === "canceled") session.command({ type: "stop" });
+    if (outcome === "failed") requests[0]!.result.reject(new Error("Format unavailable"));
+    else requests[0]!.result.resolve({ source: "https://stream.example/new" });
+    await result;
+    if (outcome === "failed") session.observe({ ...session.state.player, position: 65 });
+    session.command({ type: "stop" });
+    expect(store.progress("household", mediaId)?.position).toBe(outcome === "failed" ? 65 : 55);
+    expect(store.historySource(mediaId)?.quality).toBe(outcome === "loading" ? "720p" : undefined);
   } finally { session.close(); store.close(); }
 });
