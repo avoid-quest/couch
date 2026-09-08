@@ -12,6 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SaveForLater } from "./SaveForLater";
 import { progressTime } from "./HistoryPanel";
+import type { Action } from "../shared/protocol";
+import type { ProviderId, VideoQuality } from "../shared/providers";
+import { SearchOnlineResults, providerNames } from "./SearchOnlineResults";
+import { SearchRadioResults } from "./SearchRadioResults";
+import { QualitySelect } from "./QualitySelect";
+import { useEnqueueVideoQuality } from "./video-quality";
+import { createId } from "./session";
 
 type Source = "Library" | "Jellyfin";
 type Options = { playNow?: boolean; fromStart?: boolean };
@@ -20,6 +27,8 @@ type Page = { items: Result[]; total: number; warning?: string };
 type Props = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   libraryVersion: number; jellyfinVersion: number;
+  providerVersion?: number; radioVersion?: number; defaultQuality?: VideoQuality;
+  onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;
   onBrowse: (section: string) => void;
 };
@@ -28,6 +37,12 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 export function SearchPanel(props: Props) {
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState({ query: "", attempt: 0 });
+  const [filter, setFilter] = useState("All");
+  const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality ?? "auto");
+  const [linkPending, setLinkPending] = useState(false);
+  const [linkNotice, setLinkNotice] = useState("");
+  const linkRequest = useRef<AbortController | null>(null);
+  useEffect(() => { const controller = new AbortController(); linkRequest.current = controller; setLinkPending(false); return () => controller.abort(); }, [props.origin, props.token, props.connected, search.attempt]);
   const panel = useRef<HTMLElement>(null);
   const scroll = useRef({ top: 0, left: 0 });
   useLayoutEffect(() => {
@@ -36,16 +51,48 @@ export function SearchPanel(props: Props) {
     if (container) { container.scrollTop = scroll.current.top; container.scrollLeft = scroll.current.left; }
     return () => { if (container) scroll.current = { top: container.scrollTop, left: container.scrollLeft }; };
   }, [props.active]);
+  const url = /^https?:\/\//i.test(search.query) ? search.query : undefined;
+  const linkedProvider = url ? providerForLink(url) : undefined;
+  const providers = linkedProvider ? [linkedProvider] : url ? [] : ["youtube", "raiplay", "twitch"] as ProviderId[];
+  const visible = (source: string) => filter === "All" || filter === source;
+  const scopes = ["All", "YouTube", "RaiPlay", "Radio", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
+  async function playLink(playNow: boolean) {
+    if (!props.onCommand || !url || linkPending || !linkRequest.current) return;
+    const signal = linkRequest.current.signal;
+    setLinkPending(true); setLinkNotice("");
+    try { if (await props.onCommand({ type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { resetQuality(); setLinkNotice(playNow ? "Opening this link on the TV." : "Link added to Up next."); } }
+    catch (reason) { if (!signal.aborted) setLinkNotice(message(reason)); }
+    finally { if (!signal.aborted) setLinkPending(false); }
+  }
   return <section ref={panel} className="search-panel catalog-panel min-w-0 space-y-5" aria-label="Search media">
-    <h1 className="sr-only">Search your media</h1>
-    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setSearch(value => ({ query: draft.trim(), attempt: value.attempt + 1 })); }}>
-      <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search library and Jellyfin</Label><Input id="media-search" type="search" maxLength={200} value={draft} disabled={!props.connected} onChange={event => setDraft(event.target.value)} placeholder="Title, artist or album" /></div>
+    <h1>Search</h1>
+    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setLinkNotice(""); if (/^https?:\/\//i.test(draft.trim())) setFilter("All"); setSearch(value => ({ query: draft.trim(), attempt: value.attempt + 1 })); }}>
+      <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search your sources</Label><Input id="media-search" type="search" maxLength={4096} value={draft} disabled={!props.connected} onChange={event => setDraft(event.target.value)} placeholder="Title, artist, station or link" /></div>
       <Button variant="ghost" type="submit" disabled={!props.connected}>Search</Button>
     </form>
-    <p className="text-sm text-muted-foreground">Your TV folders and Jellyfin, grouped by source.</p><div className="search-catalogs flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>More sources</span>{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>{section}</Button>)}</div>
+    <p className="text-sm text-muted-foreground">Find videos, programs, music and radio across your sources.</p>
+    <nav className="search-scopes" aria-label="Search sources">{scopes.map(scope => <Button key={scope} variant={filter === scope ? "secondary" : "ghost"} aria-pressed={filter === scope} onClick={() => setFilter(scope)}>{scope}</Button>)}</nav>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
-    {!search.query ? <Card className="p-5 text-sm text-muted-foreground">Enter a title or artist to search both libraries. Public online services are searched in their own catalogs.</Card> : <div className="space-y-6">{(["Library", "Jellyfin"] as const).map(source => <SearchSource key={`${source}:${search.attempt}`} {...props} source={source} query={search.query} attempt={search.attempt} />)}</div>}
+    {!search.query ? <Card className="search-start"><h2>What would you like to play?</h2><p>Search YouTube, RaiPlay, Twitch, your radio sources, TV folders and Jellyfin together. Paste a Bandcamp album or track link to open it here.</p><div className="flex flex-wrap gap-2">{["Online", "Radio", "Guide"].map(section => <Button key={section} variant="outline" onClick={() => props.onBrowse(section)}>Browse {section}</Button>)}</div></Card> : <>
+      {linkedProvider !== "bandcamp" && (filter === "All" || ["YouTube", "RaiPlay", "Twitch"].includes(filter)) && <div className="search-quality"><QualitySelect id="search-quality" label="Next video quality" value={quality} disabled={!props.connected} onChange={setQuality} /><p className="text-xs text-muted-foreground">Overrides your default for the next video you play or add.</p></div>}
+      {providers.map(provider => <div key={`${provider}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onEnqueued={resetQuality} /></div>)}
+      {!url && <>
+        <div hidden={!visible("Radio")}><SearchRadioResults key={`radio:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} /><SearchRadioResults key={`directory:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} directory /></div>
+        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
+        {(filter === "All" || filter === "Bandcamp") && <p className="search-capability">Bandcamp: paste a public album or track link to open its tracks.</p>}
+      </>}
+      {url && !linkedProvider && <Card className="search-start"><h2>Open a media link</h2><p>Send this link to the TV using the existing website player. Supported pages and direct streams can play here.</p><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play link on TV</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
+      {url && linkedProvider && !visible(providerNames[linkedProvider]) && <p>Choose {providerNames[linkedProvider]} or All to open this link.</p>}
+    </>}
   </section>;
+}
+
+function providerForLink(value: string): ProviderId | undefined {
+  try {
+    const { hostname } = new URL(value);
+    return (Object.entries({ youtube: ["youtube.com", "youtu.be"], raiplay: ["raiplay.it"], twitch: ["twitch.tv"], bandcamp: ["bandcamp.com"] }) as [ProviderId, string[]][]).find(([, domains]) => domains.some(domain => hostname === domain || hostname.endsWith(`.${domain}`)))?.[0];
+  } catch { return undefined; }
+
 }
 
 function SearchSource({ source, query, attempt, ...props }: Props & { source: Source; query: string; attempt: number }) {

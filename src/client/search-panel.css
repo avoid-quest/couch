@@ -16,3 +16,29 @@
   .search-panel .search-box input { font-size: 14px; }
   .search-optional { display: none; }
 }
+.search-panel > h1 { font-size: 28px; font-weight: 600; }
+.search-scopes { display: flex; gap: 6px; flex-wrap: wrap; }
+.search-scopes > button { min-height: 44px; }
+.search-start { display: grid; gap: 16px; padding: 24px; }
+.search-start h2 { font-size: 22px; font-weight: 600; }
+.search-start p, .search-capability { color: var(--muted-foreground); font-size: 14px; }
+.search-quality { display: grid; gap: 8px; max-width: 360px; }
+.search-source { display: grid; gap: 16px; padding-block: 20px; border-bottom: 1px solid var(--border); }
+.search-source-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.search-source-heading h2 { font-size: 21px; font-weight: 600; }
+.search-online-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 18px; }
+.search-online-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.search-online-card > .media-artwork { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.search-online-copy { padding: 14px; }
+.search-online-copy h3 { font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+.search-online-copy p { margin-top: 6px; color: var(--muted-foreground); font-size: 13px; }
+.search-item-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.search-online-card .search-item-actions { margin-top: auto; padding: 0 10px 12px; }
+.search-item-actions > button { min-height: 44px; }
+.search-radio-copy { display: grid; flex: 1; min-width: 0; gap: 6px; overflow-wrap: anywhere; }
+.search-radio-copy small { color: var(--muted-foreground); }
+@media (max-width: 650px) {
+  .search-online-grid { grid-template-columns: 1fr; }
+  .search-source .search-result-row { flex-wrap: wrap; }
+  .search-source .search-result-row > .search-item-actions { width: 100%; padding-left: 60px; }
+}
