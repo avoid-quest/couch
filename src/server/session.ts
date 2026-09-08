@@ -473,8 +473,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
       const wasUnavailable = state.player.status === "unavailable";
+      // libmpv can report EOF after an interrupted HTTP range response. An early
+      // VOD end only starts the same private expiry confirmation, never a blind retry.
+      const earlyEnd = player.status === "ended" && player.duration !== null && player.position + 2 < player.duration;
+      if (earlyEnd && webRetried) player = { ...player, status: "error" };
       const ended = player.status === "ended" && state.player.status !== "ended";
-      if (player.status === "error" && recoverWeb(player)) return;
+      if ((player.status === "error" || earlyEnd) && recoverWeb(player)) return;
       if (["playing", "paused"].includes(player.status)) {
         if (pendingPause === (player.status === "paused")) pendingPause = null;
         state.webRetry = null;

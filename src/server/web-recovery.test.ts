@@ -130,3 +130,21 @@ test("recovery controls reflect both pause choices while the replacement native 
   }
   f.store.close();
 });
+
+test("a premature native EOF confirms expiry before retrying, while normal EOF advances the queue", async () => {
+  for (const premature of [false, true]) {
+    const f = fixture();
+    f.session.observe({ ...idle, playbackId: f.playbackId, status: "ended", duration: 120, position: premature ? 47.25 : 120 });
+    await Bun.sleep(0);
+    expect(f.calls()).toBe(premature ? 1 : 0);
+    if (premature) {
+      f.pending.resolve(f.fresh);
+      await Bun.sleep(0);
+      f.session.observe({ ...idle, playbackId: f.session.state.player.playbackId, status: "ended", duration: 120, position: 50 });
+      expect(f.session.state.player.status).toBe("error");
+      expect(f.session.state.player.error).toContain("after one attempt");
+      expect(f.session.state.currentEntryId).toBe("one");
+    } else expect(f.session.state.currentEntryId).toBe("two");
+    f.store.close();
+  }
+});
