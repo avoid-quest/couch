@@ -4,6 +4,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
+import type { ProviderItem } from "../shared/providers";
+import type { RadioStation } from "../shared/radio";
 import { createId, useSession, type Credentials } from "./session";
 import { knownConnection } from "./connection";
 import { BrowseHome } from "./BrowseHome";
@@ -68,6 +70,8 @@ export function App() {
   const homeSection = "Home";
   const [section, setSection] = useState(homeSection);
   const [sourcesRequest, setSourcesRequest] = useState(0);
+  const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
+  useEffect(() => setOnlineRequest(null), [credentials?.origin, credentials?.token]);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingOpen, setPairingOpen] = useState(false);
   const [visited, setVisited] = useState(new Set([homeSection]));
@@ -191,6 +195,16 @@ export function App() {
     }
   };
 
+  const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
+    run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
+  const enqueueRadio = (station: RadioStation, playNow: boolean) => run(station.sourceId
+    ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
+    : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow });
+  const openProvider = (item: ProviderItem) => {
+    setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1 }));
+    browseSection("Online");
+  };
+
   const pair = async (event: FormEvent) => {
     event.preventDefault();
     setPairing(true);
@@ -297,14 +311,12 @@ export function App() {
                   <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </section>
                 {visited.has("Search") && <section data-page="Search" hidden={section !== "Search"}><SearchPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search" && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} /></section>}
-                {visited.has("Saved") && <section data-page="Saved" hidden={section !== "Saved"}><SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} onPlay={playHistory} active={section === "Saved"} /></section>}
+                {visited.has("Saved") && <section data-page="Saved" hidden={section !== "Saved"}><SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} onPlay={playHistory} active={section === "Saved"} onBrowse={browseSection} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} /></section>}
                 <section data-page="Settings" hidden={section !== "Settings"}><Settings inline active={section === "Settings"} onOpenRequest={() => changeSection("Settings")} setupStep={state?.setupStep} libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} /></section>
                 {visited.has("Guide") && <section data-page="Guide" hidden={section !== "Guide"}><GuidePanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} host={nativeHost} version={state?.iptvVersion ?? 0} recordingsVersion={state?.recordingsVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} currentSource={state?.queue.find(entry => entry.id === state.currentEntryId)?.source} onGoLive={() => { if (state?.player.playbackId) void run({ type: "goLive", playbackId: state.player.playbackId }); }} active={section === "Guide"} /></section>}
-                {visited.has("Online") && <section data-page="Online" hidden={section !== "Online"}><ProviderPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={(item, playNow, quality) =>
-                  run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(quality ? { quality } : {}), playNow })
-                } onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
+                {visited.has("Online") && <section data-page="Online" hidden={section !== "Online"}><ProviderPanel key={`${credentials.origin}:${credentials.token}:${onlineRequest?.revision ?? 0}`} initialItem={onlineRequest?.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
                 {visited.has("Library") && <section data-page="Library" hidden={section !== "Library"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} onPlayHistory={playHistory} /></section>}
-                {visited.has("Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel host={nativeHost} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={(station, playNow) => run(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow })} /></section>}
+                {visited.has("Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel host={nativeHost} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} /></section>}
                 {visited.has("Jellyfin") && <section data-page="Jellyfin" hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></section>}
               </div>
             </div>
