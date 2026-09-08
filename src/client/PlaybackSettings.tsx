@@ -128,16 +128,17 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
   const commandPending = useRef(false);
   const focusRequest = useRef<{ trigger: HTMLButtonElement; cancel: () => void } | null>(null);
   useEffect(() => {
-    if (!ready || pending) return;
+    if (!ready || pending || !focusRequest.current) return;
     const frame = requestAnimationFrame(() => {
       const request = focusRequest.current;
-      if (request?.trigger.isConnected && !request.trigger.disabled && request.trigger.getClientRects().length) {
+      const active = document.activeElement;
+      if (request?.trigger.isConnected && !request.trigger.disabled && request.trigger.getClientRects().length
+        && (active === request.trigger || active === document.body || active === request.trigger.closest('[role="dialog"]'))) {
         request.trigger.focus({ preventScroll: true });
-        request.cancel();
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [ready, pending, player.playbackId]);
+  }, [ready, pending, player.playbackId, player.seekable, player.tracks]);
   useEffect(() => () => focusRequest.current?.cancel(), [entry?.id, profile.id, credentials.origin, credentials.token]);
   useEffect(() => setDefaultError(null), [player.playbackId, profile.id, connected]);
   const tracks = player.tracks ?? [];
@@ -146,9 +147,11 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
   const chapters = player.chapters ?? [];
   const qualityAvailable = supportsCurrentVideoQuality(entry, player);
   const previousQuality = useRef<string | undefined>(undefined);
-  if (qualityAvailable) previousQuality.current = entry?.id;
-  else if (player.status !== "loading" || previousQuality.current !== entry?.id) previousQuality.current = undefined;
-  const showQuality = qualityAvailable || player.status === "loading" && !!entry && previousQuality.current === entry.id;
+  const qualitySource = entry ? `${entry.id}:${entry.source}` : undefined;
+  if (qualityAvailable) previousQuality.current = qualitySource;
+  else if (!player.playbackId || previousQuality.current !== qualitySource) previousQuality.current = undefined;
+  // Native status, seekability and tracks arrive separately during a reload.
+  const showQuality = qualityAvailable || !!qualitySource && previousQuality.current === qualitySource;
   const video = showQuality || tracks.some(track => track.kind === "video");
   const chapterIndex = chapters.findLastIndex((chapter) => chapter.position <= player.position);
   const disabled = !ready || pending;
@@ -201,7 +204,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
             <DialogDescription className="sr-only">Controls for the current media.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-5">
-            {showQuality && <QualitySelect id="playback-quality" label="Quality" value={entry?.quality ?? "auto"} disabled={disabled} onChange={quality => {
+            {showQuality && <QualitySelect id="playback-quality" label="Quality" value={entry?.quality ?? "auto"} disabled={disabled || !qualityAvailable} onChange={quality => {
               setDefaultError(null);
               if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }, "playback-quality").then(ok => { if (!ok) setDefaultError("Could not change quality."); });
             }} />}

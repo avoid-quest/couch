@@ -2,7 +2,7 @@ import type { LibrarySource } from "../shared/library";
 import type { JellyfinSource } from "./jellyfin";
 import type { Library } from "./library";
 import { RadioError, type createRadio } from "./radio";
-import { localMediaId, ViewingError } from "./progress";
+import { playbackMediaId, ViewingError } from "./progress";
 import type { Store } from "./store";
 import type { createSession } from "./session";
 import { ControllerError } from "./controllers";
@@ -13,6 +13,8 @@ type Services = {
   jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
 };
+
+const progressIdentity = /^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64}|media:[a-f0-9]{64})$/;
 
 class RequestError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -82,18 +84,39 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
         if (viewing && pathname === "/api/progress/history") {
           if (request.method !== "GET") return methodNotAllowed("GET");
           const { activeProfile, queue } = viewing.session.state;
+          const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
           const items = viewing.store.history(activeProfile.id, queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
-            const queueEntry = queue.find(entry => localMediaId(entry) === item.mediaId);
-            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}) };
+            const queueEntry = queued.get(item.mediaId);
+            const source = queueEntry ?? viewing.store.historySource(item.mediaId);
+            const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
+            return { ...item, ...(queueEntry ? { queueEntryId: queueEntry.id } : {}), ...(source ? { playable: true, thumbnail: source.thumbnail, artworkId: source.artworkId, sourceLabel } : {}) };
           });
           return Response.json({ items, profile: activeProfile });
+        }
+        const historyPlay = /^\/api\/progress\/([^/]+)\/play$/.exec(pathname);
+        if (viewing && historyPlay) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          authorize();
+          if (Object.keys(changes).some(key => !["fromStart", "profileId"].includes(key)) || typeof changes.profileId !== "string" || changes.fromStart !== undefined && typeof changes.fromStart !== "boolean") throw new RequestError("Choose resume or play from start.");
+          const unchangedPerson = () => {
+            authorize();
+            if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("The active person changed. Reload your history.", 409);
+          };
+          unchangedPerson();
+          let mediaId: string;
+          try { mediaId = decodeURIComponent(historyPlay[1]!); }
+          catch { throw new RequestError("Invalid media identity."); }
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
+          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedPerson);
+          return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {
           if (request.method !== "POST") return methodNotAllowed("POST");
           let mediaId: string;
           try { mediaId = decodeURIComponent(pathname.slice("/api/progress/".length)); }
           catch { throw new RequestError("Invalid media identity."); }
-          if (!/^(library:[\w-]{1,80}|recording:[a-f0-9-]{36}|file:[a-f0-9]{64})$/.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
           const changes = await body(request);
           authorize();
           if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))

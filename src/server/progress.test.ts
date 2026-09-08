@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
-import { localMediaId } from "./progress";
+import { playbackMediaId } from "./progress";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 
@@ -16,9 +16,9 @@ function fixture(options: Parameters<typeof createSession>[3] = {}, store = open
   let writes = 0;
   let fail = false;
   const commands: PlaybackCommand[] = [];
-  const session = createSession({ ...store, saveProgress(profileId, item) {
+  const session = createSession({ ...store, saveProgress(profileId, item, entry) {
     if (fail) throw new Error("Private database failure");
-    store.saveProgress(profileId, item); writes++;
+    store.saveProgress(profileId, item, entry); writes++;
   } }, command => commands.push(command), () => {}, { now: () => time, ...options });
   session.observe(idle);
   const enqueue = (id: string, source = `library:${id}`) => session.command({ type: "enqueue", entry: { id, title: id, source } });
@@ -202,22 +202,60 @@ test("failed checkpoints never invalidate durable progress and retry before repl
   expect(f.session.state.progressError).toBeNull();
 });
 
-test("direct file history uses opaque identities; radio, live entries, websites and Jellyfin never enter local history", () => {
+test("history retains non-live sources privately and excludes radio and live entries", () => {
   const f = fixture();
-  const file = { id: "file", title: "Movie", source: "file:///private/library/Movie.mkv" };
-  f.session.command({ type: "enqueue", entry: file });
-  f.play("file"); f.observe(12); f.session.command({ type: "stop" });
-  const mediaId = localMediaId(file)!;
-  expect(mediaId).toMatch(/^file:[a-f0-9]{64}$/);
-  expect(JSON.stringify(f.store.history("household"))).not.toContain("private");
-  f.play("file");
-  expect(f.commands.at(-1)).toMatchObject({ startPosition: 12 });
-  for (const [id, source] of [["radio", "radio:station"], ["jellyfin", "jellyfin:movie"], ["web", "web:https://example.com/video"], ["http", "https://radio.example/live"]]) {
-    f.enqueue(id!, source); f.play(id!); f.observe(25);
+  const sources = ["file:///private/library/Movie.mkv", "jellyfin:account:movie", "web:https://example.com/video", "https://example.com/album/track.mp3"];
+  for (const [index, source] of sources.entries()) {
+    const entry = { id: String(index), title: `Item ${index}`, source };
+    f.session.command({ type: "enqueue", entry });
+    f.play(entry.id); f.observe(25); f.session.command({ type: "stop" });
+    const id = playbackMediaId(entry)!;
+    expect(id).toMatch(/^(file|media):[a-f0-9]{64}$/);
+    expect(f.store.historySource(id)).toEqual(entry);
+    f.play(entry.id);
+    expect(f.commands.at(-1)).toMatchObject({ startPosition: 25 });
   }
-  f.session.command({ type: "enqueue", entry: { id: "live", title: "Live", source: "library:live", live: true } });
-  f.play("live"); f.observe(30);
-  expect(f.store.history("household")).toHaveLength(1);
+  for (const entry of [
+    { id: "radio", title: "Radio", source: "radio:station" },
+    { id: "raw-radio", title: "Radio URL", source: "https://radio.example/live", kind: "radio" as const },
+    { id: "twitch", title: "Live Twitch", source: "web:https://twitch.tv/channel", live: true },
+    { id: "rai", title: "Live RaiPlay", source: "web:https://raiplay.it/dirette/rai1", live: true },
+    { id: "iptv", title: "Live TV", source: "iptv:channel" },
+  ]) {
+    f.session.command({ type: "enqueue", entry }); f.play(entry.id); f.observe(30);
+    expect(playbackMediaId(entry)).toBeNull();
+  }
+  expect(f.store.history("household")).toHaveLength(sources.length);
+  expect(JSON.stringify(f.store.history("household"))).not.toContain("private");
+  expect(JSON.stringify(f.store.history("household"))).not.toContain("https:");
+});
+
+test("a history source remains replayable after queue removal and store restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-history-replay-"));
+  cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "state.sqlite");
+  const f = fixture({}, openStore(path));
+  const entry = { id: "album-track", title: "Album track", source: "web:https://artist.bandcamp.com/track/song" };
+  f.session.command({ type: "enqueue", entry }); f.play(entry.id); f.observe(31);
+  f.session.command({ type: "stop" }); f.session.command({ type: "remove", entryId: entry.id });
+  const fresh = fixture({}, openStore(path));
+  const mediaId = playbackMediaId(entry)!;
+  fresh.session.playHistory(mediaId);
+  expect(fresh.session.state.queue).toHaveLength(1);
+  expect(fresh.session.state.queue[0]).toMatchObject({ source: entry.source, title: entry.title });
+  expect(fresh.session.state.queue[0]!.id).not.toBe(entry.id);
+  expect(fresh.commands.at(-1)).toMatchObject({ type: "load", startPosition: 31 });
+  fresh.session.command({ type: "stop" }); fresh.session.playHistory(mediaId, true);
+  expect(fresh.commands.at(-1)).not.toHaveProperty("startPosition");
+  expect(fresh.session.state.queue).toHaveLength(1);
+});
+
+test("resolved live metadata excludes history and Jellyfin retains its fresh upstream resume", () => {
+  const f = fixture({ resolveSource: entry => ({ source: "https://resolved.example/media", ...(entry.id === "live" ? { metadata: { live: true } } : { startPosition: 45 }) }) });
+  f.enqueue("live", "web:https://twitch.tv/channel"); f.play("live"); f.observe(30);
+  expect(f.store.history("household")).toEqual([]);
+  f.enqueue("jellyfin", "jellyfin:account:movie"); f.play("jellyfin"); f.observe(20);
+  f.play("jellyfin"); expect(f.commands.at(-1)).toMatchObject({ startPosition: 45 });
 });
 
 test("profile storage bounds names and count and failed profile changes do not publish", () => {
@@ -227,4 +265,34 @@ test("profile storage bounds names and count and failed profile changes do not p
   const first = f.session.state.activeProfile;
   expect(() => f.session.selectProfile("missing")).toThrow("not found");
   expect(f.session.state.activeProfile).toEqual(first);
+});
+
+
+test("a delayed history replay cannot defeat Stop or a revoked controller", async () => {
+  for (const stopped of [true, false]) {
+    const source = Promise.withResolvers<MediaSource>();
+    const f = fixture({ resolveSource: () => source.promise });
+    const entry = { id: "archived", title: "Old URL", source: "web:https://example.com/archived" };
+    const mediaId = playbackMediaId(entry)!;
+    f.store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 33, duration: 120, watched: false, lastPlayedAt: 1 }, entry);
+    let allowed = true;
+    f.session.playHistory(mediaId, false, () => { if (!allowed) throw new Error("This remote is no longer paired."); });
+    if (stopped) f.session.command({ type: "stop" }); else allowed = false;
+    source.resolve({ source: "https://example.com/newly-resolved" });
+    await Bun.sleep(0);
+    expect(f.commands.filter(command => command.type === "load")).toEqual([]);
+    expect(f.store.progress("household", mediaId)?.position).toBe(33);
+  }
+});
+
+
+test("a non-seekable recording enters history without an unsupported resume action", () => {
+  const f = fixture();
+  const entry = { id: "download", title: "Recording", source: "https://example.com/recording" };
+  f.session.command({ type: "enqueue", entry });
+  const playbackId = f.play(entry.id);
+  f.session.observe({ ...idle, playbackId, status: "playing", position: 25 });
+  const mediaId = playbackMediaId(entry)!;
+  expect(f.store.progress("household", mediaId)).toMatchObject({ position: 0, watched: false });
+  expect(f.store.historySource(mediaId)).toEqual(entry);
 });

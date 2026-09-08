@@ -223,6 +223,8 @@ test("quality reload restores the ready trigger without taking focus after user 
     await act(async () => resolve(true));
     await act(async () => new Promise(done => setTimeout(done, 25)));
     expect(quality.disabled).toBe(true);
+    await render({ ...loading, player: { ...loading.player, status: "paused", seekable: false } }, true, true, command);
+    expect(document.querySelector("#playback-quality")).toBe(quality);
     if (navigate) {
       await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
       button("Done").focus();
@@ -230,6 +232,27 @@ test("quality reload restores the ready trigger without taking focus after user 
     await render({ ...value, player: { ...value.player, playbackId: "replacement", status: "paused" } }, true, true, command);
     await act(async () => new Promise(done => setTimeout(done, 25)));
     expect(document.activeElement).toBe(navigate ? button("Done") : quality);
+    await render(loading, true, true, command);
+    if (!navigate) quality.blur();
+    await render({ ...value, player: { ...value.player, playbackId: "replacement", status: "paused" } }, true, true, command);
+    await act(async () => new Promise(done => setTimeout(done, 25)));
+    expect(document.activeElement).toBe(navigate ? button("Done") : quality);
     await act(async () => button("Done").click());
   }
+});
+
+
+test("Home keeps finished album tracks beside resumable online history without a second destination", async () => {
+  request.mockResolvedValue(Response.json({ profile: state.activeProfile, items: [
+    { mediaId: "media:album", title: "Finished album track", libraryItemId: null, position: 0, duration: 210, watched: true, lastPlayedAt: 20, playable: true, thumbnail: "https://example.com/album.jpg" },
+    { mediaId: "media:video", title: "Unfinished video", libraryItemId: null, position: 43, duration: 300, watched: false, lastPlayedAt: 10, playable: true },
+  ] }));
+  await render();
+  expect(document.querySelector('[aria-label="Playback history"]')?.textContent).toContain("Finished album track");
+  expect(document.querySelector('[aria-label="Playback history"]')?.textContent).toContain("Unfinished video");
+  expect(document.querySelector('[aria-label="Playback history"]')?.textContent).not.toContain("Profile");
+  expect(document.querySelector<HTMLImageElement>(".history-inspect-art img")?.src).toBe("https://example.com/album.jpg");
+  await act(async () => button("Details for Finished album track").click());
+  expect(button("Play again Finished album track").disabled).toBe(false);
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Open this file");
 });

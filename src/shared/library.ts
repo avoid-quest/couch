@@ -47,4 +47,4 @@ export type VideoSeason = { season: number | null; episodeCount: number; artwork
 
 export type WatchingProfile = { id: string; name: string };
 export type ViewingProgress = { position: number; duration: number | null; watched: boolean; lastPlayedAt: number | null };
-export type HistoryItem = ViewingProgress & { mediaId: string; title: string; libraryItemId: string | null; queueEntryId?: string };
+export type HistoryItem = ViewingProgress & { mediaId: string; title: string; libraryItemId: string | null; queueEntryId?: string; playable?: boolean; thumbnail?: string; artworkId?: string; sourceLabel?: string };

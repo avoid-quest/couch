@@ -233,3 +233,28 @@ test("profile edits validate HTTP bodies consistently and leave the Jellyfin acc
   expect(connectCalls()).toBe(1);
   expect(invalidations).toEqual(["jellyfin"]);
 });
+
+
+test("history replay validates the current person and keeps durable source URLs private", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "web", title: "An album track", source: "web:https://artist.example/track", thumbnail: "https://artist.example/art.jpg" };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 21, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
+  const data = await (await request("/api/progress/history")).json();
+  expect(data.items[0]).toMatchObject({ mediaId, playable: true, sourceLabel: "Online", thumbnail: entry.thumbnail });
+  expect(JSON.stringify(data)).not.toContain(entry.source);
+  expect(JSON.stringify(data)).not.toContain("queueEntryId");
+  const endpoint = `/api/progress/${encodeURIComponent(mediaId)}/play`;
+  expect((await request(endpoint)).status).toBe(405);
+  for (const body of [{}, { profileId: "household", fromStart: "yes" }, { profileId: "household", source: "file:///private" }]) expect((await request(endpoint, "POST", body)).status).toBe(400);
+  expect((await request(endpoint, "POST", { profileId: "other" })).status).toBe(409);
+  expect(session.state.queue).toEqual([]);
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  expect((await request(endpoint, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue[0]).toMatchObject({ title: entry.title, source: entry.source });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true })).status).toBe(409);
+  session.command({ type: "stop" });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true })).status).toBe(200);
+  expect(store.progress("household", mediaId)?.position).toBe(0);
+});

@@ -44,6 +44,7 @@ export function openStore(path: string) {
       PRIMARY KEY (profileId, mediaId)
     );
     CREATE INDEX IF NOT EXISTS viewing_history ON viewing_progress(profileId, lastPlayedAt DESC);
+    CREATE TABLE IF NOT EXISTS history_sources (mediaId TEXT PRIMARY KEY, entry TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS watching_preferences (profileId TEXT PRIMARY KEY, preferences TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS bluetooth_output (id INTEGER PRIMARY KEY CHECK (id = 1), address TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS audio_output (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, card TEXT, profile TEXT);
@@ -193,12 +194,19 @@ export function openStore(path: string) {
       return db.query<ProgressRow, [string, number]>(`SELECT ${progressColumns} FROM viewing_progress WHERE profileId = ? AND lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC, mediaId LIMIT ?`)
         .all(profileId, Math.max(1, Math.min(100, Math.floor(limit) || 40))).map(progressView);
     },
-    saveProgress(profileId: string, item: HistoryItem) {
-      db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
-        title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
-        watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt`)
-        .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt);
+    historySource(mediaId: string): QueueEntry | null {
+      const row = db.query<{ entry: string }, [string]>("SELECT entry FROM history_sources WHERE mediaId = ?").get(mediaId);
+      return row ? JSON.parse(row.entry) : null;
+    },
+    saveProgress(profileId: string, item: HistoryItem, entry?: QueueEntry) {
+      db.transaction(() => {
+        db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(profileId, mediaId) DO UPDATE SET
+          title=excluded.title, libraryItemId=excluded.libraryItemId, position=excluded.position, duration=excluded.duration,
+          watched=(viewing_progress.watched OR excluded.watched), lastPlayedAt=excluded.lastPlayedAt`)
+          .run(profileId, item.mediaId, item.title, item.libraryItemId, item.position, item.duration, Number(item.watched), item.lastPlayedAt);
+        if (entry) db.query("INSERT INTO history_sources VALUES (?, ?) ON CONFLICT(mediaId) DO UPDATE SET entry=excluded.entry WHERE history_sources.entry != excluded.entry").run(item.mediaId, JSON.stringify(entry));
+      })();
     },
     editProgress(profileId: string, mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
       db.transaction(() => {

@@ -1,4 +1,3 @@
-import { profileDisplayName } from "./profile-name";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -7,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { HistoryItem, ViewingProgress, WatchingProfile } from "../shared/library";
+import type { HistoryItem, ViewingProgress } from "../shared/library";
+import { AuthArtwork } from "./AuthArtwork";
+import { MediaArtwork } from "./ProviderPanel";
 import "./history-presentation.css";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
@@ -57,19 +58,17 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   </Popover>;
 }
 
-export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, continueOnly = false, active = true, presentation = "default" }: {
+export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, active = true, presentation = "default" }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
   version: number;
   onPlay: HistoryPlayback;
-  continueOnly?: boolean;
   active?: boolean;
   presentation?: "default" | "inspect";
 }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
-  const [profile, setProfile] = useState<WatchingProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -90,7 +89,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     }).then(async response => {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not load viewing history.");
-      if (!controller.signal.aborted) { setItems(result.items); setProfile(result.profile); }
+      if (!controller.signal.aborted) { setItems(result.items); }
     }).catch(reason => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load viewing history.");
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -107,25 +106,25 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     finally { setPending(null); }
   };
 
-  const visibleItems = continueOnly ? items.filter(item => item.position > 0 && !item.watched).slice(0, 6) : items;
+  const artwork = (item: HistoryItem, className: string) => <span className={className} aria-hidden="true">{item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} /> : item.thumbnail ? <MediaArtwork thumbnail={item.thumbnail} title={item.title} /> : <History />}</span>;
 
   const playbackActions = (item: HistoryItem) => <div className="catalog-row-actions flex flex-wrap gap-2">
-    <Button disabled={!connected || !canPlay || !(item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`${item.position > 0 ? "Resume" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending === item.mediaId ? "Starting…" : item.position > 0 ? "Resume" : "Play"}</Button>
-    {item.position > 0 && <Button variant="outline" disabled={!connected || !canPlay || !(item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
+    <Button disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`${item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending === item.mediaId ? "Starting…" : item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"}</Button>
+    {item.position > 0 && <Button variant="outline" disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
   </div>;
   const summary = (item: HistoryItem) => `${item.position > 0 ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}${item.watched ? " · Watched" : ""}`;
 
-  return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label={continueOnly ? "Continue watching" : "Viewing history"}>
-    <div><h3 className="text-xl font-semibold">{continueOnly ? "Continue watching" : "Recently played"}</h3><p className="mt-1 text-sm text-muted-foreground">Profile: {profileDisplayName(profile)}</p></div>
+  return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label="Playback history">
+    <div><h3 className="text-xl font-semibold">Recently played</h3></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="text-sm text-muted-foreground" role="status">Loading history…</p>}
-    {!loading && !error && !visibleItems.length && <Card className="p-5 text-sm text-muted-foreground">{continueOnly ? "No unfinished local media for this profile. Browse below to choose something." : "Play a local file to begin this profile's history."}</Card>}
-    <ul className="history-items space-y-3" aria-busy={loading}>{visibleItems.map(item => {
-      const available = !!(item.libraryItemId || item.queueEntryId);
+    {!loading && !error && !items.length && <Card className="p-5 text-sm text-muted-foreground">Nothing played yet.</Card>}
+    <ul className="history-items space-y-3" aria-busy={loading}>{items.map(item => {
+      const available = !!(item.playable || item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;
       if (presentation === "inspect") return <li key={item.mediaId} className="history-inspect-row">
-        <span className="history-inspect-art" aria-hidden="true"><History /></span>
+        {artwork(item, "history-inspect-art")}
         <Button variant="ghost" className="history-inspect-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(item.mediaId); }}><strong>{item.title}</strong><small>{summary(item)}</small></Button>
       </li>;
       return <li key={item.mediaId}><Card className="catalog-row gap-3 p-3">
@@ -142,8 +141,8 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
       </Card></li>;
     })}</ul>
     {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="history-inspect-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
-      {detail && <><span className="history-inspect-art history-inspect-detail-art" aria-hidden="true"><History /></span><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>History · {profileDisplayName(profile)}</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
-        {!detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
+      {detail && <>{artwork(detail, "history-inspect-art history-inspect-detail-art")}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Recently played</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
+        {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
         {playbackActions(detail)}<ProgressActions origin={origin} token={token} connected={connected} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={() => setRefresh(value => value + 1)} />
         {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
       </>}

@@ -110,27 +110,17 @@ test("without native playback saved media remains queueable, while disconnect cl
   expect(document.body.textContent).toContain("Reconnect");
 });
 
-test("Saved starts with every existing save store together and keeps viewing history separate", async () => {
+test("Saved keeps saved collections together without a separate history destination", async () => {
   const { SavedSection } = await import("./SavedSection");
   const browsed: string[] = [];
-  await act(async () => root.render(<SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active onPlay={async () => true}
+  await act(async () => root.render(<SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} />));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
   expect([...document.querySelectorAll('[role="tab"]')].map(node => node.textContent)).toEqual(["Items", "Playlists"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
-  await click("History");
-  expect(document.querySelector("h1")?.textContent).toBe("Viewing history");
-  expect(document.body.textContent).toContain("Profile: Default profile");
-  expect(calls.some(call => call.path === "/api/progress/history")).toBe(true);
-  expect(document.activeElement).toBe(button("Back to Saved"));
-  expect(document.querySelector("button[data-back]")).toBe(button("Back to Saved"));
-  await act(async () => document.querySelector<HTMLButtonElement>("button[data-back]")!.click());
-  await flush();
-  expect(document.querySelector("h1")?.textContent).toBe("Saved");
-  expect(document.activeElement).toBe(button("History"));
-  expect(calls.every(call => call.method === "GET")).toBe(true);
+  expect([...document.querySelectorAll("button")].some(node => node.textContent === "History")).toBe(false);
 });
 
 

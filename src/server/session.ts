@@ -1,6 +1,6 @@
 import type { Action, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { Store } from "./store";
-import { createProgress, localMediaId, ViewingError } from "./progress";
+import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
 import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
@@ -152,7 +152,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     cancelPreparation();
     const pending = { entryId: next.id, playbackId: crypto.randomUUID(), currentId: state.player.playbackId, key, controller: new AbortController(), sent: false };
     prepared = pending;
-    const mediaId = localMediaId(next);
+    const mediaId = playbackMediaId(next);
     if (mediaId && (store.progress(state.activeProfile.id, mediaId)?.position ?? 0) > 0) return;
     void Promise.resolve().then(() => {
       pending.controller.signal.throwIfAborted();
@@ -311,9 +311,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         expiry = sourceExpiry;
         if (metadata || radio) enrichEntry(entry.id, entry.source, { ...metadata, ...(radio ? { kind: "radio", live: true } : {}) });
         const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
-        const mediaId = localMediaId(currentEntry);
+        const mediaId = playbackMediaId(currentEntry);
         const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
-        if (position !== undefined && position > 0) media.startPosition = position;
+        if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, profileId);
         send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
       };
@@ -483,6 +483,20 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}) {
       if (intent !== playIntent) throw new Error("Added to the queue. Playback was canceled by a newer control.");
       play(entryId, fromStart, false, authorize);
+    },
+    playHistory(mediaId: string, fromStart = false, authorize = () => {}) {
+      authorize();
+      available();
+      if (!store.progress(state.activeProfile.id, mediaId)) throw new ViewingError("History item not found.", 404);
+      const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
+      const saved = existing ?? store.historySource(mediaId);
+      if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
+      const entry = existing ?? { ...saved, id: crypto.randomUUID() };
+      if (!existing) {
+        if (state.queue.length >= 500) throw new ViewingError("Up next is full. Remove an item before playing this one.", 409);
+        saveQueue([...state.queue, entry]);
+      }
+      play(entry.id, fromStart, false, authorize);
     },
     close() { if (!quiescing) end(false); },
     checkpoint() { persistProgress(progress.checkpoint, true); },

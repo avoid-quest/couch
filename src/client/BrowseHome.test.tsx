@@ -47,14 +47,14 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("browse home offers only unfinished local history and preserves resume and restart commands", async () => {
+test("browse home uses one history for continued and finished playback and preserves resume and restart commands", async () => {
   await renderHome();
   expect(document.body.textContent).not.toContain("MBP");
   expect(document.body.textContent).not.toContain("Good morning");
   expect(document.body.textContent).not.toContain("Watching as");
   expect(document.body.textContent).toContain("Halfway home");
-  expect(document.body.textContent).not.toContain("Finished film");
-  expect(document.body.textContent).not.toContain("No progress");
+  expect(document.body.textContent).toContain("Finished film");
+  expect(document.body.textContent).toContain("No progress");
   expect(played).toEqual([]);
   await act(async () => button("Resume Halfway home").click());
   await act(async () => button("Details").click());
@@ -115,7 +115,7 @@ test("library artwork cards open details without playback and retain actual libr
   await renderHome();
   await act(async () => button("Details for A library film").click());
   expect(played).toEqual([]);
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("From your local library");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Library");
   await act(async () => button("Add A library film to Up next").click());
   expect(added).toEqual([{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }]);
   expect(played).toEqual([]);
@@ -126,4 +126,24 @@ test("library artwork cards open details without playback and retain actual libr
   expect(played).toEqual([]);
   await act(async () => button("Play A library film").click());
   expect(played).toEqual([[{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }, { fromStart: false }]]);
+});
+
+
+test("online album tracks and Jellyfin remain playable in the same history after leaving the queue", async () => {
+  const items: HistoryItem[] = [
+    { mediaId: "media:album", title: "Album track", libraryItemId: null, position: 45, duration: 240, watched: false, lastPlayedAt: 3, playable: true, thumbnail: "https://example.com/album.jpg", sourceLabel: "Online" },
+    { mediaId: "media:jellyfin", title: "Server movie", libraryItemId: null, position: 90, duration: 900, watched: false, lastPlayedAt: 2, playable: true, sourceLabel: "Jellyfin" },
+  ];
+  request.mockImplementation((async input => String(input).includes("/api/library/items") ? Response.json({ items: [] }) : Response.json({ profile, items })) as typeof fetch);
+  await renderHome();
+  expect(button("Resume Album track").disabled).toBe(false);
+  expect(document.querySelector<HTMLImageElement>(".browse-hero img")?.src).toBe("https://example.com/album.jpg");
+  await act(async () => button("Resume Album track").click());
+  expect(played).toEqual([[items[0], { fromStart: false }]]);
+  await act(async () => button("Details for Server movie").click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Jellyfin");
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Open this file");
+  expect(button("Resume Server movie").disabled).toBe(false);
+  await act(async () => button("Play Server movie from start").click());
+  expect(played.at(-1)).toEqual([items[1], { fromStart: true }]);
 });
