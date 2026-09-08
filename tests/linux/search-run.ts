@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import { remoteSocketUrl } from "./build";
 import { verifySearch } from "./search";
+import { verifyAcceptedUx } from "./accepted-ux";
 import { seedConfiguredFixture } from "./configured-fixture";
 import { addTVFolder } from "./folder-settings";
 import { mkdir } from "node:fs/promises";
@@ -99,6 +100,11 @@ class Remote {
 try {
   await until("official Tauri WebDriver ready", async () => { try { return (await fetch(`${driverOrigin}/status`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } });
   await launch();
+  await until("TV starts on visible Browse and resume with Home selected", () => ui.execute(`
+    const home = document.querySelector('[aria-label="Browse and resume"]');
+    return !!home && !home.closest('[hidden]') && home.getClientRects().length > 0 && getComputedStyle(home).visibility === 'visible'
+      && document.querySelector('.source-nav [data-source="Home"]')?.getAttribute('aria-selected') === 'true';
+  `));
   await ui.click(".pair-shortcut");
   const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
   assert.match(code, /^\d{6}$/);
@@ -111,6 +117,11 @@ try {
   }
   await until("two independently paired controllers receive the stopped session", () => all(state => state.player.status === "idle"));
   httpRemote = await startHttpRemote(origin, code, artifactDir, until, 4446, 1.5);
+  await until("paired phone starts on the visible current session", () => httpRemote!.ui.execute(`
+    const queue = document.querySelector('.remote-session .queue-panel');
+    return !!queue && !queue.closest('[hidden]') && queue.getClientRects().length > 0 && getComputedStyle(queue).visibility === 'visible'
+      && [...document.querySelectorAll('.mode-switch button')].some(button => button.textContent.trim() === 'On TV' && button.getAttribute('aria-pressed') === 'true');
+  `));
   await httpRemote.minimize();
   otherRemote = await startHttpRemote(origin, code, artifactDir, until, 4447);
   await otherRemote.minimize();
@@ -132,6 +143,7 @@ try {
   await until("Search fixture connects the actual Jellyfin account", async () => (await api("/api/jellyfin")).connected === true, 30_000);
   await ui.key(keys.escape);
   await until("Jellyfin source configuration closes", () => ui.execute("return !document.querySelector('[role=dialog]')"));
+  await verifyAcceptedUx(context);
   await verifySearch(context);
   if (process.env.COUCH_SEARCH_OUTAGE === "1") {
     await httpRemote.restore();
