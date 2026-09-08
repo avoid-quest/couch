@@ -107,3 +107,24 @@ test("Ubuntu JSON card profiles expose output-only choices and retain active dup
   expect(profiles[1]!.available).toBe(false);
   expect(profiles[2]).toMatchObject({ active: true, selectable: false });
 });
+
+
+test("PipeWire sink properties identify the ALSA and Bluetooth card without PulseAudio card indices", () => {
+  const cards = [
+    { index: 44, name: "alsa_card.pci-0000_00_1f.3" },
+    { index: 215, name: "bluez_card.14_0F_92_24_EE_40", properties: { "api.bluez5.address": "14:0F:92:24:EE:40" } },
+    { index: 33, name: "unrelated_card" },
+  ];
+  const outputs = soundOutputs([
+    { index: 64, name: "alsa_output.pci-0000_00_1f.3.hdmi-stereo", properties: { "device.name": cards[0]!.name, "device.id": "44" } },
+    { index: 216, name: "bluez_output.14_0F_92_24_EE_40.1", description: "C39S", properties: { "device.name": cards[1]!.name, "device.id": "33", "api.bluez5.address": "14:0F:92:24:EE:40" } },
+  ], cards);
+  expect(outputs[0]).toMatchObject({ card: cards[0]!.name });
+  expect(outputs[1]).toMatchObject({ card: cards[1]!.name, bluetoothAddress: "14:0F:92:24:EE:40", name: "C39S" });
+});
+
+test("explicit PulseAudio card indices take precedence over PipeWire properties", () => {
+  const cards = [{ index: 3, name: "pulse_card" }, { index: 7, name: "other_card" }];
+  expect(soundOutputs([{ index: 1, name: "speakers", card: 3, properties: { "device.name": "other_card" } }], cards)[0]!.card).toBe("pulse_card");
+  expect(soundOutputs([{ index: 2, name: "virtual", properties: { "device.id": "3" } }], cards)[0]!.card).toBeUndefined();
+});

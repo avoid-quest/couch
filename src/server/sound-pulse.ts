@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import type { SoundInventory, SoundOutput, SoundProfile } from "../shared/sound";
 
 type Card = { index: number; name: string; active_profile?: string; properties?: Record<string, string>; profiles?: Record<string, { description?: string; sinks?: number; sources?: number; available?: boolean }> };
-type Sink = { card?: number; flags?: string[]; index: number; name: string; description?: string; state?: string; mute?: boolean; volume?: Record<string, { value: number }>; active_port?: string; ports?: { name: string; availability?: string }[] };
+type Sink = { card?: number; properties?: Record<string, string>; flags?: string[]; index: number; name: string; description?: string; state?: string; mute?: boolean; volume?: Record<string, { value: number }>; active_port?: string; ports?: { name: string; availability?: string }[] };
 export type SoundProcess = { pid: number; exited: Promise<number>; stop: () => void };
 export type SoundBackend = { inventory: () => Promise<SoundInventory>; start: (output: string) => SoundProcess; route: (pid: number) => Promise<string | null> };
 const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
@@ -25,9 +25,10 @@ export function soundOutputs(value: unknown, cards: Card[] = []): SoundOutput[] 
   if (!Array.isArray(value)) throw new Error("The audio server returned an invalid output list.");
   return value.slice(0, 128).map((sink: Sink) => {
     if (typeof sink.name !== "string" || !sink.name || sink.name.length > 512 || typeof sink.index !== "number") throw new Error("The audio server returned an invalid output.");
+    const card = cards.find(card => card.index === sink.card) ?? cards.find(card => card.name === sink.properties?.["device.name"]);
     const availability = sink.ports?.find(port => port.name === sink.active_port)?.availability;
     const volumes = Object.values(sink.volume ?? {}).map(channel => channel.value).filter(value => Number.isFinite(value) && value >= 0);
-    return { ...bluetoothAddress(cards.find(card => card.index === sink.card)), ...(cards.find(card => card.index === sink.card) ? { card: cards.find(card => card.index === sink.card)!.name } : {}), testBlocked: sink.flags?.includes("FLAT_VOLUME") ? "This audio server couples stream and system volume. Testing is unavailable to preserve your output level." : null, id: sink.name, name: (sink.description || sink.name).slice(0, 160), state: (sink.state || "Unknown").slice(0, 30), availability: availability === "available" || availability === "yes" ? "available" : availability === "not available" || availability === "no" ? "unavailable" : "unknown", muted: sink.mute === true, volume: volumes.length ? Math.round(Math.max(...volumes) / 65536 * 100) : null };
+    return { ...bluetoothAddress(card), ...(card ? { card: card.name } : {}), testBlocked: sink.flags?.includes("FLAT_VOLUME") ? "This audio server couples stream and system volume. Testing is unavailable to preserve your output level." : null, id: sink.name, name: (sink.description || sink.name).slice(0, 160), state: (sink.state || "Unknown").slice(0, 30), availability: availability === "available" || availability === "yes" ? "available" : availability === "not available" || availability === "no" ? "unavailable" : "unknown", muted: sink.mute === true, volume: volumes.length ? Math.round(Math.max(...volumes) / 65536 * 100) : null };
   });
 }
 
