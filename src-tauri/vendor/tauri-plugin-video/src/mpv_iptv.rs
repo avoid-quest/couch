@@ -19,6 +19,11 @@ impl LiveStartDefaults {
             mpv.command("change-list", &["demuxer-lavf-o", "append", start])
                 .map_err(option_error)?;
         }
+        if event_start {
+            // Allow a late EVENT segment to arrive before FFmpeg makes EOF final.
+            mpv.command("change-list", &["demuxer-lavf-o", "append", "max_reload=30"])
+                .map_err(option_error)?;
+        }
         Ok(())
     }
 }
@@ -83,10 +88,11 @@ mod tests {
             Ok(())
         }).unwrap();
         let defaults = LiveStartDefaults::read(&mpv).unwrap();
-        for (case, (go_live, event_start, expected)) in [(false, false, "/3.ts"), (false, true, "/0.ts"), (true, true, "/5.ts"), (false, false, "/3.ts")].into_iter().enumerate() {
+        for (case, (go_live, event_start, expected)) in [(false, false, "/3.ts"), (false, true, "/0.ts"), (true, true, "/5.ts"), (true, false, "/5.ts"), (false, false, "/3.ts")].into_iter().enumerate() {
             mpv.command("stop", &[]).unwrap();
             while mpv.wait_event(0.0).is_some() {}
             defaults.configure(&mpv, go_live, event_start).unwrap();
+            assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap().split(',').any(|option| option == "max_reload=30"), event_start);
             if !go_live && !event_start { assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), defaults.0); }
             let prefix = format!("/case-{case}");
             mpv.command("loadfile", &[&format!("{origin}{prefix}/live.m3u8"), "replace"]).unwrap();
@@ -101,10 +107,12 @@ mod tests {
         stop.store(true, Ordering::SeqCst);
         server.join().unwrap();
         // Preserve unrelated AVOptions and a caller's original start override too.
-        mpv.set_property("demuxer-lavf-o", "probesize=500000,live_start_index=-2").unwrap();
+        mpv.set_property("demuxer-lavf-o", "probesize=500000,live_start_index=-2,max_reload=7").unwrap();
         let configured = LiveStartDefaults::read(&mpv).unwrap();
         configured.configure(&mpv, true, false).unwrap();
-        assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1");
+        assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1,max_reload=7");
+        configured.configure(&mpv, true, true).unwrap();
+        assert_eq!(mpv.get_property::<String>("demuxer-lavf-o").unwrap(), "probesize=500000,live_start_index=-1,max_reload=30");
         mpv.command("loadfile", &[local.to_str().unwrap(), "replace"]).unwrap();
         // Cancel this load before resetting, as replacement and Stop do in the player.
         mpv.command("stop", &[]).unwrap();

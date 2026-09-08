@@ -221,6 +221,10 @@ playlist receives a private `eventStart` hint, selecting `live_start_index=0`
 so its first segment anchors the seek timeline. An explicit Go live command
 rechecks the current playlist separately. Its private `goLive` load
 flag selects FFmpeg's newest complete segment with `live_start_index=-1`.
+Verified EVENT loads also set `max_reload=30`, allowing a delayed next segment
+to arrive before FFmpeg returns EOF. This is a reload-attempt bound, not a
+wall-clock timeout; the [retained differential](../../docs/research/timeshift-event-reload.md)
+reproduces default EOF and isolates this option with the same media bytes.
 `mpv_iptv` restores the original `demuxer-lavf-o` before every load, preserving
 ordinary sliding HLS, VOD and provider playback. This gives explicit live return less
 buffering margin than normal startup and can stall sooner on a slow feed.
