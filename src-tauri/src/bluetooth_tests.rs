@@ -8,7 +8,7 @@ const DEVICE: &str = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF";
 const ADDRESS: &str = "AA:BB:CC:DD:EE:FF";
 const AUDIO: &str = "0000110b-0000-1000-8000-00805f9b34fb";
 #[derive(Default)]
-struct State { powered: bool, paired: bool, trusted: bool, connected: bool, scanning: bool, cancelled: usize, stopped: usize, mode: String, agent: Option<(String, Path<'static>)>, connects: Vec<String> }
+struct State { powered: bool, paired: bool, trusted: bool, connected: bool, scanning: bool, cancelled: usize, stopped: usize, disconnects: usize, mode: String, agent: Option<(String, Path<'static>)>, connects: Vec<String> }
 type Data = Arc<Mutex<State>>;
 fn action(op: &str) -> Action { serde_json::from_value(json!({"op":op,"owner":"administrator","device":ADDRESS})).unwrap() }
 async fn operation(client: &Bluetooth, predicate: impl Fn(&Value) -> bool) -> Value {
@@ -80,9 +80,25 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
             }
         });
         builder.method("CancelPairing", (), (), |_, data: &mut Data, (): ()| { data.lock().unwrap().cancelled += 1; Ok(()) });
-        builder.method("Connect", (), (), |_, data: &mut Data, (): ()| { let mut state = data.lock().unwrap(); state.connects.push("all".into()); state.connected = true; Ok(()) });
+        builder.method_with_cr_async("Connect", (), (), |mut context, cr, (): ()| {
+            let data = cr.data_mut::<Data>(context.path()).unwrap().clone();
+            async move {
+                let (slow, disconnects) = { let mut state = data.lock().unwrap(); state.connects.push("all".into()); (state.mode == "slow-connect", state.disconnects) };
+                if slow { tokio::time::sleep(Duration::from_millis(250)).await; }
+                let mut state = data.lock().unwrap();
+                if disconnects == state.disconnects { state.connected = true; }
+                context.reply(Ok(()))
+            }
+        });
         builder.method("ConnectProfile", ("uuid",), (), |_, data: &mut Data, (uuid,): (String,)| { let mut state = data.lock().unwrap(); state.connects.push(uuid); state.connected = true; Ok(()) });
-        builder.method("Disconnect", (), (), |_, data: &mut Data, (): ()| { data.lock().unwrap().connected = false; Ok(()) });
+        builder.method_with_cr_async("Disconnect", (), (), |mut context, cr, (): ()| {
+            let data = cr.data_mut::<Data>(context.path()).unwrap().clone();
+            async move {
+                tokio::time::sleep(Duration::from_millis(75)).await;
+                let mut state = data.lock().unwrap(); state.connected = false; state.disconnects += 1;
+                context.reply(Ok(()))
+            }
+        });
     });
     cr.insert("/", &[cr.object_manager()], ());
     cr.insert("/org/bluez", &[agent], data.clone());
@@ -149,6 +165,21 @@ async fn bluez_pair_discovery_cancel_reconnect_and_forget() {
     restarted.request(action("reconnect")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
     assert!(data.lock().unwrap().connected);
     assert_eq!(data.lock().unwrap().connects, vec!["all", AUDIO], "Startup reconnect still targets the saved audio profile");
+    // Dropping the D-Bus reply future alone does not stop a delayed BlueZ Connect.
+    restarted.request(action("disconnect")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
+    data.lock().unwrap().mode = "slow-connect".into();
+    restarted.request(action("connect")).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    restarted.request(action("cancel")).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!data.lock().unwrap().connected, "Cancelled Connect must not finish later");
+    restarted.request(action("connect")).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    restarted.request(action("cancel")).await.unwrap();
+    data.lock().unwrap().mode = "confirm".into();
+    restarted.request(action("connect")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(data.lock().unwrap().connected, "Cancellation cleanup must not disconnect a newer Connect");
     restarted.request(action("forget")).await.unwrap(); operation(&restarted, |op| op["status"] == "finished").await;
     assert!(restarted.request(action("read")).await.unwrap()["devices"].as_array().unwrap().is_empty());
     // An object disappearing before a command cannot be paired or connected.
