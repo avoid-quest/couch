@@ -41,7 +41,11 @@ export function SessionBar({ state, credentials, connected, run, onOpen, onRemot
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
   if (!current || !player?.playbackId) return null;
-  return <footer ref={bar} className="session-bar" aria-label="Current TV playback" onFocusCapture={event => { focusedControl.current = event.target; }} onBlurCapture={event => {
+  return <footer ref={bar} className="session-bar" aria-label="Current TV playback" onFocusCapture={event => {
+    // Dialogs and selects bubble through React portals but own their focus recovery.
+    focusedControl.current = event.currentTarget.contains(event.target) ? event.target : null;
+  }} onBlurCapture={event => {
+    if (!event.currentTarget.contains(event.target)) return;
     if (event.target.isConnected && !event.target.matches(":disabled") && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
   }}>
     <button className="session-bar-open" onClick={onOpen} aria-label={`Open current playback: ${current.title}`}>

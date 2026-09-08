@@ -160,3 +160,37 @@ test("footer timeline shows current time and preserves a focused seek through li
   expect(document.querySelector('.playback-timeline [role="slider"]')).toBeNull();
   expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:12");
 });
+
+test("footer focus recovery leaves portaled playback settings in control during quality reload", async () => {
+  const video: SessionState = { ...state, queue: [{ ...state.queue[1]!, source: "web:https://www.youtube.com/watch?v=abcdefghijk", quality: "auto" }], player: { ...state.player, status: "paused" } };
+  await render(video);
+  await act(async () => button("Playback settings").click());
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const quality = document.querySelector<HTMLButtonElement>("#playback-quality")!;
+  await act(async () => quality.focus());
+  expect(document.querySelector("footer")?.contains(quality)).toBe(false);
+  await render({ ...video, player: { ...video.player, playbackId: "replacement", status: "loading", seekable: false, tracks: [] } });
+  expect(quality.disabled).toBe(true);
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  expect(document.activeElement === button("Stop playback")).toBe(false);
+  await render(video);
+  let resolve!: (accepted: boolean) => void;
+  const command = () => new Promise<boolean>(done => { resolve = done; });
+  await render(video, true, true, command);
+  quality.getClientRects = () => [{ width: 200, height: 44 }] as unknown as DOMRectList;
+  await act(async () => quality.click());
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Up to 720p")!.click());
+  const loading: SessionState = { ...video, player: { ...video.player, playbackId: "replacement", status: "loading", seekable: false, tracks: [] } };
+  await render(loading, true, true, command);
+  await act(async () => resolve(true));
+  expect(document.activeElement === button("Stop playback")).toBe(false);
+  const restored: SessionState = { ...video, player: { ...video.player, playbackId: "replacement" } };
+  await render(restored, true, true, command);
+  await act(async () => new Promise(done => setTimeout(done, 25)));
+  expect(document.activeElement === quality).toBe(true);
+  await render(loading, true, true, command);
+  await act(async () => quality.blur());
+  await render(restored, true, true, command);
+  await act(async () => new Promise(done => setTimeout(done, 25)));
+  expect(document.activeElement === quality).toBe(true);
+});
