@@ -1,3 +1,5 @@
+import { seedConfiguredFixture } from "./configured-fixture";
+seedConfiguredFixture();
 import { strict as assert } from "node:assert";
 import { mkdir, readFile, rename } from "node:fs/promises";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
