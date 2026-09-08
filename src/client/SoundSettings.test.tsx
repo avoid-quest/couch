@@ -48,3 +48,13 @@ test("test uses explicit output identity and Stop remains available before route
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Stop sound test")!.click());
   expect(calls.find(call => call.url.endsWith("/stop"))!.body).toBe(JSON.stringify({ testId: "test-id" }));
 });
+
+test("phone selection uses the stable device name and shows saved, unconfirmed routing separately", async () => {
+  state = { ...state, audioDelay: 0.25, routing: { selectedOutput: "hdmi", observedOutput: null, volume: 63, muted: false, error: null } };
+  await render();
+  expect(document.body.textContent).toContain("Saved for playback. No active audio stream to confirm.");
+  expect(document.body.textContent).toContain("TV audio delay");
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Use HDMI TV")!.click());
+  expect(calls.find(call => call.url.endsWith("/output"))!.body).toBe(JSON.stringify({ output: "hdmi" }));
+  expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Use Speakers")!.disabled).toBe(true);
+});

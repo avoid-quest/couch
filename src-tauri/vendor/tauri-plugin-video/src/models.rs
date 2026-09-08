@@ -35,6 +35,8 @@ pub enum TrackKind {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeOpenRequest {
+    #[serde(default)]
+    pub audio_output: Option<String>,
     /// Protocol and adapter version are required by protocol 1. They remain
     /// optional while deserializing so legacy JavaScript receives a deliberate
     /// protocol error instead of a generic invalid-payload rejection.
@@ -186,6 +188,8 @@ pub struct NativeLayoutRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeControlRequest {
+    #[serde(default)]
+    pub audio_output: Option<String>,
     #[serde(default)]
     pub session_key: String,
     #[serde(default)]

@@ -5,7 +5,7 @@ type Sink = { flags?: string[]; index: number; name: string; description?: strin
 export type SoundProcess = { pid: number; exited: Promise<number>; stop: () => void };
 export type SoundBackend = { inventory: () => Promise<SoundInventory>; start: (output: string) => SoundProcess; route: (pid: number) => Promise<string | null> };
 const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
-const query = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
+export const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
   execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The TV audio session did not answer. Check PipeWire/PulseAudio and pulseaudio-utils.")) : resolve(stdout.trim()));
 });
 
@@ -36,7 +36,7 @@ export function testTone(): Uint8Array {
 export function pulseSound(): SoundBackend {
   return {
     async inventory() {
-      const [sinks, selected] = await Promise.all([query(["--format=json", "list", "sinks"]), query(["get-default-sink"])]);
+      const [sinks, selected] = await Promise.all([querySound(["--format=json", "list", "sinks"]), querySound(["get-default-sink"])]);
       return { outputs: soundOutputs(JSON.parse(sinks)), defaultOutput: selected || null };
     },
     start(output) {
@@ -44,11 +44,24 @@ export function pulseSound(): SoundBackend {
       return { pid: child.pid, exited: child.exited, stop: () => { child.kill("SIGKILL"); } };
     },
     async route(pid) {
-      const [inputs, sinks] = await Promise.all([query(["--format=json", "list", "sink-inputs"]), query(["--format=json", "list", "sinks"])]);
+      const [inputs, sinks] = await Promise.all([querySound(["--format=json", "list", "sink-inputs"]), querySound(["--format=json", "list", "sinks"])]);
       const streams = JSON.parse(inputs) as { sink: number; properties: Record<string, string> }[];
-      const stream = streams.find(input => input.properties?.["application.process.id"] === String(pid));
-      const sink = (JSON.parse(sinks) as Sink[]).find(sink => sink.index === stream?.sink);
-      return sink?.name ?? null;
+      const owned = streams.filter(input => input.properties?.["application.process.id"] === String(pid));
+      const routes = owned.map(stream => (JSON.parse(sinks) as Sink[]).find(sink => sink.index === stream.sink)?.name);
+      if (routes.some(route => route !== routes[0])) throw new Error("The player's audio streams have different routes.");
+      return routes[0] ?? null;
     },
+  };
+}
+
+export function pulseRouting() {
+  const backend = pulseSound();
+  return {
+    inventory: backend.inventory,
+    // Only this native player's streams, never other applications or test tones.
+    route: () => backend.route(process.ppid),
+    async volume(output: string, volume: number) { await querySound(["set-sink-volume", output, `${volume}%`]); },
+    async mute(output: string, muted: boolean) { await querySound(["set-sink-mute", output, muted ? "1" : "0"]); },
+    async default(output: string) { await querySound(["set-default-sink", output]); },
   };
 }

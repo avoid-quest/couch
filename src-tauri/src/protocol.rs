@@ -55,7 +55,10 @@ pub enum PlaybackCommand {
         #[serde(default)]
         next: Option<PreparedAudio>,
     },
+    AudioOutput { output: String },
     Load {
+        #[serde(default)]
+        audio_output: Option<String>,
         playback_id: String,
         source: String,
         #[serde(default)]

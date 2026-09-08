@@ -16,10 +16,13 @@ type SessionOptions = {
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
   now?: () => number;
+  systemAudio?: boolean;
+  prepareAudio?: () => string;
 };
 
 export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
   let desiredVolume = store.volume;
+  let audioInterrupted = false;
   let resolution: AbortController | null = null;
   let audioOnly = false;
   let prepared: { entryId: string; playbackId: string; currentId: string; key: string; controller: AbortController; sent: boolean } | null = null;
@@ -227,6 +230,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false) => {
     authorize();
     available();
+    options.prepareAudio?.();
+    audioInterrupted = false;
     const entry = state.queue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
     audioOnly = false;
@@ -275,7 +280,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
         if (position !== undefined && position > 0) media.startPosition = position;
         progress.begin(currentEntry, playbackId, profileId);
-        send({ type: "load", playbackId, ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
+        send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
       };
       if (source instanceof Promise) {
         send({ type: "stop" });
@@ -291,6 +296,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     expiry = undefined;
     webRetried = false;
     pendingPause = null;
+    audioInterrupted = false;
     playIntent++;
     cancelRadioRetry();
     finishProgress(true);
@@ -321,6 +327,31 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
 
   return {
+    updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
+      state.systemAudio = audio;
+      if (audio.volume !== null) state.player.volume = audio.volume;
+      broadcast();
+    },
+    saveAudioDelay(delay: number) {
+      store.saveAudioDelay(delay);
+      state.preferences = { ...state.preferences!, device: { audioDelay: delay } };
+      if (state.player.playbackId && ["loading", "playing", "paused"].includes(state.player.status)) send({ type: "audioDelay", playbackId: state.player.playbackId, delay });
+      broadcast();
+    },
+    audioLost(error: string) {
+      if (!admitted() || audioInterrupted) return;
+      audioInterrupted = true;
+      playIntent++; cancelRadioRetry(); resolution?.abort(); finishProgress();
+      if (state.player.playbackId && state.player.seekable && ["playing", "paused"].includes(state.player.status)) {
+        send({ type: "pause", playbackId: state.player.playbackId, paused: true });
+        state.player = { ...state.player, status: "paused", error };
+      } else {
+        options.deactivate?.();
+        state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", nowPlaying: null, error };
+        send({ type: "stop" });
+      }
+      broadcast();
+    },
     updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
     get state() { return structuredClone(state); },
     enrichEntry,
@@ -474,6 +505,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "pause":
           currentPlayback(action.playbackId);
+          if (!action.paused) { options.prepareAudio?.(); audioInterrupted = false; state.player.error = null; }
           pendingPause = action.paused;
           if (state.webRetry) {
             state.webRetry = { paused: action.paused };
@@ -503,6 +535,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           send({ ...action, position });
           progress.seek(position);
           break;
+        case "mute": throw new Error("System mute is unavailable on this player.");
         case "volume":
           store.saveVolume(action.volume);
           desiredVolume = action.volume;
@@ -531,6 +564,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.player = { ...state.player, playbackId: player.playbackId, status: "loading" };
         progress.begin(next, player.playbackId!, state.activeProfile.id);
       }
+      if (player.status === "unavailable") audioInterrupted = false;
+      if (audioInterrupted) return;
       // Native Stop can acknowledge the retired source while another source is still resolving.
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;
@@ -557,11 +592,11 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (["unavailable", "error", "idle"].includes(player.status)) finishProgress();
       radioRetry.observe(player);
       if (player.status === "playing") state.radioRetry = null;
-      state.player = { ...player, ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
+      state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
       catch { state.progressError = "Could not save viewing progress. Check the TV's storage."; }
       options.observe?.(player);
-      if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: desiredVolume });
+      if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
       broadcast();
       if (ended) {
         const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
