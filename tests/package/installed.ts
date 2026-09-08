@@ -38,6 +38,7 @@ const checks: string[] = [];
 const browsers: { port: number; id: string }[] = [];
 let socket: WebSocket | undefined;
 let state: any;
+const reconnectObservations: { description: string; events: { at: string; event: string; code?: number }[] }[] = [];
 function run(args: string[]) {
   const child = Bun.spawnSync(args, { stderr: "inherit" });
   assert.equal(child.exitCode, 0, args.join(" "));
@@ -128,10 +129,18 @@ function supervised() {
 async function retained(description: string) {
   socket?.close();
   state = undefined;
-  await until("Installed HTTP coordinator is ready", async () => api("/api/build").then(() => true).catch(() => false));
+  // Build identity is available before startup opens admission to controllers.
+  await until("Installed HTTP coordinator is ready", async () => api("/api/settings/restart").then(value => value.ready === true).catch(() => false));
+  const observation = { description, events: [] as { at: string; event: string; code?: number }[] };
+  reconnectObservations.push(observation);
+  if (reconnectObservations.length > 8) reconnectObservations.shift();
+  const record = (event: string, code?: number) => { if (observation.events.length < 8) observation.events.push({ at: new Date().toISOString(), event, ...(code === undefined ? {} : { code }) }); };
   const BunSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
   socket = new BunSocket(await remoteSocketUrl(origin, seed.tokens[1]), { headers: { Origin: origin } });
-  socket.onmessage = event => { const value = JSON.parse(event.data); if (value.type === "state") state = value.state; };
+  socket.onopen = () => record("open");
+  socket.onerror = () => record("error");
+  socket.onclose = event => record("close", event.code);
+  socket.onmessage = event => { const value = JSON.parse(event.data); if (value.type === "state") { if (!state) record("first-state"); state = value.state; } };
   await until(description, async () => state && await connected());
   assert.equal(state.activeProfile.id, seed.profileId);
   assert.equal(state.currentEntryId, null, "Restart must not autoplay");
@@ -707,10 +716,17 @@ try {
   }
   await Bun.write(`${fixtures}/installed-result.json`, JSON.stringify({ initialBuild, build, transactions, archiveSha256: installed.archiveSha256, checks, display: "Xvfb software rendering; no physical acceptance", scope: updateReceipt ? "Actual installed signed A to B update, exact-current repair, systemd restart and operator recovery." : "Actual installed AppImage, systemd restart and operator recovery. Signed update and repair require their separate journey." }, null, 2));
 } catch (error) {
+  const [browserStatus, coordinator, build] = await Promise.all([
+    Promise.all(browsers.map(async (browser, index) => execute(browser, "return { controller: !!document.querySelector('.remote-controller'), headerStatus: document.querySelector('.header-status [role=status]')?.textContent ?? null, documentReady: document.readyState, tokenMatches: localStorage.getItem('couch.remote-token') === arguments[0] }", [seed.tokens[index]]).catch(() => ({ unavailable: true })))),
+    api("/api/settings/restart").catch(() => ({ unavailable: true })),
+    api("/api/build").catch(() => ({ unavailable: true })),
+  ]);
+  await Bun.write(`${fixtures}/reconnect-failure.json`, JSON.stringify({ stateSeen: !!state, socketReadyState: socket?.readyState ?? null, observations: reconnectObservations, browsers: browserStatus, coordinator, build }, null, 2)).catch(() => {});
   await Bun.write(`${fixtures}/tool-health-failure.json`, JSON.stringify(await api("/api/tools").catch(error => ({ error: String(error) })), null, 2));
   await Bun.write(`${fixtures}/installed-failure.json`, JSON.stringify({ checks, faultChecks, error: String(error) }, null, 2));
   throw error;
 } finally {
+  await Bun.write(`${fixtures}/reconnect-observations.json`, JSON.stringify(reconnectObservations, null, 2)).catch(() => {});
   importGate?.resolve();
   try { clearDamagedTools(); }
   finally {
