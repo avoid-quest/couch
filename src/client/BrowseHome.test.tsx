@@ -102,7 +102,7 @@ test("a paired remote starts with its current TV session and can browse and sear
   expect(document.querySelector('[data-page="Home"]')?.hasAttribute('hidden')).toBe(false);
   expect(window.location.pathname).toBe("/");
   await act(async () => { window.history.back(); await Bun.sleep(20); });
-  expect(window.location.pathname).toBe("/settings");
+  expect(window.location.pathname).toBe("/settings/playback");
   expect(document.querySelector('[data-page="Settings"]')?.hasAttribute("hidden")).toBe(false);
   await act(async () => { window.history.forward(); await Bun.sleep(20); });
   expect(window.location.pathname).toBe("/");
