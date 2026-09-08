@@ -54,6 +54,7 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
     let secondId = "";
     const reports: { path: string; itemId?: string; session?: string; position?: number }[] = [];
     const opens: { item: string; mode: string; at: string; authorized: boolean }[] = [];
+    const responses: { path: string; status: number }[] = [];
     const proxy = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
       const url = new URL(request.url);
       if (url.pathname.startsWith("/Sessions/Playing")) {
@@ -70,7 +71,9 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
       const headers = new Headers(request.headers);
       headers.delete("host");
       headers.set("accept-encoding", "identity");
-      return fetch(`${config.containerUrl}${url.pathname}${url.search}`, { method: request.method, headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body, signal: request.signal, redirect: "manual" });
+      const response = await fetch(`${config.containerUrl}${url.pathname}${url.search}`, { method: request.method, headers, body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body, signal: request.signal, redirect: "manual" });
+      responses.push({ path: url.pathname, status: response.status });
+      return response;
     } });
     try {
     await clear();
@@ -126,7 +129,10 @@ export async function verifyContinuity(context: MusicContext, other: Awaited<Ret
     await stop();
     assert.ok(opens.every(open => open.authorized), "Both current and prepared native Jellyfin opens retain host authentication");
     await Bun.write(`${artifactDir}/jellyfin-continuity-lifecycle.json`, JSON.stringify({ version: config.version, normalReports, reports, opens }, null, 2));
-    } finally { await proxy.stop(true); }
+    } finally {
+      await Bun.write(`${artifactDir}/jellyfin-continuity-responses.json`, JSON.stringify(responses, null, 2));
+      await proxy.stop(true);
+    }
   }
   await Bun.write(`${artifactDir}/continuity-measurements.json`, JSON.stringify({ measurements, physicalOutput: false, jellyfinQualified: !!process.env.COUCH_TEST_JELLYFIN }, null, 2));
   for (const result of measurements) {
