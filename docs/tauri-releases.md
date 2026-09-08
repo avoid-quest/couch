@@ -6,9 +6,11 @@ storage. The trusted installer enrolls its public key and feed address; the TV
 never discovers trust from an update response. Keep the private key off CI,
 source control and the HTTP-served directory. Back it up before enrolling TVs.
 
-Build the target package in local Ubuntu 24.04 x86_64 Docker from a clean
-committed source revision. The publisher accepts its already qualified local
-directory and needs no GitHub run or artifact download. It checks the clean
+GitHub Actions remains the intended path for PR checks, builds and releases.
+During the temporary capacity pause, build with the same package scripts in
+Ubuntu 24.04 x86_64 Docker on the Mac, from a clean committed source revision.
+The T480 only installs and runs the result. The publisher also accepts an already
+qualified local directory without a GitHub download. It checks the clean
 packaged build identity and the AppImage hash against the matching runtime
 qualification before invoking `bunx --no-install tauri signer sign`.
 
@@ -28,17 +30,21 @@ The signer also accepts `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for a protected key
 Never put a private key or password in command history. The temporary LAN feed
 can use its enrolled HTTP address; moving hosting does not change the format.
 
-For a new local build, set `COUCH_RELEASE_ID` before package preparation using
-the existing positive `BUILD.ATTEMPT` format, for example
-`export COUCH_RELEASE_ID="$(date -u +%Y%m%d%H%M%S).1"`. A UTC build timestamp such as
-`20260908123456.1` sorts after the retained GitHub build `34172088324.1` without
-changing the installed updater's version format. A fresh build needs a new
-identity; requalification, signing and promotion keep the original identity.
-This is a local build identifier, not a GitHub run. Preserve the source revision,
-build inputs, package hashes and qualification evidence with it.
+For a new local build, set `COUCH_RELEASE_ID` to an unused positive
+`BUILD.ATTEMPT` above the published release and below newer hosted build IDs.
+For this delivery, `34172088325.1` follows the retained `34172088324.1` and sorts
+below the already observed hosted run `34206078781`. Verify that the selected
+identity is unused before building. Do not use a wall-clock timestamp that would
+prevent future hosted releases from advancing the channel. Changed bytes need a
+new identity; requalification, signing and promotion keep it. Preserve the source
+revision, inputs, hashes and qualification evidence with every local build.
 
-The installed A-to-B runner accepts a local qualified B directory too. On the
-scheduled Linux qualification host, run:
+The original artifact command is retained for hosted builds:
+`bun scripts/publish-appimage.ts ARTIFACT_ID NEW_PRIVATE_DIRECTORY FEED_DIRECTORY BASE_URL stable|preview NOTES`.
+It still verifies the authenticated archive digest and successful main build.
+
+The installed A-to-B runner accepts either its original artifact ID or a local
+qualified B directory. In the Linux qualification environment, run:
 
 ```sh
 bun scripts/test-installed-update.ts /absolute/retained-A.AppImage \

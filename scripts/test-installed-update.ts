@@ -3,15 +3,16 @@ import { strict as assert } from "node:assert";
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { publish } from "./publish-appimage";
+import { download, publish } from "./publish-appimage";
 
 const [appimage, qualified, directory] = process.argv.slice(2);
-assert.ok(process.argv.length === 5 && appimage && qualified && directory, "Usage: bun scripts/test-installed-update.ts APPIMAGE QUALIFIED_B_DIRECTORY EVIDENCE_DIRECTORY");
+assert.ok(process.argv.length === 5 && appimage && qualified && directory, "Usage: bun scripts/test-installed-update.ts APPIMAGE QUALIFIED_B_DIRECTORY_OR_ARTIFACT_ID EVIDENCE_DIRECTORY");
 assert.ok(await Bun.file(appimage).exists(), "Installed A AppImage must exist");
-const target = resolve(qualified);
 const evidence = resolve(directory);
 await mkdir(evidence, { recursive: true });
 const temporary = await mkdtemp(join(tmpdir(), "couch-installed-update-"));
+const artifactId = /^[1-9]\d*$/.test(qualified) ? qualified : null;
+const target = artifactId ? join(temporary, "target") : resolve(qualified);
 const feed = join(temporary, "feed"), key = join(temporary, "signer.key");
 delete process.env.TAURI_SIGNING_PRIVATE_KEY;
 process.env.TAURI_SIGNING_PRIVATE_KEY_PATH = key;
@@ -23,6 +24,7 @@ async function run(args: string[], quiet = false, env = process.env) {
 let server: ReturnType<typeof Bun.serve> | undefined;
 let activeEvidence = evidence;
 try {
+  if (artifactId) await download(artifactId, target);
   await run(["bunx", "--no-install", "tauri", "signer", "generate", "--ci", "-p", "", "-w", key], true);
   await chmod(key, 0o600);
   server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {

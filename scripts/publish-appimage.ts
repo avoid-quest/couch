@@ -110,8 +110,10 @@ export async function publish(artifact: string, feed: string, baseUrl: string, c
 }
 
 if (import.meta.main) {
-  const [directory, feed, base, channel, notes] = Bun.argv.slice(2);
-  assert.ok(Bun.argv.length === 7 && directory && feed && base && (channel === "stable" || channel === "preview") && notes, "Usage: bun scripts/publish-appimage.ts QUALIFIED_DIRECTORY FEED_DIRECTORY BASE_URL stable|preview NOTES");
+  const args = Bun.argv.slice(2);
+  const [directory, feed, base, channel, notes] = args.slice(-5);
+  assert.ok((args.length === 5 || args.length === 6) && directory && feed && base && (channel === "stable" || channel === "preview") && notes, "Usage: bun scripts/publish-appimage.ts [ARTIFACT_ID] QUALIFIED_DIRECTORY FEED_DIRECTORY BASE_URL stable|preview NOTES");
+  if (args.length === 6) await download(args[0]!, resolve(directory));
   const result = await publish(resolve(directory), resolve(feed), base, channel, notes);
   console.log(`Published ${channel}: ${result.version} (${result.revision})`);
 }

@@ -57,7 +57,7 @@ test("official signing, promotion and renewal preserve bytes; rollback and tampe
 }, 30_000);
 
 test("local publisher and installed-update CLIs need no GitHub download", async () => {
-  const artifact = await fixture(20260908123456), localFeed = join(directory, "local-feed");
+  const artifact = await fixture(34172088325), localFeed = join(directory, "local-feed");
   const bin = join(directory, "bin"), evidence = join(directory, "installed"), called = join(directory, "gh-called");
   await mkdir(bin);
   await Bun.write(join(bin, "gh"), `#!/bin/sh\ntouch '${called}'\nexit 97\n`);
@@ -89,10 +89,26 @@ await Bun.write(evidence + "/fixture-invoked", "local signed target accepted");
   const retained = await fixture(34172088324);
   await publish(retained, localFeed, "http://localhost:8765/tauri/", "preview", "Retained build");
   await execute("publish-appimage.ts", [artifact, localFeed, "http://localhost:8765/tauri/", "preview", "Local qualification"]);
-  expect((await Bun.file(join(localFeed, "preview.json")).json()).releaseId).toBe("20260908123456.1");
+  expect((await Bun.file(join(localFeed, "preview.json")).json()).releaseId).toBe("34172088325.1");
   await expect(publish(retained, localFeed, "http://localhost:8765/tauri/", "preview", "Older build")).rejects.toThrow("backwards");
   await execute("test-installed-update.ts", [join(artifact, "Couch.AppImage"), artifact, evidence]);
   expect(await Bun.file(join(evidence, "fixture-invoked")).text()).toBe("local signed target accepted");
   expect(await Bun.file(called).exists()).toBe(false);
-  expect(await Bun.file(join(artifact, "Couch.AppImage")).text()).toBe("fixture AppImage 20260908123456");
+  expect(await Bun.file(join(artifact, "Couch.AppImage")).text()).toBe("fixture AppImage 34172088325");
+  const futureHosted = await fixture(34206078781);
+  await publish(futureHosted, localFeed, "http://localhost:8765/tauri/", "preview", "Future hosted build");
+  expect((await Bun.file(join(localFeed, "preview.json")).json()).releaseId).toBe("34206078781.1");
+  // The retained artifact forms must still reach the verifier when Actions resumes.
+  // The failing local gh stub proves dispatch without accessing GitHub.
+  for (const [script, args] of [
+    ["publish-appimage.ts", ["123", join(directory, "downloaded"), localFeed, "http://localhost:8765/tauri/", "preview", "Hosted qualification"]],
+    ["test-installed-update.ts", [join(artifact, "Couch.AppImage"), "123", evidence]],
+  ] as const) {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, script), ...args], { cwd: join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" });
+    const errors = await new Response(child.stderr).text();
+    expect(await child.exited).not.toBe(0);
+    expect(errors).not.toContain("Usage:");
+    expect(await Bun.file(called).exists()).toBe(true);
+    await rm(called);
+  }
 }, 30_000);
