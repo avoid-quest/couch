@@ -253,10 +253,13 @@ from an obsolete revision. Up to 100 playlists with 500 entries each persist
 across restart, without autoplay. Host paths and resolved provider streams do
 not appear in playlist HTTP responses.
 
-Queue transitions currently stop and load the next source. The 2026-09-05
-Bandcamp qualification capture measured 298.4 ms of silence between two lossless
-tracks, with unmatched edge samples retained in the measurement's loss/repetition bounds. Gapless
-playback, ReplayGain, cue sheets and crossfade remain open feature gates.
+Consecutive ordinary local and Jellyfin audio tracks prepare the next source
+inside the same native player. Queue edits and Stop cancel obsolete preparation.
+The measured 44,100 Hz FLAC software captures had no inserted boundary silence
+for local, mounted-folder and Jellyfin sources. Slow opens can still leave a gap;
+other formats and physical speaker output need separate qualification. The
+[continuity record](qualification/audio-continuity.md) preserves sample-loss
+bounds, uncertainty and the tested controls. Crossfade remains outside this work.
 
 ### Bandcamp albums and tracks
 
