@@ -57,7 +57,10 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} cross-source inspec
   await render(); expect(paths).toEqual([]); await search("Evening");
   expect(document.body.textContent).toContain("40 results"); expect(document.body.textContent).toContain("55 results");
   scroller.scrollTop = 480;
+  expect(queued).toEqual([]);
+  expect(button("Resume Evening movie")).toBeUndefined();
   await click("Details for Evening movie");
+  expect(queued).toEqual([]);
   let dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("An evening story"); await click("Resume Evening movie", dialog); await click("Add Evening movie to queue", dialog); await click("Close", dialog);
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Details for Evening movie"); expect(scroller.scrollTop).toBe(480);
@@ -71,14 +74,15 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} cross-source inspec
 });
 test("one unavailable source does not hide local results and retries only that source", async () => {
   jellyfinError = true; await render(); await search("Evening");
-  expect(button("Resume Evening movie").disabled).toBe(false); expect(document.body.textContent).toContain("Jellyfin server unavailable");
+  expect(button("Details for Evening movie").disabled).toBe(false); expect(document.body.textContent).toContain("Jellyfin server unavailable");
   const count = paths.filter(path => path.startsWith("/api/library")).length;
   jellyfinError = false; await click("Retry Jellyfin");
-  expect(button("Play Evening song").disabled).toBe(false); expect(paths.filter(path => path.startsWith("/api/library")).length).toBe(count);
+  expect(button("Details for Evening song").disabled).toBe(false); expect(paths.filter(path => path.startsWith("/api/library")).length).toBe(count);
 });
 test("missing folders retain searchable items with disabled play and queue", async () => {
   unavailable = true; connectedJellyfin = false; await render(); await search("Evening");
-  expect(document.body.textContent).toContain("NAS: folder unavailable"); expect(button("Resume Evening movie").disabled).toBe(true); expect(button("Add Evening movie to queue").disabled).toBe(true);
+  expect(document.body.textContent).toContain("NAS: folder unavailable"); expect(button("Add Evening movie to queue").disabled).toBe(true);
+  await click("Details for Evening movie"); expect(button("Resume Evening movie").disabled).toBe(true); await click("Close");
   expect(document.body.textContent).toContain("Jellyfin is not connected"); expect(paths.some(path => path.startsWith("/api/jellyfin/items"))).toBe(false);
 });
 test("pagination is independent, new searches reset both pages, and empty results are explicit", async () => {
@@ -95,7 +99,7 @@ test("new queries cancel delayed old responses and disconnected playback stays d
   expect(document.body.textContent).toContain("Searching Library");
   await search("new"); await act(async () => release?.()); await flush();
   expect(document.body.textContent).toContain("New movie"); expect(document.body.textContent).not.toContain("Evening movie");
-  await render(true, true, false); expect(button("Resume New movie").disabled).toBe(true); expect(button("Add New movie to queue").disabled).toBe(false);
+  await render(true, true, false); await click("Details for New movie"); expect(button("Resume New movie").disabled).toBe(true); expect(button("Add New movie to queue").disabled).toBe(false); await click("Close");
   await render(true, false); expect(button("Add New movie to queue").disabled).toBe(true);
 });
 
