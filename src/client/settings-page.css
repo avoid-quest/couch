@@ -21,7 +21,7 @@
 .settings-dialog .settings-nav { max-width: none; }
 @media (min-width: 1024px) {
   .settings-page-detail .settings-layout { grid-template-columns: 11rem minmax(0, 1fr); gap: 2rem; }
-  .settings-page-detail .settings-nav { display: grid; position: sticky; top: 1rem; }
+  .settings-page-detail .settings-nav { display: grid; position: sticky; top: calc(var(--shell-header, 0px) + 1rem); }
   .settings-page-detail .settings-link-arrow { display: none; }
   .settings-page-detail .settings-section-header { min-height: 44px; justify-content: center; }
   .settings-page-detail .settings-back { display: none; }

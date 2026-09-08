@@ -2,10 +2,12 @@
 .couch-shell { --shell-header: 72px; --shell-rail: 195px; --shell-footer: 74px; --shell-gutter: 42px; }
 .couch-shell.remote-shell { max-width: 1440px; padding: 0; margin: auto; }
 .couch-shell .app-header { position: sticky; top: 0; z-index: 20; background: var(--background); min-height: var(--shell-header); padding: 12px var(--shell-gutter); gap: 18px; border-bottom: 1px solid var(--border); }
-.couch-shell .brand { font-size: 26px; font-weight: 750; letter-spacing: -1.8px; gap: 4px; }
+.couch-shell .brand { flex-shrink: 0; font-size: 26px; font-weight: 750; letter-spacing: -1.8px; gap: 4px; }
 .couch-shell .brand-dot { width: 7px; height: 7px; margin-top: 17px; border-radius: 50%; background: #c4b998; }
 .couch-shell .tv-name { color: var(--muted-foreground); font-size: 13px; }
-.couch-shell .header-status { margin-left: auto; gap: 16px; }
+.couch-shell .header-status { margin-left: auto; gap: 16px; min-width: 0; flex-wrap: nowrap; }
+.couch-shell .person-name { min-width: 44px; flex-shrink: 1; }
+.couch-shell .person-name span { min-width: 0; }
 .couch-shell .header-status [role="status"] { font-size: 12px; }
 .couch-shell .watching-profile { min-height: 44px; width: 44px; height: 44px; padding: 10px; }
 .couch-shell .profile-name { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; font-size: 13px; font-weight: 600; }
@@ -59,8 +61,6 @@
 .couch-shell .media-browser > section > .browse-home,
 .couch-shell .media-browser > section > .session-home { padding: 0; }
 .couch-shell .settings-page > h1 { font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }
-@media (max-width: 959px) {
-}
 
 .couch-shell .page-title { margin-bottom: 26px; font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }
 .couch-shell .browse-source-list { display: flex; flex-wrap: wrap; gap: 14px; }
@@ -72,4 +72,4 @@
   .couch-shell.remote-shell .profile-name { max-width: 150px; overflow-wrap: anywhere; white-space: normal; }
 }
 
-.couch-shell .header-clock { font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--foreground); }
+.couch-shell .header-clock { flex-shrink: 0; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--foreground); }
