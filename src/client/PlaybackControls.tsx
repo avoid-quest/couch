@@ -1,4 +1,3 @@
-import { ChevronUp, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Action, PlayerState, SessionState } from "../shared/protocol";
@@ -9,6 +8,7 @@ import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";
 import { WatchingProfile } from "./WatchingProfile";
+import { playbackCapabilities, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
 
 const playbackLabels: Record<PlayerState["status"], string> = {
   unavailable: "No player", idle: "Ready", loading: "Loading…", playing: "Playing",
@@ -46,28 +46,12 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
 }) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  const available = connected && !!player && player.status !== "unavailable";
-  const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
-  const audioReady = !state?.systemAudio || state.systemAudio.volume !== null;
-  const transportReady = available && !!player?.playbackId && ["playing", "paused"].includes(player.status);
+  const { available, active, audioReady, transportReady, seekable } = playbackCapabilities(state, connected);
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
-  const seekable = !!player?.seekable && !current?.live;
-  const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
-  const hasNext = currentIndex >= 0 && currentIndex < (state?.queue.length ?? 0) - 1;
   const hasMedia = !!current;
   const artwork = connected && radio ? state?.radioProgramme?.artworkUrl || current?.thumbnail : current?.thumbnail;
-  const seekBy = (seconds: number) => {
-    if (player?.playbackId && transportReady && seekable) void run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) });
-  };
-
   const session = presentation === "session";
-  const stop = <Button variant="ghost" size="icon" className="icon-button" aria-label="Stop playback" title="Stop playback" disabled={!available || !active}
-    onClick={() => void run({ type: "stop" })}><Icon name="stop" /></Button>;
-  const volume = <div className="volume-control">
-    {state?.systemAudio ? <Button variant="ghost" size="icon" className="icon-button" aria-label={state.systemAudio.muted ? "Unmute TV" : "Mute TV"} title={state.systemAudio.muted ? "Unmute TV" : "Mute TV"} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" />}
-    <RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
-      onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>
-  </div>;
+  const volume = state && <PlaybackVolume state={state} connected={connected} run={run} />;
   const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
   return <div className={`player-controls${session ? " session-playback" : ""}`}>
@@ -103,17 +87,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
       <div className="time-labels"><span>{time(player?.position || 0)}</span><span>{player?.duration || current?.duration ? time(player?.duration || current?.duration || 0) : ""}</span></div>
     </div>}
     {hasMedia && <div className="transport-row">
-      <div className="transport-buttons" role="group" aria-label="Playback controls">
-        {seekable && <Button variant="ghost" size="icon" className="icon-button flex-col gap-0" aria-label="Seek backward 10 seconds" title="Back 10 seconds" disabled={!transportReady} onClick={() => seekBy(-10)}><RotateCcw aria-hidden="true" /><span aria-hidden="true" className="text-[10px] leading-none">10</span></Button>}
-        <Button size="icon" className="play-button" aria-label={player?.status === "playing" ? "Pause" : "Resume"} title={player?.status === "playing" ? "Pause" : "Resume"} disabled={!transportReady}
-          onClick={() => { if (player?.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" }); }}><Icon name={player?.status === "playing" ? "pause" : "play"} /></Button>
-        {seekable && <Button variant="ghost" size="icon" className="icon-button flex-col gap-0" aria-label="Seek forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" /><span aria-hidden="true" className="text-[10px] leading-none">10</span></Button>}
-        {hasNext && <Button variant="ghost" size="icon" className="icon-button" aria-label="Next in queue" title="Next in queue" disabled={!transportReady}
-          onClick={() => { if (player?.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" /></Button>}
-        {stop}
-        {settings}
-        {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp aria-hidden="true" /></Button>}
-      </div>
+      {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} onExpand={onExpand} />}
       {session ? <div className="session-volume-row">{volume}{onRemote && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}

@@ -16,7 +16,7 @@ const state: SessionState = {
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
 async function render(value = state, connected = true, active = true, command?: (action: Action) => Promise<boolean>) {
   const { SessionBar } = await import("./SessionBar");
-  await act(async () => root.render(active ? <SessionBar state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} onOpen={() => browsed.push("Home")} run={command ?? (async action => { actions.push(action); return true; })} /> : null));
+  await act(async () => root.render(active ? <SessionBar state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} onOpen={() => browsed.push("Home")} onRemote={() => browsed.push("Remote")} run={command ?? (async action => { actions.push(action); return true; })} /> : null));
 }
 beforeEach(async () => {
   actions.length = 0; browsed.length = 0;
@@ -38,24 +38,25 @@ afterEach(async () => {
 test("compact footer sends the current transport commands and opens the session", async () => {
   await render();
   await act(async () => button("Open current playback: current").click());
-  for (const label of ["Pause playback", "Next in queue", "Stop playback"]) await act(async () => button(label).click());
-  expect(browsed).toEqual(["Home"]);
+  for (const label of ["Pause", "Next in queue", "Stop playback"]) await act(async () => button(label).click());
+  await act(async () => button("Remote").click());
+  expect(browsed).toEqual(["Home", "Remote"]);
   expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: true }, { type: "next", playbackId: "playback" }, { type: "stop" }]);
 });
 test("loading allows Stop, offline disables commands, and the final entry omits Next", async () => {
   await render({ ...state, player: { ...state.player, status: "loading" } });
-  expect(button("Resume playback").disabled).toBe(true);
+  expect(button("Resume").disabled).toBe(true);
   expect(button("Next in queue").disabled).toBe(true);
   expect(button("Stop playback").disabled).toBe(false);
   await render(state, false);
-  for (const label of ["Pause playback", "Next in queue", "Stop playback"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
+  for (const label of ["Pause", "Next in queue", "Stop playback"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
   expect(actions).toEqual([]);
   await render({ ...state, queue: [state.queue[1]!] });
   expect(button("Next in queue")).toBeUndefined();
 });
 test("live playback can pause and stop without seek controls, and idle hides the footer", async () => {
   await render({ ...state, queue: [{ ...state.queue[1]!, live: true, kind: "radio" }], player: { ...state.player, status: "paused", seekable: false } });
-  await act(async () => button("Resume playback").click());
+  await act(async () => button("Resume").click());
   expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: false }]);
   expect(document.querySelector('[aria-label^="Seek"]')).toBeNull();
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
@@ -66,7 +67,7 @@ test("Next disappearing restores an available transport and loading falls back t
   await render();
   button("Next in queue").focus();
   await render({ ...state, queue: [state.queue[1]!] });
-  expect(document.activeElement === button("Pause playback")).toBe(true);
+  expect(document.activeElement === button("Pause")).toBe(true);
   await render({ ...state, queue: [state.queue[1]!], player: { ...state.player, status: "loading" } });
   expect(document.activeElement === button("Stop playback")).toBe(true);
 });
@@ -102,4 +103,40 @@ test("removing the focused footer returns to the active page without navigating 
   saved.focus();
   await frame();
   expect(document.activeElement === saved).toBe(true);
+});
+
+test("footer volume uses the observed output and keeps keyboard edits through live updates", async () => {
+  const systemAudio = { selectedOutput: "hdmi", observedOutput: "hdmi", volume: 30, muted: false, error: null };
+  await render({ ...state, systemAudio });
+  await act(async () => button("Mute TV").click());
+  expect(actions).toEqual([{ type: "mute", muted: true }]);
+  const slider = document.querySelector<HTMLElement>('[role="slider"][aria-label="Volume"]')!;
+  slider.focus();
+  await act(async () => slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+  expect(actions.at(-1)).toEqual({ type: "volume", volume: 31 });
+  await render({ ...state, systemAudio, player: { ...state.player, position: 13, volume: 30 } });
+  expect(document.activeElement === slider).toBe(true);
+  expect(slider.getAttribute("aria-valuenow")).toBe("31");
+  await act(async () => button("Pause").focus());
+  expect(slider.getAttribute("aria-valuenow")).toBe("30");
+  await render({ ...state, systemAudio: { ...systemAudio, muted: true } });
+  await act(async () => button("Unmute TV").click());
+  expect(actions.at(-1)).toEqual({ type: "mute", muted: false });
+  await render({ ...state, systemAudio: { ...systemAudio, volume: null } });
+  expect(button("Mute TV").disabled).toBe(true);
+  expect(document.querySelector('[data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(true);
+  await render(state);
+  expect(button("Mute TV")).toBeUndefined();
+  expect(document.querySelector('[data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(false);
+});
+
+test("footer seek clamps to the item and current quality is available in its gear", async () => {
+  await render({ ...state, player: { ...state.player, position: 4 } });
+  await act(async () => button("Seek backward 10 seconds").click());
+  await render({ ...state, player: { ...state.player, position: 98 } });
+  await act(async () => button("Seek forward 10 seconds").click());
+  expect(actions).toEqual([{ type: "seek", playbackId: "playback", position: 0 }, { type: "seek", playbackId: "playback", position: 100 }]);
+  await render({ ...state, queue: [{ ...state.queue[1]!, source: "web:https://www.youtube.com/watch?v=abc", quality: "auto" }], player: { ...state.player, tracks: [{ id: "1", index: 0, kind: "video", label: "Video", language: "", selected: true }] } });
+  await act(async () => button("Playback settings").click());
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Quality");
 });
