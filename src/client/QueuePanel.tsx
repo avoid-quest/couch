@@ -166,7 +166,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
                 <p id="media-link-help" className="queue-form-help">{sourceKind === "webpage" ? "A video or album page from a supported site." : "A direct link to a video, audio file, or live stream."}</p>
               </div>
               <div className="queue-form-field"><Label htmlFor="media-title">Title <span className="optional">optional</span></Label><Input id="media-title" placeholder={sourceKind === "webpage" ? "Fetched automatically" : "Give it a name"} maxLength={200} value={title} onChange={event => setTitle(event.target.value)} disabled={!connected || adding} /></div>
-              {offersVideoQuality && <QualitySelect id="media-quality" value={quality} disabled={!connected || adding} onChange={setQuality} />}
+              {offersVideoQuality && <QualitySelect id="media-quality" label="This video quality" description="Overrides your default for this video only." value={quality} disabled={!connected || adding} onChange={setQuality} />}
               <Button type="submit" className="queue-add-submit" disabled={!connected || adding || !source.trim()}><Plus aria-hidden="true" />{adding ? "Adding…" : "Add to queue"}</Button>
             </form>
           </DialogContent>

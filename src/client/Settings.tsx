@@ -207,10 +207,20 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
     </div>
   </div>;
 
+  const qualitySettings = <div className="space-y-3">
+    <QualitySelect id="default-video-quality" label="Default online-video quality" value={videoQualityPreference.quality} onChange={videoQualityPreference.save} />
+    <p className="text-muted-foreground">The recommended setting plays up to 1080p. Saved in this browser for new online videos.</p>
+    <p className="text-muted-foreground">Choose another quality for an individual video when you play or add it.</p>
+    {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
+  </div>;
+
   const content = <>
       {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
-      {!setup && !section && <div className="grid gap-3" aria-label="Settings sections">
-        {settingsGroups.map(group => <Button key={group.id} variant="outline" className="h-auto min-h-16 justify-between gap-3 whitespace-normal px-4 py-3 text-left" data-settings-group={group.id} onClick={() => { focusSection.current = true; setSection(group.section); }}><span><span className="block font-medium">{group.title}</span><span className="block text-sm font-normal text-muted-foreground">{group.description}</span></span><ChevronRight aria-hidden="true" /></Button>)}
+      {!setup && !section && <div className="space-y-6">
+        <section className="rounded-lg border p-4" aria-label="Online-video default">{qualitySettings}</section>
+        <div className="grid gap-3" aria-label="Settings sections">
+          {settingsGroups.map(group => <Button key={group.id} variant="outline" className="h-auto min-h-16 justify-between gap-3 whitespace-normal px-4 py-3 text-left" data-settings-group={group.id} onClick={() => { focusSection.current = true; setSection(group.section); }}><span><span className="block font-medium">{group.title}</span><span className="block text-sm font-normal text-muted-foreground">{group.description}</span></span><ChevronRight aria-hidden="true" /></Button>)}
+        </div>
       </div>}
       {!setup && section && <div className="space-y-3"><Button variant="ghost" className="min-h-11" data-back onClick={() => { const id = group.id; setSection(""); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-settings-group="${id}"]`)?.focus()); }}><ArrowLeft aria-hidden="true" />All settings</Button><h3 className="font-medium">{group.title}</h3></div>}
       <Tabs value={section} onValueChange={setSection} activationMode={host ? "manual" : "automatic"} className="min-w-0 gap-4">
@@ -292,10 +302,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           {profile && preferences ? <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={onCommand} /> : <p className="text-muted-foreground">Connect to the TV to see the watching profile's saved defaults.</p>}
         </TabsContent>
         <TabsContent value="remote" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
-          <QualitySelect id="default-video-quality" label="Default online-video quality" value={videoQualityPreference.quality} onChange={videoQualityPreference.save} />
-          <p className="text-muted-foreground">Saved in this browser for new online videos. You can choose another quality when adding a video.</p>
-          <p className="text-muted-foreground">Existing queue entries, other remotes and the TV's display resolution stay unchanged.</p>
-          {videoQualityPreference.error && <Alert variant="destructive"><AlertDescription>{videoQualityPreference.error}</AlertDescription></Alert>}
+          {qualitySettings}
         </TabsContent>
         <TabsContent value="sources" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`} data-tv-local-only={host ? "" : undefined}>
           <SettingsSources setupOnly={setup} credentials={credentials} connected={connected} canManage={!!host || administrator} version={jellyfinVersion} radioVersion={radioVersion} libraryVersion={libraryVersion} />
