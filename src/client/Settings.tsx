@@ -207,7 +207,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
             <p className="font-medium">TV name</p><p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
             <p className="text-muted-foreground">{host ? "Use an administrator remote to change this TV's settings." : credentials ? "An administrator can change this TV's name." : "Pair this browser to control the TV."}</p>
           </div>}
-          {administrator && credentials && open && section === "general" && <StartupSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
+          {administrator && credentials && open && section === "general" && <StartupSettings key={`startup:${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
           <div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={() => setSection("connection")}>Pair again / manage remotes</Button>{administrator && <Button variant="outline" className="min-h-11" onClick={() => setSection("advanced")}>Effective overrides</Button>}</div>
           {administrator && credentials && <RestartSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
           {host && !administratorClaimed && identity?.claimAvailable && <>
