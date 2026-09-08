@@ -33,7 +33,9 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); window.happyDOM.abort();
+  await act(async () => root.unmount());
+  await new Promise(resolve => setTimeout(resolve, 0));
+  request.mockRestore(); window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
