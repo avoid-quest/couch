@@ -689,7 +689,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.currentEntryId = next.id;
         state.presentationId = player.playbackId;
         state.player = { ...state.player, playbackId: player.playbackId, status: "loading" };
-        progress.begin(next, player.playbackId!, state.activeProfile.id);
+        const mediaId = playbackMediaId(next);
+        progress.begin(next, player.playbackId!, mediaId ? store.progressOwner(mediaId) ?? state.activeProfile.id : state.activeProfile.id);
       }
       // Native Stop can acknowledge the retired source while another source is still resolving.
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
