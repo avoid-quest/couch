@@ -22,6 +22,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import type { TvAppearance } from "../shared/appearance";
 import { PairedRemotes } from "./PairedRemotes";
 import { UpdatesSettings } from "./UpdatesSettings";
+import { BluetoothSettings } from "./BluetoothSettings";
 import { SoundSettings } from "./SoundSettings";
 import { DisplaySettings } from "./DisplaySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
@@ -194,6 +195,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
           <TabsTrigger value="sources" className="min-h-11" data-tv-local-only={host ? "" : undefined}>Sources</TabsTrigger>
           <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
+          {administrator && <TabsTrigger value="bluetooth" className="min-h-11">Bluetooth</TabsTrigger>}
           {administrator && <TabsTrigger value="sound" className="min-h-11">Sound</TabsTrigger>}
           {administrator && <TabsTrigger value="display" className="min-h-11">Display</TabsTrigger>}
           <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>
@@ -207,6 +209,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           <Button variant="outline" className="min-h-11" onClick={() => setSection("connection")}>Open Connection</Button>
         </TabsContent>}
         {administrator && credentials && <TabsContent value="advanced" className="min-w-0">{open && section === "advanced" && <AdvancedSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</TabsContent>}
+        {administrator && credentials && <TabsContent value="bluetooth" className="min-w-0">{open && section === "bluetooth" && <BluetoothSettings credentials={credentials} connected={connected} />}</TabsContent>}
         {administrator && credentials && <TabsContent value="sound" className="min-w-0">{open && section === "sound" && <SoundSettings credentials={credentials} connected={connected} />}</TabsContent>}
         {administrator && credentials && <TabsContent value="display" className="min-w-0">{open && section === "display" && <DisplaySettings credentials={credentials} connected={connected} />}</TabsContent>}
         <TabsContent value="appearance" className="min-w-0"><AppearanceSettings native={!!host} credentials={credentials} connected={connected} administrator={administrator || !!host && identity?.authority === "host"} appearance={appearance} /></TabsContent>

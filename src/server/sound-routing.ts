@@ -32,7 +32,7 @@ export function createSoundRouting(options: Options) {
   const profileFor = (inventory: SoundInventory, name: string) => {
     const card = output(inventory, name)?.card;
     const profile = inventory.profiles?.find(profile => profile.card === card && profile.active);
-    return profile ? { card: profile.card, profile: profile.id } : null;
+    return profile ? { card: profile.card, profile: profile.id, ...(profile.bluetoothAddress ? { bluetoothAddress: profile.bluetoothAddress } : {}) } : null;
   };
   const refresh = async () => {
     let inventory = await backend.inventory();
@@ -101,7 +101,7 @@ export function createSoundRouting(options: Options) {
   const timer = setInterval(() => void check(), 500);
   void check();
   return {
-    get state() { return { ...snapshot }; },
+    get state() { const address = options.savedProfile?.()?.bluetoothAddress; return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) }; },
     check,
     prepare() {
       if (changing || closed || !selected || snapshot.error) throw new ControllerError(snapshot.error || "The audio output is changing. Try again.", 409);

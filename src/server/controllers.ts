@@ -41,7 +41,7 @@ export async function settingField(request: Request, field: string) {
   return (value as Record<string, unknown>)[field];
 }
 
-export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode }: { store: Store; onChange: () => void; onRevoke?: (id: string) => void; recoveryCode?: string }) {
+export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode }: { store: Store; onChange: (controller?: import("../shared/controllers").Controller) => void; onRevoke?: (id: string) => void; recoveryCode?: string }) {
   if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("The administrator recovery code must contain 32 to 256 hexadecimal characters.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
@@ -93,7 +93,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
           const value = await settingField(request, device[2]);
           administrator();
           const controller = device[2] === "name" ? store.renameController(id, value) : store.setControllerRole(id, value);
-          onChange();
+          onChange(controller);
           return json({ controller });
         }
         if (path === "/api/controllers/claim-code") {

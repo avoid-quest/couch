@@ -15,6 +15,11 @@ pub struct ConnectionInfo {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SidecarMessage {
+    Bluetooth {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        action: crate::bluetooth::Action,
+    },
     AppimageQuiesced { nonce: String, closed: bool, error: Option<String> },
     AppimageUpdate {
         #[serde(rename = "requestId")]

@@ -1261,3 +1261,28 @@ test("authenticated first-run steps broadcast to both phones and survive coordin
   expect(restarted.commands).toEqual([]);
   expect(resumed.state.queue).toEqual([]);
 });
+
+test("Bluetooth pairing ownership ends on administrator demotion, revocation and remote disconnect", async () => {
+  const calls: import("../shared/bluetooth").BluetoothAction[] = [];
+  const disconnected = Promise.withResolvers<void>();
+  let onCancel: (() => void) | undefined;
+  const { hub } = fixture(undefined, undefined, undefined, { nativeBluetooth: async action => { calls.push(action); if (action.op === "cancel") onCancel?.(); return { adapter: "available", devices: [], operation: null }; } });
+  const first = await pair(hub), second = await pair(hub);
+  await claimAdministrator(hub, first);
+  const { controller } = await (await controllerApi(hub, second, "/api/controllers/me")).json() as { controller: { id: string } };
+  const role = (value: string) => controllerApi(hub, first, `/api/controllers/${controller.id}/role`, "POST", { role: value });
+  expect((await role("administrator")).status).toBe(200);
+  expect((await controllerApi(hub, second, "/api/bluetooth", "POST", { action: { op: "pair", device: "AA:BB:CC:DD:EE:FF" } })).status).toBe(200);
+  expect(calls.at(-1)).toMatchObject({ op: "pair", owner: controller.id });
+  expect((await role("controller")).status).toBe(200);
+  expect(calls.at(-1)).toEqual({ op: "cancel", owner: controller.id });
+  expect((await controllerApi(hub, second, "/api/bluetooth")).status).toBe(403);
+  expect((await role("administrator")).status).toBe(200);
+  const peer = new Peer(hub, second); await peer.ready();
+  const closed = new Promise(resolve => peer.socket.addEventListener("close", resolve, { once: true }));
+  calls.length = 0; onCancel = disconnected.resolve; peer.socket.close(); await Promise.all([closed, disconnected.promise]);
+  expect(calls).toContainEqual({ op: "cancel", owner: controller.id });
+  calls.length = 0;
+  expect((await controllerApi(hub, first, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+  expect(calls).toContainEqual({ op: "cancel", owner: controller.id });
+});

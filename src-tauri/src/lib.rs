@@ -1,5 +1,6 @@
 mod appimage_update;
 mod diagnostics;
+mod bluetooth;
 mod display;
 mod player;
 mod protocol;
@@ -22,6 +23,7 @@ use tokio::sync::watch;
 use protocol::{ConnectionInfo, PlayerState, SidecarMessage, VideoRect};
 
 struct Host {
+    bluetooth: bluetooth::Bluetooth,
     connection: watch::Sender<Option<Result<ConnectionInfo, String>>>,
     child: Mutex<Option<CommandChild>>,
     player: mpsc::Sender<player::Request>,
@@ -236,6 +238,7 @@ pub fn run() {
             }
             let (mut events, child) = sidecar.spawn()?;
             app.manage(Host {
+                bluetooth: bluetooth::Bluetooth::default(),
                 connection,
                 child: Mutex::new(Some(child)),
                 player: player_sender,
@@ -298,6 +301,19 @@ pub fn run() {
                                         }
                                     }
                                 }
+                                Ok(SidecarMessage::Bluetooth { request_id, action }) => {
+                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                        let handle = handle.clone();
+                                        tauri::async_runtime::spawn(async move {
+                                            let host = handle.state::<Host>();
+                                            let result = host.bluetooth.request(action).await;
+                                            host.report_message(match result {
+                                                Ok(state) => serde_json::json!({"type":"bluetooth","requestId":request_id,"state":state}),
+                                                Err(error) => serde_json::json!({"type":"bluetooth","requestId":request_id,"error":error}),
+                                            });
+                                        });
+                                    }
+                                }
                                 Ok(SidecarMessage::Display { request_id, action }) => {
                                     if uuid::Uuid::parse_str(&request_id).is_ok() {
                                         let _ = host.display.send(display::Request { id: request_id, action });
@@ -350,6 +366,7 @@ pub fn run() {
                 if host.shutting_down.swap(true, Ordering::Relaxed) {
                     return;
                 }
+                host.bluetooth.close();
                 let mut exited = host.child_exited.subscribe();
                 if let Some(child) = host.child.lock().expect("sidecar lock poisoned").as_mut() {
                     if let Err(error) = child.write(b"{\"type\":\"shutdown\"}\n") {
