@@ -2,6 +2,8 @@ import { strict as assert } from "node:assert";
 import { remoteSocketUrl } from "./build";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import { UiDriver } from "./ui";
+import { addTVFolder } from "./folder-settings";
+import type { LibraryItem } from "../../src/shared/library";
 
 const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444";
 const checks: string[] = [];
@@ -92,6 +94,24 @@ try {
   await command({ type: "pause", playbackId: state!.player.playbackId!, paused: false });
   await until("explicit resume restores native audio on HDMI", () => state?.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_hdmi");
   await command({ type: "stop" }); await until("idle before restart", () => state?.player.status === "idle");
+  await addTVFolder(ui, until, "sound-fixtures");
+  let tracks: LibraryItem[] = [];
+  await until("lossless boundary sources scanned", async () => {
+    tracks = (await api("/api/library/items?q=Sound-&limit=10")).items.sort((a: LibraryItem, b: LibraryItem) => a.title.localeCompare(b.title));
+    return tracks.length === 2;
+  });
+  for (const [index, track] of tracks.entries()) await command({ type: "enqueueLibrary", itemId: track.id, entryId: `boundary-${index}` });
+  await command({ type: "play", entryId: "boundary-0", fromStart: true });
+  await until("native player adopts the queued successor", () => state?.currentEntryId === "boundary-1" && state.player.status === "playing");
+  const successorId = state!.player.playbackId!;
+  await pactl("unload-module", hdmi);
+  await until("audio loss pauses the adopted successor with its current identity", () => state?.player.playbackId === successorId && state.player.status === "paused" && !!state.player.error);
+  hdmi = await pactl("load-module", "module-null-sink", "sink_name=couch_sound_hdmi", "sink_properties=device.description=HDMI_Test");
+  await until("successor remains paused after output reconnects", () => state?.systemAudio?.error === null && state.player.status === "paused");
+  await Bun.sleep(1000); assert.equal(state!.player.status, "paused");
+  await command({ type: "pause", playbackId: successorId, paused: false });
+  await until("explicit successor resume retains its identity and restores audio", () => state?.player.playbackId === successorId && state.player.status === "playing" && state.systemAudio?.observedOutput === "couch_sound_hdmi");
+  await command({ type: "stop" }); await until("idle after resumed successor", () => state?.player.status === "idle");
   socket.close(); await wd(`/session/${sessionId}`, undefined, "DELETE"); sessionId = ""; state = null;
   await launch(); await connect();
   await until("restart retains output and delay without autoplay", () => state?.systemAudio?.selectedOutput === "couch_sound_hdmi" && state.preferences?.device.audioDelay === 0.25 && state.player.status === "idle");
