@@ -22,7 +22,12 @@ data=${data#\"}; data=${data%\"}
 failed="/var/lib/couch-installer/failed-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0700 "$failed"
 cp -a "$data" "$failed/data"
-cp -a "$application/Couch.AppImage" "$application/build.json" "$failed/"
+cp -a "$application/build.json" "$failed/"
+if [[ -e $application/Couch.AppImage || -L $application/Couch.AppImage ]]; then
+    cp -a "$application/Couch.AppImage" "$failed/"
+else
+    printf 'The current AppImage was absent before recovery.\n' > "$failed/missing-appimage.txt"
+fi
 sync -f "$failed"
 runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/Couch.AppImage.new; chmod 0700 /var/lib/couch/application/Couch.AppImage.new' < "$backup/Couch.AppImage"
 runuser -u couch-tv -- "$application/Couch.AppImage.new" --version > "$failed/recovery-build.json"
