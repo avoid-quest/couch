@@ -35,3 +35,15 @@
 .settings-category select { width: 100%; min-height: 44px; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); color: var(--foreground); font: inherit; }
 .settings-category select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 @media (min-width: 1024px) { .settings-category { display: none; } }
+
+/* Match the native shell's pixel sizing inside the zoomed TV interface. */
+.couch-shell.tv-shell .settings-content { max-width: none; }
+.couch-shell.tv-shell .settings-content .quality-select { width: 100%; max-width: 480px; }
+.couch-shell.tv-shell .settings-page button,
+.couch-shell.tv-shell .settings-page input,
+.couch-shell.tv-shell .settings-page select,
+.couch-shell.tv-shell .settings-page [role="combobox"] { font-size: 18px; }
+.couch-shell.tv-shell .settings-link { font-size: 18px; line-height: 1.3; padding: 12px 14px; }
+@media (min-width: 1024px) {
+  .couch-shell.tv-shell .settings-page-detail .settings-layout { grid-template-columns: 176px minmax(0, 1fr); gap: 24px; }
+}
