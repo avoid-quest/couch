@@ -11,6 +11,7 @@ import { QualitySelect } from "./QualitySelect";
 import { useEnqueueVideoQuality } from "./video-quality";
 
 type Props = {
+  initialItem?: ProviderItem;
   origin: string;
   token: string;
   connected: boolean;
@@ -49,7 +50,8 @@ function duration(seconds: number) {
 }
 
 export function ProviderPanel(props: Props) {
-  const [provider, setProvider] = useState<ProviderId>("youtube");
+  const [provider, setProvider] = useState<ProviderId>(props.initialItem?.provider ?? "youtube");
+  const [initialItem, setInitialItem] = useState(props.initialItem);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality);
   const enqueue = async (item: ProviderItem, playNow: boolean) => {
     const ok = await props.onEnqueue(item, playNow, item.provider === "bandcamp" ? undefined : quality);
@@ -58,17 +60,17 @@ export function ProviderPanel(props: Props) {
   };
   return <section className="provider-panel catalog-panel space-y-5" aria-label="Online media">
     <div className="provider-heading catalog-heading flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold tracking-tight">Online media</h2><p className="mt-1 text-sm text-muted-foreground">{provider === "bandcamp" ? "Albums and tracks for your TV." : "Find something to watch."}</p></div>{provider !== "bandcamp" && <QualitySelect id="provider-quality" label="Next video quality" description="Overrides your default for the next video you play or add." value={quality} disabled={!props.connected} onChange={setQuality} />}</div>
-    <Tabs value={provider} onValueChange={value => setProvider(value as ProviderId)}>
+    <Tabs value={provider} onValueChange={value => { setInitialItem(undefined); setProvider(value as ProviderId); }}>
       <TabsList className="provider-selector h-auto w-full" aria-label="Online providers">{(Object.keys(providers) as ProviderId[]).map(id => <TabsTrigger key={id} value={id} className="min-h-11 flex-1">{providers[id].name}</TabsTrigger>)}</TabsList>
-      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} onEnqueue={enqueue} provider={provider} /></TabsContent>
+      <TabsContent value={provider} className="mt-4"><ProviderBrowser key={`${props.origin}:${props.token}:${provider}`} {...props} initialItem={initialItem} onEnqueue={enqueue} provider={provider} /></TabsContent>
     </Tabs>
   </section>;
 }
 
-function ProviderBrowser({ provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum }: Props & { provider: ProviderId }) {
+function ProviderBrowser({ initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum }: Props & { provider: ProviderId }) {
   const info = providers[provider];
   const [input, setInput] = useState("");
-  const [trail, setTrail] = useState<Location[]>([{ request: {}, title: info.name }]);
+  const [trail, setTrail] = useState<Location[]>([{ request: {}, title: info.name }, ...(initialItem?.provider === provider ? [{ request: { url: initialItem.url }, title: initialItem.title }] : [])]);
   const [page, setPage] = useState<ProviderPage | null>(null);
   const [view, setView] = useState<"browse" | "saved">("browse");
   const [loading, setLoading] = useState(false);

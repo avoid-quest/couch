@@ -6,8 +6,8 @@ import { MediaArtwork } from "./ProviderPanel";
 import { Button } from "@/components/ui/button";
 import type { ForLaterItem } from "../shared/for-later";
 
-export function ForLaterSection({ origin, token, connected, canPlay, version, inspect = false }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean; version: number; inspect?: boolean;
+export function ForLaterSection({ origin, token, connected, canPlay, version, inspect = false, onFind }: {
+  origin: string; token: string; connected: boolean; canPlay: boolean; version: number; inspect?: boolean; onFind?: () => void;
 }) {
   const [detail, setDetail] = useState<ForLaterItem | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
@@ -60,17 +60,17 @@ export function ForLaterSection({ origin, token, connected, canPlay, version, in
     <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title} from For later`} onClick={() => void update(item, "remove", index)}><X aria-hidden="true" />Remove</Button>
   </div>;
   return <section className="catalog-panel space-y-4" aria-labelledby="for-later-title">
-    <div><h2 ref={heading} tabIndex={-1} id="for-later-title" className={inspect ? "sr-only focus:not-sr-only" : "text-2xl font-semibold"}>For later</h2><p className="text-sm text-muted-foreground">Shared by everyone on this TV. Save items from Search or the queue. They stay here until you remove them.</p></div>
+    <div><h2 ref={heading} tabIndex={-1} id="for-later-title" className="text-xl font-semibold">For later</h2><p className="text-sm text-muted-foreground">Shared by everyone on this TV. Items saved from your library or queue stay here until you remove them.</p></div>
     {!connected && <p role="status">Reconnect to see your saved items.</p>}
     {loading && <p role="status">Loading saved items…</p>}
     {error && <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => setRefresh(value => value + 1)}>Refresh For later</Button></div>}
     {notice && <p role="status">{notice}</p>}
-    {connected && !loading && !error && !items.length && <p>Nothing saved yet. Choose For later on something you want to watch or listen to.</p>}
+    {connected && !loading && !error && !items.length && <div className="space-y-2"><p>Nothing saved for later yet. Save something you want to watch or listen to.</p>{onFind && <Button variant="outline" onClick={onFind}>Search for something to save</Button>}</div>}
     <ul ref={list} className="space-y-2" aria-label="Saved for later" aria-busy={loading}>{items.map((item, index) => <li key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
       {inspect ? <>
         {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="saved-item-art" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="saved-item-art" />}
         <Button variant="ghost" className="saved-item-title" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}><strong>{item.title}</strong>{item.live && <small>Live</small>}</Button>
-        <Button variant="outline" disabled={!connected || pending} aria-label={`Add ${item.title} to Up next`} onClick={() => void update(item, "append", index)}><Plus aria-hidden="true" /><span className="saved-optional">Up next</span></Button>
+        {actions(item, index)}
       </> : <><strong className="min-w-0 flex-1 break-words">{item.title}</strong>{actions(item, index)}</>}
 
     </li>)}</ul>

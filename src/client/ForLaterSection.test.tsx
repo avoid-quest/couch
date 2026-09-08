@@ -61,7 +61,7 @@ test("failed source keeps its saved item removable and removal returns focus to 
   expect(document.activeElement).toBe(button("Play Evening song"));
   await click("Remove Evening song from For later");
   expect(document.activeElement?.id).toBe("for-later-title");
-  expect(document.body.textContent).toContain("Nothing saved yet");
+  expect(document.body.textContent).toContain("Nothing saved for later yet");
 });
 
 test("unavailable native playback still allows append and remove; disconnected controllers cannot mutate", async () => {
@@ -101,9 +101,9 @@ test("a successful append whose Play was canceled reports that outcome instead o
 });
 
 
-test("Saved opens details without playing and keeps playback inside the dialog", async () => {
+test("Saved opens details without playing and also exposes direct playback actions", async () => {
   await render(true, true, 1, true);
-  expect(button("Play Evening movie")).toBeUndefined();
+  expect(button("Play Evening movie")).toBeDefined();
   await click("Details for Evening movie");
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Saved for later");
