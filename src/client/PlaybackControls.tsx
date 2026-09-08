@@ -69,7 +69,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
     <div className="seek-control" hidden={!current}>
       <RangeControl key={player?.playbackId || "idle"} label="Playback position" value={player?.position || 0} max={player?.duration || 1} showValue={false}
         disabled={!transportReady || !player?.seekable || !player.duration}
-        onCommit={async position => { if (player?.playbackId) await run({ type: "seek", playbackId: player.playbackId, position }); }} />
+        onCommit={async position => { if (!player?.playbackId) return false; return run({ type: "seek", playbackId: player.playbackId, position }); }} />
       <div className="time-labels"><span>{time(player?.position || 0)}</span><span>{current?.live ? "LIVE" : player?.duration || current?.duration ? time(player?.duration || current?.duration || 0) : transportReady ? "LIVE" : "0:00"}</span></div>
     </div>
     <div className="transport-row">
@@ -83,7 +83,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand 
         {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp /></Button>}
       </div>
       <div className="volume-control"><Icon name="volume" /><RangeControl label="Volume" value={player?.volume ?? 100} max={100} disabled={!available || !audioReady}
-        onCommit={async volume => { await run({ type: "volume", volume }); }} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>{state?.systemAudio && <Button variant="outline" disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? "Unmute TV" : "Mute TV"}</Button>}</div>
+        onCommit={volume => run({ type: "volume", volume })} /><span>{audioReady ? `${Math.round(player?.volume ?? 100)}%` : "Unknown"}</span>{state?.systemAudio && <Button variant="outline" disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? "Unmute TV" : "Mute TV"}</Button>}</div>
     </div>
     {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
     <div className="player-settings">
