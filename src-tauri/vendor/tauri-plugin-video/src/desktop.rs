@@ -1808,6 +1808,10 @@ mod linux_mpv {
                 .as_mut()
                 .ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
             ensure_session(&player.session_key, &payload.session_key)?;
+            drain_events(player)?;
+            if payload.playback_id.as_ref().is_some_and(|id| id != &player.playback_id) {
+                return snapshot(player);
+            }
             match payload.action.as_str() {
                 "play" => player.mpv.set_property("pause", false).map_err(mpv_error)?,
                 "pause" => player.mpv.set_property("pause", true).map_err(mpv_error)?,

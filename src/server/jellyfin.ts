@@ -295,9 +295,10 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
         ...(startPosition > 0 ? { startPosition } : {}),
       };
     },
-    activatePrepared(playbackId: string) {
+    activatePrepared(playbackId: string, previous?: PlayerState) {
       if (prepared?.playbackId !== playbackId) return;
       const next = prepared;
+      if (active && previous?.playbackId === active.playbackId) active.last = previous;
       void deactivate();
       active = next;
     },

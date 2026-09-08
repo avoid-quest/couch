@@ -7,10 +7,11 @@ import type { TvAppearance } from "../shared/appearance";
 import type { WebMediaSource } from "./web-media";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
-export type MediaSource = { source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; expiry?: WebMediaSource["expiry"] };
+export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; expiry?: WebMediaSource["expiry"] };
 type SessionOptions = {
   admitted?: () => boolean;
-  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean) => MediaSource | Promise<MediaSource>;
+  resolveSource?: (entry: QueueEntry, playbackId: string, signal: AbortSignal, fromStart: boolean, goLive: boolean, preparing?: boolean) => MediaSource | Promise<MediaSource>;
+  activatePrepared?: (playbackId: string, previous: PlayerState) => void;
   deactivate?: () => void;
   observe?: (player: PlayerState) => void;
   stopped?: (pendingPlaybackId: string | null) => void;
@@ -20,6 +21,8 @@ type SessionOptions = {
 export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
   let desiredVolume = store.volume;
   let resolution: AbortController | null = null;
+  let audioOnly = false;
+  let prepared: { entryId: string; playbackId: string; currentId: string; key: string; controller: AbortController; sent: boolean } | null = null;
   let subtitleWarning: string | null = null;
   let playIntent = 0;
   let activePlayIntent = 0;
@@ -43,7 +46,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     preferences: store.playbackPreferences(activeProfile.id),
     player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
   };
-  const broadcast = () => publish(state);
+  const broadcast = () => { refreshPreparation(); publish(state); };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
   const invalidate = (kind: "library" | "radio" | "iptv" | "recordings" | "provider" | "jellyfin" | "playlist" | "controller") => {
@@ -99,6 +102,43 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       broadcast();
       throw new Error("The desktop player disconnected.");
     }
+  };
+  const cancelPreparation = () => {
+    const previous = prepared;
+    prepared = null;
+    previous?.controller.abort();
+    if (previous?.sent && state.player.status !== "unavailable") send({ type: "prepare", playbackId: previous.currentId });
+  };
+  const refreshPreparation = () => {
+    const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
+    const next = index >= 0 ? state.queue[index + 1] : undefined;
+    if (!admitted() || !audioOnly || !next || !state.player.playbackId || !["playing", "paused"].includes(state.player.status)) {
+      cancelPreparation();
+      return;
+    }
+    const key = JSON.stringify([state.player.playbackId, next.id, next.source, state.preferences]);
+    if (prepared?.key === key) return;
+    cancelPreparation();
+    const pending = { entryId: next.id, playbackId: crypto.randomUUID(), currentId: state.player.playbackId, key, controller: new AbortController(), sent: false };
+    prepared = pending;
+    const mediaId = localMediaId(next);
+    if (mediaId && (store.progress(state.activeProfile.id, mediaId)?.position ?? 0) > 0) return;
+    void Promise.resolve().then(() => {
+      pending.controller.signal.throwIfAborted();
+      return options.resolveSource?.(next, pending.playbackId, pending.controller.signal, false, false, true);
+    }).then(media => {
+      if (prepared !== pending || pending.controller.signal.aborted) return;
+      if (!media?.audioOnly || media.segment || media.audioSource || media.startPosition || media.subtitles?.length || media.radio || media.goLive) {
+        pending.controller.abort();
+        return;
+      }
+      pending.sent = true;
+      send({ type: "prepare", playbackId: pending.currentId, next: { playbackId: pending.playbackId, source: media.source, headers: media.headers, preferences: { ...state.preferences!.profile, ...state.preferences!.device } } });
+    }).catch(() => {
+      // Preparation failure keeps the current song playing. Its ordinary EOF
+      // load retains source-specific errors and retry controls.
+      pending.controller.abort();
+    });
   };
   const cancelReconnect = (message: string) => {
     if (!state.radioRetry || state.player.status !== "loading") return false;
@@ -189,6 +229,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     available();
     const entry = state.queue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
+    audioOnly = false;
+    cancelPreparation();
     finishProgress(true, true);
     if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
@@ -221,8 +263,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     };
     try {
       const source = options.resolveSource?.(entry, playbackId, resolution.signal, fromStart, goLive) ?? { source: entry.source };
-      const load = ({ metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
+      const load = ({ audioOnly: sourceAudioOnly, metadata, radio, subtitleWarning: warning, expiry: sourceExpiry, ...media }: MediaSource) => {
         if (!admitted() || state.player.playbackId !== playbackId) return;
+        audioOnly = sourceAudioOnly === true && !media.segment;
         authorize();
         subtitleWarning = warning ?? null;
         expiry = sourceExpiry;
@@ -241,6 +284,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     } catch (error) { failed(error); throw error; }
   };
   const stop = () => {
+    audioOnly = false;
+    cancelPreparation();
     webRecovery = null;
     state.webRetry = null;
     expiry = undefined;
@@ -265,6 +310,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const end = (required: boolean) => {
     quiescing = true;
+    cancelPreparation();
     playIntent++;
     cancelRadioRetry();
     resolution?.abort();
@@ -471,6 +517,19 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     observe(player: PlayerState) {
       if (!admitted()) return;
+      if (prepared?.sent && player.playbackId === prepared.playbackId) {
+        const next = state.queue.find(entry => entry.id === prepared!.entryId);
+        if (!next) return;
+        const previous: PlayerState = { ...state.player, status: "ended", position: state.player.duration ?? state.player.position };
+        persistProgress(() => progress.observe(previous));
+        options.activatePrepared?.(player.playbackId!, previous);
+        resolution?.abort();
+        resolution = prepared.controller;
+        prepared = null;
+        state.currentEntryId = next.id;
+        state.player = { ...state.player, playbackId: player.playbackId, status: "loading" };
+        progress.begin(next, player.playbackId!, state.activeProfile.id);
+      }
       // Native Stop can acknowledge the retired source while another source is still resolving.
       if (player.status === "idle" && player.playbackId === null) options.stopped?.(["loading", "playing", "paused"].includes(state.player.status) ? state.player.playbackId : null);
       if (player.status !== "unavailable" && player.playbackId !== state.player.playbackId) return;

@@ -188,6 +188,8 @@ pub struct NativeLayoutRequest {
 pub struct NativeControlRequest {
     #[serde(default)]
     pub session_key: String,
+    #[serde(default)]
+    pub playback_id: Option<String>,
     pub action: String,
     #[serde(default)]
     pub value: f64,

@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import type { LibraryItem } from "../../src/shared/library";
 import type { MusicContext } from "./music";
 
@@ -86,8 +87,10 @@ async function run(args: string[]) {
   return output;
 }
 
-export async function verifyMusicTransition(context: MusicContext, tracks: LibraryItem[]) {
-  const { clients, until, artifactDir } = context;
+export async function verifyMusicTransition(context: MusicContext, tracks: LibraryItem[], options: { artifactDir?: string; folder?: string; enqueue?: (ids: string[]) => Promise<void> } = {}) {
+  const { clients, until } = context;
+  const artifactDir = options.artifactDir ?? context.artifactDir;
+  await mkdir(artifactDir, { recursive: true });
   const first = () => clients[0]!.state!;
   const all = (predicate: (state: NonNullable<typeof clients[number]["state"]>) => boolean) => clients.every(client => client.state && predicate(client.state));
   assert.equal(tracks.length, 2);
@@ -95,7 +98,7 @@ export async function verifyMusicTransition(context: MusicContext, tracks: Libra
   const manifest = await Bun.file("/transition-reference/manifest.json").json();
   const referenceBytes = await Bun.file("/transition-reference/continuous.s16le").arrayBuffer();
   const reference = new Int16Array(referenceBytes);
-  const paths = ["/mnt/music-fixtures/transitions/part-1.flac", "/mnt/music-fixtures/transitions/part-2.flac"];
+  const paths = [1, 2].map(part => `${options.folder ?? "/mnt/music-fixtures/transitions"}/part-${part}.flac`);
   const decodedParts = await Promise.all(paths.map(path => run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", path, "-f", "s16le", "-ar", String(manifest.sampleRate), "-ac", "1", "-"])));
   assert.deepEqual(Buffer.concat(decodedParts.map(part => Buffer.from(part))), Buffer.from(referenceBytes), "Concatenated decoded lossless fixtures equal the unsplit reference byte for byte");
   await Bun.write(`${artifactDir}/music-fixtures.json`, JSON.stringify(manifest, null, 2));
@@ -111,7 +114,8 @@ export async function verifyMusicTransition(context: MusicContext, tracks: Libra
     await clients[0]!.command({ type: "volume", volume: 100 });
     await clients[0]!.command({ type: "preferences", profileId: original.profileId, preferences: { ...original.preferences.profile, speed: 1 } });
     const ids = tracks.map(() => crypto.randomUUID());
-    for (const [index, track] of tracks.entries()) await clients[1]!.command({ type: "enqueueLibrary", itemId: track.id, entryId: ids[index]! });
+    if (options.enqueue) await options.enqueue(ids);
+    else for (const [index, track] of tracks.entries()) await clients[1]!.command({ type: "enqueueLibrary", itemId: track.id, entryId: ids[index]! });
     // Set the device delay before the measured load; settings require a live ID.
     await clients[0]!.command({ type: "play", entryId: ids[0]!, fromStart: true });
     await until("first lossless sample starts through native libmpv", () => all(state => state.player.status === "playing" && state.currentEntryId === ids[0]));
@@ -140,6 +144,7 @@ export async function verifyMusicTransition(context: MusicContext, tracks: Libra
     await Bun.write(`${artifactDir}/music-audio-transition.json`, JSON.stringify({ observedAt: new Date().toISOString(), playbackIds, fixture: manifest, captureSha256: createHash("sha256").update(Buffer.from(await Bun.file(capturePath).arrayBuffer())).digest("hex"), ...result }, null, 2));
     await run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", capturePath, "-filter_complex", "showwavespic=s=1600x360:colors=32b8d9", "-frames:v", "1", `${artifactDir}/music-audio-waveform.png`]);
     console.log(`PASS native music transition measured: ${result.netInsertedMilliseconds.toFixed(3)} ms net insertion, ${result.insertedSilenceMilliseconds.toFixed(3)} ms silence, missing samples ${result.missingSamplesBounds.join("..")}, repeated samples ${result.repeatedSamplesBounds.join("..")}`);
+    return result;
   } finally {
     if (capture.exitCode === null) { capture.kill("SIGINT"); await capture.exited; }
     if (first().player.playbackId && first().player.status !== "idle") await clients[0]!.command({ type: "audioDelay", playbackId: first().player.playbackId!, delay: original.preferences.device.audioDelay });
