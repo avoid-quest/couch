@@ -1,3 +1,4 @@
+import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
 import type { HTMLBundle, ServerWebSocket } from "bun";
 import { randomInt } from "node:crypto";
@@ -18,6 +19,7 @@ import { createMediaFolders } from "./media-folders";
 import { createFolderSettings } from "./folder-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
+import { createRadioProgramme } from "./radio-programme";
 import { createRadioSettings } from "./radio-settings";
 import { createJellyfin } from "./jellyfin";
 import { createJellyfinSettings } from "./jellyfin-settings";
@@ -27,6 +29,7 @@ import { createProviders } from "./providers";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
+import { createForLater } from "./for-later";
 import { createPlaylists } from "./playlists";
 import { ControllerError, createControllers, settingField } from "./controllers";
 import type { ControllerIdentity } from "../shared/controllers";
@@ -99,6 +102,7 @@ export function createHub(options: HubOptions) {
   const inspections = new Map<string, AbortController>();
   const sockets = new Set<ServerWebSocket<SocketData>>();
   const jellyfin = createJellyfin(options.databasePath, { onWarning: message => { console.error(message); diagnostics.log.add("Jellyfin", message); }, onProgress: () => session.invalidate("jellyfin") });
+  const streamingCommunitySettings = createStreamingCommunitySettings(store);
   const startup = createStartup(async () => {
     const value = (await options.nativeDiagnostics?.())?.facts.find(fact => fact.name === "Fullscreen now")?.value;
     return value === "true" ? true : value === "false" ? false : null;
@@ -106,8 +110,10 @@ export function createHub(options: HubOptions) {
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.nativeDiagnostics && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
+  let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
+    radioProgramme?.observe(state);
     sound?.interrupt();
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
@@ -115,12 +121,16 @@ export function createHub(options: HubOptions) {
     admitted, systemAudio,
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
     resolveSource: (entry, playbackId, signal, fromStart, goLive, preparing) => {
-      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality);
+      if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
-      if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
+      if (entry.source.startsWith("radio:")) {
+        const station = radio.getPlayable(entry.source.slice(6));
+        radioProgramme?.load(playbackId, entry.source, station.source);
+        return { ...station, radio: true };
+      }
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.
       if (radio.favorites().some(station => station.url === entry.source)) return { source: entry.source, radio: true };
@@ -137,6 +147,7 @@ export function createHub(options: HubOptions) {
   const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
   const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
+  radioProgramme = createRadioProgramme({ station: radio.programmeStation, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
   const guide = createGuide({ databasePath: options.databasePath, onChange: () => session.invalidate("iptv"),
@@ -161,6 +172,33 @@ export function createHub(options: HubOptions) {
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
+  const forLater = createForLater({
+    databasePath: options.databasePath, onChange: () => session.invalidate("forLater"),
+    lookup: async reference => {
+      if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
+      if (reference.kind === "queue") {
+        const entry = session.state.queue.find(item => item.id === reference.id);
+        if (!entry) throw new ControllerError("This item is no longer in the queue.", 404);
+        return entry;
+      }
+      const item = library.getItem(reference.id);
+      if (!item) throw new ControllerError("This item is no longer in the library.", 404);
+      return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) };
+    },
+    prepare: async entry => {
+      if (entry.source.startsWith("library:")) await library.getPlayable(entry.source.slice(8));
+      if (entry.source.startsWith("jellyfin:")) {
+        const current = await jellyfin.entry(entry.source.split(":")[2]!, entry.id);
+        if (current.source !== entry.source) throw new ControllerError("This item belongs to another Jellyfin server or account. Save it again from the current library.", 409);
+      }
+      if (entry.source.startsWith("radio:")) radio.getPlayable(entry.source.slice(6));
+    },
+    reservePlay: () => session.reservePlay(),
+    enqueue: (entry, intent, authorize) => {
+      session.command({ type: "enqueue", entry }, authorize);
+      if (intent !== undefined) session.playIfCurrent(intent, entry.id, false, authorize);
+    },
+  });
   const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
     session.invalidate("controller");
@@ -323,6 +361,7 @@ export function createHub(options: HubOptions) {
         };
         if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
+        if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
@@ -338,6 +377,7 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
         if (!websocket && (/^\/api\/library\/folders(?:\/browse)?$/.test(url.pathname) || /^\/api\/library\/sources\/[\w-]{1,80}(?:\/(?:scan|test|verify))?$/.test(url.pathname) || url.pathname === "/api/library/sources" && request.method !== "GET")) return cors(request, await folderSettings.handle(request, currentIdentity));
         if (!websocket && /^\/api\/radio\/(?:sources|playlists(?:\/[\w-]{1,80}(?:\/refresh)?)?)$/.test(url.pathname)) return cors(request, await radioSettings.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/for-later(?:\/|$)/.test(url.pathname)) return cors(request, await forLater.handle(request, authorize));
         if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize)));
         return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
@@ -386,7 +426,7 @@ export function createHub(options: HubOptions) {
             if (!title) {
               const controller = new AbortController();
               inspections.set(action.entryId, controller);
-              void inspectWebMedia(action.url, controller.signal).then(metadata => {
+              void inspectWebMedia(action.url, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
                 if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(action.entryId, source, metadata); }
               }).catch(() => {}).finally(() => {
                 if (inspections.get(action.entryId) === controller) { inspections.delete(action.entryId); idle.activity(); }
@@ -468,7 +508,9 @@ export function createHub(options: HubOptions) {
     providers.close();
     subtitles.close();
     playlists.close();
+    forLater.close();
     collections.close();
+    radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
     const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), server.stop(true)]);

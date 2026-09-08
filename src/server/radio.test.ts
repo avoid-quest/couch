@@ -129,3 +129,21 @@ test("rejects malformed favorites and strips fields outside the public station m
   expect(radio.saveFavorite({ ...favorite, secret: "must not persist" })).toEqual(favorite);
   expect(radio.favorites()).toEqual([favorite]);
 });
+
+test("programme lookup trusts only stations currently imported from the avoid feed", async () => {
+  let stream = "https://streams.example/original";
+  const radio = fixture({ fetch: (async () => new Response(`#EXTM3U\n#EXTINF:-1 tvg-id="avoid-radio-one",One\n${stream}\n`)) as unknown as typeof fetch });
+  const own = await radio.addPlaylist({ name: "avoid", url: "https://radio.avoid.quest/playlist.m3u" });
+  const other = await radio.addPlaylist({ name: "other", url: "https://example.com/playlist.m3u" });
+  const station = radio.playlistStations({ playlistId: own.id })[0]!;
+  expect(radio.programmeStation(`radio:${station.id}`)).toEqual({ id: "avoid-radio-one", streamUrl: stream });
+  expect(radio.programmeStation(`radio:${radio.playlistStations({ playlistId: other.id })[0]!.id}`)).toBeNull();
+  radio.saveFavorite(station);
+  stream = "https://streams.example/updated";
+  await radio.refreshPlaylist(own.id);
+  expect(radio.programmeStation(`radio:${station.id}`)).toEqual({ id: "avoid-radio-one", streamUrl: stream });
+  expect(radio.getPlayable(station.id).source).toBe(stream);
+  radio.removePlaylist(own.id);
+  expect(radio.programmeStation(`radio:${station.id}`)).toBeNull();
+  expect(radio.getPlayable(station.id).source).toBe(stream);
+});

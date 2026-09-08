@@ -1,7 +1,7 @@
 import { StartupSettings } from "./StartupSettings";
 import { RestartSettings } from "./RestartSettings";
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Settings2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, RefreshCw, Settings2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,12 @@ import type { SetupStep } from "../shared/setup";
 import { SetupProgress } from "./SetupProgress";
 
 type ClaimCode = { code: string; expiresAt: number };
+const settingsGroups = [
+  { id: "profile", title: "Watching profile", description: "Saved audio, subtitle and playback defaults", section: "playback" },
+  { id: "device", title: "This device", description: "Appearance, connection and online-video quality", section: "appearance" },
+  { id: "tv", title: "TV & sources", description: "Sources, shared TV settings and administrator access", section: "general" },
+];
+const settingsGroup = (section: string) => section === "playback" ? "profile" : ["appearance", "connection", "remote"].includes(section) ? "device" : "tv";
 type Props = {
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   credentials: { origin: string; token: string } | null;
@@ -63,9 +69,18 @@ type Props = {
 export function Settings({ videoQualityPreference, credentials, connected, status, identity, details, pairingRequired, reachable, playerStatus, host, administratorClaimed, name, version, appearance, onReconnect, onPairAgain, profile, preferences, onCommand, initialOpen = false, setupStep, sourcesRequest = 0, jellyfinVersion, radioVersion, libraryVersion }: Props) {
   const [requestedOpen, setOpen] = useState(initialOpen);
   const open = requestedOpen || !!setupStep && setupStep !== "complete";
-  const [selectedSection, setSection] = useState("general");
+  const [selectedSection, setSection] = useState("");
   const setup = !!setupStep && setupStep !== "complete";
   const section = setup ? !host && identity?.authority === "administrator" ? setupStep : "general" : selectedSection;
+  const group = settingsGroups.find(group => group.id === settingsGroup(section))!;
+  const sectionNavigation = useRef<HTMLDivElement | null>(null);
+  const focusSection = useRef(false);
+  useEffect(() => {
+    if (focusSection.current && section && !setup) {
+      sectionNavigation.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.focus();
+      focusSection.current = false;
+    }
+  }, [section, setup]);
   const previousStep = useRef(setupStep);
   useEffect(() => {
     if (previousStep.current && previousStep.current !== "complete" && setupStep === "complete") setOpen(false);
@@ -89,6 +104,12 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   const origin = credentials?.origin;
   const token = credentials?.token;
   const administrator = !host && identity?.authority === "administrator";
+  useEffect(() => {
+    if (!administrator && ["bluetooth", "sound", "display", "advanced", "remotes"].includes(selectedSection)) {
+      focusSection.current = true;
+      setSection("general");
+    }
+  }, [administrator, selectedSection]);
   useEffect(() => { if (origin && administrator && readUpdateRequest(origin)) { setSection("updates"); setOpen(true); } }, [origin, administrator]);
   const canWrite = connected && !loading && !pending;
   const urls = host?.urls ?? details?.urls ?? [];
@@ -181,38 +202,50 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
   </div>;
 
   return <Dialog open={open} onOpenChange={value => { if (setup) return; setOpen(value); setError(null); setNotice(null); }}>
-    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("general")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
+    <DialogTrigger asChild><Button variant="ghost" className="min-h-11" aria-label="Settings" onClick={() => setSection("")}><Settings2 aria-hidden="true" />Settings</Button></DialogTrigger>
     <DialogContent showCloseButton={!setup} data-tv-local-only={host && section === "sources" ? "" : undefined} className={`max-h-[calc(100dvh-2rem)] overflow-y-auto [&>button]:min-h-11 [&>button]:min-w-11 ${host ? "text-base sm:max-w-lg" : "sm:max-w-md"}`}>
       <DialogHeader>
         <DialogTitle className={host ? "text-lg" : undefined}>{setup ? host ? "Welcome to Couch" : "Set up your TV" : "Settings"}</DialogTitle>
         <DialogDescription className={host ? "break-words text-base" : "break-words"}>{savedName || "Couch"}</DialogDescription>
       </DialogHeader>
       {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
+      {!setup && !section && <div className="grid gap-3" aria-label="Settings sections">
+        {settingsGroups.map(group => <Button key={group.id} variant="outline" className="h-auto min-h-16 justify-between gap-3 whitespace-normal px-4 py-3 text-left" data-settings-group={group.id} onClick={() => { focusSection.current = true; setSection(group.section); }}><span><span className="block font-medium">{group.title}</span><span className="block text-sm font-normal text-muted-foreground">{group.description}</span></span><ChevronRight aria-hidden="true" /></Button>)}
+      </div>}
+      {!setup && section && <div className="space-y-3"><Button variant="ghost" className="min-h-11" data-back onClick={() => { const id = group.id; setSection(""); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-settings-group="${id}"]`)?.focus()); }}><ArrowLeft aria-hidden="true" />All settings</Button><h3 className="font-medium">{group.title}</h3></div>}
       <Tabs value={section} onValueChange={setSection} activationMode={host ? "manual" : "automatic"} className="min-w-0 gap-4">
-        {!setup && <TabsList className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
-          <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
-          <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>
-          <TabsTrigger value="remote" className="min-h-11">{host ? "This screen" : "This remote"}</TabsTrigger>
-          <TabsTrigger value="sources" className="min-h-11" data-tv-local-only={host ? "" : undefined}>Sources</TabsTrigger>
-          <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
-          {administrator && <TabsTrigger value="bluetooth" className="min-h-11">Bluetooth</TabsTrigger>}
-          {administrator && <TabsTrigger value="sound" className="min-h-11">Sound</TabsTrigger>}
-          {administrator && <TabsTrigger value="display" className="min-h-11">Display</TabsTrigger>}
-          <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>
-          <TabsTrigger value="updates" className="min-h-11">Updates</TabsTrigger>
-          {administrator && <TabsTrigger value="advanced" className="min-h-11">Advanced</TabsTrigger>}
+        {!setup && section && <TabsList ref={sectionNavigation} className="grid h-auto w-full grid-cols-2 group-data-horizontal/tabs:h-auto" aria-label="Settings sections">
+          {group.id === "tv" && <>
+            <TabsTrigger value="general" className="min-h-11">General</TabsTrigger>
+            <TabsTrigger value="sources" className="min-h-11" data-tv-local-only={host ? "" : undefined}>Sources</TabsTrigger>
+            {administrator && <TabsTrigger value="bluetooth" className="min-h-11">Bluetooth</TabsTrigger>}
+            {administrator && <TabsTrigger value="sound" className="min-h-11">Sound</TabsTrigger>}
+            {administrator && <TabsTrigger value="display" className="min-h-11">Display</TabsTrigger>}
+            {!host && <TabsTrigger value="tv-appearance" className="min-h-11">TV appearance</TabsTrigger>}
+            {administrator && <TabsTrigger value="remotes" className="min-h-11">Paired remotes</TabsTrigger>}
+            <TabsTrigger value="updates" className="min-h-11">Updates</TabsTrigger>
+            {administrator && <TabsTrigger value="advanced" className="min-h-11">Advanced</TabsTrigger>}
+          </>}
+          {group.id === "profile" && <TabsTrigger value="playback" className="min-h-11">Playback</TabsTrigger>}
+          {group.id === "device" && <>
+            <TabsTrigger value="appearance" className="min-h-11">Appearance</TabsTrigger>
+            <TabsTrigger value="connection" className="min-h-11">Connection</TabsTrigger>
+            <TabsTrigger value="remote" className="min-h-11">Video quality</TabsTrigger>
+          </>}
         </TabsList>}
         {administrator && credentials && <TabsContent value="updates" className="min-w-0">{open && section === "updates" && <UpdatesSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</TabsContent>}
         {!administrator && <TabsContent value="updates" className="min-w-0 space-y-3">
-          <p>Open Settings &gt; Updates on an administrator remote to check for updates and install a signed release on this TV.</p>
-          <p className="text-muted-foreground">Pairing alone does not grant administrator access. Use General to claim administration when available, or ask an existing administrator to approve this remote in Connection.</p>
-          <Button variant="outline" className="min-h-11" onClick={() => setSection("connection")}>Open Connection</Button>
+          <p>Open Settings &gt; TV &amp; sources &gt; Updates on an administrator remote to check for updates and install a signed release on this TV.</p>
+          <p className="text-muted-foreground">Pairing alone does not grant administrator access. Use General to claim administration when available, or ask an existing administrator to approve this remote in Paired remotes.</p>
+          <Button variant="outline" className="min-h-11" onClick={() => { focusSection.current = true; setSection("connection"); }}>Open Connection</Button>
         </TabsContent>}
         {administrator && credentials && <TabsContent value="advanced" className="min-w-0">{open && section === "advanced" && <AdvancedSettings key={`${credentials.origin}:${identity.controller?.id}`} credentials={credentials} connected={connected} />}</TabsContent>}
         {administrator && credentials && <TabsContent value="bluetooth" className="min-w-0">{open && section === "bluetooth" && <BluetoothSettings credentials={credentials} connected={connected} />}</TabsContent>}
         {administrator && credentials && <TabsContent value="sound" className="min-w-0">{open && section === "sound" && <SoundSettings credentials={credentials} connected={connected} />}</TabsContent>}
         {administrator && credentials && <TabsContent value="display" className="min-w-0">{open && section === "display" && <DisplaySettings credentials={credentials} connected={connected} />}</TabsContent>}
-        <TabsContent value="appearance" className="min-w-0"><AppearanceSettings native={!!host} credentials={credentials} connected={connected} administrator={administrator || !!host && identity?.authority === "host"} appearance={appearance} /></TabsContent>
+        <TabsContent value="appearance" className="min-w-0"><AppearanceSettings scope="device" native={!!host} credentials={credentials} connected={connected} administrator={administrator || !!host && identity?.authority === "host"} appearance={appearance} /></TabsContent>
+        {!host && <TabsContent value="tv-appearance" className="min-w-0"><AppearanceSettings scope="tv" native={false} credentials={credentials} connected={connected} administrator={administrator} appearance={appearance} /></TabsContent>}
+        {administrator && devices && <TabsContent value="remotes" className="min-w-0"><PairedRemotes devices={devices} currentId={identity.controller!.id} disabled={!canWrite} update={update} /></TabsContent>}
         <TabsContent value="general" className={`min-w-0 space-y-4 ${host ? "text-base" : ""}`}>
           {administrator ? <form className="space-y-3" onSubmit={event => void update(event, "/api/settings", { name: draftName.trim() }, "TV name saved.")}>
             <div className="space-y-2"><Label htmlFor="tv-name">TV name</Label><Input ref={nameInput} id="tv-name" className="min-h-11" value={draftName} onChange={event => setDraftName(event.target.value)} maxLength={60} required disabled={!canWrite} aria-describedby="tv-name-help" /></div>
@@ -223,7 +256,7 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
             <p className="text-muted-foreground">{host ? "Use an administrator remote to change this TV's settings." : credentials ? "An administrator can change this TV's name." : "Pair this browser to control the TV."}</p>
           </div>}
           {administrator && credentials && open && section === "general" && <StartupSettings key={`startup:${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
-          <div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={() => setSection("connection")}>Pair again / manage remotes</Button>{administrator && <Button variant="outline" className="min-h-11" onClick={() => setSection("advanced")}>Effective overrides</Button>}</div>
+          <div className="flex flex-wrap gap-2"><Button variant="outline" className="min-h-11" onClick={() => { focusSection.current = true; setSection("connection"); }}>Connection</Button>{administrator && <Button variant="outline" className="min-h-11" onClick={() => { focusSection.current = true; setSection("remotes"); }}>Manage remotes</Button>}{administrator && <Button variant="outline" className="min-h-11" onClick={() => { focusSection.current = true; setSection("advanced"); }}>Effective overrides</Button>}</div>
           {administrator && credentials && <RestartSettings key={`${credentials.origin}:${credentials.token}`} credentials={credentials} connected={connected} />}
           {host && !administratorClaimed && identity?.claimAvailable && <>
             <Separator />
@@ -287,7 +320,6 @@ export function Settings({ videoQualityPreference, credentials, connected, statu
           {!host && <p className="text-muted-foreground">Reconnect keeps this browser's credential and retries this TV, including its known LAN addresses. Pair again forgets only this browser's credential. It does not revoke access on the TV.</p>}
           {lastAdministrator && !pairingRequired && <p className="text-muted-foreground">Approve another administrator before forgetting this browser. Lost access requires local or SSH recovery on the TV computer.</p>}
           {forgetting && <div role="alert" className="space-y-3 rounded-lg border p-3"><p>Forget this browser's pairing? You will need the code shown on the TV to connect again.{identity?.authority === "administrator" ? " Administration will require another administrator or local/SSH recovery." : ""}</p><div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setForgetting(false)}>Cancel</Button><Button className="min-h-11" disabled={lastAdministrator && !pairingRequired} onClick={pairAgain}>Forget this browser</Button></div></div>}
-          {administrator && devices && <><Separator /><PairedRemotes devices={devices} currentId={identity.controller!.id} disabled={!canWrite} update={update} /></>}
         </TabsContent>
       </Tabs>
       {setup && administrator && <Button className="min-h-11" disabled={!canWrite || section === "general" && draftName.trim() !== savedName} onClick={event => void update(event, "/api/settings/setup", { step: setupStep }, "Setup progress saved.")}>

@@ -26,8 +26,9 @@ test("General keeps one startup control across navigation and identity loss", as
   const startupCount = () => document.querySelectorAll("[data-startup-mode]").length;
   try {
     await render();
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-settings-group="tv"]')!.click());
     expect(startupCount()).toBe(1);
-    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Pair again / manage remotes")!.click());
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Manage remotes")!.click());
     await act(async () => document.querySelector('[role="tab"][id$="-trigger-general"]')!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })));
     expect(startupCount()).toBe(1);
     await render(null);

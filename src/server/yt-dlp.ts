@@ -1,4 +1,6 @@
-export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; executable?: string };
+import { streamingCommunityPlugin } from "./streamingcommunity";
+
+export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; executable?: string; plugin?: "streamingcommunity" };
 
 let running = 0;
 const waiting: Array<() => void> = [];
@@ -68,7 +70,7 @@ async function extract(command: string, args: string[], signal: AbortSignal): Pr
   } finally { kill(); await child.exited; }
 }
 
-export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable }: YtDlpOptions = {}): Promise<string> {
+export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
   const command = executable ?? process.env.COUCH_YT_DLP ?? Bun.which("yt-dlp");
   if (!command) throw new Error("Install yt-dlp on the player to open webpage links.");
@@ -76,7 +78,11 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, exe
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
     await acquireSlot(cancellation);
-    try { return await extract(command, args, cancellation); }
+    try {
+      const bundled = plugin === "streamingcommunity" ? await streamingCommunityPlugin() : null;
+      try { return await extract(command, [...(bundled ? ["--plugin-dirs", bundled.directory, "--use-extractors", "StreamingCommunity,end", "--flat-playlist"] : []), ...args], cancellation); }
+      finally { await bundled?.close(); }
+    }
     finally { releaseSlot(); }
   } catch (error) {
     signal?.throwIfAborted();

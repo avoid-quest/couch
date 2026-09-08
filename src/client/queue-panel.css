@@ -48,3 +48,9 @@ body.native-host .queue-add-dialog label { font-size: 18px; }
   .queue-panel .queue-entry-copy .source-label { font-size: .7rem; }
   .queue-panel .queue-empty { padding: 32px 20px; }
 }
+
+.queue-panel .queue-group { border-top: 1px solid var(--border); }
+.queue-panel .queue-group h3, .queue-panel .queue-previous summary { padding: 16px 20px 8px; font-size: .95rem; }
+.queue-panel .queue-previous summary { cursor: pointer; min-height: 48px; }
+.queue-panel .queue-group-empty { padding: 8px 20px 20px; color: var(--muted-foreground); font-size: .85rem; }
+.queue-panel .queue-previous summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }

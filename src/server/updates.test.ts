@@ -119,7 +119,7 @@ test("auto policy persists independently of either channel and stages without in
   expect(f.open().state).toMatchObject({ policy: "idle", channel: "preview", currentCheck: false });
 });
 
-test("automatic attempts retain identity after lost reply and never repeat a restored failed candidate", async () => {
+test.each(["failed", "operator-required", "restored"] as const)("automatic attempts retain identity after lost reply and never repeat a %s candidate", async phase => {
   const f = await automaticSetup();
   await f.updates.handle(request("/policy", { policy: "idle" }), admin);
   await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
@@ -129,14 +129,14 @@ test("automatic attempts retain identity after lost reply and never repeat a res
   const attempted = f.installations[0]!;
   expect(JSON.parse(await readFile(join(f.directory, "settings.json"), "utf8")).attempt).toEqual(attempted);
   await f.updates.automatic(); expect(f.installations).toHaveLength(1);
-  f.records.set(attempted.requestId, { ...f.records.get(attempted.requestId)!, phase: "restored", restoredVersion: "1", restoredRevision: "previous" });
+  f.records.set(attempted.requestId, { ...f.records.get(attempted.requestId)!, phase, error: "The startup trial failed. Recover through SSH.", ...(phase === "restored" ? { restoredVersion: "1", restoredRevision: "previous" } : {}) });
   await f.updates.automatic(); expect(f.installations).toHaveLength(1);
   expect(f.updates.state.waiting).toContain("already had an automatic attempt");
   await f.updates.close();
   const restarted = f.open();
   await restarted.handle(request("/check", { check: true }), admin); await settled(restarted);
   await restarted.automatic(); expect(f.installations).toHaveLength(1);
-  expect((await f.records.get(attempted.requestId))?.restoredVersion).toBe("1");
+  expect(f.records.get(attempted.requestId)).toMatchObject({ phase, error: "The startup trial failed. Recover through SSH." });
 });
 
 test("an idle refusal can retry after a fresh idle interval, while offline checks never install", async () => {

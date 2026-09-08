@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SaveForLater } from "./SaveForLater";
 import { progressTime } from "./HistoryPanel";
 
 type Source = "Library" | "Jellyfin";
@@ -111,6 +112,7 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
   const actions = (item: Result) => <div className="flex flex-wrap gap-2">
     <Button aria-label={`${item.position ? "Resume" : "Play"} ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}>{item.position ? "Resume" : "Play"}</Button>
     {!!item.position && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true, fromStart: true })}>From start</Button>}
+    <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} />
     <Button variant="secondary" aria-label={`Add ${item.title} to queue`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>Queue</Button>
   </div>;
   return <section className="space-y-3" aria-label={`${source} search results`} aria-busy={loading}>

@@ -60,13 +60,20 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       if (player.status === "ended") { active.item.watched = true; active.item.position = 0; flush(); active = null; }
       else if (checkpoint) flush();
     },
-    finish(nearEnd = false) {
-      if (active?.observed && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
-        active.item.watched = true;
-        active.item.position = 0;
-      }
-      // Keep the observation on a failed write so a later stop/play can retry it.
-      flush();
+    finish(nearEnd = false, commit?: (save: () => void) => void) {
+      const save = () => {
+        if (active?.observed && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
+          active.item.watched = true;
+          active.item.position = 0;
+        }
+        flush();
+      };
+      if (commit) {
+        const previous = active && structuredClone(active);
+        try { commit(save); }
+        catch (error) { active = previous; throw error; }
+      } else save();
+      // Keep observing until all writes, including an enclosing transaction, commit.
       active = null;
     },
   };

@@ -111,7 +111,7 @@ try {
   await until(async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   session = (await wd("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until(async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected");
-  await ui.button("Settings");
+  await ui.button("Settings"); await ui.settingsSection("general");
   await until(async () => await execute("return !!document.querySelector('[data-administrator-code]')"));
   await ui.key(keys.escape);
   await until(async () => !await execute("return !!document.querySelector('[role=dialog]')"));
@@ -247,7 +247,7 @@ try {
     await until(async () => { try { await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) }); return false; } catch { return true; } });
     session = (await wd("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
     await until(async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected");
-    await ui.button("Settings");
+    await ui.button("Settings"); await ui.settingsSection("general");
     await until(async () => await execute("return !!document.querySelector('[data-administrator-code]')"));
     await ui.key(keys.escape);
     await until(async () => !await execute("return !!document.querySelector('[role=dialog]')"));

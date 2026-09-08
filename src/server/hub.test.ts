@@ -752,6 +752,24 @@ test("two controllers share queue and observed playback, reject stale controls, 
   expect(reconnected.state.queue.map(entry => entry.id)).toEqual(["one", "two"]);
 });
 
+test("paired controllers and reconnects share the queue boundary after Stop", async () => {
+  const { hub } = fixture();
+  hub.session.observe(idle);
+  const first = new Peer(hub, await pair(hub)), second = new Peer(hub, await pair(hub));
+  await Promise.all([first.ready(), second.ready()]);
+  for (const id of ["one", "two", "three"]) await first.command({ type: "enqueue", entry: { id, title: id, source: `https://media.example/${id}` } });
+  await first.command({ type: "play", entryId: "two" });
+  await second.waitFor(message => message.type === "state" && message.state.currentEntryId === "two");
+  expect(second.state.queueCursorEntryId).toBe("two");
+  await second.command({ type: "stop" });
+  await first.waitFor(message => message.type === "state" && message.state.currentEntryId === null && message.state.queueCursorEntryId === "two");
+  expect(first.state.queue).toEqual(second.state.queue);
+  expect(first.state.queue.map(entry => entry.id)).toEqual(["one", "two", "three"]);
+  const reconnected = new Peer(hub, await pair(hub));
+  await reconnected.ready();
+  expect(reconnected.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two" });
+});
+
 test("persists queue, chosen volume, and paired devices without resuming playback after restart", async () => {
   const initial = fixture();
   const token = await pair(initial.hub);
@@ -1285,4 +1303,45 @@ test("Bluetooth pairing ownership ends on administrator demotion, revocation and
   calls.length = 0;
   expect((await controllerApi(hub, first, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
   expect(calls).toContainEqual({ op: "cancel", owner: controller.id });
+});
+
+test("paired controllers share For later across profile changes and restart without changing the active queue", async () => {
+  const first = fixture();
+  const token = await pair(first.hub), another = await pair(first.hub);
+  const remote = new Peer(first.hub, another);
+  await remote.ready();
+  first.hub.session.observe(idle);
+  first.hub.session.command({ type: "enqueue", entry: { id: "original", title: "Saved movie", source: "https://media.example/movie" } });
+  const queue = first.hub.session.state.queue;
+  const beforeCommands = [...first.commands];
+  const savedResponse = await controllerApi(first.hub, token, "/api/for-later", "POST", { reference: { kind: "queue", id: "original" } });
+  expect(savedResponse.status).toBe(201);
+  const saved = (await savedResponse.json() as { item: { id: string; title: string } }).item;
+  await remote.waitFor(message => message.type === "state" && message.state.forLaterVersion === 1);
+  expect(JSON.stringify(saved)).not.toContain("media.example");
+  expect(await (await controllerApi(first.hub, another, "/api/for-later")).json()).toEqual({ items: [saved] });
+  expect(first.hub.session.state.queue).toEqual(queue); expect(first.commands).toEqual(beforeCommands);
+  const profile = first.hub.session.createProfile("Guest");
+  first.hub.session.selectProfile(profile.id);
+  expect(await (await controllerApi(first.hub, another, "/api/for-later")).json()).toEqual({ items: [saved] });
+  expect(first.hub.session.state.queue).toEqual(queue);
+  expect((await controllerApi(first.hub, "unpaired", "/api/for-later")).status).toBe(401);
+  expect((await controllerApi(first.hub, "unpaired", `/api/for-later/${saved.id}`, "DELETE")).status).toBe(401);
+  await remote.close();
+  await first.hub.close(); hubs.splice(hubs.indexOf(first.hub), 1);
+  const second = fixture(first.databasePath);
+  expect(await (await controllerApi(second.hub, another, "/api/for-later")).json()).toEqual({ items: [saved] });
+  second.hub.session.observe(idle);
+  const restartedCommands = [...second.commands];
+  expect((await controllerApi(second.hub, token, `/api/for-later/${saved.id}/load`, "POST", { mode: "append" })).status).toBe(200);
+  expect(second.hub.session.state.queue).toHaveLength(2); expect(second.commands).toEqual(restartedCommands);
+  expect((await controllerApi(second.hub, another, `/api/for-later/${saved.id}/load`, "POST", { mode: "play" })).status).toBe(200);
+  expect(second.hub.session.state.queue).toHaveLength(3);
+  expect(second.hub.session.state.currentEntryId).toBe(second.hub.session.state.queue[2]!.id);
+  expect(second.commands.some(command => command.type === "load")).toBe(true);
+  const current = second.hub.session.state;
+  expect((await controllerApi(second.hub, token, `/api/for-later/${saved.id}`, "DELETE")).status).toBe(200);
+  expect(second.hub.session.state.queue).toEqual(current.queue);
+  expect(second.hub.session.state.currentEntryId).toBe(current.currentEntryId);
+  expect(await (await controllerApi(second.hub, another, "/api/for-later")).json()).toEqual({ items: [] });
 });

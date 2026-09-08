@@ -112,7 +112,7 @@ try {
   socket.close(); socket = undefined;
   await restart();
   await until("completed restart keeps home and the paired phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
-  await phone.restore(); await phone.ui.button("Settings");
+  await phone.restore(); await phone.ui.button("Settings"); await phone.ui.settingsSection("general");
   await until("saved name and ordinary Settings remain available", () => phone!.ui.execute("return document.querySelector('#tv-name')?.value === 'First-run fixture' && !!document.querySelector('[aria-label=\"Settings sections\"]')"));
   await phone.screenshot("onboarding-complete-settings");
   await Bun.write(`${artifacts}/onboarding-acceptance.json`, JSON.stringify({ checks, physicalConfirmation: false, source: "optional source skipped with no Internet access required", audio: "actual test route and non-silent null-sink PCM", localPlayback: "real phone folder registration, scan, native playback pixels and stop", remaining: "Installed target, physical screen and audible sound, machine reboot" }, null, 2));

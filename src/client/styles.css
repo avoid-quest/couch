@@ -151,3 +151,7 @@ body.native-host button, body.native-host input, body.native-host [role="combobo
 body.native-host [data-slot="slider"] { min-height: 44px; }
 body.native-host [data-slot="tabs-list"] { height: auto; min-height: 54px; }
 [data-slot="dialog-header"] { padding-right: 36px; }
+
+.radio-programme { display: flex; align-items: center; gap: 1rem; margin: 0; }
+.radio-programme .media-artwork { width: 5rem; height: 5rem; object-fit: cover; border-radius: .5rem; }
+.radio-programme small { display: block; color: var(--muted-foreground); }

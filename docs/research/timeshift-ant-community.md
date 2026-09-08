@@ -1,5 +1,7 @@
 # Ant Media Community timeshift investigation
 
+> Architecture status, corrected by the owner on 2026-09-08: Tvheadend remains the incumbent TV/DVR backend and retains scheduling. Ant is a provisional candidate for HLS EVENT growing-recording delivery, not an accepted permanent capture/storage dependency. Compare the complete actual Couch/native journey against the smallest maintained Tvheadend-only path before any separate owner decision. Existing experiments and results below remain evidence, not architecture acceptance.
+
 Continuation of [Qualify a stable live/growing-timeshift backend and maintained host client](https://github.com/avoid-quest/couch/issues/67), from Couch `351eb9ee52f9fea2b91c4db92fff9d042a1c95eb`, checked 2026-09-08. The product gate remains open. This report establishes a local backend/client control result and does not claim packaged playback.
 
 Ant Media Community 3.1.0 and the retained libmpv 0.37.0 passed the generated real-backend EVENT-HLS sequence after two fixture startup failures. All 69 recorded client assertions passed, followed by verified container cleanup. Missing Flussonic access does not block this account-free route. Outputs were null; this proves controls and clocks under the measured limits, not presented pixels, audible continuity or the packaged product.

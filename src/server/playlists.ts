@@ -60,7 +60,7 @@ function originalSource(value: unknown): value is string {
 
 // Queue sources are original catalog references or user-selected URLs. Resolved
 // provider streams and headers belong to native loads and never enter this table.
-function capture(queue: QueueEntry[]): QueueEntry[] {
+export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
   if (!queue.length) throw new PlaylistError("Add something to the queue before saving it.");
   if (queue.length > 500) throw new PlaylistError("A playlist can contain up to 500 entries.");
   const ids = new Set<string>();
@@ -123,7 +123,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
           const row = db.transaction(() => {
             if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM saved_playlists").get()!.count >= 100) throw new PlaylistError("You can save up to 100 playlists.");
             uniqueName(name);
-            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(capture(queue())) };
+            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(capturePlaylistEntries(queue())) };
             db.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?)").run(saved.id, name, name.toLowerCase(), saved.revision, saved.updatedAt, saved.entries);
             return saved;
           })();
@@ -168,7 +168,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
               break;
             case "saveQueue":
               fields(input, ["revision", "operation"]);
-              row.entries = JSON.stringify(capture(queue()));
+              row.entries = JSON.stringify(capturePlaylistEntries(queue()));
               break;
             case "remove": case "move": {
               fields(input, input.operation === "remove" ? ["revision", "operation", "entryId"] : ["revision", "operation", "entryId", "beforeEntryId"]);

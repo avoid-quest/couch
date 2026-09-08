@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
@@ -35,6 +35,7 @@ test("one host-only successor advances identity and checkpoints the previous tra
     f.session.observe(next);
     f.session.observe(next);
     expect(f.session.state.currentEntryId).toBe("second");
+    expect(f.session.state.queueCursorEntryId).toBe("second");
     expect(f.transitions).toEqual([command.next.playbackId]);
     expect(f.store.progress("household", "library:first")).toMatchObject({ watched: true, position: 0 });
     expect(f.commands.filter(command => command.type === "load")).toHaveLength(1);
@@ -143,4 +144,21 @@ test("audio loss aborts unresolved successor preparation", async () => {
     expect(f.commands.some(command => command.type === "prepare" && command.next)).toBe(false);
     expect(f.session.state.player.status).toBe("paused");
   } finally { f.close(); }
+});
+
+test("a queue-position write failure still adopts the track already started by the native player", async () => {
+  const f = fixture();
+  const save = spyOn(f.store, "saveQueueCursor").mockImplementation(() => { throw new Error("Disk full"); });
+  try {
+    await tick();
+    const command = f.commands.find(command => command.type === "prepare" && command.next);
+    if (command?.type !== "prepare" || !command.next) throw new Error("Missing prepared successor");
+    f.session.observe({ ...idle, playbackId: command.next.playbackId, status: "playing", position: 0.1, duration: 3 });
+    expect(f.session.state).toMatchObject({ currentEntryId: "second", queueCursorEntryId: "second", player: { playbackId: command.next.playbackId, status: "playing" } });
+    expect(f.session.state.queueError).toContain("Could not save the queue position");
+    save.mockRestore();
+    f.session.command({ type: "stop" });
+    f.session.command({ type: "play", entryId: "second" });
+    expect(f.session.state.queueError).toBeNull();
+  } finally { save.mockRestore(); f.close(); }
 });

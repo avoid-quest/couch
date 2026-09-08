@@ -11,6 +11,7 @@ export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLangua
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
+export type RadioProgramme = { playbackId: string; stationId: string; provider: "radio.avoid.quest"; title: string; artworkUrl?: string; sampledAt: number; expiresAt: number };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
@@ -35,6 +36,8 @@ export type PlayerState = {
 export type SessionState = {
   queue: QueueEntry[];
   currentEntryId: string | null;
+  queueCursorEntryId?: string | null;
+  queueError?: string | null;
   player: PlayerState;
   activeProfile: WatchingProfile;
   preferences?: PlaybackPreferences;
@@ -46,12 +49,14 @@ export type SessionState = {
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;
+  forLaterVersion?: number;
   controllerVersion?: number;
   installationName?: string;
   setupStep?: import("./setup").SetupStep;
   appearance?: TvAppearance;
   administratorClaimed?: boolean;
   radioRetry?: RadioRetry | null;
+  radioProgramme?: RadioProgramme | null;
   webRetry?: { paused: boolean } | null;
   systemAudio?: import("./sound").SoundRouteState;
 };

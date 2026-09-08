@@ -15,7 +15,7 @@ async function closeSettings(ui: UiDriver, until: Wait) {
 
 async function openSettings(ui: UiDriver, until: Wait) {
   await ui.browse();
-  await ui.button("Settings");
+  await ui.button("Settings"); await ui.settingsSection("general");
   await until("Settings loads General through the real application", () => ui.execute("const dialog = document.querySelector(arguments[0]); return !!dialog && !dialog.textContent.includes('Loading settings…') && !!dialog.querySelector('#tv-name, [data-settings-tv-name]')", [settings]));
 }
 
@@ -55,20 +55,22 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
     return response.json() as Promise<any>;
   };
   await openSettings(ui, until);
-  await ui.button("This screen", '[aria-label="Settings sections"]');
+  const grouped = await ui.execute(`return [...document.querySelectorAll('[role="dialog"] button')].some(button => button.textContent.trim() === "All settings")`);
+  const precedingTab = grouped ? "General" : "This screen", followingTab = grouped ? "Updates" : "Connection";
+  await ui.settingsSection(grouped ? "general" : "remote");
   await ui.execute("document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]').focus()");
   await navigate(ui, guest, until, "right");
-  await until("Radix moves remote arrow focus to the protected Sources tab without activating it", () => ui.execute("return document.activeElement?.textContent === 'Sources' && document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen'"));
+  await until("Radix moves remote arrow focus to the protected Sources tab without activating it", () => ui.execute("return document.activeElement?.textContent === 'Sources' && document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === arguments[0]", [precedingTab]));
   await navigate(ui, guest, until, "select");
-  assert.equal(await ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'This screen' && !document.querySelector('[aria-label=\"Jellyfin settings\"]')"), true, "Remote Enter cannot activate Sources after Radix deferred focus reaches its protected trigger");
+  assert.equal(await ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === arguments[0] && !document.querySelector('[aria-label=\"Jellyfin settings\"]')", [precedingTab]), true, "Remote Enter cannot activate Sources after Radix deferred focus reaches its protected trigger");
   await navigate(ui, guest, until, "left");
-  assert.equal(await ui.execute("return document.activeElement?.textContent === 'This screen'"), true, "Remote Left recovers the preceding ordinary tab after Sources owns Radix's only tab stop");
+  assert.equal(await ui.execute("return document.activeElement?.textContent === arguments[0]", [precedingTab]), true, "Remote Left recovers the preceding ordinary tab after Sources owns Radix's only tab stop");
   await navigate(ui, guest, until, "right");
   await until("remote Right can focus protected Sources again", () => ui.execute("return document.activeElement?.textContent === 'Sources'"));
   await navigate(ui, guest, until, "right");
-  assert.equal(await ui.execute("return document.activeElement?.textContent === 'Connection'"), true, "Remote Right recovers the next ordinary tab without opening Sources");
+  assert.equal(await ui.execute("return document.activeElement?.textContent === arguments[0]", [followingTab]), true, "Remote Right recovers the next ordinary tab without opening Sources");
   await navigate(ui, guest, until, "select");
-  await until("ordinary Connection tab still activates after protected-tab recovery", () => ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === 'Connection' && !document.querySelector('[aria-label=\"Jellyfin settings\"]')"));
+  await until("ordinary next tab still activates after protected-tab recovery", () => ui.execute("return document.querySelector('[aria-label=\"Settings sections\"] [data-state=active]')?.textContent === arguments[0] && !document.querySelector('[aria-label=\"Jellyfin settings\"]')", [followingTab]));
   await closeSettings(ui, until);
   await ui.section("Library");
   await ui.click('[data-action="library-folders"]');

@@ -9,7 +9,7 @@ const browserToken = (ui: UiDriver) => ui.execute("return localStorage.getItem('
 async function connection(ui: UiDriver, until: Wait) {
   await ui.browse();
   await ui.button("Settings");
-  await ui.button("Connection", '[aria-label="Settings sections"]');
+  await ui.settingsSection("connection");
   await until("Connection finishes loading", () => ui.execute("return !!document.querySelector(arguments[0]) && !document.querySelector(arguments[0]).textContent.includes('Loading settings…')", [settings]));
 }
 
@@ -37,6 +37,7 @@ export async function verifyConnection(context: Context) {
   await connection(phone, until);
   assert.equal(await phone.execute("return [...document.querySelectorAll('button')].find(button => button.textContent === 'Pair again')?.disabled"), true, "The sole connected administrator cannot accidentally forget this browser");
   assert.equal((await api(origin, original, `/api/controllers/${caller.controller!.id}`, undefined, "DELETE")).status, 409, "HTTP also protects the last administrator");
+  await phone.settingsSection("remotes");
   const code = await ui.execute("return document.querySelector('.pair-shortcut strong').textContent");
   const response = await api(origin, "", "/api/pair", { code, name: "Connection helper" });
   assert.equal(response.status, 200);
@@ -54,6 +55,7 @@ export async function verifyConnection(context: Context) {
   await until("approved helper gains server-enforced administrator authority", async () => ((await (await api(origin, helper.token, "/api/controllers/me")).json()) as ControllerIdentity).authority === "administrator");
   await assertResponsive(phone, "Connection administrator devices");
   await httpRemote.screenshot("http-paired-remotes");
+  await phone.settingsSection("connection");
   await phone.button("Pair again", settings);
   await phone.button("Forget this browser", settings);
   const replacement = await pairBrowser(context, "Connection replacement");
@@ -62,6 +64,9 @@ export async function verifyConnection(context: Context) {
   assert.equal(replacementIdentity.authority, "controller", "Pairing again never inherits former administrator authority");
   await connection(phone, until);
   assert.equal(await phone.execute("return !!document.querySelector('[aria-label=\"Paired remotes\"]')"), false);
+  await phone.settingsSection("general");
+  assert.equal(await phone.execute("return !!document.querySelector('[role=tab][id$=\"-trigger-remotes\"], [aria-label=\"Paired remotes\"]')"), false, "An ordinary controller cannot reach paired-remote management in TV settings");
+  await phone.settingsSection("connection");
   await phone.button("Reconnect", settings);
   await until("Reconnect preserves the browser credential and obtains a fresh snapshot", async () => await browserToken(phone) === replacement && await phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
   assert.equal((await api(origin, helper.token, `/api/controllers/${replacementIdentity.controller!.id}`, undefined, "DELETE")).status, 200);
@@ -73,6 +78,8 @@ export async function verifyConnection(context: Context) {
   const finalIdentity = await (await api(origin, final, "/api/controllers/me")).json() as ControllerIdentity;
   assert.equal((await api(origin, helper.token, `/api/controllers/${finalIdentity.controller!.id}/role`, { role: "administrator" })).status, 200);
   await connection(phone, until);
+  await until("the already connected browser sees its approved role", () => phone.execute("return document.querySelector('[role=dialog]')?.textContent.includes('Administrator')"));
+  await phone.settingsSection("remotes");
   await until("an already connected browser sees its approved role and device management", () => phone.execute("return !!document.querySelector('[aria-label=\"Paired remotes\"]')"));
   await phone.key(keys.escape);
   await httpRemote.minimize();
@@ -89,6 +96,7 @@ export async function verifyRecovery(context: Context, recoveryCode: string) {
   await phone.button("Forget this browser", settings);
   const recovered = await pairBrowser(context, "Recovered administrator");
   await phone.button("Settings");
+  await phone.settingsSection("general");
   await until("the replacement browser offers the configured recovery claim", () => phone.execute("return !!document.querySelector('#administrator-code:not(:disabled)')"));
   await phone.type("#administrator-code", recoveryCode);
   await phone.button("Claim administrator", settings);

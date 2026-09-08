@@ -145,10 +145,10 @@ try {
   }
   await until("two independent controllers receive idle snapshots", () => all(state => state.player.status === "idle"));
   phone = await startHttpRemote(origin, code, artifacts, until, 4446, 1.5);
-  await phone.minimize(); await ui.button("Settings");
+  await phone.minimize(); await ui.button("Settings"); await ui.settingsSection("general");
   await until("TV shows its one-use administrator code", () => ui.execute("return /^\\d{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent ?? '')"));
   const claimCode = await ui.execute("return document.querySelector('[data-administrator-code]').textContent") as string;
-  await phone.restore(); await phone.ui.button("Settings"); await keyboard(phone.ui, "#administrator-code", claimCode); await phone.ui.button("Claim administrator");
+  await phone.restore(); await phone.ui.button("Settings"); await phone.ui.settingsSection("general"); await keyboard(phone.ui, "#administrator-code", claimCode); await phone.ui.button("Claim administrator");
   await until("real phone claim grants administration", () => phone!.ui.execute("return !!document.querySelector('#tv-name') && !document.querySelector('#administrator-code')"));
   administrator = await phone.ui.execute("return localStorage.getItem('couch.remote-token')") as string;
   await phone.ui.key(keys.escape); await phone.minimize(); await ui.key(keys.escape);
