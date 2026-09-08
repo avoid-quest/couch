@@ -1,0 +1,22 @@
+# Bluetooth audio
+
+Administrators can find and pair stereo speakers or headphones in Settings → Bluetooth. Discovery lasts 30 seconds; all Bluetooth operations stop within 60 seconds. The initiating remote answers confirmation, PIN or numeric passkey requests. Leaving the page, losing its connection, revoking its administrator access, cancelling, or closing Couch cancels its pending pairing and discovery. Expired prompt tokens cannot authorize another operation.
+
+Couch uses the official [BlueZ Rust binding, bluer 0.17.4](https://github.com/bluez/bluer). Its application-owned [pairing agent](https://bluez.readthedocs.io/en/latest/agent-api/) exists only during an initiated pairing request. It never becomes the default agent and does not enable adapter discoverability. BlueZ owns device bonds and Trusted persistence. Couch requests only the remote A2DP Audio Sink profile through [Device1.ConnectProfile](https://bluez.readthedocs.io/en/latest/device-api/). Keyboard, gamepad and microphone pairing are outside this interface.
+
+Paired, connected and selected for playback are separate states. A connected output appears in Sound, correlated by the audio card's Bluetooth address. Sound selects and tests the output and exposes available output-only A2DP profiles. It retains the saved address even while that output is missing. Couch makes one bounded reconnect attempt for that selected address on startup; it does not reconnect every remembered nearby device. A failed attempt appears in Bluetooth progress and can be retried with Connect. No reconnect resumes media. Existing Sound behavior pauses seekable playback or stops live media when its selected output disappears.
+
+The Ubuntu companion requires `bluez` and `libspa-0.2-bluetooth` alongside its existing PipeWire, WirePlumber, logind and session packages. Bluetooth and audio run as the existing `couch-tv` login, without another daemon, elevated application privileges or a separate audio server. [WirePlumber 0.4.17's shipped configuration](https://github.com/PipeWire/wireplumber/blob/0.4.17/src/config/bluetooth.lua.d/50-bluez-config.lua) enables logind arbitration by default. Keep it enabled so the active Couch login owns Bluetooth audio rather than a greeter or another session.
+
+## Qualification
+
+Focused Bun tests cover administrator ownership, delayed revocation, cancellation alongside an in-flight native read, exact Sound address correlation, saved-output changes, disconnected-but-selected UI, and page/connection exit cleanup. The Linux Rust fixture uses a private D-Bus service double through the actual bluer library. Its name check refuses a normal production system bus. It verifies discovery release, current-agent confirmation/PIN handling, late-answer rejection, authentication failure, the actual 60-second timeout, A2DP connect, saved bond reconnect through a fresh client, forget, vanished devices and absent adapter. This proves the protocol boundary, not Bluetooth radio or audio hardware.
+
+Run the ignored Rust test only inside a disposable Linux container with a private bus, after compiling the native test target:
+
+```sh
+dbus-daemon --session --fork --address=unix:path=/tmp/couch-bluetooth-bus
+DBUS_SYSTEM_BUS_ADDRESS=unix:path=/tmp/couch-bluetooth-bus cargo test --manifest-path src-tauri/Cargo.toml bluez_pair_discovery_cancel_reconnect_and_forget -- --ignored --nocapture
+```
+
+[Pair and reconnect Bluetooth speakers or headphones](https://github.com/avoid-quest/couch/issues/15) retains the real-device acceptance. C39S was identified by the owner in earlier discussion; its availability must be confirmed before taking it over. Required hardware evidence remains actual pair, audible stereo test and media, output loss during playback, reconnect without autoplay, restart reconnect, forget, rfkill/absent-adapter behavior, and proof that the active Couch session owns the output. No T480 changes or hardware results are implied by these source and D-Bus checks.

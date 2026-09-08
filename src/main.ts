@@ -1,5 +1,6 @@
 import { checkpointAppImage } from "./server/appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./server/appimage-update-native";
+import { createNativeBluetooth } from "./server/bluetooth-native";
 import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
 type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
@@ -31,6 +32,7 @@ function send(message: SidecarMessage) {
 
 const appimage = native && process.env.COUCH_APPIMAGE === "1";
 const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
+const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
@@ -46,6 +48,7 @@ hub = createHub({
   ...(appimage ? { restart: appimageUpdates.restart } : {}),
   ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
   nativeDisplay: nativeDisplay.request,
+  ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
   ...(appimage ? {
     admitted: () => admission,
     frontendReady: (value: unknown) => {
@@ -89,6 +92,7 @@ async function close() {
   closing = true;
   nativeDiagnostics.close();
   nativeDisplay.close();
+  nativeBluetooth.close();
   appimageUpdates.close();
   nativeReadiness.close();
   try { await hub.close(); } finally { process.exit(0); }
@@ -146,6 +150,7 @@ if (native) {
           })();
         }
         else if (message.type === "appimageUpdate") appimageUpdates.receive(message);
+        else if (message.type === "bluetooth") nativeBluetooth.receive(message);
         else if (message.type === "display") nativeDisplay.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);
         else if (message.type === "shutdown") await close();

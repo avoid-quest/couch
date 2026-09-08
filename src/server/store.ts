@@ -42,6 +42,7 @@ export function openStore(path: string) {
     );
     CREATE INDEX IF NOT EXISTS viewing_history ON viewing_progress(profileId, lastPlayedAt DESC);
     CREATE TABLE IF NOT EXISTS watching_preferences (profileId TEXT PRIMARY KEY, preferences TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS bluetooth_output (id INTEGER PRIMARY KEY CHECK (id = 1), address TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS audio_output (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, card TEXT, profile TEXT);
     CREATE TABLE IF NOT EXISTS playback_device (id INTEGER PRIMARY KEY CHECK (id = 1), audioDelay REAL NOT NULL);
     INSERT OR IGNORE INTO playback_device VALUES (1, 0);
@@ -104,8 +105,6 @@ export function openStore(path: string) {
 
   return {
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },
-    audioProfile() { const value = db.query<{ card: string | null; profile: string | null }, []>("SELECT card, profile FROM audio_output WHERE id = 1").get(); return value?.card && value.profile ? { card: value.card, profile: value.profile } : null; },
-    saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); },
     setupStep,
     advanceSetup(expected: unknown) {
       return db.transaction(() => {
@@ -117,6 +116,8 @@ export function openStore(path: string) {
         return next;
       }).immediate();
     },
+    audioProfile() { const value = db.query<{ card: string | null; profile: string | null }, []>("SELECT card, profile FROM audio_output WHERE id = 1").get(); const bluetooth = db.query<{ address: string }, []>("SELECT address FROM bluetooth_output WHERE id = 1").get(); return value?.card && value.profile ? { card: value.card, profile: value.profile, ...(bluetooth ? { bluetoothAddress: bluetooth.address } : {}) } : null; },
+    saveAudioOutput(name: string, profile?: import("../shared/sound").SavedSoundProfile | null) { db.transaction(() => { db.query("INSERT INTO audio_output VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,card=excluded.card,profile=excluded.profile").run(name, profile?.card ?? null, profile?.profile ?? null); if (profile?.bluetoothAddress) db.query("INSERT INTO bluetooth_output VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET address=excluded.address").run(profile.bluetoothAddress); else db.run("DELETE FROM bluetooth_output"); })(); },
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
     saveTvInterfaceSize(size: InterfaceSize) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");

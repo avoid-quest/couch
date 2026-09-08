@@ -38,6 +38,8 @@ import { createGuide } from "./iptv";
 import { createRecordings } from "./recordings";
 
 import { createSoundRouting } from "./sound-routing";
+import { bluetoothSettings } from "./bluetooth";
+import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -51,6 +53,7 @@ type HubOptions = {
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
   restart?: (confirmInterrupt: boolean) => Promise<unknown>;
+  nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
   frontend?: HTMLBundle;
@@ -158,7 +161,11 @@ export function createHub(options: HubOptions) {
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
-  const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: () => session.invalidate("controller"), onRevoke: id => {
+  const controllers = createControllers({ store, recoveryCode: options.adminRecoveryCode, onChange: controller => {
+    if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
+    session.invalidate("controller");
+  }, onRevoke: id => {
+    void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
       socket.unsubscribe("session");
       socket.close(4001, "This remote's access was revoked. Pair again.");
@@ -171,6 +178,8 @@ export function createHub(options: HubOptions) {
     pin: output => options.sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
   });
+  const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
+  if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
   sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
@@ -317,6 +326,7 @@ export function createHub(options: HubOptions) {
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));
         if (!websocket && /^\/api\/updates(?:\/|$)/.test(url.pathname)) return cors(request, await updates.handle(request, currentIdentity));
         if (!websocket && /^\/api\/tools(?:\/|$)/.test(url.pathname)) return cors(request, await toolHealth.handle(request, currentIdentity));
+        if (!websocket && /^\/api\/bluetooth(?:\/|$)/.test(url.pathname)) return cors(request, await bluetoothSettings(request, currentIdentity, options.nativeBluetooth));
         if (!websocket && /^\/api\/sound(?:\/|$)/.test(url.pathname)) return cors(request, await sound!.handle(request, currentIdentity));
         if (!websocket && /^\/api\/display(?:\/|$)/.test(url.pathname)) return cors(request, await displaySettings(request, currentIdentity, options.nativeDisplay));
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
@@ -346,7 +356,7 @@ export function createHub(options: HubOptions) {
         if (socket.data.trusted) socket.subscribe("navigation");
         socket.send(JSON.stringify({ type: "state", state: session.state } satisfies ServerMessage));
       },
-      close(socket) { sockets.delete(socket); },
+      close(socket) { sockets.delete(socket); if (socket.data.controllerId) void options.nativeBluetooth?.({ op: "cancel", owner: socket.data.controllerId }).catch(() => {}); },
       async message(socket, message) {
         try { socket.data.authorize(); } catch { socket.close(4001, "Pair this remote again."); return; }
         idle.activity();

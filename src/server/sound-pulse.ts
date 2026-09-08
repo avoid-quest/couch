@@ -10,12 +10,14 @@ export const querySound = (args: string[]): Promise<string> => new Promise((reso
   execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The TV audio session did not answer. Check PipeWire/PulseAudio and pulseaudio-utils.")) : resolve(stdout.trim()));
 });
 
+const bluetoothAddress = (card?: Card) => { const value = card?.properties?.["api.bluez5.address"] ?? card?.properties?.["device.string"]; return value && /^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(value) ? { bluetoothAddress: value.toUpperCase() } : {}; };
+
 export function soundProfiles(value: unknown): SoundProfile[] {
   if (!Array.isArray(value)) throw new Error("The audio server returned invalid cards.");
   return value.slice(0, 128).flatMap((card: Card) => {
     if (typeof card.name !== "string" || !card.name || card.name.length > 512) throw new Error("Invalid audio card.");
     return Object.entries(card.profiles ?? {}).filter(([name]) => name.length <= 512)
-      .map(([id, profile]) => ({ selectable: profile.sinks === 1 && profile.sources === 0 && id.startsWith("output:"), card: card.name, id, name: `${card.properties?.["device.description"] || card.name} · ${profile.description || id}`.slice(0, 200), active: card.active_profile === id, available: profile.available === true }));
+      .map(([id, profile]) => ({ ...bluetoothAddress(card), selectable: profile.sinks === 1 && profile.sources === 0 && (id.startsWith("output:") || id.startsWith("a2dp-sink")), card: card.name, id, name: `${card.properties?.["device.description"] || card.name} · ${profile.description || id}`.slice(0, 200), active: card.active_profile === id, available: profile.available === true }));
   });
 }
 
@@ -25,7 +27,7 @@ export function soundOutputs(value: unknown, cards: Card[] = []): SoundOutput[] 
     if (typeof sink.name !== "string" || !sink.name || sink.name.length > 512 || typeof sink.index !== "number") throw new Error("The audio server returned an invalid output.");
     const availability = sink.ports?.find(port => port.name === sink.active_port)?.availability;
     const volumes = Object.values(sink.volume ?? {}).map(channel => channel.value).filter(value => Number.isFinite(value) && value >= 0);
-    return { ...(cards.find(card => card.index === sink.card) ? { card: cards.find(card => card.index === sink.card)!.name } : {}), testBlocked: sink.flags?.includes("FLAT_VOLUME") ? "This audio server couples stream and system volume. Testing is unavailable to preserve your output level." : null, id: sink.name, name: (sink.description || sink.name).slice(0, 160), state: (sink.state || "Unknown").slice(0, 30), availability: availability === "available" || availability === "yes" ? "available" : availability === "not available" || availability === "no" ? "unavailable" : "unknown", muted: sink.mute === true, volume: volumes.length ? Math.round(Math.max(...volumes) / 65536 * 100) : null };
+    return { ...bluetoothAddress(cards.find(card => card.index === sink.card)), ...(cards.find(card => card.index === sink.card) ? { card: cards.find(card => card.index === sink.card)!.name } : {}), testBlocked: sink.flags?.includes("FLAT_VOLUME") ? "This audio server couples stream and system volume. Testing is unavailable to preserve your output level." : null, id: sink.name, name: (sink.description || sink.name).slice(0, 160), state: (sink.state || "Unknown").slice(0, 30), availability: availability === "available" || availability === "yes" ? "available" : availability === "not available" || availability === "no" ? "unavailable" : "unknown", muted: sink.mute === true, volume: volumes.length ? Math.round(Math.max(...volumes) / 65536 * 100) : null };
   });
 }
 

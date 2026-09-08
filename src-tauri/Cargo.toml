@@ -35,9 +35,14 @@ time = { version = "0.3", features = ["parsing"] }
 libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+bluer = { version = "=0.17.4", features = ["bluetoothd"] }
+futures-util = "0.3"
 tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
+dbus = "0.9"
+dbus-tokio = "0.7"
+dbus-crossroads = "0.5"
 libmpv2 = "=5.0.3"
 libmpv2-sys = "=4.0.1"
 
