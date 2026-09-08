@@ -1,3 +1,4 @@
+import { setupSteps, type SetupStep } from "../shared/setup";
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -80,6 +81,9 @@ export function openStore(path: string) {
   const protectAdministrator = (device: Controller) => {
     if (device.role === "administrator" && !db.query("SELECT 1 FROM devices WHERE role = 'administrator' AND id != ? LIMIT 1").get(device.id)) throw new ControllerError("Keep at least one administrator. Approve another remote first.", 409);
   };
+  db.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
+  db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() ? "complete" : "general");
+  const setupStep = () => db.query<{ step: SetupStep }, []>("SELECT step FROM installation_setup WHERE id = 1").get()!.step;
   const claimRow = (code: string) => db.query<{ recovery: number; expiresAt: number; consumed: number }, [string]>("SELECT recovery, expiresAt, consumed FROM controller_claims WHERE code_hash = ?").get(hash(code));
   const progressColumns = "mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt";
   const activeProfile = () => db.query<WatchingProfile, []>("SELECT p.id, p.name FROM watching_profiles p JOIN watching_state s ON s.profileId = p.id WHERE s.id = 1").get()!;
@@ -96,6 +100,17 @@ export function openStore(path: string) {
   };
 
   return {
+    setupStep,
+    advanceSetup(expected: unknown) {
+      return db.transaction(() => {
+        if (!administratorExists()) throw new ControllerError("Claim an administrator before continuing setup.", 409);
+        const current = setupStep();
+        if (expected !== current || current === "complete") throw new ControllerError("Setup changed. Review the current step and try again.", 409);
+        const next = setupSteps[setupSteps.indexOf(current) + 1]!;
+        db.query("UPDATE installation_setup SET step = ? WHERE id = 1").run(next);
+        return next;
+      }).immediate();
+    },
     tvInterfaceSize(): InterfaceSize { return db.query<{ scale: InterfaceSize }, []>("SELECT scale FROM installation_appearance WHERE id = 1").get()!.scale; },
     saveTvInterfaceSize(size: InterfaceSize) {
       if (!isInterfaceSize(size)) throw new ControllerError("Choose a supported interface size.");

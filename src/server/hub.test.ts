@@ -1164,3 +1164,29 @@ test("active and uncertain recordings defer idle updates, while confirmed future
     now += 300_000; expect(hub.idleReason()).toBeNull();
   } finally { db.close(); }
 });
+
+test("authenticated first-run steps broadcast to both phones and survive coordinator restart without replaying claim", async () => {
+  const initial = fixture();
+  const ownerToken = await pair(initial.hub), guestToken = await pair(initial.hub);
+  const owner = new Peer(initial.hub, ownerToken), guest = new Peer(initial.hub, guestToken);
+  await Promise.all([owner.ready(), guest.ready()]);
+  expect(owner.state.setupStep).toBe("general");
+  expect((await controllerApi(initial.hub, guestToken, "/api/settings/setup", "POST", { step: "general" })).status).toBe(403);
+  await claimAdministrator(initial.hub, ownerToken);
+  for (const [step, next] of [["general", "display"], ["display", "sound"]]) {
+    expect((await controllerApi(initial.hub, ownerToken, "/api/settings/setup", "POST", { step })).status).toBe(200);
+    await guest.waitFor(message => message.type === "state" && message.state.setupStep === next);
+  }
+  await Promise.all([owner.close(), guest.close()]);
+  await initial.hub.close();
+  hubs.splice(hubs.indexOf(initial.hub), 1);
+  const restarted = fixture(initial.databasePath);
+  const resumed = new Peer(restarted.hub, ownerToken);
+  await resumed.ready();
+  expect(resumed.state).toMatchObject({ setupStep: "sound", administratorClaimed: true, currentEntryId: null });
+  expect((await controllerApi(restarted.hub, hostToken, "/api/controllers/claim-code")).status).toBe(409);
+  for (const step of ["sound", "sources"]) expect((await controllerApi(restarted.hub, ownerToken, "/api/settings/setup", "POST", { step })).status).toBe(200);
+  await resumed.waitFor(message => message.type === "state" && message.state.setupStep === "complete");
+  expect(restarted.commands).toEqual([]);
+  expect(resumed.state.queue).toEqual([]);
+});
