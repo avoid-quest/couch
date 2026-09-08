@@ -190,3 +190,48 @@ test("selecting a PipeWire Bluetooth sink saves its card profile and reconnect a
     expect(f.sound.state.selectedBluetoothAddress).toBe("14:0F:92:24:EE:40");
   } finally { f.sound.close(); }
 });
+
+
+test("refresh repairs a legacy selected Bluetooth sink once without changing playback or existing profiles", async () => {
+  const sink = "bluez_output.14_0F_92_24_EE_40.1";
+  const cards = [{ index: 215, name: "bluez_card.14_0F_92_24_EE_40", active_profile: "a2dp-sink", properties: { "api.bluez5.address": "14:0F:92:24:EE:40" }, profiles: {
+    "a2dp-sink": { description: "High Fidelity Playback", sinks: 1, sources: 0, available: true },
+  } }];
+  const expected = { card: cards[0]!.name, profile: "a2dp-sink", bluetoothAddress: "14:0F:92:24:EE:40" };
+  for (const scenario of ["legacy", "saved profile", "missing card", "inactive profile", "unavailable sink"] as const) {
+    const store = openStore(":memory:");
+    const existing = scenario === "saved profile" ? { ...expected, profile: "a2dp-sink-sbc_xq" } : null;
+    store.saveAudioOutput(sink, existing);
+    const inventory: SoundInventory = {
+      defaultOutput: sink,
+      outputs: soundOutputs([{ index: 216, name: sink, description: "C39S", properties: { "device.name": cards[0]!.name, "api.bluez5.address": expected.bluetoothAddress } }], cards),
+      profiles: soundProfiles(cards),
+    };
+    if (scenario === "missing card") delete inventory.outputs[0]!.card;
+    if (scenario === "inactive profile") inventory.profiles![0]!.active = false;
+    if (scenario === "unavailable sink") inventory.outputs[0]!.availability = "unavailable";
+    const before = structuredClone(inventory);
+    const saves: string[] = [], mutations: string[] = [];
+    const sound = createSoundRouting({
+      saved: store.audioOutput, savedProfile: store.audioProfile,
+      save: (name, profile) => { saves.push(name); store.saveAudioOutput(name, profile); },
+      active: () => false, pin: () => mutations.push("pin"), lost: () => mutations.push("lost"), changed: () => {},
+      backend: {
+        inventory: async () => structuredClone(inventory), route: async () => null,
+        profile: async () => { mutations.push("profile"); }, default: async () => { mutations.push("default"); },
+        volume: async () => { mutations.push("volume"); }, mute: async () => { mutations.push("mute"); },
+      },
+    });
+    try {
+      await Bun.sleep(1);
+      await sound.check(); await sound.check();
+      expect(store.audioOutput()).toBe(sink);
+      expect(store.audioProfile()).toEqual(scenario === "legacy" ? expected : existing);
+      expect(saves).toEqual(scenario === "legacy" ? [sink] : []);
+      expect(mutations).toEqual([]);
+      expect(inventory).toEqual(before);
+      expect(sound.state.observedOutput).toBeNull();
+      if (scenario === "legacy") expect(sound.state.selectedBluetoothAddress).toBe(expected.bluetoothAddress);
+    } finally { sound.close(); store.close(); }
+  }
+});

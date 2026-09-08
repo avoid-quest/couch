@@ -51,6 +51,9 @@ export function createSoundRouting(options: Options) {
     const sink = output(inventory);
     if (!sink) { lost("The selected audio output is unavailable. Reconnect it or choose another output, then resume playback."); return; }
     if (sink.testBlocked) { lost("This audio server couples stream and system volume. Disable flat volumes before playback."); return; }
+    // Older selections may have saved only the sink name before its card metadata was available.
+    const missingProfile = options.savedProfile && !savedProfile ? profileFor(inventory, sink.id) : null;
+    if (missingProfile) options.save(sink.id, missingProfile);
     // Ubuntu's volume keys address its default sink. Reconcile that default
     // after restart/hotplug so those keys still control the saved TV output.
     if (inventory.defaultOutput !== selected) await backend.default(selected!);
