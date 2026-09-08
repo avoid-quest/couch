@@ -74,6 +74,7 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
   const current = state?.operation;
   const own = current?.id === operation.current;
   const prompt = own ? current?.prompt : null;
+  const searching = active && current?.kind === "scan";
   const disabled = !connected || pending || active;
   const deviceDisabled = !connected || state?.adapter !== "available" || pending || active && !(own && current?.kind === "scan");
   return <section className="space-y-4">
@@ -84,11 +85,10 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
     {state?.adapter === "absent" && <p>No Bluetooth adapter is attached to the TV.</p>}
     {state?.adapter === "blocked" && <p>Bluetooth is blocked. Turn off airplane mode or release the TV computer's Bluetooth switch.</p>}
     {state?.adapter === "off" && <Button disabled={disabled} onClick={() => change({ op: "power" })}>Turn Bluetooth on</Button>}
-    {state?.adapter === "available" && <Button disabled={disabled} onClick={() => change({ op: "scan" })}>{active && current?.kind === "scan" ? "Searching…" : "Search"}</Button>}
+    {state?.adapter === "available" && <Button disabled={!connected || pending || active && !(own && searching)} onClick={() => change(own && searching ? { op: "cancel", token: current.id } : { op: "scan" })}>{searching ? own ? "Stop search" : "Searching…" : "Search"}</Button>}
     {current && <div role="status" className="space-y-2">
-      <p>{active ? current.kind === "scan" ? "Searching for nearby devices. Choose a result below." : "Connecting or updating your device…" : current.message || (current.kind === "scan" ? "Search finished." : "Device updated.")}</p>
-      {active && own && <Button disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>{current.kind === "scan" ? "Stop search" : "Cancel"}</Button>}
-      {active && !own && <p>Another remote is managing Bluetooth. Wait for it to finish.</p>}
+      <p className="min-h-10">{active ? !own ? "Another remote is managing Bluetooth. Wait for it to finish." : current.kind === "scan" ? "Searching for devices. Choose a result below." : "Connecting or updating your device…" : current.message || (current.kind === "scan" ? "Search finished. Choose a result below." : "Device updated.")}</p>
+      {active && own && !searching && <Button disabled={!connected || pending} onClick={() => change({ op: "cancel", token: current.id })}>Cancel</Button>}
     </div>}
     {prompt && <div className="space-y-2 rounded border p-3"><p>{prompt.kind === "confirm" ? `Confirm pairing${prompt.value ? " code " + prompt.value : " with this device"}?` : prompt.kind === "display" ? `Enter ${prompt.value} on the device.` : "Enter the pairing " + (prompt.kind === "pin" ? "PIN from the device's instructions." : "six-digit passkey.")}</p>{["pin", "passkey"].includes(prompt.kind) && <Input aria-label="Bluetooth pairing code" value={answer} maxLength={prompt.kind === "pin" ? 16 : 6} autoComplete="off" onChange={event => setAnswer(event.target.value)} />}{prompt.kind !== "display" && <Button disabled={!connected || pending || prompt.kind !== "confirm" && !answer} onClick={() => change({ op: "answer", token: current!.id, prompt: prompt.id, answer: prompt.kind === "confirm" ? "yes" : answer })}>{prompt.kind === "confirm" ? "Confirm pairing" : "Submit pairing code"}</Button>}</div>}
     {state?.devices.length === 0 && state.adapter === "available" && <p>{active ? "No devices found yet." : "No devices found. Put your device in pairing mode and select Search."}</p>}
@@ -96,10 +96,10 @@ export function BluetoothSettings({ credentials: { origin, token }, connected }:
       const outputs = sound?.outputs.filter(output => output.bluetoothAddress === device.address) ?? [];
       const selected = sound?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound?.routing?.selectedOutput);
       return <li key={device.address} className="flex flex-wrap items-center justify-between gap-3 rounded border p-3">
-        <div><p>{device.name}</p><p className="text-sm text-muted-foreground">{!device.available ? "Not currently available · Search again" : device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""} · {device.address}</p></div>
+        <div className="min-w-0 break-words"><p>{device.name}</p><p className="text-sm text-muted-foreground"><span className="block min-h-10">{!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""}</span><span className="block">{device.address}</span></p></div>
         <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => change({ op: device.connected ? "disconnect" : device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => change({ op: "forget", device: device.address })}>Forget</Button>}</div>
       </li>;
     })}</ul>
-    <p className="text-sm text-muted-foreground">For speakers and headphones, choose the connected output in Sound. Connecting does not change your sound output or start playback.</p>
+    <p className="text-sm text-muted-foreground">Search again to find unavailable devices. For speakers and headphones, choose the connected output in Sound. Connecting does not change your sound output or start playback.</p>
   </section>;
 }
