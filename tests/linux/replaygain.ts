@@ -49,7 +49,7 @@ export async function verifyReplayGain(context: Context) {
   };
   const savedSettings = async (driver: UiDriver) => {
     await driver.button("Settings");
-    await driver.button("Playback", "[role=dialog]");
+    await driver.settingsSection("playback");
     await until("saved ReplayGain selector is visible", () => driver.execute("return !!document.querySelector('#preferred-replaygain')"));
   };
   const capture = async (fixture: Fixture, id: string, mode: ReplayGainMode, label: string, radio = false, current = false) => {

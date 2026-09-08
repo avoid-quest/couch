@@ -128,6 +128,23 @@ export class UiDriver {
     await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
+  async settingsSection(section: string) {
+    const selector = (value: string) => `[aria-label="Settings sections"] [role="tab"][id$="-trigger-${value}"]`;
+    await this.waitFor("Settings navigation is rendered", () => this.execute('return !!document.querySelector(\'[role="dialog"] [aria-label="Settings sections"]\')'));
+    const grouped = await this.execute('return !!document.querySelector("[data-settings-group]") || [...document.querySelectorAll(\'[role="dialog"] button\')].some(button => button.textContent.trim() === "All settings")');
+    if (grouped && !await this.execute("return !!document.querySelector(arguments[0])", [selector(section)])) {
+      if (await this.execute('return !document.querySelector("[data-settings-group]")')) await this.button("All settings", '[role="dialog"]');
+      const group = section === "playback" ? "profile" : ["appearance", "connection", "remote"].includes(section) ? "device" : "tv";
+      const entry = `[data-settings-group="${group}"]`;
+      await this.waitFor(`Settings offers the ${group} group`, () => this.execute("return !!document.querySelector(arguments[0])", [entry]));
+      await this.click(entry);
+    }
+    const target = selector(!grouped && section === "tv-appearance" ? "appearance" : !grouped && section === "remotes" ? "connection" : section);
+    await this.waitFor(`Settings offers ${section}`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
+    await this.click(target);
+    await this.waitFor(`Settings selects ${section}`, () => this.execute('return document.querySelector(arguments[0])?.getAttribute("aria-selected") === "true"', [target]));
+  }
+
   async select(selector: string, label: string) {
     await this.click(selector);
     const deadline = Date.now() + 5_000;

@@ -177,7 +177,7 @@ async function savePreferences(ui: UiDriver, until: Wait, preferences: ProfilePl
 
 async function savedSettings(ui: UiDriver, until: Wait) {
   await ui.button("Settings");
-  await ui.button("Playback", "[role=dialog]");
+  await ui.settingsSection("playback");
   await until("Settings Playback shows the watching profile and saved choices", () => ui.execute("return !!document.querySelector('#preferred-audio-language') && document.querySelector('[role=dialog]').textContent.includes('Watching profile:')"));
 }
 

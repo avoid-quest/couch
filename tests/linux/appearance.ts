@@ -35,11 +35,11 @@ async function subtitleMask(artifactDir: string, name: string, sample: { left: n
   return mask;
 }
 
-async function open(ui: UiDriver, until: Wait) {
+async function open(ui: UiDriver, until: Wait, scope: "device" | "tv" = "device") {
   await ui.browse();
   await ui.button("Settings");
-  await ui.button("Appearance", '[aria-label="Settings sections"]');
-  await until("Appearance loads its controls", () => ui.execute("return !!document.querySelector('#tv-interface-size') && !document.querySelector('[role=dialog]')?.textContent.includes('Loading settings…')"));
+  await ui.settingsSection(scope === "tv" ? "tv-appearance" : "appearance");
+  await until("Appearance loads its controls", () => ui.execute("return !!document.querySelector('#tv-interface-size, #remote-interface-size') && !document.querySelector('[role=dialog]')?.textContent.includes('Loading settings…')"));
 }
 async function close(ui: UiDriver, until: Wait) {
   await ui.key(keys.escape);
@@ -66,12 +66,15 @@ export async function verifyAppearance(context: Context) {
   await otherRemote.restore();
   await open(other, until);
   assert.equal(await scale(other), 1, "The second actual browser keeps its default size");
+  await other.settingsSection("tv-appearance");
   assert.equal(await other.execute("return !!document.querySelector(arguments[0])", [tvChoices]), false, "An ordinary paired browser cannot edit the shared TV size");
+  await other.settingsSection("appearance");
   await other.button("Larger", remoteChoices);
   await until("the second browser changes only its own size", async () => await scale(other) === 1.15 && await scale(phone) === 1.3 && await scale(ui) === 1);
   await close(other, until);
   await otherRemote.minimize();
   await httpRemote.restore();
+  await phone.settingsSection("tv-appearance");
   await phone.button("Largest", tvChoices);
   await until("TV preview is shared with both WebSocket observers and the native screen", async () => all(state => state.appearance?.size === 1.3 && !!state.appearance.preview) && await scale(ui) === 1.75);
   assert.deepEqual(await geometry(), original, "Interface preview leaves the fullscreen native aperture unchanged");
@@ -80,6 +83,7 @@ export async function verifyAppearance(context: Context) {
   await assertNativePortal(ui, '[role="dialog"][data-tv-local-only]', artifactDir, "appearance-tv-preview");
   await until("unconfirmed TV preview automatically returns to default", async () => all(state => state.appearance?.size === 1 && state.appearance.preview === null) && await scale(ui) === 1, 25_000);
   await httpRemote.restore();
+  await phone.settingsSection("tv-appearance");
   await phone.button("Largest", tvChoices);
   await phone.button("Keep TV size", settingsDialog);
   await until("confirmed TV size is shared without a remaining preview", async () => all(state => state.appearance?.size === 1.3 && state.appearance.confirmedSize === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.75);
@@ -102,7 +106,7 @@ export async function verifyAppearance(context: Context) {
   const subtitle = clients[0]!.state!.player.tracks!.find(track => track.kind === "subtitle")!;
   await assertSubtitlePixels(context, subtitle, "appearance-default-subtitles");
   await httpRemote.restore();
-  await open(phone, until);
+  await open(phone, until, "tv");
   await phone.button("Largest", tvChoices);
   await phone.button("Keep TV size", settingsDialog);
   await until("largest confirmed TV size applies to the paused native picture", async () => await scale(ui) === 1.75 && all(state => state.appearance?.preview === null));
@@ -141,8 +145,9 @@ export async function verifyAppearance(context: Context) {
       await until("confirmed TV size survives desktop restart", async () => all(state => state.appearance?.size === 1.3 && state.appearance.preview === null) && await scale(ui) === 1.75);
       assert.deepEqual(await geometry(), original);
       await httpRemote.restore();
-      await open(phone, until);
+      await open(phone, until, "tv");
       await phone.button("Reset TV to default", settingsDialog);
+      await phone.settingsSection("appearance");
       await phone.button("Reset this remote to default", settingsDialog);
       await until("both TV and first browser resets restore default", async () => await scale(phone) === 1 && await scale(ui) === 1);
       await close(phone, until);

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { openStore } from "../../src/server/store";
 import { createLibrary } from "../../src/server/library";
 import { remoteSocketUrl } from "../linux/build";
+import { UiDriver } from "../linux/ui";
 
 const [mode, directory, container] = process.argv.slice(2);
 assert.ok(directory, "Usage: installed.ts --prepare FIXTURES | --verify FIXTURES CONTAINER");
@@ -97,6 +98,15 @@ async function api(path: string, body?: unknown) {
   return response.json();
 }
 const execute = (browser: { port: number; id: string }, script: string, args: unknown[] = []) => driver(browser.port, `/session/${browser.id}/execute/sync`, { script, args });
+async function settingsUi(browser: { port: number; id: string }, section: string) {
+  const ui = new UiDriver((path, body, method) => driver(browser.port, path, body, method), () => browser.id);
+  if (!await execute(browser, 'return !!document.querySelector(\'[role="dialog"] [aria-label="Settings sections"]\')')) {
+    await ui.browse();
+    await ui.button("Settings");
+  }
+  await ui.settingsSection(section);
+  return ui;
+}
 async function connected() {
   for (const browser of browsers) {
     if (!await execute(browser, "return !!document.querySelector('.remote-controller') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'")) return false;
@@ -201,15 +211,15 @@ try {
     sql("DROP TRIGGER reject_restart_checkpoint;");
     // Exercise the administrator's actual General confirmation, not an SSH restart.
     const admin = browsers[0]!;
-    await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
-    const click = (text: string) => execute(admin, "const button = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === arguments[0] && !b.disabled); if (!button) return false; button.click(); return true", [text]);
-    await until("Administrator opens restart confirmation", async () => click("Restart Couch"));
+    const ui = await settingsUi(admin, "general");
+    await ui.button("Restart Couch");
+    await until("Administrator opens restart confirmation", async () => execute(admin, "return [...document.querySelectorAll('[role=dialog] button')].some(button => button.textContent.trim() === 'Confirm restart')"));
     let observed = 0, beforeRestart = 0;
     await until("Restart confirmation has unsaved native progress", async () => {
       beforeRestart = stored(); observed = state.player.position;
       return observed > beforeRestart + 1;
     });
-    assert.equal(await click("Confirm restart"), true);
+    await ui.button("Confirm restart");
     const savedPreferences = state.preferences;
     await until("General restart replaces the native systemd owner", async () => service("show", "couch-tv.service", "-p", "MainPID", "--value") !== beforePid && service("show", "couch-tv.service", "-p", "MainPID", "--value") !== "0");
     await retained("Administrator restart retains both browser identities without autoplay");
@@ -227,9 +237,10 @@ try {
     service("reset-failed", "couch-tv.service");
     service("restart", "couch-tv.service");
     await retained("One start consumes the disposable supervisor restart budget");
-    await execute(admin, "const b = document.querySelector('button[aria-label=Settings]'); if (b && !document.querySelector('[role=tablist]')) b.click(); return true");
-    await until("Administrator requests restart with the exhausted budget", async () => click("Restart Couch"));
-    assert.equal(await click("Confirm restart"), true);
+    await settingsUi(admin, "general");
+    await ui.button("Restart Couch");
+    await until("Administrator requests restart with the exhausted budget", async () => execute(admin, "return [...document.querySelectorAll('[role=dialog] button')].some(button => button.textContent.trim() === 'Confirm restart')"));
+    await ui.button("Confirm restart");
     await until("Systemd truthfully reports start-limit-hit", async () => service("show", "couch-tv.service", "-p", "Result", "--value") === "start-limit-hit");
     await until("General reports missing reconnect and SSH recovery", async () => execute(admin, "return document.body.textContent.includes('Couch did not reconnect.')"), 75_000);
     inside("rm", dropin);
@@ -378,9 +389,7 @@ try {
       await importing;
       await waiting("five continuous idle minutes");
       const admin = browsers[0]!;
-      await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
-      const updates = await driver(admin.port, `/session/${admin.id}/element`, { using: "css selector", value: '[role="tab"][id$="-trigger-updates"]' });
-      await driver(admin.port, `/session/${admin.id}/element/${updates["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+      await settingsUi(admin, "updates");
       await until("Administrator opens Updates during the idle wait", async () => execute(admin, 'return document.querySelector(\'[role="tab"][id$="-trigger-updates"]\')?.getAttribute("aria-selected") === "true"'));
       await until("Updates explains the active idle policy", async () => execute(admin, "return document.body.textContent.includes('five continuous idle minutes')"));
       for (const browser of browsers) {
@@ -558,22 +567,24 @@ try {
     const admin = browsers[0]!;
     await driver(admin.port, `/session/${admin.id}/url`, { url: origin });
     await retained("The final build's refreshed remote retains its existing pairing");
-    await execute(admin, "document.querySelector('button[aria-label=Settings]').click(); return true");
-    const click = (text: string) => execute(admin, "const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === arguments[0] && !b.disabled); if (!b) return false; b.click(); return true", [text]);
+    const ui = await settingsUi(admin, "general");
     const denied = await fetch(`${origin}${path}`, { method: "POST", headers: { Authorization: `Bearer ${seed.tokens[1]}`, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: false }) });
     assert.equal(denied.status, 403, "A paired nonadministrator cannot change TV startup");
     for (const enabled of [false, true]) {
-      await until("General exposes the effective startup control", async () => click(enabled ? "Enable automatic startup" : "Disable automatic startup"));
+      const label = enabled ? "Enable automatic startup" : "Disable automatic startup";
+      await until("General exposes the effective startup control", async () => execute(admin, "return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === arguments[0] && !button.disabled)", [label]));
+      await ui.button(label);
       await until("General shows the saved next-session startup mode", async () => execute(admin, "return document.querySelector('[data-startup-mode]')?.textContent.includes(arguments[0])", [enabled ? "Couch starts automatically" : "Login screen; Couch does not start automatically"]));
       assert.equal((await api(path)).enabled, enabled, "Readback comes from the effective OS setting");
       assert.equal(supervised(), beforePid, "Changing next-session startup does not interrupt Couch");
     }
-    for (const [button, tab] of [["Pair again / manage remotes", "Connection"], ["Effective overrides", "Advanced"]]) {
-      assert.equal(await click(button!), true);
+    const grouped = await execute(admin, `return [...document.querySelectorAll('[role="dialog"] button')].some(button => button.textContent.trim() === "All settings")`);
+    const links = grouped ? [["Connection", "Connection"], ["Manage remotes", "Paired remotes"], ["Effective overrides", "Advanced"]] : [["Pair again / manage remotes", "Connection"], ["Effective overrides", "Advanced"]];
+    for (const [button, tab] of links) {
+      await ui.button(button!);
       await until(`General links to ${tab}`, async () => execute(admin, "return [...document.querySelectorAll('[role=tab]')].some(t => t.textContent.trim() === arguments[0] && t.getAttribute('aria-selected') === 'true')", [tab]));
-      const general = await driver(admin.port, `/session/${admin.id}/element`, { using: "css selector", value: '[role="tab"][id$="-trigger-general"]' });
-      await driver(admin.port, `/session/${admin.id}/element/${general["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
-      await until("General tab is selected before the next link", async () => execute(admin, 'return document.querySelector(\'[role="tab"][id$="-trigger-general"]\')?.getAttribute("aria-selected") === "true"'));
+      await ui.settingsSection("general");
+      await until("General tab is selected before the next link", async () => execute(admin, `return document.querySelector('[role="tab"][id$="-trigger-general"]')?.getAttribute("aria-selected") === "true"`));
       assert.equal(await execute(admin, "return [...document.querySelectorAll('p')].filter(p => p.textContent === 'Start Couch automatically without a login password').length"), 1, "General retains exactly one startup section after returning from another tab");
     }
     checks.push("Installed administrator toggles effective passwordless TV startup without interrupting the current session");

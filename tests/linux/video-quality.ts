@@ -21,10 +21,10 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
     await target.key(keys.escape);
     await until("quality dialog closes", () => target.execute("return !document.querySelector('[role=dialog]')"));
   };
-  const settings = async (target: UiDriver, host = false) => {
+  const settings = async (target: UiDriver) => {
     await target.browse();
     await target.button("Settings");
-    await target.button(host ? "This screen" : "This remote", '[aria-label="Settings sections"]');
+    await target.settingsSection("remote");
     await until("local quality settings opens", () => target.execute("return !!document.querySelector('#default-video-quality')"));
   };
   const selected = async (target: UiDriver, selector: string, quality: VideoQuality) => {
@@ -74,7 +74,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await close(other);
   await otherRemote.minimize();
   await httpRemote.minimize();
-  await settings(ui, true);
+  await settings(ui);
   await selected(ui, "#default-video-quality", "auto");
   await screenshot("quality-tv-settings");
   await close(ui);

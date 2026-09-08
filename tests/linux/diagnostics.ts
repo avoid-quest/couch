@@ -30,7 +30,7 @@ try {
   await until("diagnostics native driver starts", async () => { try { return (await fetch("http://127.0.0.1:4444/status")).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('[aria-label=Settings]')"));
-  await tv.button("Settings");
+  await tv.button("Settings"); await tv.settingsSection("general");
   await until("native startup offers its administrator code", () => tv.execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '')"));
   const claim = await tv.execute("return document.querySelector('[data-administrator-code]').textContent") as string;
   const code = await tv.execute("return document.querySelector('[data-pairing-code]').textContent") as string;
@@ -41,11 +41,11 @@ try {
   const paired = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   const guest = (await paired.json() as { token: string }).token;
   for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) assert.equal((await api(path)).status, 403);
-  await phone.ui.browse(); await phone.ui.button("Settings");
+  await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.settingsSection("general");
   assert.equal(await phone.ui.execute("return [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'Advanced')"), false);
   await phone.ui.type("#administrator-code", claim); await phone.ui.button("Claim administrator");
   await until("claimed phone exposes Advanced", () => phone!.ui.execute("return [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'Advanced')"));
-  await phone.ui.button("Advanced", '[aria-label="Settings sections"]');
+  await phone.ui.settingsSection("advanced");
   await until("Advanced displays an idle native report", () => phone!.ui.execute("return document.querySelector('[data-advanced-settings]')?.textContent.includes('Private coordinator pipe')"));
   await assertResponsive(phone.ui, "Advanced diagnostics phone");
   await phone.screenshot("diagnostics-phone-idle");
@@ -79,7 +79,7 @@ try {
   assert.equal(facts.find(fact => fact.name === "Hardware decoder")?.value, "no", "Xvfb fixture truthfully reports software decoding");
   await until("diagnostic collection leaves the same playback advancing", () => state?.player.playbackId === before.playbackId && state.player.position > before.position && state.player.status === "playing");
   for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) assert.equal((await api(path, guest)).status, 403);
-  await phone.restore(); await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.button("Advanced", '[aria-label="Settings sections"]');
+  await phone.restore(); await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.settingsSection("advanced");
   await until("phone shows the observed software decoder", () => phone!.ui.execute("return [...document.querySelectorAll('[data-advanced-settings] dt')].some(term => term.textContent === 'Hardware decoder' && term.nextElementSibling?.textContent.startsWith('no'))"));
   await assertResponsive(phone.ui, "Advanced native playback details"); await phone.screenshot("diagnostics-phone-playing");
   await phone.ui.button("Export diagnostics");
