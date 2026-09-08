@@ -124,7 +124,7 @@ test("EOF clears resume and marks watched; stop completion requires 90 percent a
   expect(f.saved()).toMatchObject({ position: 0, watched: true });
 });
 
-test("each play reads current profile resume instead of queue metadata; restart restores profiles without playback", () => {
+test("each play reads the shared resume point while retaining legacy history rows across restart", () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-progress-"));
   const path = join(directory, "state.sqlite");
   const f = fixture({}, openStore(path));
@@ -144,10 +144,10 @@ test("each play reads current profile resume instead of queue metadata; restart 
   f.session.observe(idle);
   f.session.selectProfile(guest.id);
   f.play("one");
-  expect(f.commands.at(-1)).not.toHaveProperty("startPosition");
+  expect(f.commands.at(-1)).toMatchObject({ type: "load", startPosition: 26 });
   f.observe(50);
-  expect(f.saved("one", guest.id)?.position).toBe(50);
-  expect(f.saved()?.position).toBe(26);
+  expect(f.saved("one", guest.id)).toBeNull();
+  expect(f.saved()?.position).toBe(50);
   f.session.command({ type: "stop" });
   f.play("one", true);
   expect(f.commands.at(-1)).not.toHaveProperty("startPosition");
@@ -159,7 +159,8 @@ test("each play reads current profile resume instead of queue metadata; restart 
   expect(fresh.state.currentEntryId).toBeNull();
   expect(fresh.state.queue).toHaveLength(1);
   expect(loads).toEqual([]);
-  expect(reopened.history(guest.id)[0]?.position).toBe(50);
+  expect(reopened.history(guest.id)).toEqual([]);
+  expect(reopened.sharedHistory()[0]?.position).toBe(50);
   fresh.close(); reopened.close();
 });
 
@@ -239,6 +240,8 @@ test("a history source remains replayable after queue removal and store restart"
   f.session.command({ type: "enqueue", entry }); f.play(entry.id); f.observe(31);
   f.session.command({ type: "stop" }); f.session.command({ type: "remove", entryId: entry.id });
   const fresh = fixture({}, openStore(path));
+  const separate = fresh.session.createProfile("Separate old history");
+  fresh.session.selectProfile(separate.id);
   const mediaId = playbackMediaId(entry)!;
   fresh.session.playHistory(mediaId);
   expect(fresh.session.state.queue).toHaveLength(1);
@@ -295,4 +298,20 @@ test("a non-seekable recording enters history without an unsupported resume acti
   const mediaId = playbackMediaId(entry)!;
   expect(f.store.progress("household", mediaId)).toMatchObject({ position: 0, watched: false });
   expect(f.store.historySource(mediaId)).toEqual(entry);
+});
+
+test("shared playback checkpoints keep the visible record and do not revive an older watched mark", () => {
+  const f = fixture();
+  f.enqueue("one");
+  const older = f.session.createProfile("Older history");
+  const item = { mediaId: "library:one", libraryItemId: "one", title: "one", position: 0, duration: 120, watched: true, lastPlayedAt: 100 };
+  f.store.saveProgress("household", item);
+  f.store.saveProgress(older.id, { ...item, position: 30, watched: false, lastPlayedAt: 200 });
+  f.play("one");
+  expect(f.commands.at(-1)).toMatchObject({ type: "load", startPosition: 30 });
+  f.observe(40, "paused");
+  expect(f.store.sharedProgress(item.mediaId)).toMatchObject({ position: 40, watched: false });
+  expect(f.store.progress("household", item.mediaId)).toEqual(item);
+  expect(f.store.progress(older.id, item.mediaId)).toMatchObject({ position: 40, watched: false });
+  expect(f.session.state.activeProfile.id).toBe("household");
 });

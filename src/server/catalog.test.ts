@@ -199,7 +199,7 @@ test("watching profiles and progress APIs validate edits and expose path-free ca
   expect((await request("/api/progress/library%3Amissing", "POST", { watched: true })).status).toBe(404);
   expect((await request("/api/progress/history?limit=101")).status).toBe(400);
   expect((await request(`/api/profiles/${profile.id}/select`, "POST")).status).toBe(200);
-  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [], profile });
+  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId, position: 0, watched: false }], profile });
   session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
   session.command({ type: "play", entryId: "queued" });
   expect((await request("/api/profiles/household/select", "POST")).status).toBe(409);
@@ -235,7 +235,7 @@ test("profile edits validate HTTP bodies consistently and leave the Jellyfin acc
 });
 
 
-test("history replay validates the current person and keeps durable source URLs private", async () => {
+test("history replay validates current playback settings and keeps durable source URLs private", async () => {
   const { request, session, store } = fixture();
   const { playbackMediaId } = await import("./progress");
   const entry = { id: "web", title: "An album track", source: "web:https://artist.example/track", thumbnail: "https://artist.example/art.jpg" };
@@ -292,4 +292,26 @@ test("changing active history while a person-name body loads rejects the stale n
   expect((await response.json()).error).toContain("active history changed");
   expect(store.profiles()).toEqual(profiles);
   expect(session.state).toEqual(before);
+});
+
+test("every remote can play and edit shared history retained under a different legacy record", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const older = store.createProfile("Older history");
+  const entry = { id: "old-video", title: "Older video", source: "web:https://video.example/watch/old" };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress(older.id, { mediaId, title: entry.title, libraryItemId: null, position: 21, duration: 200, watched: false, lastPlayedAt: 100 }, entry);
+  expect((await (await request("/api/progress/history")).json()).items).toMatchObject([{ mediaId, position: 21, playable: true }]);
+  expect(store.history("household")).toEqual([]);
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}/play`, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue[0]?.source).toBe(entry.source);
+  expect(session.state.activeProfile.id).toBe("household");
+  session.command({ type: "stop" });
+  const response = await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true, watched: true });
+  expect(response.status).toBe(200);
+  expect((await response.json()).progress).toMatchObject({ position: 0, watched: true });
+  expect(store.progress(older.id, mediaId)).toMatchObject({ position: 0, watched: true });
+  expect(store.history("household")).toEqual([]);
+  expect(store.profiles()).toHaveLength(2);
 });

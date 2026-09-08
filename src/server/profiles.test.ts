@@ -286,3 +286,38 @@ test("person naming refuses an inactive history without mutation or broadcast", 
   expect(session.state.activeProfile).toEqual(second);
   session.close();
 });
+
+test("shared history selects the latest record per item without merging legacy rows or changing identities", () => {
+  const { store, path } = fixture();
+  const older = store.createProfile("Older history");
+  const active = store.createProfile("Current history");
+  store.selectProfile(active.id);
+  store.saveProfilePreferences(older.id, preferences);
+  const token = store.pair("Kitchen tablet");
+  const controller = store.controllerForToken(token);
+  store.saveProgress("household", history);
+  store.saveProgress(older.id, { ...history, position: 42, watched: false, lastPlayedAt: 200 });
+  store.saveProgress(older.id, { ...history, mediaId: "library:second", position: 0, watched: true, lastPlayedAt: 300 });
+  const profiles = store.profiles();
+  const rows = profiles.map(profile => store.history(profile.id));
+  const shared = store.sharedHistory();
+  expect(shared.map(item => item.mediaId)).toEqual(["library:second", history.mediaId]);
+  expect(shared[1]).toMatchObject({ position: 42, watched: false });
+  expect(store.sharedProgress(history.mediaId)).toEqual(shared[1]!);
+  expect(store.sharedHistory(1)).toEqual([shared[0]!]);
+  expect(JSON.stringify(shared)).not.toContain("profileId");
+  expect(profiles.map(profile => store.history(profile.id))).toEqual(rows);
+  const reopened = openStore(path);
+  cleanup.push(() => reopened.close());
+  expect(reopened.sharedHistory()).toEqual(shared);
+  expect(reopened.profiles()).toEqual(profiles);
+  expect(reopened.activeProfile()).toEqual(active);
+  expect(reopened.controllerForToken(token)).toEqual(controller);
+  expect(reopened.playbackPreferences(older.id).profile).toEqual(preferences);
+  expect(profiles.map(profile => reopened.history(profile.id))).toEqual(rows);
+  reopened.editSharedProgress(active.id, history.mediaId, { clearResume: true, watched: true }, history);
+  expect(reopened.sharedProgress(history.mediaId)).toMatchObject({ position: 0, watched: true });
+  expect(reopened.progress("household", history.mediaId)).toEqual(history);
+  expect(reopened.history(active.id)).toEqual([]);
+  expect(reopened.profiles()).toEqual(profiles);
+});

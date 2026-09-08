@@ -153,7 +153,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const pending = { entryId: next.id, playbackId: crypto.randomUUID(), currentId: state.player.playbackId, key, controller: new AbortController(), sent: false };
     prepared = pending;
     const mediaId = playbackMediaId(next);
-    if (mediaId && (store.progress(state.activeProfile.id, mediaId)?.position ?? 0) > 0) return;
+    if (mediaId && (store.sharedProgress(mediaId)?.position ?? 0) > 0) return;
     void Promise.resolve().then(() => {
       pending.controller.signal.throwIfAborted();
       return options.resolveSource?.(next, pending.playbackId, pending.controller.signal, false, false, true);
@@ -313,9 +313,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         if (metadata || radio) enrichEntry(entry.id, entry.source, { ...metadata, ...(radio ? { kind: "radio", live: true } : {}) });
         const currentEntry = state.queue.find(candidate => candidate.id === entry.id)!;
         const mediaId = playbackMediaId(currentEntry);
-        const position = mediaId && !fromStart ? store.progress(profileId, mediaId)?.position : undefined;
+        const position = mediaId && !fromStart ? store.sharedProgress(mediaId)?.position : undefined;
         if (media.startPosition === undefined && position !== undefined && position > 0) media.startPosition = position;
-        progress.begin(currentEntry, playbackId, profileId);
+        progress.begin(currentEntry, playbackId, mediaId ? store.progressOwner(mediaId) ?? profileId : profileId);
         send({ type: "load", playbackId, ...(options.prepareAudio ? { audioOutput: options.prepareAudio() } : {}), ...media, ...(isRadio(currentEntry) ? { radio: true } : {}), preferences: { ...preferences, ...state.preferences!.device } });
       };
       if (source instanceof Promise) {
@@ -489,7 +489,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     playHistory(mediaId: string, fromStart = false, authorize = () => {}) {
       authorize();
       available();
-      if (!store.progress(state.activeProfile.id, mediaId)) throw new ViewingError("History item not found.", 404);
+      if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
       const saved = existing ?? store.historySource(mediaId);
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
@@ -557,7 +557,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
       assertAdmitted();
       if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
-      store.editProgress(state.activeProfile.id, mediaId, changes, item);
+      store.editSharedProgress(state.activeProfile.id, mediaId, changes, item);
       invalidate("library");
     },
     command(action: Action, authorize = () => {}) {

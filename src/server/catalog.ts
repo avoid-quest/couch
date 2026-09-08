@@ -87,7 +87,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (request.method !== "GET") return methodNotAllowed("GET");
           const { activeProfile, queue } = viewing.session.state;
           const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
-          const items = viewing.store.history(activeProfile.id, queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
+          const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100)).map(item => {
             const queueEntry = queued.get(item.mediaId);
             const source = queueEntry ?? viewing.store.historySource(item.mediaId);
             const sourceLabel = source?.source.startsWith("jellyfin:") ? "Jellyfin" : item.libraryItemId ? "Library" : source?.source.startsWith("file:") ? "Local file" : "Online";
@@ -101,16 +101,16 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           const changes = await body(request);
           authorize();
           if (Object.keys(changes).some(key => !["fromStart", "profileId"].includes(key)) || typeof changes.profileId !== "string" || changes.fromStart !== undefined && typeof changes.fromStart !== "boolean") throw new RequestError("Choose resume or play from start.");
-          const unchangedPerson = () => {
+          const unchangedSettings = () => {
             authorize();
-            if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("The active person changed. Reload your history.", 409);
+            if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("Playback settings changed. Try again.", 409);
           };
-          unchangedPerson();
+          unchangedSettings();
           let mediaId: string;
           try { mediaId = decodeURIComponent(historyPlay[1]!); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
-          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedPerson);
+          viewing.session.playHistory(mediaId, changes.fromStart === true, unchangedSettings);
           return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {
@@ -125,13 +125,12 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             || changes.watched !== undefined && typeof changes.watched !== "boolean"
             || changes.clearResume !== undefined && changes.clearResume !== true
             || changes.watched === undefined && changes.clearResume === undefined) throw new RequestError("Choose a watched state or clear the resume position.");
-          const profileId = viewing.session.state.activeProfile.id;
-          const existing = viewing.store.progress(profileId, mediaId);
+          const existing = viewing.store.sharedProgress(mediaId);
           const libraryItemId = mediaId.startsWith("library:") ? mediaId.slice(8) : null;
           const item = existing ?? (libraryItemId ? library.getItem(libraryItemId) : null);
           if (!item) throw new RequestError("Media item not found.", 404);
           viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title, libraryItemId });
-          return Response.json({ progress: viewing.store.progress(profileId, mediaId) });
+          return Response.json({ progress: viewing.store.sharedProgress(mediaId) });
         }
         if (pathname === "/api/library/sources") {
           if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });
@@ -149,9 +148,8 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
             videoType: videoType || undefined, showId: showId || undefined, season,
             offset: queryInteger(searchParams, "offset", 0, 0, 1_000_000), limit: queryInteger(searchParams, "limit", 40, 1, 100) });
           if (viewing) {
-            const profileId = viewing.session.state.activeProfile.id;
             result.items = result.items.map(item => {
-              const saved = viewing.store.progress(profileId, `library:${item.id}`);
+              const saved = viewing.store.sharedProgress(`library:${item.id}`);
               const progress = saved ? { position: saved.position, duration: saved.duration, watched: saved.watched, lastPlayedAt: saved.lastPlayedAt } : null;
               return { ...item, progress };
             });
