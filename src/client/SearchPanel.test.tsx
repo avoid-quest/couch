@@ -292,3 +292,24 @@ test("Search starts with direct browsing actions and no page-level quality contr
   expect(browsed).toEqual(["Online"]);
   expect(commands).toEqual([]);
 });
+
+
+for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} search channel opens broadcasts and restores its browse control without playback`, async () => {
+  const { SearchOnlineResults } = await import("./SearchOnlineResults");
+  const channel: ProviderItem = { id: "channel", provider: "twitch", kind: live ? "media" : "channel", title: "Evening channel", url: "https://www.twitch.tv/evening", live };
+  const archive: ProviderItem = { id: "archive", provider: "twitch", kind: "media", title: "Past episode", url: "https://www.twitch.tv/videos/123456789", live: false };
+  request.mockImplementation((async (input: RequestInfo | URL) => {
+    const url = new URL(String(input)); paths.push(url.pathname + url.search);
+    return Response.json(url.pathname.endsWith("/favorites") ? { favorites: [] } : { items: url.searchParams.has("url") ? [channel, archive] : [channel] });
+  }) as typeof fetch);
+  await act(async () => root.render(<SearchOnlineResults provider="twitch" query="Evening" version={1} quality="auto" onEnqueued={() => {}} origin="http://localhost" token="paired" connected canPlay active onCommand={async action => { commands.push(action); return true; }} />)); await flush();
+  const label = live ? "Past broadcasts from Evening channel" : "Open Evening channel";
+  await click(label);
+  expect(paths).toContain("/api/providers/twitch/items?url=https%3A%2F%2Fwww.twitch.tv%2Fevening");
+  expect(button("Play Past episode")).toBeDefined();
+  expect(button("Past broadcasts from Evening channel")).toBeUndefined();
+  expect(commands).toEqual([]);
+  await click("Back to results");
+  expect(document.activeElement).toBe(button(label));
+  expect(commands).toEqual([]);
+});

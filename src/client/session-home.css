@@ -65,7 +65,7 @@
 .session-detail-actions button { min-height: 44px; }
 
 @media (max-width: 375px) {
-  .session-home .transport-buttons { gap: 2px; }
+  .session-home .transport-buttons { gap: 1px; }
   .session-home .transport-buttons > .play-button { width: 52px; min-width: 52px; height: 52px; }
   .session-home .transport-buttons > button:not(.play-button), .session-home .transport-buttons .playback-settings > button { width: 44px; }
   .session-home .session-volume-row { gap: 6px; }

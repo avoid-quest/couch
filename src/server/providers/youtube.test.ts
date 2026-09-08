@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { isYouTubePlaylistUrl } from "../../shared/providers";
 import type { BrowseRequest } from "../../shared/providers";
 import type { YtDlpOptions } from "../yt-dlp";
 import { parseCommand } from "../validation";
@@ -200,4 +201,14 @@ test("playlist loading discards cancelled output", async () => {
   const controller = new AbortController();
   const load = createYouTubePlaylistLoader(async () => { controller.abort(); return JSON.stringify({ _type: "playlist", entries: [video] }); });
   await expect(load(playlist, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
+});
+
+
+test("playlist action eligibility accepts the same trailing slash forms as browsing", async () => {
+  const url = playlist.replace("/playlist?", "/playlist/?");
+  expect(isYouTubePlaylistUrl(url)).toBe(true);
+  const { browse, calls } = fixture();
+  await browse({ url });
+  expect(calls[0]!.args.at(-1)).toBe(playlist);
+  expect(isYouTubePlaylistUrl("https://www.youtube.com/@NASA/videos/")).toBe(false);
 });

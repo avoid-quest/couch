@@ -22,6 +22,6 @@ export function isYouTubePlaylistUrl(value: string): boolean {
     const url = new URL(value);
     return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password && !url.port
       && ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"].includes(url.hostname)
-      && ["/playlist", "/watch"].includes(url.pathname) && /^[A-Za-z0-9_-]{10,100}$/.test(url.searchParams.get("list") ?? "");
+      && ["/playlist", "/watch"].includes(url.pathname.replace(/\/$/, "")) && /^[A-Za-z0-9_-]{10,100}$/.test(url.searchParams.get("list") ?? "");
   } catch { return false; }
 }
