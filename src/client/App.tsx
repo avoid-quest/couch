@@ -225,6 +225,7 @@ export function App() {
   };
 
   const player = state?.player;
+  const programme = connected ? state?.radioProgramme : null;
   const current = state?.queue.find((entry) => entry.id === state.currentEntryId);
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
@@ -240,8 +241,8 @@ export function App() {
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
         {nativeHost && <VideoStage active={active} title={current?.title || "Your media"}
           audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
-          subtitle={player?.nowPlaying ? [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ") : undefined}
-          artwork={current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
+          subtitle={[programme ? `Programme: ${programme.title}` : null, player?.nowPlaying ? [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ") : null].filter(Boolean).join(" · ") || undefined}
+          artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
         <a className="brand" href="#main" aria-label="Couch, go home" onClick={() => { changeSection(homeSection); if (nativeHost) tv.openHome(); else setRemoteMode("browse"); }}><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>couch<span className="brand-light">.avoid.quest</span></span></a>

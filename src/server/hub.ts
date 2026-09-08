@@ -18,6 +18,7 @@ import { createMediaFolders } from "./media-folders";
 import { createFolderSettings } from "./folder-settings";
 import { createLibrary } from "./library";
 import { createRadio } from "./radio";
+import { createRadioProgramme } from "./radio-programme";
 import { createRadioSettings } from "./radio-settings";
 import { createJellyfin } from "./jellyfin";
 import { createJellyfinSettings } from "./jellyfin-settings";
@@ -106,8 +107,10 @@ export function createHub(options: HubOptions) {
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const systemAudio = !!options.nativeDiagnostics && process.platform === "linux";
   let sound: ReturnType<typeof createSound> | undefined;
+  let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
     idle.playback(state.player.status, !!state.radioRetry);
+    radioProgramme?.observe(state);
     sound?.interrupt();
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
     if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
@@ -120,7 +123,11 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
       if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
-      if (entry.source.startsWith("radio:")) return { ...radio.getPlayable(entry.source.slice(6)), radio: true };
+      if (entry.source.startsWith("radio:")) {
+        const station = radio.getPlayable(entry.source.slice(6));
+        radioProgramme?.load(playbackId, entry.source, station.source);
+        return { ...station, radio: true };
+      }
       // Older directory favorites were queued as direct URLs before radio had
       // its own playback policy. Recognize their saved station on the next play.
       if (radio.favorites().some(station => station.url === entry.source)) return { source: entry.source, radio: true };
@@ -137,6 +144,7 @@ export function createHub(options: HubOptions) {
   const library = createLibrary({ folders, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
   const collections = createCollections({ databasePath: options.databasePath, library, onChange: () => session.invalidate("library"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize) => { session.loadQueue(entries, mode, authorize); } });
   const radio = createRadio({ databasePath: options.databasePath, onChange: () => session.invalidate("radio") });
+  radioProgramme = createRadioProgramme({ station: radio.programmeStation, publish: (playbackId, programme) => session.updateRadioProgramme(playbackId, programme) });
   const folderSettings = createFolderSettings(library, folders);
   const radioSettings = createRadioSettings(radio);
   const guide = createGuide({ databasePath: options.databasePath, onChange: () => session.invalidate("iptv"),
@@ -469,6 +477,7 @@ export function createHub(options: HubOptions) {
     subtitles.close();
     playlists.close();
     collections.close();
+    radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
     const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), server.stop(true)]);

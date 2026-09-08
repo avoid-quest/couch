@@ -1,4 +1,4 @@
-import type { Action, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, SessionState } from "../shared/protocol";
+import type { Action, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { Store } from "./store";
 import { createProgress, localMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
@@ -50,7 +50,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     preferences: store.playbackPreferences(activeProfile.id),
     player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
   };
-  const broadcast = () => { refreshPreparation(); publish(state); };
+  const broadcast = () => {
+    if (state.radioProgramme && (state.radioProgramme.playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status))) state.radioProgramme = null;
+    refreshPreparation(); publish(state);
+  };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
   const invalidate = (kind: "library" | "radio" | "iptv" | "recordings" | "provider" | "jellyfin" | "playlist" | "controller") => {
@@ -354,6 +357,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", nowPlaying: null, error };
         send({ type: "stop" });
       }
+      broadcast();
+    },
+    updateRadioProgramme(playbackId: string, programme: RadioProgramme | null) {
+      if (!admitted() || playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status)) return;
+      if (state.radioProgramme === programme) return;
+      state.radioProgramme = programme;
       broadcast();
     },
     updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
