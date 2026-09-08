@@ -36,6 +36,14 @@
 .couch-shell .session-bar-controls { display: flex; align-items: center; flex-shrink: 0; gap: 4px; }
 .couch-shell .session-bar-controls button { min-width: 44px; min-height: 44px; }
 .couch-shell.tv-shell .tv-browser { padding: 0; }
+.couch-shell.tv-shell .app-header { height: var(--shell-header); padding-block: 0; }
+/* Insets use the same scaled viewport as the fixed session bar. */
+.couch-shell.tv-shell .primary-nav { position: fixed; top: var(--shell-header); bottom: 0; left: 0; height: auto; padding-bottom: 18px; scroll-padding-block: 12px; }
+.couch-shell.tv-shell:has(.session-bar) .primary-nav { bottom: var(--shell-footer); padding-bottom: 18px; }
+.couch-shell.tv-shell .workspace { min-height: 0; }
+.couch-shell.tv-shell .media-browser { grid-column: 2; }
+.couch-shell.tv-shell .person-name { font-size: 18px; max-width: 200px; }
+.couch-shell.tv-shell .person-name svg { width: 20px; height: 20px; }
 .couch-shell.tv-shell .media-browser { font-size: 18px; }
 .couch-shell.tv-shell .media-browser h1 { font-size: 34px; }
 .couch-shell.tv-shell .primary-nav [data-source] { font-size: 18px; }
