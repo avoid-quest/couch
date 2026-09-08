@@ -230,3 +230,43 @@ test("a failed pairing code request never shows an address-only QR", async () =>
   expect(document.querySelector("svg:has(title)")).toBeNull();
   expect(document.body.textContent).toContain("Retry pairing QR");
 });
+
+test("native qualification navigates current Settings links and the phone category select", async () => {
+  const { UiDriver } = await import("../../tests/linux/ui");
+  const { BrowserRouter, useLocation, useNavigate } = await import("react-router");
+  const { settingsPageForPath, settingsPagePath } = await import("../shared/settings-pages");
+  function Pages() {
+    const location = useLocation(), navigate = useNavigate();
+    return <Settings {...props} inline section={settingsPageForPath(location.pathname)} onSectionChange={section => void navigate(settingsPagePath(section))} />;
+  }
+  await act(async () => root.render(<BrowserRouter><Pages /></BrowserRouter>));
+  const nativeClicks: string[] = [];
+  const ui = new UiDriver(async path => {
+    const selector = path.slice("/session/dom/element/".length, -"/click".length);
+    const option = document.querySelector<HTMLOptionElement>(selector)!;
+    expect(option.tagName).toBe("OPTION");
+    nativeClicks.push(option.value);
+    await act(async () => {
+      const select = option.parentElement as HTMLSelectElement;
+      select.value = option.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }, () => "dom");
+  ui.element = async selector => selector;
+  ui.execute = async (script, args = []) => new Function("document", "args", `return (function () { ${script} }).apply(null, args)`)(document, args);
+  ui.clickElement = async selector => { await act(async () => document.querySelector<HTMLElement>(selector)!.click()); };
+  ui.waitFor = async (_description, predicate) => { expect(await predicate()).toBe(true); };
+  const category = document.querySelector<HTMLSelectElement>(".settings-category select")!;
+  Object.defineProperty(category, "getClientRects", { configurable: true, value: () => [] });
+  await ui.settingsSection("general");
+  expect(window.location.pathname).toBe("/settings/tv");
+  expect(document.querySelector("#tv-name")).not.toBeNull();
+  Object.defineProperty(category, "getClientRects", { value: () => [{ width: 360, height: 44 }] });
+  await ui.settingsSection("remotes");
+  expect(window.location.pathname).toBe("/settings/connection");
+  expect(document.querySelector("#remote-owner")).not.toBeNull();
+  await ui.settingsSection("remote");
+  expect(window.location.pathname).toBe("/settings/playback");
+  expect(document.querySelector("#default-video-quality")).not.toBeNull();
+  expect(nativeClicks).toEqual(["connection", "playback"]);
+});

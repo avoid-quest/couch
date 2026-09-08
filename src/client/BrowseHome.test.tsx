@@ -113,6 +113,24 @@ test("a paired remote starts with its current TV session and can browse and sear
   expect(localStorage.getItem("couch.remote-token")).toBe("paired");
   expect(state.player.playbackId).toBe("playback");
   expect(state.queue).toHaveLength(1); expect(played).toEqual([]);
+  const { UiDriver } = await import("../../tests/linux/ui");
+  const ui = new UiDriver(async () => { throw new Error("Unexpected native request"); }, () => "dom");
+  ui.element = async selector => document.querySelector(selector) as unknown as string;
+  ui.execute = async (script, args = []) => {
+    const result = new Function("document", "args", `return (function () { ${script} }).apply(null, args)`)(document, args);
+    return Array.isArray(result) ? result.map(element => ({ "element-6066-11e4-a52e-4f735466cecf": element })) : result;
+  };
+  ui.clickElement = async element => { await act(async () => (element as unknown as HTMLElement).click()); };
+  ui.waitFor = async (_description, predicate) => { expect(await predicate()).toBe(true); };
+  await ui.section("Search");
+  expect(window.location.pathname).toBe("/search");
+  await ui.button("Settings");
+  expect(window.location.pathname).toBe("/settings/playback");
+  request.mockImplementation((async input => Response.json(String(input).endsWith("/sources") ? { sources: [] } : String(input).endsWith("/favorites") ? { favorites: [] } : { items: [], total: 0, offset: 0, limit: 24 })) as typeof fetch);
+  await ui.section("Files");
+  expect(window.location.pathname).toBe("/browse/files");
+  expect(document.querySelector('[data-page="Files"]:not([hidden]) h2')?.textContent).toBe("TV folders");
+  expect(played).toEqual([]);
 });
 
 test("library artwork cards open details without playback and retain actual library identity", async () => {
