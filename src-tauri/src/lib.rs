@@ -1,7 +1,8 @@
 mod appimage_update;
-mod diagnostics;
 mod bluetooth;
+mod diagnostics;
 mod display;
+mod operating_mode;
 mod player;
 mod protocol;
 
@@ -23,6 +24,14 @@ use tokio::sync::watch;
 use protocol::{ConnectionInfo, PlayerState, SidecarMessage, VideoRect};
 
 struct Host {
+    data_dir: std::path::PathBuf,
+    local_running: AtomicBool,
+    workers: Mutex<
+        Option<(
+            mpsc::Receiver<player::Request>,
+            mpsc::Receiver<display::Request>,
+        )>,
+    >,
     bluetooth: bluetooth::Bluetooth,
     connection: watch::Sender<Option<Result<ConnectionInfo, String>>>,
     child: Mutex<Option<CommandChild>>,
@@ -30,7 +39,12 @@ struct Host {
     display: mpsc::Sender<display::Request>,
     updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
     update_busy: AtomicBool,
-    update_checkpoint: Mutex<Option<(String, tokio::sync::oneshot::Sender<(bool, Result<(), String>)>)>>,
+    update_checkpoint: Mutex<
+        Option<(
+            String,
+            tokio::sync::oneshot::Sender<(bool, Result<(), String>)>,
+        )>,
+    >,
     shutting_down: AtomicBool,
     child_exited: watch::Sender<bool>,
 }
@@ -168,9 +182,217 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
         .map_err(|_| "The selected folder name is not valid Unicode".into())
 }
 
+fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
+    let host = app.state::<Host>();
+    if host.child.lock().expect("sidecar lock poisoned").is_some() {
+        return Ok(());
+    }
+    if let Some((player_receiver, display_receiver)) =
+        host.workers.lock().expect("worker lock poisoned").take()
+    {
+        let handle = app.clone();
+        let display_path = host.data_dir.join("display-output");
+        std::thread::Builder::new()
+            .name("display".into())
+            .spawn(move || display::run(handle, display_path, display_receiver))
+            .map_err(|error| error.to_string())?;
+        let handle = app.clone();
+        std::thread::Builder::new()
+            .name("native-player".into())
+            .spawn(move || player::run(handle, player_receiver))
+            .map_err(|error| error.to_string())?;
+    }
+    let token = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let mut sidecar = app
+        .shell()
+        .sidecar("couch-server")
+        .map_err(|error| error.to_string())?
+        .env("COUCH_NATIVE", "1")
+        .env(
+            "COUCH_BUNDLED_TOOLS",
+            app.path()
+                .resource_dir()
+                .map_err(|error| error.to_string())?
+                .join("tools"),
+        )
+        .env(
+            "COUCH_APPIMAGE",
+            if appimage_update::running(app) {
+                "1"
+            } else {
+                "0"
+            },
+        )
+        .env("COUCH_HOST_TOKEN", token)
+        .env("COUCH_DATA_DIR", &host.data_dir)
+        .env(
+            "COUCH_PORT",
+            std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
+        );
+    for (variable, name) in [("COUCH_YT_DLP", "yt-dlp"), ("COUCH_DENO", "deno")] {
+        let bundled = app
+            .path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?
+            .join("tools")
+            .join(name);
+        let path = if bundled.is_file() {
+            bundled
+        } else {
+            host.data_dir.join("tools").join(name)
+        };
+        if std::env::var_os(variable).is_none() && path.is_file() {
+            sidecar = sidecar.env(variable, path);
+        }
+    }
+    let (mut events, child) = sidecar.spawn().map_err(|error| error.to_string())?;
+
+    host.connection.send_replace(None);
+    host.child_exited.send_replace(false);
+    *host.child.lock().expect("sidecar lock poisoned") = Some(child);
+    host.local_running.store(true, Ordering::Relaxed);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = events.recv().await {
+            let host = handle.state::<Host>();
+            match event {
+                CommandEvent::Stdout(line) => {
+                    match serde_json::from_slice::<SidecarMessage>(&line) {
+                        Ok(SidecarMessage::Ready { connection }) => {
+                            host.connection.send_replace(Some(Ok(connection)));
+                            let _ = host.player.send(player::Request::Observe);
+                        }
+                        Ok(SidecarMessage::Observe) => {
+                            let _ = host.player.send(player::Request::Observe);
+                        }
+                        Ok(SidecarMessage::Playback { command }) => {
+                            let _ = host.player.send(player::Request::Command(command));
+                        }
+                        Ok(SidecarMessage::Readiness { nonce }) => {
+                            if nonce.len() == 32
+                                && nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
+                            {
+                                let _ = host.player.send(player::Request::Readiness {
+                                    nonce,
+                                    deadline: std::time::Instant::now()
+                                        + std::time::Duration::from_secs(2),
+                                });
+                            }
+                        }
+                        Ok(SidecarMessage::AppimageQuiesced {
+                            nonce,
+                            closed,
+                            error,
+                        }) => {
+                            let mut pending = host
+                                .update_checkpoint
+                                .lock()
+                                .expect("checkpoint lock poisoned");
+                            if pending.as_ref().is_some_and(|(id, _)| id == &nonce) {
+                                if let Some((_, sender)) = pending.take() {
+                                    let _ = sender.send((closed, error.map_or(Ok(()), Err)));
+                                }
+                            }
+                        }
+                        Ok(SidecarMessage::AppimageUpdate { request_id, action }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                if let crate::appimage_update::Action::Status {
+                                    request_id: ref saved_id,
+                                } = action
+                                {
+                                    host.report_message(appimage_update::status(
+                                        &handle,
+                                        saved_id.as_deref(),
+                                        &request_id,
+                                    ));
+                                } else if host
+                                    .update_busy
+                                    .swap(true, std::sync::atomic::Ordering::SeqCst)
+                                {
+                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update or restart operation is already running."}));
+                                } else if host
+                                    .updates
+                                    .try_send(appimage_update::Request {
+                                        id: request_id.clone(),
+                                        action,
+                                    })
+                                    .is_err()
+                                {
+                                    host.update_busy
+                                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
+                                }
+                            }
+                        }
+                        Ok(SidecarMessage::Bluetooth { request_id, action }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                let handle = handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let host = handle.state::<Host>();
+                                    let result = host.bluetooth.request(action).await;
+                                    host.report_message(match result {
+                Ok(state) => serde_json::json!({"type":"bluetooth","requestId":request_id,"state":state}),
+                Err(error) => serde_json::json!({"type":"bluetooth","requestId":request_id,"error":error}),
+                    });
+                                });
+                            }
+                        }
+                        Ok(SidecarMessage::Display { request_id, action }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                let _ = host.display.send(display::Request {
+                                    id: request_id,
+                                    action,
+                                });
+                            }
+                        }
+                        Ok(SidecarMessage::Diagnostics { request_id }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                let _ = host.player.send(player::Request::Diagnostics(request_id));
+                            }
+                        }
+                        Err(error) => log::error!("Invalid media server protocol: {error}"),
+                    }
+                }
+                CommandEvent::Stderr(line) => {
+                    log::info!("{}", String::from_utf8_lossy(&line))
+                }
+                CommandEvent::Error(error) => {
+                    log::error!("Media server error: {error}");
+                    host.connection.send_replace(Some(Err(error)));
+                }
+                CommandEvent::Terminated(payload) => {
+                    host.connection.send_replace(Some(Err(format!(
+                        "Media server exited: {:?}",
+                        payload.code
+                    ))));
+                    let _ = host
+                        .player
+                        .send(player::Request::Command(protocol::PlaybackCommand::Stop));
+                    host.child.lock().expect("sidecar lock poisoned").take();
+                    host.child_exited.send_replace(true);
+                    if host.local_running.load(Ordering::Relaxed)
+                        && !host.shutting_down.load(Ordering::Relaxed)
+                    {
+                        handle.exit(1);
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+    Ok(())
+}
+
 pub fn run() {
     if std::env::args().any(|arg| arg == "--version") {
-        println!("{}", option_env!("COUCH_BUILD_INFO").unwrap_or("{\"packaged\":false}"));
+        println!(
+            "{}",
+            option_env!("COUCH_BUILD_INFO").unwrap_or("{\"packaged\":false}")
+        );
         return;
     }
     let builder = tauri::Builder::default()
@@ -196,7 +418,12 @@ pub fn run() {
             connection_info,
             set_video_rect,
             choose_media,
-            choose_folder
+            choose_folder,
+            operating_mode::playback_device,
+            operating_mode::select_playback_device,
+            operating_mode::retry_playback_device,
+            operating_mode::complete_local_setup,
+            operating_mode::show_playback_device
         ])
         .setup(|app| {
             let data_dir = match std::env::var_os("COUCH_DATA_DIR") {
@@ -209,38 +436,13 @@ pub fn run() {
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
             let (child_exited, _) = watch::channel(false);
-            let token = format!(
-                "{}{}",
-                uuid::Uuid::new_v4().simple(),
-                uuid::Uuid::new_v4().simple()
-            );
-            let mut sidecar = app
-                .shell()
-                .sidecar("couch-server")?
-                .env("COUCH_NATIVE", "1")
-                .env("COUCH_BUNDLED_TOOLS", app.path().resource_dir()?.join("tools"))
-                .env("COUCH_APPIMAGE", if appimage_update::running(app.handle()) { "1" } else { "0" })
-                .env("COUCH_HOST_TOKEN", token)
-                .env("COUCH_DATA_DIR", &data_dir)
-                .env(
-                    "COUCH_PORT",
-                    std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
-                );
-            for (variable, name) in [
-                ("COUCH_YT_DLP", "yt-dlp"),
-                ("COUCH_DENO", "deno"),
-            ] {
-                let bundled = app.path().resource_dir()?.join("tools").join(name);
-                let path = if bundled.is_file() { bundled } else { data_dir.join("tools").join(name) };
-                if std::env::var_os(variable).is_none() && path.is_file() {
-                    sidecar = sidecar.env(variable, path);
-                }
-            }
-            let (mut events, child) = sidecar.spawn()?;
             app.manage(Host {
+                data_dir: data_dir.clone(),
+                local_running: AtomicBool::new(false),
+                workers: Mutex::new(Some((player_receiver, display_receiver))),
                 bluetooth: bluetooth::Bluetooth::default(),
                 connection,
-                child: Mutex::new(Some(child)),
+                child: Mutex::new(None),
                 player: player_sender,
                 display: display_sender,
                 updates: update_sender,
@@ -249,114 +451,37 @@ pub fn run() {
                 shutting_down: AtomicBool::new(false),
                 child_exited,
             });
-            tauri::async_runtime::spawn(appimage_update::run(app.handle().clone(), data_dir.join("updates/appimage"), update_receiver));
-            let display_handle = app.handle().clone();
-            std::thread::Builder::new().name("display".into()).spawn(move || display::run(display_handle, data_dir.join("display-output"), display_receiver))?;
-            let handle = app.handle().clone();
-            std::thread::Builder::new()
-                .name("native-player".into())
-                .spawn(move || {
-                    player::run(handle, player_receiver);
-                })?;
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                while let Some(event) = events.recv().await {
-                    let host = handle.state::<Host>();
-                    match event {
-                        CommandEvent::Stdout(line) => {
-                            match serde_json::from_slice::<SidecarMessage>(&line) {
-                                Ok(SidecarMessage::Ready { connection }) => {
-                                    host.connection.send_replace(Some(Ok(connection)));
-                                    let _ = host.player.send(player::Request::Observe);
-                                }
-                                Ok(SidecarMessage::Observe) => {
-                                    let _ = host.player.send(player::Request::Observe);
-                                }
-                                Ok(SidecarMessage::Playback { command }) => {
-                                    let _ = host.player.send(player::Request::Command(command));
-                                }
-                                Ok(SidecarMessage::Readiness { nonce }) => {
-                                    if nonce.len() == 32 && nonce.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                                        let _ = host.player.send(player::Request::Readiness {
-                                            nonce,
-                                            deadline: std::time::Instant::now() + std::time::Duration::from_secs(2),
-                                        });
-                                    }
-                                }
-                                Ok(SidecarMessage::AppimageQuiesced { nonce, closed, error }) => {
-                                    let mut pending = host.update_checkpoint.lock().expect("checkpoint lock poisoned");
-                                    if pending.as_ref().is_some_and(|(id, _)| id == &nonce) {
-                                        if let Some((_, sender)) = pending.take() { let _ = sender.send((closed, error.map_or(Ok(()), Err))); }
-                                    }
-                                }
-                                Ok(SidecarMessage::AppimageUpdate { request_id, action }) => {
-                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
-                                        if let crate::appimage_update::Action::Status { request_id: ref saved_id } = action {
-                                            host.report_message(appimage_update::status(&handle, saved_id.as_deref(), &request_id));
-                                        } else if host.update_busy.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                                            host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update or restart operation is already running."}));
-                                        } else if host.updates.try_send(appimage_update::Request { id: request_id.clone(), action }).is_err() {
-                                            host.update_busy.store(false, std::sync::atomic::Ordering::SeqCst);
-                                            host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
-                                        }
-                                    }
-                                }
-                                Ok(SidecarMessage::Bluetooth { request_id, action }) => {
-                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
-                                        let handle = handle.clone();
-                                        tauri::async_runtime::spawn(async move {
-                                            let host = handle.state::<Host>();
-                                            let result = host.bluetooth.request(action).await;
-                                            host.report_message(match result {
-                                                Ok(state) => serde_json::json!({"type":"bluetooth","requestId":request_id,"state":state}),
-                                                Err(error) => serde_json::json!({"type":"bluetooth","requestId":request_id,"error":error}),
-                                            });
-                                        });
-                                    }
-                                }
-                                Ok(SidecarMessage::Display { request_id, action }) => {
-                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
-                                        let _ = host.display.send(display::Request { id: request_id, action });
-                                    }
-                                }
-                                Ok(SidecarMessage::Diagnostics { request_id }) => {
-                                    if uuid::Uuid::parse_str(&request_id).is_ok() {
-                                        let _ = host.player.send(player::Request::Diagnostics(request_id));
-                                    }
-                                }
-                                Err(error) => log::error!("Invalid media server protocol: {error}"),
-                            }
-                        }
-                        CommandEvent::Stderr(line) => {
-                            log::info!("{}", String::from_utf8_lossy(&line))
-                        }
-                        CommandEvent::Error(error) => {
-                            log::error!("Media server error: {error}");
-                            host.connection.send_replace(Some(Err(error)));
-                        }
-                        CommandEvent::Terminated(payload) => {
-                            host.connection.send_replace(Some(Err(format!(
-                                "Media server exited: {:?}",
-                                payload.code
-                            ))));
-                            let _ = host
-                                .player
-                                .send(player::Request::Command(protocol::PlaybackCommand::Stop));
-                            host.child.lock().expect("sidecar lock poisoned").take();
-                            host.child_exited.send_replace(true);
-                            if !host.shutting_down.load(Ordering::Relaxed) {
-                                handle.exit(1);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            });
+            tauri::async_runtime::spawn(appimage_update::run(
+                app.handle().clone(),
+                data_dir.join("updates/appimage"),
+                update_receiver,
+            ));
+            app.manage(operating_mode::Modes::load(
+                data_dir.join("operating-mode.json"),
+            )?);
+            let config = app.config().app.windows[0].clone();
+            tauri::WebviewWindowBuilder::from_config(app, &config)?
+                .initialization_script(
+                    "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', { value: true });",
+                )
+                .on_navigation(|url| operating_mode::bundled_origin(url))
+                .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+                .build()?;
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("Cannot start Couch")
         .run(|app, event| {
+            if let tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Destroyed,
+                ..
+            } = &event
+            {
+                if label == "remote" {
+                    app.state::<operating_mode::Modes>().remote_destroyed();
+                }
+            }
             if let tauri::RunEvent::ExitRequested { ref api, code, .. } = event {
                 let host = app.state::<Host>();
                 if host.child.lock().expect("sidecar lock poisoned").is_none() {
@@ -404,8 +529,7 @@ mod tests {
 
     #[test]
     fn app_data_is_private_for_new_and_preexisting_directories() {
-        let path =
-            std::env::temp_dir().join(format!("couch-permissions-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("couch-permissions-{}", uuid::Uuid::new_v4()));
         prepare_data_dir(&path).unwrap();
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
