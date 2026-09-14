@@ -1,4 +1,5 @@
 - Follow YAGNI. Prefer small, readable changes and one-liners where sufficient. 
 - Prefer first class solutions. Check official docs when uncertain.
+- UI work must preserve Couch's design system and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
 - Before PR operations, read `gh-stack` and `unslop` if available. Open PRs ready for review.
 - GitHub Actions is temporarily paused while capacity is unavailable. Once capacity returns, use it only for PR checks, builds and releases. Recover the existing Mac delivery path for the temporary workaround; the T480 only installs and runs Couch, never builds it.
