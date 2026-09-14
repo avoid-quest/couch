@@ -6,6 +6,9 @@ owns release and update behavior. Actions is disabled. This configuration does n
 authorize enabling it, publishing to CrabNebula, deploying the website or changing
 any T480 installation.
 
+[Local qualification evidence](evidence/hosted-release-276/2026-09-15/README.md)
+records the signed candidate, exact sources, passed checks and remaining hosted gates.
+
 ## Build and delivery
 
 The manual Package workflow uses the accepted Blacksmith 4 vCPU Ubuntu 24.04
