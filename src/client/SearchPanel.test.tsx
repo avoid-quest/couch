@@ -10,6 +10,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const paths: string[] = [], queued: unknown[] = [], browsed: string[] = [];
 let release: (() => void) | undefined, jellyfinError = false, delayedQuery = "", unavailable = false, connectedJellyfin = true, empty = false;
 const commands: Action[] = [];
+const setupSources: (string | undefined)[] = [];
 let integrated = false, youtubeError = false, administrator = false;
 let onlineFavorites: ProviderItem[] = [], radioFavorites: RadioStation[] = [];
 const video: ProviderItem = { id: "yt-video", provider: "youtube", kind: "media", title: "Evening video", subtitle: "An artist", url: "https://www.youtube.com/watch?v=abcdefghijk" };
@@ -30,11 +31,11 @@ async function search(query: string) {
 }
 async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost", defaultQuality: "auto" | "1080p" = "1080p") {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel onManageSources={administrator ? () => browsed.push("Source settings") : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  await act(async () => root.render(<SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
   await flush();
 }
 beforeEach(async () => {
-  commands.length = 0; integrated = youtubeError = administrator = false; onlineFavorites = []; radioFavorites = [];
+  setupSources.length = 0; commands.length = 0; integrated = youtubeError = administrator = false; onlineFavorites = []; radioFavorites = [];
   paths.length = 0; queued.length = 0; browsed.length = 0; release = undefined; jellyfinError = unavailable = empty = false; delayedQuery = ""; connectedJellyfin = true;
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
@@ -407,4 +408,43 @@ test("avoid radio has its own matching group and retries a stale catalog without
   expect(refreshRequested).toBe(true);
   expect(document.body.textContent).not.toContain("Using saved avoid stations");
   expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(youtubeReads);
+});
+
+for (const manage of [false, true]) for (const [source, failedPath, setup] of [
+  ["Library", "/api/library/items", "folders"],
+  ["Jellyfin", "/api/jellyfin/items", "jellyfin"],
+  ["Radio playlists", "/api/radio/playlists/own/stations", "radio"],
+]) test(`${source} failure offers ${manage ? "direct source settings" : "a controller role explanation"} without losing search`, async () => {
+  integrated = true; administrator = manage;
+  const original = request.getMockImplementation()!;
+  request.mockImplementation((async (input, init) => new URL(String(input)).pathname === failedPath ? Response.json({ error: "Source access expired" }, { status: 401 }) : original(input, init)) as typeof fetch);
+  await render(); await search("Evening");
+  const results = document.querySelector(`[aria-label="${source} search results"]`)!;
+  expect(results.textContent).toContain("Source access expired");
+  expect(!!button("Source settings", results)).toBe(manage);
+  if (manage) { await click("Source settings", results); expect(setupSources).toEqual([setup]); }
+  else expect(results.textContent).toContain("Ask an administrator to manage this source");
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("Evening");
+  expect(button("Play now: Evening video").disabled).toBe(false);
+  expect(commands).toEqual([]);
+});
+
+test("saved directory stations keep their source identity and do not create a radio playlist group", async () => {
+  integrated = true;
+  const directoryStation = { ...station, id: "saved-directory", sourceId: undefined, name: "Evening directory" };
+  radioFavorites = [directoryStation];
+  const original = request.getMockImplementation()!;
+  request.mockImplementation((async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/radio/playlists") return Response.json({ playlists: [] });
+    if (path === "/api/radio/stations") return Response.json({ stations: [directoryStation] });
+    return original(input, init);
+  }) as typeof fetch);
+  await render(); await search("Evening");
+  expect(!!button("Radio playlists")).toBe(false);
+  expect(button("Radio directory").textContent).toBe("Radio directory 1");
+  expect(document.querySelector('[aria-label="Radio playlists search results"]')?.textContent).not.toContain("Evening directory");
+  expect(button("Remove Evening directory from saved").getAttribute("aria-pressed")).toBe("true");
+  await click("Add to queue: Evening directory");
+  expect(commands.at(-1)).toMatchObject({ type: "enqueue", entry: { title: "Evening directory", kind: "radio" }, playNow: false });
 });

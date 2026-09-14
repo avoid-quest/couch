@@ -4,9 +4,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
 import { createId } from "./session";
+import type { SourceSetupKind } from "./SourceSetupDialog";
 import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
 
-type Props = SearchPlaybackProps & { query: string; version: number; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
+type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; version: number; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
   return <RadioResults key={`${props.origin}:${props.token}`} {...props} />;
 }
@@ -83,7 +84,7 @@ function RadioResults(props: Props) {
       if (!signal.aborted) setFavorites(current => saved ? current?.filter(entry => entry.id !== station.id) ?? [] : [...current?.filter(entry => entry.id !== station.id) ?? [], station]);
     }, `${station.name} ${saved ? "removed from" : "added to"} Saved.`);
   }
-  const matches = (station: RadioStation) => station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
+  const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
   const results = directory || avoid ? stations : [...new Map([...stations, ...(favorites ?? []).filter(matches)].map(station => [station.id, station])).values()];
   useEffect(() => { props.onResults?.(title, { count: results.length, loading, error: !!error }); }, [results.length, loading, error, props.onResults, title]);
   useEffect(() => { if (!props.active) setDetail(null); }, [props.active]);
@@ -94,6 +95,7 @@ function RadioResults(props: Props) {
   return <section aria-label={`${title} search results`} aria-busy={loading} className="search-source"><div className="search-source-heading"><h2>{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
     {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Retry {title}</Button></p>}
+    {error && !directory && !avoid && (props.onManageSources ? <Button variant="outline" onClick={() => props.onManageSources?.("radio")}>Source settings</Button> : <p className="text-sm text-muted-foreground">Ask an administrator to manage this source.</p>)}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
