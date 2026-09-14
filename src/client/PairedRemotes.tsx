@@ -12,7 +12,7 @@ type Props = {
   update: (event: { preventDefault(): void }, path: string, body: unknown, success: string, method?: "POST" | "DELETE") => Promise<boolean>;
 };
 
-function Remote({ device, currentId, disabled, update, lastAdministrator }: Omit<Props, "devices"> & { device: Controller; lastAdministrator: boolean }) {
+function Remote({ device, currentId, disabled, update }: Omit<Props, "devices"> & { device: Controller }) {
   const [confirmation, setConfirmation] = useState<"role" | "revoke" | null>(null);
   useEffect(() => { setConfirmation(null); }, [device.name, device.role]);
   const nextRole = device.role === "administrator" ? "controller" : "administrator";
@@ -22,10 +22,9 @@ function Remote({ device, currentId, disabled, update, lastAdministrator }: Omit
     <p className="text-muted-foreground">Last seen {device.lastSeenAt === null ? "unknown" : new Date(device.lastSeenAt).toLocaleString()}</p>
     {device.id !== currentId && <RemoteName device={device} disabled={disabled} update={update} />}
     <div className="flex flex-wrap gap-2">
-      <Button className="min-h-11" variant="outline" disabled={disabled || lastAdministrator} onClick={() => setConfirmation("role")}>{roleAction}</Button>
-      <Button className="min-h-11" variant="destructive" disabled={disabled || lastAdministrator} onClick={() => setConfirmation("revoke")}>Revoke access</Button>
+      <Button className="min-h-11" variant="outline" disabled={disabled} onClick={() => setConfirmation("role")}>{roleAction}</Button>
+      <Button className="min-h-11" variant="destructive" disabled={disabled} onClick={() => setConfirmation("revoke")}>Revoke access</Button>
     </div>
-    {lastAdministrator && <p className="text-muted-foreground">Keep this administrator until another remote is approved.</p>}
     {confirmation && <div className="space-y-3 rounded-md border p-3" role="alert">
       <p>{confirmation === "revoke" ? `Revoke ${device.name}? Its open connections will close and it must pair again.` : nextRole === "administrator" ? `Allow ${device.name} to change TV settings and manage every paired remote?` : `Remove administration from ${device.name}? It will keep browsing and playback controls.`}</p>
       <div className="flex flex-wrap gap-2">
@@ -37,11 +36,11 @@ function Remote({ device, currentId, disabled, update, lastAdministrator }: Omit
 }
 
 export function PairedRemotes({ devices, ...props }: Props) {
-  const administrators = devices.filter(device => device.role === "administrator").length;
   return <section className="space-y-3" aria-label="Paired remotes">
     <h3 className="font-medium">Paired remotes</h3>
-    <p className="text-muted-foreground">Administrators manage this TV and every paired remote. Controller pairing grants browsing and playback only.</p>
-    <ul className="space-y-3">{devices.map(device => <Remote key={device.id} device={device} lastAdministrator={device.role === "administrator" && administrators === 1} {...props} />)}</ul>
+    <p className="text-muted-foreground">Administrators manage settings and remotes. Controllers browse, play and queue. You can always manage roles on the playback computer.</p>
+    {!devices.length && <p className="text-muted-foreground">No remembered remotes. The next pairing becomes Administrator.</p>}
+    <ul className="space-y-3">{devices.map(device => <Remote key={device.id} device={device} {...props} />)}</ul>
   </section>;
 }
 

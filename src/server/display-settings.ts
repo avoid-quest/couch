@@ -7,7 +7,7 @@ export async function displaySettings(request: Request, identity: () => Controll
   const authorize = () => {
     const caller = identity();
     if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-    if (caller.authority !== "administrator") throw new ControllerError("An administrator is required.", 403);
+    if (caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
   };
   try {
     authorize();

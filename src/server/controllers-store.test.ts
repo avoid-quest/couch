@@ -59,11 +59,11 @@ test("legacy pairing migration preserves exact token hashes, stable identities a
   for (const secret of [...tokens, ...tokens.map(hash)]) expect(JSON.stringify(devices)).not.toContain(secret);
 });
 
-test("pairing stores normalized names and hashed credentials without granting administration", () => {
+test("pairing stores normalized names and grants administration only to the first remembered remote", () => {
   const store = open();
   const token = store.pair("  Cafe\u0301 remote  ");
   const device = store.controllerForToken(token)!;
-  expect(device).toMatchObject({ name: "Café remote", role: "controller", createdAt: expect.any(Number), lastSeenAt: expect.any(Number) });
+  expect(device).toMatchObject({ name: "Café remote", role: "administrator", createdAt: expect.any(Number), lastSeenAt: expect.any(Number) });
   expect(store.controller(device.id)).toEqual(device);
   expect(store.controllerForToken(store.pair())?.name).toBe("Remote");
   expect(store.controllerForToken(store.pair("Café remote"))?.id).not.toBe(device.id);
@@ -71,7 +71,7 @@ test("pairing stores normalized names and hashed credentials without granting ad
   for (const name of [null, {}, 5, "", "   ", "a".repeat(61), "bad\nname", "bad\u0085name"]) expect(() => store.pair(name)).toThrow("Use a name with 1 to 60 characters.");
   expect(store.controllerForToken("unknown")).toBeNull();
   expect(store.controllerForToken("x".repeat(129))).toBeNull();
-  expect(store.administratorExists()).toBeFalse();
+  expect(store.administratorExists()).toBeTrue();
 });
 
 test("last seen writes at most once a minute and never moves backwards", () => {
@@ -97,6 +97,7 @@ test("setup claims expire, replace older setup codes and grant only the first ex
   const store = open();
   const one = store.controllerForToken(store.pair("One"))!;
   const two = store.controllerForToken(store.pair("Two"))!;
+  store.setControllerRole(one.id, "controller");
   expect(store.createControllerClaim("1111111111", false)).toEqual({ expiresAt: 600_100, consumed: false });
   store.createControllerClaim("2222222222", false);
   expect(store.controllerClaim("1111111111")).toBeNull();
@@ -124,6 +125,7 @@ test("recovery expiry and consumption survive restart without retaining plaintex
   const first = open(file);
   const one = first.controllerForToken(first.pair("One"))!;
   const two = first.controllerForToken(first.pair("Two"))!;
+  first.setControllerRole(one.id, "controller");
   const expired = first.createControllerClaim(expiredCode, true);
   first.createControllerClaim(consumedCode, true);
   first.consumeControllerClaim(one.id, consumedCode);
@@ -150,6 +152,7 @@ test("a failed claim commit rolls back both role promotion and code consumption"
   const file = path();
   const store = open(file);
   const device = store.controllerForToken(store.pair())!;
+  store.setControllerRole(device.id, "controller");
   const claim = store.createControllerClaim("1111111111", false);
   const db = new Database(file);
   db.run("CREATE TRIGGER reject_claim BEFORE UPDATE OF consumed ON controller_claims BEGIN SELECT RAISE(ABORT, 'Private database failure'); END;");
@@ -175,13 +178,14 @@ test("installation names persist separately from watching profiles and controlle
   expect(open(file).installationName()).toBe("Café TV");
 });
 
-test("device management persists names and roles while protecting the final administrator", () => {
+test("device management persists names and roles and permits removing the final administrator", () => {
   const file = path();
   const store = open(file);
   const oneToken = store.pair("One"), twoToken = store.pair("Two");
   const one = store.controllerForToken(oneToken)!, two = store.controllerForToken(twoToken)!;
   store.setControllerRole(one.id, "administrator");
-  for (const mutate of [() => store.revokeController(one.id), () => store.setControllerRole(one.id, "controller")]) expect(mutate).toThrow("Keep at least one administrator");
+  expect(store.setControllerRole(one.id, "controller").role).toBe("controller");
+  expect(store.administratorExists()).toBeFalse();
   expect(store.renameController(two.id, "  Kitchen remote  ").name).toBe("Kitchen remote");
   expect(() => store.setControllerRole(two.id, "host")).toThrow("Choose Controller or Administrator");
   store.setControllerRole(two.id, "administrator");
@@ -194,5 +198,7 @@ test("device management persists names and roles while protecting the final admi
   const reopened = open(file);
   expect(reopened.controllers()).toEqual([expect.objectContaining({ id: two.id, name: "Kitchen remote", role: "administrator" })]);
   expect(reopened.controllerForToken(twoToken)?.role).toBe("administrator");
-  expect(() => reopened.revokeController(two.id)).toThrow("Keep at least one administrator");
+  reopened.revokeController(two.id);
+  expect(reopened.controllers()).toEqual([]);
+  expect(reopened.controllerForToken(reopened.pair("New owner"))?.role).toBe("administrator");
 });

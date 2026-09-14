@@ -16,7 +16,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   const authorize = (identity: () => ControllerIdentity | null) => {
     const caller = identity();
     if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-    if (caller.authority !== "administrator") throw new ControllerError("An administrator remote is required to install updates.", 403);
+    if (caller.authority === "controller") throw new ControllerError("An administrator is required to install updates.", 403);
   };
   const status = async (requestId?: string) => {
     const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean };

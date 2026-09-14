@@ -133,7 +133,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
         if (path === "/api/settings/setup") {
           if (request.method !== "POST") return methods("POST");
           const requireOwner = () => {
-            if (requireIdentity().authority !== "administrator") throw new ControllerError("Use an administrator remote to continue setup.", 403);
+            administrator();
           };
           requireOwner();
           const expected = await settingField(request, "step");

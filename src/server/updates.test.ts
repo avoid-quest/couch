@@ -26,7 +26,7 @@ test("defaults stable/manual, accepts only admin commands and bounded fields", a
   const { updates } = await setup({ check: async () => candidate, stage: async () => {} });
   expect(await state(updates)).toMatchObject({ channel: "stable", policy: "manual", running: { version: "0.1.0" } });
   expect((await updates.handle(request(), () => null)).status).toBe(401);
-  for (const authority of ["controller", "host"] as const) expect((await updates.handle(request("/check", { check: true }), () => ({ ...admin(), authority }))).status).toBe(403);
+  for (const authority of ["controller"] as const) expect((await updates.handle(request("/check", { check: true }), () => ({ ...admin(), authority }))).status).toBe(403);
   expect((await updates.handle(request("/channel", { channel: "preview", url: "https://evil" }), admin)).status).toBe(400);
   expect((await updates.handle(request("/channel", { channel: "nightly" }), admin)).status).toBe(400);
 });

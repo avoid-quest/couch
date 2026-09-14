@@ -23,7 +23,7 @@ export function createSound(options: Options) {
       const authorize = () => {
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-        if (caller.authority !== "administrator") throw new ControllerError("An administrator is required.", 403);
+        if (caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
         if (closed) throw new ControllerError("The audio session is closing.", 503);
       };
       try {

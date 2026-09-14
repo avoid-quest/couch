@@ -119,7 +119,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (caller.authority !== "administrator") throw new ControllerError("An administrator remote is required to manage updates.", 403);
+        if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage updates.", 403);
       };
       try {
         authorize();

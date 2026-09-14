@@ -134,7 +134,7 @@ test("unpackaged or absent release metadata never invents verified package healt
 test("only administrators can trigger fixed checks and no request can choose paths or commands", async () => {
   const f = await fixture(); let calls = 0;
   const health = createToolHealth({ ...f.options, command: async () => { calls++; return "2026.08.19"; } });
-  for (const identity of [null, { ...administrator, authority: "host" as const }, { ...administrator, authority: "controller" as const }]) expect((await health.handle(request(), () => identity)).status).toBe(403);
+  for (const identity of [null, { ...administrator, authority: "controller" as const }]) expect((await health.handle(request(), () => identity)).status).toBe(403);
   expect((await health.handle(new Request(request(), { method: "POST", body: '{"command":"private"}' }), () => administrator)).status).toBe(405);
   expect((await health.handle(new Request("http://localhost/api/tools?path=/private"), () => administrator)).status).toBe(400);
   expect((await health.handle(new Request("http://localhost/api/tools/private"), () => administrator)).status).toBe(404);

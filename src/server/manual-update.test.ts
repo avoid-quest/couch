@@ -12,7 +12,7 @@ test("only an administrator's exact staged candidate reaches the fixed worker op
   const calls: unknown[] = [];
   const manual = createManualUpdate({ request: async value => { calls.push(value); return value.op === "status" ? { ok: true, repairCurrent: true, transaction: null } : { ok: true, repairCurrent: true, transaction }; } }, () => true, id => id === payload.candidateId);
   expect((await manual.install(request(), () => null)).status).toBe(401);
-  expect((await manual.install(request(), () => ({ authority: "host", controller: null, claimAvailable: false }))).status).toBe(403);
+  expect((await manual.install(request(), () => ({ authority: "controller", controller: null, claimAvailable: false }))).status).toBe(403);
   expect(calls).toEqual([]);
   for (const bad of [{ ...payload, path: "/tmp/package.deb" }, { ...payload, whenIdle: true }, { ...payload, candidateId: "https://feed.example/release" }, { ...payload, confirmInterrupt: "yes" }]) expect((await manual.install(request(bad), admin)).status).toBe(400);
   expect(calls).toEqual([]);

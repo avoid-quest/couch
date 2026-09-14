@@ -22,7 +22,7 @@ test("LightDM readback resolves defaults before ordered matching seat groups, in
 test("startup writes require current administrator authority, a boolean and exact request fields", async () => {
   let writes = 0;
   const settings = createStartup(async () => true, { read: async () => true, write: async () => { writes++; }, fullscreen: async () => true });
-  for (const authority of ["host", "controller"] as const) expect((await settings.handle(request({ enabled: false }), () => ({ authority }) as ControllerIdentity)).status).toBe(403);
+  for (const authority of ["controller"] as const) expect((await settings.handle(request({ enabled: false }), () => ({ authority }) as ControllerIdentity)).status).toBe(403);
   for (const value of [{ enabled: "false" }, { enabled: false, unit: "dbus.service" }]) expect((await settings.handle(request(value), admin)).status).toBe(400);
   let authorizationCalls = 0;
   expect((await settings.handle(request({ enabled: false }), () => ++authorizationCalls === 1 ? admin() : null)).status).toBe(403);

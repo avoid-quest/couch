@@ -270,3 +270,48 @@ test("native qualification navigates current Settings links and the phone catego
   expect(document.querySelector("#default-video-quality")).not.toBeNull();
   expect(nativeClicks).toEqual(["connection", "playback"]);
 });
+
+test("the local host manages settings and the last remote without an administrator claim", async () => {
+  await render({ host: { origin: "http://localhost", token: "host", urls: ["http://192.168.1.2:4100"], pairingCode: "123456" }, identity: { authority: "host", controller: null, claimAvailable: true }, administratorClaimed: false });
+  await select("general");
+  expect(document.querySelector("#tv-name")).not.toBeNull();
+  expect(document.body.textContent).not.toContain("administrator code");
+  for (const id of ["bluetooth", "sound", "display", "advanced"]) expect(page(id)).not.toBeNull();
+  await select("connection");
+  expect(document.querySelector('[aria-label="Paired remotes"]')).not.toBeNull();
+  for (const text of ["Remove administration", "Revoke access"]) expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === text)!.disabled).toBe(false);
+  expect(document.body.textContent).not.toContain("Keep this administrator");
+});
+
+test("sharing can only be changed locally and failed saves preserve its value and focus", async () => {
+  let enabled = true, reject = true;
+  const previous = request.getMockImplementation()!;
+  request.mockImplementation((async (input, init) => {
+    if (String(input).endsWith("/sharing")) {
+      if (init?.method === "POST") {
+        if (reject) return Response.json({ error: "Could not save remote control settings." }, { status: 500 });
+        enabled = JSON.parse(String(init.body)).enabled;
+      }
+      return Response.json({ enabled });
+    }
+    return previous(input, init);
+  }) as typeof fetch);
+  await render(); await select("connection");
+  expect(document.querySelector<HTMLButtonElement>("#allow-remote-control")!.disabled).toBe(true);
+  const changed = spyOn({ changed: (_enabled: boolean) => {} }, "changed");
+  await render({ host: { origin: "http://localhost", token: "host", urls: ["http://192.168.1.2:4100"], pairingCode: "123456" }, identity: { authority: "host", controller: null, claimAvailable: false }, onRemoteControlChange: changed });
+  const control = document.querySelector<HTMLButtonElement>("#allow-remote-control")!;
+  expect(control.disabled).toBe(false);
+  expect(control.getAttribute("aria-checked")).toBe("true");
+  await act(async () => { control.focus(); control.click(); });
+  expect(document.body.textContent).toContain("Could not save remote control settings.");
+  expect(control.getAttribute("aria-checked")).toBe("true");
+  expect(document.activeElement).toBe(control);
+  expect(changed).not.toHaveBeenCalled();
+  reject = false;
+  await act(async () => control.click());
+  expect(control.getAttribute("aria-checked")).toBe("false");
+  expect(document.querySelector("[data-pairing-code]")).toBeNull();
+  expect(document.body.textContent).toContain("Playback continues and pairings are remembered.");
+  expect(changed).toHaveBeenCalledWith(false);
+});

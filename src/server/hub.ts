@@ -55,6 +55,7 @@ type HubOptions = {
   databasePath: string;
   hostToken: string;
   pairingCode?: string;
+  remoteControlEnabled?: boolean;
   adminRecoveryCode?: string;
   sendPlayer: (command: PlaybackCommand) => void;
   restart?: (confirmInterrupt: boolean) => Promise<unknown>;
@@ -82,7 +83,7 @@ export function createHub(options: HubOptions) {
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
   });
-  const store = openStore(options.databasePath);
+  const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
   const hostname = options.hostname ?? "0.0.0.0";
   const addresses = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -285,24 +286,26 @@ export function createHub(options: HubOptions) {
     routes: {
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), urls: connectionUrls, player: session.state.player.status })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), desktopRemoteUi: 1 })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
           const respond = (body: unknown, status = 200) => cors(request, json(body, status));
+          if (!store.remoteControlEnabled()) return respond({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503);
           if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
           if (Date.now() - pairWindow >= 60_000) { pairWindow = Date.now(); pairAttempts = 0; }
           if (++pairAttempts > 20) return respond({ error: "Too many pairing attempts. Try again in a minute." }, 429);
           if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return respond({ error: "Send a JSON pairing request." }, 415);
           let body: unknown;
           try { body = await request.json(); } catch { return respond({ error: "Invalid pairing request." }, 400); }
+          if (!store.remoteControlEnabled()) return respond({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503);
           if (!admitted()) return respond({ error: "The TV is preparing an update. Pairing is paused." }, 503);
           if (typeof body !== "object" || body === null || !("code" in body) || body.code !== pairingCode) return respond({ error: "The pairing code is incorrect." }, 401);
           try {
             idle.activity();
             const token = store.pair("name" in body ? body.name : undefined);
             session.invalidate("controller");
-            return respond({ token, controller: store.controllerForToken(token) });
+            return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
           } catch (error) {
             return respond({ error: error instanceof ControllerError ? error.message : "Could not save this remote. Check the TV's storage." }, error instanceof ControllerError ? error.status : 500);
           }
@@ -316,14 +319,33 @@ export function createHub(options: HubOptions) {
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
       const trusted = token === options.hostToken;
+      if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503));
       const identity = (): ControllerIdentity | null => {
         if (closed) return null;
         if (trusted) return { controller: null, authority: "host", claimAvailable: controllers.claimAvailable() };
+        if (!store.remoteControlEnabled()) return null;
         const controller = store.controllerForToken(token);
         return controller ? { controller, authority: controller.role, claimAvailable: controllers.claimAvailable() } : null;
       };
       const caller = identity();
       if (!caller) return cors(request, json({ error: "Pair this device before connecting." }, 401));
+      if (url.pathname === "/api/settings/sharing") {
+        if (request.method === "GET") return cors(request, json({ enabled: store.remoteControlEnabled() }));
+        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+        if (!trusted) return cors(request, json({ error: "Change remote control on the playback computer." }, 403));
+        try {
+          const enabled = await settingField(request, "enabled");
+          if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remote control.");
+          if (!identity()) throw new ControllerError("The playback computer is unavailable.", 503);
+          store.saveRemoteControlEnabled(enabled);
+          if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
+            socket.unsubscribe("session");
+            socket.close(4003, "Remote control is off. Your pairing is remembered.");
+          }
+          session.invalidate("controller");
+          return cors(request, json({ enabled }));
+        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
+      }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
         if (!trusted) return cors(request, json({ error: "The native frontend is required." }, 403));
@@ -339,13 +361,13 @@ export function createHub(options: HubOptions) {
         try { return cors(request, json({ ...updates.state, installation: await manual.read(identity, url.searchParams.get("requestId") ?? undefined) })); }
         catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "The update worker is unavailable." }, error instanceof ControllerError ? error.status : 503)); }
       }
-      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority === "administrator" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: "An administrator remote is required." }, 403));
+      if (url.pathname === "/api/settings/restart" && request.method === "GET") return cors(request, caller.authority !== "controller" ? json({ instanceId, available: !!options.restart, ready: admitted() }) : json({ error: "An administrator is required." }, 403));
       if (url.pathname === "/api/settings/restart" && request.method === "POST") {
-        if (caller.authority !== "administrator") return cors(request, json({ error: "An administrator remote is required." }, 403));
+        if (caller.authority === "controller") return cors(request, json({ error: "An administrator is required." }, 403));
         try {
           const confirmed = await settingField(request, "confirmInterrupt");
           if (confirmed !== true) return cors(request, json({ error: "Confirm interruption before restarting Couch." }, 400));
-          if (identity()?.authority !== "administrator") return cors(request, json({ error: "Administrator access changed." }, 403));
+          if (!["host", "administrator"].includes(identity()?.authority ?? "")) return cors(request, json({ error: "Administrator access changed." }, 403));
           if (!options.restart) return cors(request, json({ error: "Restart requires the installed systemd application." }, 409));
           await options.restart(true);
           return cors(request, json({ ok: true, instanceId }, 202));

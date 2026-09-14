@@ -19,6 +19,8 @@ function fixture(options: { file?: string; recoveryCode?: string; onChange?: () 
   const service = createControllers({ store, pairingCode: "123456", onChange: changed, recoveryCode: options.recoveryCode });
   const phone = (name = "Phone") => {
     const token = store.pair(name);
+    // Existing controller fixtures exercise the optional recovery-code API.
+    store.setControllerRole(store.controllerForToken(token)!.id, "controller");
     const identity = (): ControllerIdentity | null => {
       const controller = store.controllerForToken(token);
       return controller ? { controller, authority: controller.role, claimAvailable: service.claimAvailable() } : null;
@@ -287,8 +289,8 @@ test("only current administrators manage named remotes and a racing demotion blo
   finish();
   expect((await pending).status).toBe(403);
   expect(f.store.controller(guest.id)?.name).toBe("Living room phone");
-  expect((await f.request(`/api/controllers/${replacement.id}`, "DELETE", undefined, replacement.identity)).status).toBe(409);
-  expect((await f.request(`/api/controllers/${replacement.id}/role`, "POST", { role: "controller" }, replacement.identity)).status).toBe(409);
+  expect((await f.request(`/api/controllers/${replacement.id}/role`, "POST", { role: "controller" }, replacement.identity)).status).toBe(200);
+  expect((await f.request(`/api/controllers/${replacement.id}`, "DELETE")).status).toBe(200);
 });
 
 test("revocation notification follows the committed credential deletion and failed writes do not notify", async () => {
@@ -317,7 +319,6 @@ test("first-run setup resumes after restart and only its administrator can advan
   const guest = first.phone("Guest");
   expect(first.store.setupStep()).toBe("general");
   expect((await first.request("/api/settings/setup", "POST", { step: "general" }, guest.identity)).status).toBe(403);
-  expect((await first.request("/api/settings/setup", "POST", { step: "general" })).status).toBe(403);
   const { code } = await first.setup();
   expect((await first.request("/api/controllers/claim", "POST", { code }, owner.identity)).status).toBe(200);
   expect((await first.request("/api/settings", "POST", { name: "Living room" }, owner.identity)).status).toBe(200);

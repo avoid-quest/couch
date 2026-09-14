@@ -7,8 +7,8 @@ export async function bluetoothSettings(request: Request, identity: () => Contro
   const authorize = () => {
     const caller = identity();
     if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-    if (caller.authority !== "administrator" || !caller.controller) throw new ControllerError("An administrator is required.", 403);
-    return caller.controller.id;
+    if (caller.authority === "controller" || caller.authority === "administrator" && !caller.controller) throw new ControllerError("An administrator is required.", 403);
+    return caller.controller?.id ?? "host";
   };
   try {
     const owner = authorize();

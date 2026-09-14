@@ -1,6 +1,6 @@
 import type { PlayerState } from "./protocol";
 
-export type ConnectionDetails = { name: string; urls: string[]; player: PlayerState["status"] };
+export type ConnectionDetails = { name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1 };
 
 export type Controller = {
   id: string;

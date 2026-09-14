@@ -33,8 +33,8 @@ const controllerApi = (hub: Hub, token: string, path: string, method = "GET", bo
 });
 
 async function claimAdministrator(hub: Hub, token: string) {
-  const { code } = await (await controllerApi(hub, hostToken, "/api/controllers/claim-code")).json() as { code: string };
-  expect((await controllerApi(hub, token, "/api/controllers/claim", "POST", { code })).status).toBe(200);
+  const identity = await (await controllerApi(hub, token, "/api/controllers/me")).json() as { controller: { id: string } };
+  expect((await controllerApi(hub, hostToken, `/api/controllers/${identity.controller.id}/role`, "POST", { role: "administrator" })).status).toBe(200);
 }
 
 test("revoking one of two controllers closes all its sockets and rejects later HTTP and reconnects", async () => {
@@ -110,7 +110,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", urls: [advertised, hub.origin], player: "unavailable" });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1 });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -259,7 +259,7 @@ async function pair(hub: Hub) {
   return (await response.json() as { token: string }).token;
 }
 
-test("a claimed phone names the TV for every controller and retains its authority after restart", async () => {
+test("the first paired phone names the TV for every controller and retains its authority after restart", async () => {
   const initial = fixture();
   const ownerToken = await pair(initial.hub), guestToken = await pair(initial.hub);
   const first = new Peer(initial.hub, ownerToken), second = new Peer(initial.hub, guestToken);
@@ -269,23 +269,15 @@ test("a claimed phone names the TV for every controller and retains its authorit
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const originalProfile = first.state.activeProfile;
-  expect(first.state).toMatchObject({ installationName: "Couch", administratorClaimed: false });
+  expect(first.state).toMatchObject({ installationName: "Couch", administratorClaimed: true });
   expect((await api(initial.hub, guestToken, "/api/controllers/claim-code")).status).toBe(403);
   expect((await api(initial.hub, guestToken, "/api/settings", "POST", { name: "Unapproved TV" })).status).toBe(403);
-  const codeResponse = await api(initial.hub, hostToken, "/api/controllers/claim-code");
-  expect(codeResponse.status).toBe(200);
-  const { code } = await codeResponse.json() as { code: string };
-  expect(code).toMatch(/^\d{10}$/);
-  expect((await api(initial.hub, ownerToken, "/api/controllers/claim", "POST", { code })).status).toBe(200);
-  await second.waitFor(message => message.type === "state" && message.state.administratorClaimed === true);
-  expect((await api(initial.hub, guestToken, "/api/controllers/claim", "POST", { code })).ok).toBe(false);
   expect((await api(initial.hub, hostToken, "/api/controllers/claim-code")).status).toBe(409);
   expect((await api(initial.hub, ownerToken, "/api/settings", "POST", { name: "Living room" })).status).toBe(200);
   await second.waitFor(message => message.type === "state" && message.state.installationName === "Living room");
   expect(second.state.activeProfile).toEqual(originalProfile);
   expect(second.state.queue).toEqual([]);
   expect(initial.commands).toEqual([]);
-  expect(JSON.stringify(second.messages)).not.toContain(code);
   expect(JSON.stringify(second.messages)).not.toContain(hostToken);
   const ownerIdentity = await (await api(initial.hub, ownerToken, "/api/controllers/me")).json();
   expect(ownerIdentity).toMatchObject({ authority: "administrator", controller: { role: "administrator" }, claimAvailable: false });
@@ -308,13 +300,14 @@ test("named pairing keeps caller-supplied roles ordinary and rejects invalid nam
     body: JSON.stringify({ code: hub.pairingCode, name, role: "administrator" }),
   });
   expect((await request("\n")).status).toBe(400);
+  await pair(hub);
   const response = await request("  Kitchen phone  ");
   expect(response.status).toBe(200);
   const paired = await response.json() as { token: string; controller: { name: string; role: string } };
   expect(paired.controller).toMatchObject({ name: "Kitchen phone", role: "controller" });
   expect(JSON.stringify(paired.controller)).not.toContain(paired.token);
   expect(JSON.stringify(paired.controller)).not.toContain("token_hash");
-  expect(hub.session.state.administratorClaimed).toBe(false);
+  expect(hub.session.state.administratorClaimed).toBe(true);
 });
 
 test("only authenticated controllers upload subtitle bytes, and native observations remain authoritative", async () => {
@@ -895,10 +888,8 @@ test("an administrator manages a durable radio playlist while ordinary remotes b
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     expect((await fetch(`${initial.hub.origin}/api/radio/playlists`, { headers: { Origin: initial.hub.origin } })).status).toBe(401);
-    expect((await api(initial.hub, "sources")).status).toBe(403);
-    expect((await api(initial.hub, "playlists", "POST", { name: "avoid radio", url: `http://127.0.0.1:${feed.port}/playlist.m3u` })).status).toBe(403);
-    const claimCode = await (await fetch(`${initial.hub.origin}/api/controllers/claim-code`, { headers: { Authorization: `Bearer ${hostToken}` } })).json() as { code: string };
-    expect((await fetch(`${initial.hub.origin}/api/controllers/claim`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ code: claimCode.code }) })).status).toBe(200);
+    expect((await api(initial.hub, "sources", "GET", undefined, guestToken)).status).toBe(403);
+    expect((await api(initial.hub, "playlists", "POST", { name: "avoid radio", url: `http://127.0.0.1:${feed.port}/playlist.m3u` }, guestToken)).status).toBe(403);
     const added = await api(initial.hub, "playlists", "POST", { name: "avoid radio", url: `http://127.0.0.1:${feed.port}/playlist.m3u` });
     expect(added.status).toBe(201);
     const { playlist } = await added.json() as { playlist: RadioPlaylist };
@@ -982,8 +973,8 @@ test("paired HTTP controllers rename and race removal with shared durable state 
   expect((await (await api(hub, firstToken, "/api/profiles")).json()).profiles).toEqual([{ id: "household", name: "Household" }]);
   for (const [index, token] of [firstToken, secondToken].entries()) {
     const identity = (await (await api(hub, token, "/api/controllers/me")).json()).controller;
-    expect(identity).toMatchObject({ id: identities[index].id, role: "controller" });
-    expect((await api(hub, token, "/api/settings", { installationName: "Unclaimed" })).status).toBe(403);
+    expect(identity).toMatchObject({ id: identities[index].id, role: index === 0 ? "administrator" : "controller" });
+    expect((await api(hub, token, "/api/settings", { installationName: "Unclaimed" })).status).toBe(index === 0 ? 400 : 403);
   }
   await Promise.all([first.close(), second.close(), reconnected.close()]);
   await hub.close();
@@ -997,7 +988,7 @@ test("paired HTTP controllers rename and race removal with shared durable state 
   expect((await (await api(restarted.hub, secondToken, "/api/profiles")).json()).profiles).toEqual([{ id: "household", name: "Household" }]);
 });
 
-test("only a claimed administrator can read sanitized diagnostics through HTTP", async () => {
+test("the local host and administrators can read sanitized diagnostics through HTTP", async () => {
   const { hub, commands } = fixture();
   const token = await pair(hub), guest = await pair(hub);
   const api = (token: string, path: string, body?: unknown) => fetch(`${hub.origin}${path}`, {
@@ -1005,10 +996,8 @@ test("only a claimed administrator can read sanitized diagnostics through HTTP",
     headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  expect((await api(token, "/api/diagnostics")).status).toBe(403);
-  expect((await api(hostToken, "/api/diagnostics/export")).status).toBe(403);
-  const { code } = await (await api(hostToken, "/api/controllers/claim-code")).json();
-  expect((await api(token, "/api/controllers/claim", { code })).status).toBe(200);
+  expect((await api(guest, "/api/diagnostics")).status).toBe(403);
+  expect((await api(hostToken, "/api/diagnostics/export")).status).toBe(200);
   hub.session.observe({ ...idle, error: `Failed https://user:secret@example.test/private?signature=secret ${hub.pairingCode} ${hostToken}` });
   const previousCommands = [...commands];
   const response = await api(token, "/api/diagnostics/export");
@@ -1041,7 +1030,7 @@ test("trial admission blocks pairing and last-seen writes while keeping authenti
   } finally { db.close(); }
 });
 
-test("pairing admitted before maintenance cannot save after its request body arrives", async () => {
+test.each(["maintenance", "sharing"])("pairing admitted before %s is disabled cannot save after its request body arrives", async mode => {
   let open = true;
   const { hub, databasePath } = fixture(undefined, undefined, () => open);
   const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
@@ -1050,7 +1039,8 @@ test("pairing admitted before maintenance cannot save after its request body arr
   try {
     const response = fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode }) });
     await entered.promise;
-    open = false;
+    if (mode === "maintenance") open = false;
+    else expect((await controllerApi(hub, hostToken, "/api/settings/sharing", "POST", { enabled: false })).status).toBe(200);
     release.resolve();
     expect((await response).status).toBe(503);
     const db = new Database(databasePath, { readonly: true });
@@ -1219,7 +1209,7 @@ test("General restart requires an administrator confirmation and installed super
   await claimAdministrator(hub, admin);
   const restart = (token: string, confirmInterrupt: boolean) => controllerApi(hub, token, "/api/settings/restart", "POST", { confirmInterrupt });
   expect((await restart(guest, true)).status).toBe(403);
-  expect((await restart(hostToken, true)).status).toBe(403);
+  expect((await restart(hostToken, true)).status).toBe(409);
   expect((await restart(admin, false)).status).toBe(400);
   expect((await restart(admin, true)).status).toBe(409);
   expect((await controllerApi(hub, admin, "/api/build")).status).toBe(200);
@@ -1516,7 +1506,7 @@ test("failed controller operation survives coordinator restart in administrator 
     expect(report.recent).toContainEqual(entry);
     expect(report.sessionId).not.toBe(entry.sessionId);
     expect((await controllerApi(restarted.hub, guest, path)).status).toBe(403);
-    expect((await controllerApi(restarted.hub, hostToken, path)).status).toBe(403);
+    expect((await controllerApi(restarted.hub, hostToken, path)).status).toBe(200);
     expect((await controllerApi(restarted.hub, token, path, "DELETE")).status).toBe(405);
   }
   const recovered = new Peer(restarted.hub, token); await recovered.ready();
@@ -1551,4 +1541,81 @@ test("diagnostic read and write failures leave coordinator commands and restart 
     const healthy = await (await controllerApi(third.hub, token, "/api/diagnostics")).json();
     expect(healthy.historyError).toBeNull();
   } finally { db.close(); }
+});
+
+test("local sharing disconnects remotes immediately, preserves playback and pairings, and survives restart", async () => {
+  const initial = fixture(undefined, undefined, undefined, { remoteControlEnabled: false });
+  const { hub } = initial;
+  const sharing = (enabled: unknown, token = hostToken) => controllerApi(hub, token, "/api/settings/sharing", "POST", { enabled });
+  const pairing = () => fetch(`${hub.origin}/api/pair`, { method: "POST", headers: { Origin: hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode }) });
+  expect((await pairing()).status).toBe(503);
+  expect(await (await controllerApi(hub, hostToken, "/api/settings/sharing")).json()).toEqual({ enabled: false });
+  expect((await sharing("true")).status).toBe(400);
+  expect((await sharing(true)).status).toBe(200);
+  const admin = await pair(hub), guest = await pair(hub);
+  const identities = await Promise.all([admin, guest].map(async token => (await (await controllerApi(hub, token, "/api/controllers/me")).json()).controller));
+  expect(identities.map(controller => controller.role)).toEqual(["administrator", "controller"]);
+  const remembered = (await (await controllerApi(hub, hostToken, "/api/controllers")).json()).controllers;
+  for (const token of [admin, guest]) expect((await sharing(false, token)).status).toBe(403);
+  const host = new Peer(hub, hostToken), one = new Peer(hub, admin), two = new Peer(hub, guest);
+  await Promise.all([host.ready(), one.ready(), two.ready()]);
+  hub.session.observe(idle);
+  await one.command({ type: "enqueue", entry: { id: "sharing-track", title: "Local track", source: "https://media.example/track.mp3" } });
+  await one.command({ type: "play", entryId: "sharing-track" });
+  const playing = { ...hub.session.state.player, status: "playing" as const };
+  hub.session.observe(playing);
+  const queue = hub.session.state.queue, commands = [...initial.commands];
+  const disconnected = [one, two].map(peer => new Promise<number>(resolve => peer.socket.addEventListener("close", event => resolve(event.code), { once: true })));
+  expect((await sharing(false)).status).toBe(200);
+  expect(await Promise.all(disconnected)).toEqual([4003, 4003]);
+  expect(initial.commands).toEqual(commands);
+  expect(hub.session.state.player).toEqual(playing);
+  expect(hub.session.state.queue).toEqual(queue);
+  expect(host.socket.readyState).toBe(WebSocket.OPEN);
+  for (const token of [admin, guest]) for (const path of ["/api/controllers/me", "/api/build", "/api/profiles"]) expect((await controllerApi(hub, token, path)).status).toBe(503);
+  expect((await pairing()).status).toBe(503);
+  expect((await (await controllerApi(hub, hostToken, "/api/controllers")).json()).controllers).toEqual(remembered);
+  expect((await sharing(true)).status).toBe(200);
+  const reconnected = new Peer(hub, admin);
+  await reconnected.ready();
+  expect(reconnected.state.queue).toEqual(queue);
+  expect((await sharing(false)).status).toBe(200);
+  await hub.close(); hubs.splice(hubs.indexOf(hub), 1);
+  const restarted = fixture(initial.databasePath, undefined, undefined, { remoteControlEnabled: true });
+  expect(await (await controllerApi(restarted.hub, hostToken, "/api/settings/sharing")).json()).toEqual({ enabled: false });
+  expect(restarted.hub.session.state.queue).toEqual(queue);
+  expect(restarted.commands).toEqual([]);
+  expect((await (await controllerApi(restarted.hub, hostToken, "/api/controllers")).json()).controllers).toEqual(remembered);
+  expect((await controllerApi(restarted.hub, hostToken, "/api/settings/sharing", "POST", { enabled: true })).status).toBe(200);
+  expect((await controllerApi(restarted.hub, admin, "/api/controllers/me")).status).toBe(200);
+});
+
+test("local management works before pairing and the next role depends on remembered remotes", async () => {
+  const { hub } = fixture();
+  expect((await controllerApi(hub, hostToken, "/api/settings", "POST", { name: "Personal computer" })).status).toBe(200);
+  expect((await controllerApi(hub, hostToken, "/api/settings/setup", "POST", { step: "general" })).status).toBe(200);
+  const owner = await pair(hub), guest = await pair(hub);
+  const controller = async (token: string) => (await (await controllerApi(hub, token, "/api/controllers/me")).json()).controller as { id: string; role: string };
+  const first = await controller(owner), second = await controller(guest);
+  expect(first.role).toBe("administrator");
+  expect((await controllerApi(hub, owner, `/api/controllers/${first.id}`, "DELETE")).status).toBe(200);
+  const newcomer = await pair(hub), third = await controller(newcomer);
+  expect(third.role).toBe("controller");
+  expect((await controllerApi(hub, newcomer, `/api/controllers/${third.id}/role`, "POST", { role: "administrator" })).status).toBe(403);
+  expect((await controllerApi(hub, hostToken, `/api/controllers/${third.id}/role`, "POST", { role: "administrator" })).status).toBe(200);
+  for (const id of [second.id, third.id]) expect((await controllerApi(hub, hostToken, `/api/controllers/${id}`, "DELETE")).status).toBe(200);
+  expect((await controller(await pair(hub))).role).toBe("administrator");
+});
+
+test("public installation identity binds pairing to one installation and survives restart", async () => {
+  const first = fixture(), other = fixture();
+  const connection = async (hub: Hub) => (await fetch(`${hub.origin}/api/connection`)).json() as Promise<{ installationId: string }>;
+  const original = await connection(first.hub);
+  expect(original.installationId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+  expect((await connection(other.hub)).installationId).not.toBe(original.installationId);
+  const paired = await fetch(`${first.hub.origin}/api/pair`, { method: "POST", headers: { Origin: first.hub.origin, "Content-Type": "application/json" }, body: JSON.stringify({ code: first.hub.pairingCode }) });
+  expect(paired.status).toBe(200);
+  expect((await paired.json()).installationId).toBe(original.installationId);
+  await first.hub.close(); hubs.splice(hubs.indexOf(first.hub), 1);
+  expect((await connection(fixture(first.databasePath).hub)).installationId).toBe(original.installationId);
 });
