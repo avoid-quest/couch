@@ -1494,3 +1494,61 @@ test("manual playback uses authenticated device names across sockets, history, S
   expect(await host.command({ type: "play", entryId: hub.session.state.currentEntryId! })).toMatchObject({ ok: true });
   expect(hub.session.state.playedBy).toEqual({ deviceId: "host", name: "Couch" });
 });
+
+test("failed controller operation survives coordinator restart in administrator diagnostics and export", async () => {
+  const first = fixture();
+  const token = await pair(first.hub), guest = await pair(first.hub);
+  await claimAdministrator(first.hub, token);
+  const remote = new Peer(first.hub, token); await remote.ready();
+  const failure = await remote.command({ type: "enqueueRadio", entryId: "missing", stationId: "missing", playNow: true });
+  if (failure.type !== "result") throw new Error("Expected command result");
+  expect(failure.ok).toBe(false);
+  const original = await (await controllerApi(first.hub, token, "/api/diagnostics")).json();
+  const entry = original.recent.find((entry: { source: string }) => entry.source === "Controller command");
+  expect(entry).toMatchObject({ message: failure.error, build: original.build, sessionId: original.sessionId, count: 1 });
+  expect(entry.at).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+  await remote.close(); await first.hub.close();
+  const restarted = fixture(first.databasePath);
+  for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) {
+    const response = await controllerApi(restarted.hub, token, path);
+    expect(response.status).toBe(200);
+    const report = await response.json();
+    expect(report.recent).toContainEqual(entry);
+    expect(report.sessionId).not.toBe(entry.sessionId);
+    expect((await controllerApi(restarted.hub, guest, path)).status).toBe(403);
+    expect((await controllerApi(restarted.hub, hostToken, path)).status).toBe(403);
+    expect((await controllerApi(restarted.hub, token, path, "DELETE")).status).toBe(405);
+  }
+  const recovered = new Peer(restarted.hub, token); await recovered.ready();
+  expect(await recovered.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
+});
+
+test("diagnostic read and write failures leave coordinator commands and restart recovery usable", async () => {
+  const first = fixture();
+  first.hub.session.observe(idle);
+  const token = await pair(first.hub);
+  await claimAdministrator(first.hub, token);
+  const db = new Database(first.databasePath);
+  try {
+    db.run("CREATE TRIGGER fail_diagnostics BEFORE UPDATE ON diagnostic_history BEGIN SELECT RAISE(ABORT, 'password=private-storage-secret'); END");
+    const remote = new Peer(first.hub, token); await remote.ready();
+    expect(await remote.command({ type: "enqueueRadio", entryId: "missing", stationId: "missing" })).toMatchObject({ ok: false });
+    expect(await remote.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
+    expect(first.commands).toContainEqual({ type: "volume", volume: 32 });
+    const report = await (await controllerApi(first.hub, token, "/api/diagnostics/export")).json();
+    expect(report.historyError).toContain("could not be saved");
+    expect(JSON.stringify(report)).not.toContain("private-storage-secret");
+    await remote.close(); await first.hub.close();
+    db.run("DROP TRIGGER fail_diagnostics; UPDATE diagnostic_history SET entries = 'invalid-json'");
+    const second = fixture(first.databasePath);
+    const recovered = new Peer(second.hub, token); await recovered.ready();
+    expect(await recovered.command({ type: "volume", volume: 40 })).toMatchObject({ ok: true });
+    const failedRead = await (await controllerApi(second.hub, token, "/api/diagnostics")).json();
+    expect(failedRead.historyError).toContain("could not be read");
+    await recovered.close(); await second.hub.close();
+    db.run("UPDATE diagnostic_history SET entries = '[]'");
+    const third = fixture(first.databasePath);
+    const healthy = await (await controllerApi(third.hub, token, "/api/diagnostics")).json();
+    expect(healthy.historyError).toBeNull();
+  } finally { db.close(); }
+});

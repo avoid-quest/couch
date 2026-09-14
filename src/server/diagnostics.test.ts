@@ -1,14 +1,19 @@
-import { expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, setSystemTime, test } from "bun:test";
 import type { ControllerIdentity } from "../shared/controllers";
 import { createDiagnostics } from "./diagnostics";
 import { createNativeDiagnostics } from "./diagnostics-native";
-import { createDiagnosticLog, diagnosticLimits, redactDiagnosticText } from "./diagnostics-redaction";
+import { createDiagnosticLog } from "./diagnostics-log";
+import { diagnosticLimits, redactDiagnosticText } from "./diagnostics-redaction";
 import { configurationFacts, diagnosticBuild, helperFacts } from "./diagnostics-system";
 
 const administrator: ControllerIdentity = { authority: "administrator", controller: null, claimAvailable: false };
 const request = (path = "") => new Request(`http://localhost/api/diagnostics${path}`);
+const collectors: ReturnType<typeof createDiagnostics>[] = [];
+afterEach(() => { for (const diagnostics of collectors.splice(0)) diagnostics.close(); });
 function collector(overrides: Partial<Parameters<typeof createDiagnostics>[0]> = {}) {
-  return createDiagnostics({ databasePath: "/tmp/couch.sqlite", runtime: () => ({ hostname: "localhost", port: 4100, native: false }), native: async () => null, sources: () => [], system: async () => [], helpers: async () => [], ...overrides });
+  const diagnostics = createDiagnostics({ databasePath: ":memory:", runtime: () => ({ hostname: "localhost", port: 4100, native: false }), native: async () => null, sources: () => [], system: async () => [], helpers: async () => [], ...overrides });
+  collectors.push(diagnostics);
+  return diagnostics;
 }
 
 test("redacts representative credentials, URL paths and signed queries", () => {
@@ -37,6 +42,7 @@ test("recent log is sanitized, bounded, deduplicated and copied", () => {
   expect(log.recent()).toHaveLength(80);
   log.recent()[0]!.message = "changed";
   expect(log.recent()[0]!.message).not.toBe("changed");
+  log.close();
 });
 
 test("ordinary controllers and native host cannot trigger collection or export", async () => {

@@ -1,7 +1,8 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { DiagnosticFact, DiagnosticHelper, Diagnostics, NativeDiagnostics } from "../shared/diagnostics";
+import { createDiagnosticLog } from "./diagnostics-log";
 import { buildInfo } from "./build-info";
-import { createDiagnosticLog, diagnosticLimits, redactDiagnosticText } from "./diagnostics-redaction";
+import { diagnosticLimits, redactDiagnosticText } from "./diagnostics-redaction";
 import { configurationFacts, diagnosticBuild, helperFacts, systemFacts } from "./diagnostics-system";
 
 type Options = {
@@ -17,7 +18,7 @@ type Options = {
 
 export function createDiagnostics(options: Options) {
   const env = options.env ?? process.env;
-  const log = createDiagnosticLog(options.secrets);
+  const log = createDiagnosticLog(options.secrets, options.databasePath);
   let cached: Diagnostics | null = null;
   let pending: Promise<Diagnostics> | null = null;
   let systemPending: Promise<DiagnosticFact[]> | null = null;
@@ -49,7 +50,7 @@ export function createDiagnostics(options: Options) {
     catch { sources = [{ name: "Sources", status: "unavailable", error: "Source status could not be read." }]; }
     for (const source of sources) if (source.error) log.add(source.name, source.error);
     return {
-      formatVersion: 1, collectedAt: new Date().toISOString(), collectionMs: Math.round(performance.now() - start), build: diagnosticBuild(buildInfo),
+      formatVersion: 2, sessionId: log.sessionId, sessionStartedAt: log.sessionStartedAt, historyError: log.error(), collectedAt: new Date().toISOString(), collectionMs: Math.round(performance.now() - start), build: diagnosticBuild(buildInfo),
       system: facts(system), native: native.value && { build: diagnosticBuild(native.value.build), facts: facts(native.value.facts) }, nativeError: native.error,
       helpers: mediaHelpers.slice(0, 8).map(helper => ({ name: safe(helper.name, 60), version: helper.version ? safe(helper.version, 100) : null, status: helper.status, source: safe(helper.source), error: helper.error ? safe(helper.error) : null, checkedAt: helper.checkedAt })),
       configuration: facts(configurationFacts(env, options.runtime())), sources, recent: log.recent(), limits: diagnosticLimits,
@@ -58,6 +59,7 @@ export function createDiagnostics(options: Options) {
 
   return {
     log,
+    close: log.close,
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const headers: Record<string, string> = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status: number) => Response.json(body, { status, headers });
@@ -72,7 +74,7 @@ export function createDiagnostics(options: Options) {
       }
       // Revocation while a helper or the native host answers must take effect.
       if (!permitted()) return json({ error: "Administrator access is no longer available." }, 403);
-      const body = JSON.stringify({ ...cached!, recent: log.recent() }, null, 2);
+      const body = JSON.stringify({ ...cached!, recent: log.recent(), historyError: log.error() }, null, 2);
       if (Buffer.byteLength(body) > diagnosticLimits.exportBytes) return json({ error: "Diagnostic report exceeded its size limit." }, 503);
       if (path.endsWith("/export")) headers["Content-Disposition"] = 'attachment; filename="couch-diagnostics.json"';
       headers["Content-Type"] = "application/json; charset=utf-8";
