@@ -1,0 +1,5 @@
+probe:probe 755 /home/probe/.local/lib/couch
+probe:probe 700 /home/probe/.local/lib/couch/Couch.AppImage
+probe:probe 600 /home/probe/.local/lib/couch/Couch.AppImage.sig
+probe:probe 600 /home/probe/.local/lib/couch/build.json
+probe:probe 600 /home/probe/.local/lib/couch/couch-updater.pub

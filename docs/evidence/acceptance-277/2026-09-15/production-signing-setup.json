@@ -1,0 +1,11 @@
+{
+  "publicKeyFileSha256": "6c536529d487de4a5ad626c32f7a9ef2d598f39e3634ae8b4c61f7c366f573a7",
+  "githubVariableMatches": true,
+  "encryptedPrivateKey": true,
+  "privateDirectoryMode": "0o700",
+  "publicKeyFileMode": "0o600",
+  "signatureFixtureVerifiedBy": "Tauri CLI 2.11.4 signing and Debian Minisign verification",
+  "offlineBackup": "Owner explicitly deferred copying the private directory to offline storage.",
+  "publicationReviewers": "Owner explicitly removed the separate reviewer requirement. Main-only environments retained.",
+  "activation": "Owner authorized Actions after local act readiness. No hosted dispatch yet."
+}

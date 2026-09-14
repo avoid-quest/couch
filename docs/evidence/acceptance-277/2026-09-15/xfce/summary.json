@@ -1,0 +1,46 @@
+{
+  "beforeEntries": 1415,
+  "afterEntries": 1422,
+  "added": {
+    "gawk": {
+      "version": "1:5.2.1-2+b1",
+      "installedKiB": 2911,
+      "status": "installed"
+    },
+    "jq": {
+      "version": "1.7.1-6+deb13u3",
+      "installedKiB": 125,
+      "status": "installed"
+    },
+    "libfuse2t64:amd64": {
+      "version": "2.9.9-9",
+      "installedKiB": 354,
+      "status": "installed"
+    },
+    "libjq1:amd64": {
+      "version": "1.7.1-6+deb13u3",
+      "installedKiB": 439,
+      "status": "installed"
+    },
+    "libonig5:amd64": {
+      "version": "6.9.9-1+b1",
+      "installedKiB": 677,
+      "status": "installed"
+    },
+    "libsigsegv2:amd64": {
+      "version": "2.14-1+b2",
+      "installedKiB": 64,
+      "status": "installed"
+    },
+    "minisign": {
+      "version": "0.12-1",
+      "installedKiB": 50,
+      "status": "installed"
+    }
+  },
+  "changed": {},
+  "removed": [],
+  "sessionPolicyUnchanged": true,
+  "bootstrapExit": "0",
+  "installerExit": "0"
+}

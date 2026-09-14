@@ -1,0 +1,99 @@
+[draft] ⭐ Run Set up job
+[draft] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[draft]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[draft]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[draft]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[draft]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[draft]   ✅  Success - Set up job
+[draft] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[draft]   | STEP:draft:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[draft]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [30.728334ms]
+[draft] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[draft]   | STEP:draft:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[draft]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [32.900042ms]
+[draft] ⭐ Run Main Check the candidate inputs
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[draft]   | STEP:draft:4:Check the candidate inputs
+[draft]   ✅  Success - Main Check the candidate inputs [29.831417ms]
+[draft] ⭐ Run Main Install supported Cloud CLI
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[draft]   | STEP:draft:5:Install supported Cloud CLI
+[draft]   ✅  Success - Main Install supported Cloud CLI [35.1615ms]
+[draft] ⭐ Run Main Draft the effective Tauri version or retained promotion
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/draft] user= workdir=
+[draft]   | STEP:draft:6:Draft the effective Tauri version or retained promotion
+[draft]   ✅  Success - Main Draft the effective Tauri version or retained promotion [30.5545ms]
+[draft]   ⚙  ::set-output:: release-id=local-mock-release
+[draft] ⭐ Run Main Record completed job
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/7] user= workdir=
+[draft]   | JOB_OK:draft
+[draft]   ✅  Success - Main Record completed job [31.638ms]
+[draft] ⭐ Run Complete job
+[draft] Cleaning up container for job draft
+[draft]   ✅  Success - Complete job
+[draft] 🏁  Job succeeded
+[candidate] ⭐ Run Set up job
+[candidate] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[candidate]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[candidate]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[candidate]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[candidate]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[candidate]   ✅  Success - Set up job
+[candidate] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[candidate]   | STEP:candidate:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[candidate]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [31.856542ms]
+[candidate] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[candidate]   | STEP:candidate:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[candidate]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [30.41675ms]
+[candidate] ⭐ Run Main Select the original source and qualification work
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/qualification] user= workdir=
+[candidate]   | STEP:candidate:3:Select the original source and qualification work
+[candidate]   ✅  Success - Main Select the original source and qualification work [32.29525ms]
+[candidate]   ⚙  ::set-output:: needed=true
+[candidate] ⭐ Run Main Prepare the pinned Debian builder
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[candidate]   | STEP:candidate:4:Prepare the pinned Debian builder
+[candidate]   ✅  Success - Main Prepare the pinned Debian builder [31.539ms]
+[candidate] ⭐ Run Main Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[candidate]   | STEP:candidate:5:Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+[candidate]   ✅  Success - Main Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c [30.372167ms]
+[candidate] ⭐ Run Main Restore compiler and dependency caches
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/6] user= workdir=
+[candidate]   | STEP:candidate:6:Restore compiler and dependency caches
+[candidate]   ✅  Success - Main Restore compiler and dependency caches [32.541ms]
+[candidate] ⭐ Run Main Build and sign the complete AppImage and public archives
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/7] user= workdir=
+[candidate]   | STEP:candidate:7:Build and sign the complete AppImage and public archives
+[candidate]   ✅  Success - Main Build and sign the complete AppImage and public archives [31.918042ms]
+[candidate] ⭐ Run Main Qualify the exact signed bytes
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/9] user= workdir=
+[candidate]   | STEP:candidate:9:Qualify the exact signed bytes
+[candidate]   ❌  Failure - Main Qualify the exact signed bytes [32.392708ms]
+[candidate] exitcode '17': failure
+[candidate] ⭐ Run Main Retain compiler and dependency caches after any build outcome
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/10] user= workdir=
+[candidate]   | STEP:candidate:10:Retain compiler and dependency caches after any build outcome
+[candidate]   ✅  Success - Main Retain compiler and dependency caches after any build outcome [30.475125ms]
+[candidate] ⭐ Run Main Retain build bytes and receipts
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/11] user= workdir=
+[candidate]   | STEP:candidate:11:Retain build bytes and receipts
+[candidate]   ✅  Success - Main Retain build bytes and receipts [31.504333ms]
+[candidate] ⭐ Run Main Stop the builder
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/12] user= workdir=
+[candidate]   | STEP:candidate:12:Stop the builder
+[candidate]   ✅  Success - Main Stop the builder [32.537083ms]
+[candidate] ⭐ Run Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/14] user= workdir=
+[candidate]   | STEP:candidate:14:actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[candidate]   ✅  Success - Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f [30.869791ms]
+[candidate] ⭐ Run Complete job
+[candidate] Cleaning up container for job candidate
+[candidate]   ✅  Success - Complete job
+[candidate] 🏁  Job failed
+time="2026-09-15T01:06:24+02:00" level=info msg="Using docker host 'unix:///Users/devit/.docker/run/docker.sock', and daemon socket '-'"
+Error: Job 'candidate' failed
