@@ -6,23 +6,29 @@ The product owns TV navigation, the library, queue, playback settings, shared se
 
 Read [architecture and shared state](architecture.md), [playback](playback.md), and [provider integration](providers.md) alongside this scope. Release allocations below are proposed milestones, not claims of implemented support.
 
-## Implementation checkpoint
+## Implementation checkpoint, 14 September 2026
 
-| Area | Implemented | Remaining parity work |
+This checkpoint describes verified main and installed build 49. The remaining
+research and R1/R2 allocations below are the historical 5 September proposal,
+not a promise that every proposed capability is delivered or still selected.
+See the [dated status record](../qualification/current-status-2026-09-14.md) for
+source/build identities, evidence boundaries and current acceptance owners.
+
+| Area | Implemented software | Remaining or excluded scope |
 | --- | --- | --- |
-| TV/remote UI | Generated shadcn Mira preset `b1D0dv72`, neutral theme and Inter; fullscreen native TV with mounted VideoStage; separate browser remote, compact catalogs and phone directional pad; local retained browsing and focus restoration | Physical remote/CEC input and TV hardware qualification |
-| Shared controls | Named paired controllers over WebSockets, stable IDs, current snapshots, persistent queue/volume, stale playback rejection and catalog invalidations | Controller listing, renaming, revocation and role management in [Show connection status and manage paired remotes](https://github.com/avoid-quest/couch/issues/11); physical remote/CEC input |
-| Administration and Settings | Separate expiring first-administrator claim from a paired phone, address-only QR, durable shared TV name, Connection status/reconnect/pairing, preserved legacy credentials and trusted-local recovery; paired D-pad cannot invoke protected TV setup controls | Phone folder/Jellyfin administration and remaining Settings in the appliance map; the TV name is read-only in the native UI |
-| Native playback | Embedded libmpv, seek, tracks, subtitle off, chapters, speed and delays; private text-subtitle uploads; profile languages/subtitle mode/speed and device volume/audio-delay persistence | Bitmap subtitle/font corpus and hardware/output qualification; subtitle search/download |
-| Local/NAS library | Selected local or OS-mounted folders, bounded metadata scans, FTS search, stable IDs, missing-mount recovery; named watching profiles, local resume/watched/history | Integrated SMB/NFS setup, video metadata/artwork and profile editing/removal |
-| Music and playlists | Maintained audio tag parser, artists/albums, numeric disc/track order, authenticated embedded artwork; album queue/play; durable named playlists with revision-checked edit/load operations | Cue sheets, ReplayGain, measured gapless playback, crossfade, tag correction/writing and saved filters |
-| Radio | Saved Kodi-compatible M3U feeds, avoid radio import, stable station IDs/order/groups/logos, refresh, Radio Browser search, persistent shared favorites and immediate TV/phone Play; observed ICY/audio tags and bounded reconnects with Stop/replacement/shutdown cancellation | TV guide, recording, timeshift and physical network/audio qualification |
-| Jellyfin | Official SDK, host-only connection, paired browsing, negotiated direct play, host progress reporting, Continue watching, fresh upstream resume and authenticated text-sidecar delivery | External image subtitle delivery and conversion fallback |
-| Online browsing | YouTube search/channels/playlists, Twitch live channels/categories/search, RaiPlay live/programs/episodes/search/replays, Bandcamp public tracks/ordered albums/artwork and album queue/play; shared saved items | Account subscriptions, Bandcamp artist/search/custom-domain discovery, richer discovery and provider compatibility maintenance |
-| Website media | Webpage queue mode, automatic title/artwork, per-entry quality, bounded cancellable yt-dlp worker, separate native video/audio and private headers; public YouTube, Twitch, RaiPlay and Bandcamp native samples tested | Broader provider/expiry qualification, sign-in and DRM |
-| Installation and testing | Linux desktop build, checksum-verified media-helper installer, real HTTP remote and Docker Linux screen preview | Signed installers/updates, AppImage dependency qualification and physical TV checks |
+| TV and controllers | Fullscreen Linux player; Home, Search, Library, Saved, Up next and Settings; browser remotes; pairing, controller names/roles/revocation | Guest journey #248 and pairing-dialog QR #249 are open; CEC #38 is not planned; Mac loopback checks completed, installed-TV journey pending; Windows controller verification deferred |
+| Administration | Separate administrator claim/recovery; TV name, startup, updates, output controls; phone folder and Jellyfin setup | Real first-run media/display/audio acceptance #23 |
+| Playback and subtitles | libmpv tracks, chapters, speed/delays, uploaded text sidecars, Jellyfin text subtitles, saved profile defaults | YouTube rendering #150; display #13, sound #14 and sizing/subtitle geometry #12; HDR/refresh unqualified; subtitle search/download excluded |
+| Library and metadata | Local/already-mounted folders, FTS search, profiles and editing/removal, history/resume, NFO/artwork, corrections/export and collections | Real folder scan/play/recovery #17; integrated NAS mounting excluded; live TMDB matching needs authorized access |
+| Music | Tags, artists/albums, CUE tracks, saved playlists, ReplayGain, measured 44.1 kHz FLAC continuity for local/mounted/Jellyfin sources | Slow opens and other formats need their own continuity evidence; physical sound remains separate; crossfade not delivered |
+| Radio and TV | M3U radio, avoid radio, Radio Browser, track metadata, IPTV/XMLTV guide, Tvheadend scheduling and completed recordings | No Tvheadend deployed on the verified appliance; growing timeshift #67 deferred; physical tuner/audio acceptance is not implied |
+| Providers | YouTube, Twitch and RaiPlay public catalogs, Bandcamp public albums/tracks, yt-dlp links, quality choices, saved media and shared search/history | Account login/DRM excluded; Bandcamp full-text search/custom domains absent; provider availability varies |
+| Installation | Signed AppImage, Ubuntu companion, installation/recovery, staging and manual/idle updates, helper repair, named LAN origin | Actions capacity pause; build on Mac, install/run on T480; AC lid reachability #246 and persistent diagnostics #250 are open |
+| Architecture | React, Bun/SQLite coordinator, Tauri/Rust native host and libmpv | Full Rust port #175 was an investigation; native Mac/Windows playback and multiroom not delivered |
 
-The reproducible Linux test command and current limits are in [README](../../README.md). Implementation does not imply complete parity in a row.
+Implementation does not imply complete parity or physical acceptance in a row.
+
+## Historical qualification checkpoint, 5 September 2026
 
 The administrator/Settings gate passed 450 native/HTTP checks with Jellyfin and
 live radio. The separate eleven-case provider gate used identical production
@@ -33,7 +39,8 @@ for test counts, first-claim and migration coverage, and hardware limits.
 Music qualification includes native/HTTP decoded artwork and playlist operations
 across restart. The 2026-09-05 Bandcamp qualification transition contained 298.4 ms of
 silence; [playback evidence](playback.md) records the sample alignment and limits.
-Gapless, ReplayGain and cue sheets remain open despite upstream engine support.
+Gapless, ReplayGain and CUE were still open at that checkpoint. The updated
+checkpoint above records their later implementation.
 
 Bandcamp qualification covers Hail to Fire, Intro and the next Blazo album track
 in native playback, visible TV artwork, a 22-track ordered album on TV and HTTP,
@@ -41,14 +48,6 @@ source replacement, Stop, reconnect and restart without autoplay. The remaining
 album tracks and the suggested FTL album have no native playback qualification.
 The [provider evidence](providers.md#public-provider-checks) records the exact
 samples and the deliberately missing track's failure.
-
-Implementation pauses after the administrator/Settings increment. The
-[appliance map](https://github.com/avoid-quest/couch/issues/1) owns installation,
-Settings, controller management, outputs and updates. The linked
-[media map](https://github.com/avoid-quest/couch/issues/25) owns the remaining
-playback and library work. Ticket publication does not start implementation.
-The [implementation status](../../README.md) covers only part of R1; the broad
-acceptance gates below remain open.
 
 ## Product capability matrix
 

@@ -1,0 +1,238 @@
+{
+  "selection": {
+    "hidden": [
+      22.4,
+      63.0
+    ],
+    "held": [
+      85.5,
+      129.93
+    ]
+  },
+  "hidden": {
+    "reference46": {
+      "build": "0.1.0+build.34172088346.1",
+      "source": "64156f75f10c0dafb2587f88115c38fac7c374ec",
+      "raw": "hidden47.json",
+      "observer": "session-hidden-held47.json",
+      "range": [
+        22.4,
+        62.55
+      ],
+      "sampleCount": 78,
+      "mediaSeconds": 40.15,
+      "wallSeconds": 40.16302299499512,
+      "renderCallbackDelta": 2007,
+      "dropCounterDelta": 403,
+      "callbacksPerMediaSecond": 49.987546699875466,
+      "dropFraction": 0.16721991701244812,
+      "minimumBufferedSeconds": 18.5,
+      "maxTelemetryWallGap": 0.5377869606018066,
+      "maxTelemetryMediaGap": 0.5500000000000043,
+      "sessionCountIncludingBracketingStates": 160,
+      "maxSessionGapMs": 371,
+      "observerBracketMarginsMs": [
+        43.700927734375,
+        209.276123046875
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    },
+    "candidate48": {
+      "build": "0.1.0+build.34172088348.1",
+      "source": "ae6635b1adf8ddf80344595499145446264fbb68",
+      "raw": "raw-matched49.json",
+      "observer": "session-matched49.json",
+      "range": [
+        22.58,
+        62.62
+      ],
+      "sampleCount": 78,
+      "mediaSeconds": 40.04,
+      "wallSeconds": 40.05411696434021,
+      "renderCallbackDelta": 2180,
+      "dropCounterDelta": 222,
+      "callbacksPerMediaSecond": 54.44555444555445,
+      "dropFraction": 0.09242298084929226,
+      "minimumBufferedSeconds": 18.4,
+      "maxTelemetryWallGap": 0.5364210605621338,
+      "maxTelemetryMediaGap": 0.5400000000000063,
+      "sessionCountIncludingBracketingStates": 160,
+      "maxSessionGapMs": 359,
+      "observerBracketMarginsMs": [
+        15.9541015625,
+        237.928955078125
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    },
+    "candidate49": {
+      "build": "0.1.0+build.34172088349.1",
+      "source": "aa8bb761d2381c41dcade83ed3c9aad014cb2244",
+      "raw": "raw-hidden52-full.json",
+      "observer": "session-hidden52-full.json",
+      "range": [
+        22.85,
+        62.92
+      ],
+      "sampleCount": 78,
+      "mediaSeconds": 40.07,
+      "wallSeconds": 40.06784987449646,
+      "renderCallbackDelta": 2218,
+      "dropCounterDelta": 186,
+      "callbacksPerMediaSecond": 55.35313201896681,
+      "dropFraction": 0.07737104825291181,
+      "minimumBufferedSeconds": 468.25,
+      "maxTelemetryWallGap": 0.5357720851898193,
+      "maxTelemetryMediaGap": 0.5500000000000007,
+      "sessionCountIncludingBracketingStates": 160,
+      "maxSessionGapMs": 328,
+      "observerBracketMarginsMs": [
+        55.89111328125,
+        212.259033203125
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    }
+  },
+  "held": {
+    "reference46": {
+      "build": "0.1.0+build.34172088346.1",
+      "source": "64156f75f10c0dafb2587f88115c38fac7c374ec",
+      "raw": "held47.json",
+      "observer": "session-hidden-held47.json",
+      "range": [
+        85.5,
+        129.93
+      ],
+      "sampleCount": 86,
+      "mediaSeconds": 44.43000000000001,
+      "wallSeconds": 44.43262600898743,
+      "renderCallbackDelta": 1953,
+      "dropCounterDelta": 713,
+      "callbacksPerMediaSecond": 43.95678595543551,
+      "dropFraction": 0.26744186046511625,
+      "minimumBufferedSeconds": 74.6,
+      "maxTelemetryWallGap": 0.543651819229126,
+      "maxTelemetryMediaGap": 0.5500000000000114,
+      "sessionCountIncludingBracketingStates": 176,
+      "maxSessionGapMs": 371,
+      "observerBracketMarginsMs": [
+        41.33203125,
+        226.0419921875
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    },
+    "candidate48": {
+      "build": "0.1.0+build.34172088348.1",
+      "source": "ae6635b1adf8ddf80344595499145446264fbb68",
+      "raw": "raw-matched49.json",
+      "observer": "session-matched49.json",
+      "range": [
+        85.92,
+        129.72
+      ],
+      "sampleCount": 85,
+      "mediaSeconds": 43.8,
+      "wallSeconds": 43.8064181804657,
+      "renderCallbackDelta": 2047,
+      "dropCounterDelta": 582,
+      "callbacksPerMediaSecond": 46.7351598173516,
+      "dropFraction": 0.2213769494104222,
+      "minimumBufferedSeconds": 74.78,
+      "maxTelemetryWallGap": 0.539294958114624,
+      "maxTelemetryMediaGap": 0.5499999999999972,
+      "sessionCountIncludingBracketingStates": 173,
+      "maxSessionGapMs": 376,
+      "observerBracketMarginsMs": [
+        13.40283203125,
+        94.178955078125
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    },
+    "candidate49": {
+      "build": "0.1.0+build.34172088349.1",
+      "source": "aa8bb761d2381c41dcade83ed3c9aad014cb2244",
+      "raw": "raw-matched52.json",
+      "observer": "session-matched52.json",
+      "range": [
+        85.73,
+        129.5
+      ],
+      "sampleCount": 85,
+      "mediaSeconds": 43.769999999999996,
+      "wallSeconds": 43.763649225234985,
+      "renderCallbackDelta": 2159,
+      "dropCounterDelta": 466,
+      "callbacksPerMediaSecond": 49.32602238976468,
+      "dropFraction": 0.17752380952380953,
+      "minimumBufferedSeconds": 74.97,
+      "maxTelemetryWallGap": 0.5509359836578369,
+      "maxTelemetryMediaGap": 0.5500000000000114,
+      "sessionCountIncludingBracketingStates": 174,
+      "maxSessionGapMs": 367,
+      "observerBracketMarginsMs": [
+        54.013916015625,
+        204.3369140625
+      ],
+      "sourceFps": 60.000003814697266,
+      "cacheWait": false,
+      "identityStable": true,
+      "counterMonotonic": true,
+      "decoder": "vaapi-copy",
+      "codec": "VP9",
+      "size": [
+        1920,
+        1080
+      ],
+      "passesTargets": false
+    }
+  }
+}
