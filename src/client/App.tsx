@@ -14,6 +14,7 @@ import { BrowseHome } from "./BrowseHome";
 import { SavedSection } from "./SavedSection";
 import { SessionHome } from "./SessionHome";
 import { pairingCodeFromHash } from "./pairing-link";
+import { PairingDialog } from "./PairingDialog";
 import "./device-header.css";
 import { MediaLibrary } from "./MediaLibrary";
 import { DigitalClock } from "./DigitalClock";
@@ -223,12 +224,12 @@ export function App() {
         body: JSON.stringify({ code: pairingCode.trim(), name: remoteName.trim() }),
       });
       const result = await response.json() as { token?: string; error?: string };
-      if (!response.ok || !result.token) throw new Error(result.error || "Could not pair with the player.");
+      if (!response.ok || !result.token) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the TV." : result.error || "Could not pair with the player.");
       try { localStorage.setItem(tokenKey, result.token); } catch { /* Pairing still works for this tab. */ }
       setCredentials({ origin, token: result.token });
       setPairingCode("");
     } catch (reason) {
-      setError(errorText(reason));
+      setError(`${errorText(reason)} Check that your device and TV are on the same network, then try Connect again.`);
     } finally {
       setPairing(false);
     }
@@ -353,13 +354,7 @@ export function App() {
           <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={tv.openHome}><House aria-hidden="true" />Home</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}
-            {host && <Dialog open={pairingOpen} onOpenChange={setPairingOpen}>
-              <DialogContent className="pairing-panel" onCloseAutoFocus={event => { event.preventDefault(); document.querySelector<HTMLButtonElement>(".pair-shortcut")?.focus(); }}>
-                <DialogHeader><DialogTitle id="remotes-title">Connect a phone or laptop</DialogTitle><DialogDescription>Open an address on the same network and enter the code. Each device controls this TV and keeps its own browsing.</DialogDescription></DialogHeader>
-                <ul className="address-list">{host.urls.map(url => <li key={url}><a href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
-                <div className="pairing-display"><span>Pairing code</span><strong>{host.pairingCode}</strong></div>
-              </DialogContent>
-            </Dialog>}
+        {host && <PairingDialog host={host} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} />}
 
       </main>
 
