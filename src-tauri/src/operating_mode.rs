@@ -6,7 +6,7 @@ use std::{
     sync::{atomic::Ordering, Mutex},
     time::Duration,
 };
-use tauri::{Manager, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -292,6 +292,45 @@ async fn close_remote(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn remote_geometry(
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+    scale: f64,
+) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
+    // Round up so fractional display scales cannot cover the recovery bar.
+    let header = (88.0 * scale).ceil() as u32;
+    if size.width == 0 || size.height <= header {
+        return None;
+    }
+    Some((
+        PhysicalPosition::new(position.x, position.y.saturating_add(header as i32)),
+        PhysicalSize::new(size.width, size.height - header),
+    ))
+}
+
+pub fn sync_remote_geometry(app: &tauri::AppHandle) -> Result<(), String> {
+    let (Some(main), Some(remote)) = (
+        app.get_webview_window("main"),
+        app.get_webview_window("remote"),
+    ) else {
+        return Ok(());
+    };
+    // Keep the last usable geometry through transient minimize/zero-size events.
+    if main.is_minimized().map_err(error)? {
+        return Ok(());
+    }
+    if let Some((position, size)) = remote_geometry(
+        main.inner_position().map_err(error)?,
+        main.inner_size().map_err(error)?,
+        main.scale_factor().map_err(error)?,
+    ) {
+        // Physical bounds stay correct even before the remote adopts a new monitor's scale.
+        remote.set_position(position).map_err(error)?;
+        remote.set_size(size).map_err(error)?;
+    }
+    Ok(())
+}
+
 async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String> {
     let url = target(address)?;
     if crate::appimage_update::status(app, None, "mode-check")["transaction"]["phase"] == "trial" {
@@ -308,9 +347,13 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
     let main = app
         .get_webview_window("main")
         .ok_or("Playback device controls are unavailable.")?;
-    let position = main.outer_position().map_err(error)?;
-    let size = main.inner_size().map_err(error)?;
     let scale = main.scale_factor().map_err(error)?;
+    let (position, size) = remote_geometry(
+        main.inner_position().map_err(error)?,
+        main.inner_size().map_err(error)?,
+        scale,
+    )
+    .ok_or("Restore the playback device window before opening the remote.")?;
     let origin = url.origin();
     let handle = app.clone();
     let device = tauri::menu::MenuItem::with_id(
@@ -343,16 +386,14 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
         .resizable(false)
         .maximizable(false)
         .fullscreen(false)
-        .position(position.x as f64 / scale, position.y as f64 / scale + 88.0)
-        .inner_size(
-            size.width as f64 / scale,
-            (size.height as f64 / scale - 88.0).max(200.0),
-        )
+        .position(position.x as f64 / scale, position.y as f64 / scale)
+        .inner_size(size.width as f64 / scale, size.height as f64 / scale)
         .always_on_top(true)
         .on_navigation(move |url| url.origin() == origin)
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
         .build()
         .map_err(error)?;
+    sync_remote_geometry(app)?;
     remote.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
             if let Some(main) = handle.get_webview_window("main") {
@@ -463,6 +504,38 @@ pub async fn show_playback_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_geometry_keeps_the_recovery_header_on_moved_and_scaled_displays() {
+        for (position, size, scale, expected_position, expected_size) in [
+            ((-1920, 100), (1920, 1080), 1.0, (-1920, 188), (1920, 992)),
+            ((240, -240), (2560, 1440), 2.0, (240, -64), (2560, 1264)),
+            ((80, 100), (1600, 1000), 1.3, (80, 215), (1600, 885)),
+            ((240, 60), (1000, 150), 1.25, (240, 170), (1000, 40)),
+        ] {
+            assert_eq!(
+                remote_geometry(position.into(), size.into(), scale),
+                Some((expected_position.into(), expected_size.into())),
+            );
+        }
+    }
+
+    #[test]
+    fn remote_geometry_ignores_empty_space_and_restores_the_available_size() {
+        for size in [(0, 600), (800, 0), (800, 88), (800, 40)] {
+            assert!(remote_geometry((0, 0).into(), size.into(), 1.0).is_none());
+        }
+        assert!(remote_geometry((0, 0).into(), (800, 176).into(), 2.0).is_none());
+        assert_eq!(
+            remote_geometry((20, 40).into(), (800, 89).into(), 1.0),
+            Some(((20, 128).into(), (800, 1).into())),
+        );
+        assert_eq!(
+            remote_geometry((20, 40).into(), (800, 600).into(), 1.0),
+            Some(((20, 128).into(), (800, 512).into())),
+        );
+    }
+
     #[test]
     fn remote_addresses_are_root_origins_without_credentials() {
         assert_eq!(

@@ -472,14 +472,23 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("Cannot start Couch")
         .run(|app, event| {
-            if let tauri::RunEvent::WindowEvent {
-                label,
-                event: tauri::WindowEvent::Destroyed,
-                ..
-            } = &event
-            {
-                if label == "remote" {
+            if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
+                if label == "remote" && matches!(event, tauri::WindowEvent::Destroyed) {
                     app.state::<operating_mode::Modes>().remote_destroyed();
+                }
+                if label == "main"
+                    && matches!(
+                        event,
+                        tauri::WindowEvent::Moved(_)
+                            | tauri::WindowEvent::Resized(_)
+                            | tauri::WindowEvent::ScaleFactorChanged { .. }
+                    )
+                {
+                    if let Err(error) = operating_mode::sync_remote_geometry(app) {
+                        log::warn!(
+                            "Cannot align the remote window with playback device controls: {error}"
+                        );
+                    }
                 }
             }
             if let tauri::RunEvent::ExitRequested { ref api, code, .. } = event {
