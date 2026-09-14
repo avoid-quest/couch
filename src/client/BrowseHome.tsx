@@ -8,7 +8,7 @@ import type { ProviderId } from "../shared/providers";
 import type { SessionState } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
-import { progressTime, type HistoryPlayback } from "./HistoryPanel";
+import { ProgressActions, progressTime, type HistoryPlayback } from "./HistoryPanel";
 import type { Credentials } from "./session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
@@ -43,10 +43,10 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [detail, setDetail] = useState<HistoryItem | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLElement | null>(null);
 
-  useEffect(() => { setDetail(null); setNotice(null); }, [origin, token, profileId]);
+  useEffect(() => { setDetailId(null); setNotice(null); }, [origin, token, profileId]);
 
   useEffect(() => {
     if (!connected || !active) return;
@@ -77,11 +77,11 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const cards = currentProfile ? library.filter(item => item.id !== hero?.libraryItemId).slice(0, 3) : [];
   const metadata = (item: HistoryItem) => library.find(entry => entry.id === item.libraryItemId);
   const playable = (item: HistoryItem) => connected && canPlay && currentProfile && !loading && !pending && !!(item.playable || item.libraryItemId || item.queueEntryId) && metadata(item)?.available !== false;
-  const openDetail = (item: HistoryItem, trigger: HTMLElement) => { detailTrigger.current = trigger; setDetail(item); };
+  const openDetail = (item: HistoryItem, trigger: HTMLElement) => { detailTrigger.current = trigger; setDetailId(item.mediaId); };
   const play = async (item: HistoryItem, fromStart = false) => {
     setPending(true); setNotice(null); setError(null);
     try {
-      if (await onPlay(item, { fromStart })) { setNotice(`${fromStart || !item.position ? "Starting" : "Resuming"} ${item.title} on the playback computer.`); setDetail(null); }
+      if (await onPlay(item, { fromStart })) { setNotice(`${fromStart || !item.position ? "Starting" : "Resuming"} ${item.title} on the playback computer.`); setDetailId(null); }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not play this item."); }
     finally { setPending(false); }
   };
@@ -105,6 +105,8 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Add to queue: ${item.title}`} onClick={() => void add(item)}><Plus aria-hidden="true" />Add to queue</Button>}
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
+  const detailLibrary = library.find(item => `library:${item.id}` === detailId);
+  const detail = currentProfile ? history.find(item => item.mediaId === detailId) ?? (detailLibrary ? asHistory(detailLibrary) : null) : null;
   const selected = detail && metadata(detail);
 
   return <section className="browse-home" aria-label="Browse and resume">
@@ -133,7 +135,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
       const entry = asHistory(item);
       return <li key={item.id}><button type="button" className="browse-media-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong>{item.title}</strong><small>{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
     })}</ul>}
-    <Dialog open={active && currentProfile && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="browse-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
+    <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="browse-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}
         {detail.playedBy && <p className="browse-quiet">Started from {detail.playedBy.name}</p>}
@@ -141,6 +143,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
         {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Your resume point is saved.</p>}
         {selected?.available === false && <p>This file is unavailable. Check its TV folder.</p>}
         {playbackActions(detail)}
+        <ProgressActions origin={origin} token={token} connected={connected && currentProfile && !loading} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={() => setRefresh(value => value + 1)} />
         {notice && <p role="status" className="browse-notice">{notice}</p>}
         {error && <p role="alert">{error}</p>}
       </>}

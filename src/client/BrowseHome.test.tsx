@@ -20,9 +20,9 @@ const state: SessionState = {
   player: { playbackId: "playback", status: "paused", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
 const button = (label: string, scope: ParentNode = document) => [...scope.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
-async function renderHome(connected = true, active = true, canPlay = true) {
+async function renderHome(connected = true, active = true, canPlay = true, value = state) {
   const { BrowseHome } = await import("./BrowseHome");
-  await act(async () => root.render(<BrowseHome state={state} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} canPlay={canPlay} playing={false} onBrowse={name => browsed.push(name)} onAdd={async item => { added.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} />));
+  await act(async () => root.render(<BrowseHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} canPlay={canPlay} playing={false} onBrowse={name => browsed.push(name)} onAdd={async item => { added.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} />));
 }
 beforeEach(async () => {
   played.length = 0; added.length = 0; browsed.length = 0; requests.length = 0; failed = false;
@@ -176,6 +176,10 @@ test("Stop in Now playing then Back restores Home focus after the playback bar i
   expect(document.querySelector(".session-bar, .now-playing")).toBeNull();
   expect(document.activeElement === document.querySelector('.primary-nav [data-source="Home"]')).toBe(true);
   expect(played).toEqual([[{ type: "stop" }]]);
+  await act(async () => button("Remote", document.querySelector(".app-header")!).click());
+  expect(document.querySelector('[role="dialog"] .remote-pad')).not.toBeNull();
+  await act(async () => button("TV home").click());
+  expect(played).toEqual([[{ type: "stop" }], [{ type: "navigate", key: "home" }]]);
 });
 
 test("a terminal radio failure keeps Now playing and its retry reachable", async () => {
@@ -254,5 +258,101 @@ test("an empty TV home offers catalog browsing without a local-file placeholder"
   expect(document.querySelector('[aria-label="Browse sources"]')?.hasAttribute("hidden")).toBe(false);
   await act(async () => button("Local library").click());
   expect(browsed).toEqual(["Files"]);
+  expect(played).toEqual([]);
+});
+
+
+test("an idle paired browser can open the remote and navigate without starting playback", async () => {
+  await renderApp({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  expect(document.querySelector(".session-bar, .now-playing")).toBeNull();
+  await act(async () => button("Remote", document.querySelector(".app-header")!).click());
+  expect(document.querySelector('[role="dialog"] .remote-pad')).not.toBeNull();
+  expect(played).toEqual([]);
+  await act(async () => button("TV select").click());
+  expect(played).toEqual([[{ type: "navigate", key: "select" }]]);
+});
+
+test.each(["history", "library"] as const)("Home %s details update watched state and clear resume using the current response", async source => {
+  let item: HistoryItem = { mediaId: source === "history" ? "media:generic" : "library:next", libraryItemId: source === "history" ? null : "next", title: source === "history" ? "A saved file" : libraryItem.title, position: 45, duration: 120, watched: false, lastPlayedAt: 1 };
+  const changes: unknown[] = [];
+  request.mockImplementation((async (input, init) => {
+    const url = new URL(String(input));
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
+    if (init?.method === "POST") {
+      expect(url.pathname).toBe(`/api/progress/${encodeURIComponent(item.mediaId)}`);
+      const body = JSON.parse(String(init.body));
+      changes.push(body);
+      item = { ...item, ...(body.watched === undefined ? {} : { watched: body.watched }), ...(body.clearResume ? { position: 0 } : {}) };
+      return Response.json({ ok: true });
+    }
+    return Response.json({ profile, items: url.pathname === "/api/library/items" ? source === "library" ? [{ ...libraryItem, progress: item }] : [] : source === "history" ? [item] : [] });
+  }) as typeof fetch);
+  await renderHome();
+  await act(async () => button(source === "history" ? "Details" : `Details for ${item.title}`).click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Continue from 0:45");
+  await act(async () => button(`Watching options for ${item.title}`, dialog).click());
+  await act(async () => button("Mark watched").click());
+  await act(async () => button(`Watching options for ${item.title}`, dialog).click());
+  expect(button("Mark unwatched")).toBeDefined();
+  await act(async () => button("Mark unwatched").click());
+  await act(async () => button(`Watching options for ${item.title}`, dialog).click());
+  expect(button("Mark watched")).toBeDefined();
+  await act(async () => button("Clear resume point").click());
+  expect(dialog.textContent).not.toContain("Continue from");
+  await act(async () => button(`Watching options for ${item.title}`, dialog).click());
+  expect(button("Clear resume point")).toBeUndefined();
+  expect(changes).toEqual([{ watched: true }, { watched: false }, { clearResume: true }]);
+  expect(played).toEqual([]);
+});
+
+test.each(["history", "library"] as const)("Home %s details follow version updates and close when their item disappears", async source => {
+  let progress = { position: 45, duration: 120, watched: false, lastPlayedAt: 1 };
+  let title = "Original title";
+  let removed = false;
+  request.mockImplementation((async input => {
+    const library = String(input).includes("/api/library/items");
+    return Response.json({ profile, items: removed ? [] : library ? source === "library" ? [{ ...libraryItem, title, progress }] : [] : source === "history" ? [{ mediaId: "media:generic", libraryItemId: null, title, ...progress }] : [] });
+  }) as typeof fetch);
+  await renderHome();
+  await act(async () => button(source === "history" ? "Details" : `Details for ${title}`).click());
+  title = "Updated title";
+  progress = { ...progress, position: 0, watched: true };
+  await renderHome(true, true, true, { ...state, libraryVersion: 1 });
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain(title);
+  expect(dialog.textContent).not.toContain("Continue from");
+  await act(async () => button(`Watching options for ${title}`, dialog).click());
+  expect(button("Mark unwatched")).toBeDefined();
+  removed = true;
+  await renderHome(true, true, true, { ...state, libraryVersion: 2 });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(played).toEqual([]);
+});
+
+test("Home keeps its immediate search draft while hidden and commits it on return", async () => {
+  await renderApp();
+  const query = "https://media.example/draft";
+  const search = document.querySelector<HTMLInputElement>("#media-search")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, query);
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(search.value).toBe(query);
+  expect(document.querySelector(".browse-home")?.closest("[hidden]")).not.toBeNull();
+  expect(new URLSearchParams(window.location.search).get("q")).toBeNull();
+  await act(async () => document.querySelector<HTMLElement>('.primary-nav [data-source="Saved"]')!.click());
+  await act(async () => { await Bun.sleep(350); });
+  expect(search.value).toBe(query);
+  expect(new URLSearchParams(window.location.search).get("q")).toBeNull();
+  await act(async () => document.querySelector<HTMLElement>('.primary-nav [data-source="Home"]')!.click());
+  await act(async () => { await Bun.sleep(350); });
+  expect(document.querySelector<HTMLInputElement>("#media-search")).toBe(search);
+  expect(search.value).toBe(query);
+  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
+  await act(async () => button("Clear search").click());
+  expect(search.value).toBe("");
+  expect(document.querySelector(".browse-home")?.closest("[hidden]")).toBeNull();
+  expect(new URLSearchParams(window.location.search).get("q")).toBeNull();
   expect(played).toEqual([]);
 });

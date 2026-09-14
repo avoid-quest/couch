@@ -129,8 +129,7 @@ export function App() {
     const target = tab ?? document.querySelector<HTMLElement>(`[data-page="${section}"] button:not(:disabled), [data-page="${section}"] input:not(:disabled), .browse-back`);
     if (target && !target.closest("[hidden]")) target.focus({ preventScroll: true });
   }, [section]);
-  const navigation = useRef<(key: NavigationKey) => void>(() => {});
-  const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key));
+  const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
   useUpdateActivity(credentials, connected);
   useEffect(() => setRemoteControlEnabled(details?.remoteControlEnabled === true), [details?.remoteControlEnabled]);
   useEffect(() => {
@@ -149,7 +148,7 @@ export function App() {
   }, [credentials]);
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
-  navigation.current = key => {
+  function handleNavigation(key: NavigationKey) {
     if (!nativeHost) return;
     document.documentElement.setAttribute("data-keyboard", "");
     if (key === "home") {
@@ -168,7 +167,7 @@ export function App() {
       if (!tv.controlsVisible) return;
     }
     requestAnimationFrame(() => applyTvNavigation(key));
-  };
+  }
   useNavigation(() => {
     if (nowPlayingOpen) { closeNowPlaying(); return; }
     if (nativeHost && tv.dismissLayer()) return;
@@ -334,6 +333,7 @@ export function App() {
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" onClick={() => setNowPlayingOpen(false)} aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
           {(!credentials || pairingRequired) && <Settings libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} />}
+          {credentials && !pairingRequired && !nativeHost && <Button variant="ghost" size="icon" aria-label="Remote" title="Remote" onClick={() => setRemoteOpen(true)}><Icon name="remote" /></Button>}
           <DigitalClock />
         </div>
       </header>
@@ -369,9 +369,9 @@ export function App() {
                 {!["Home","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection("Home")}><ArrowLeft aria-hidden="true" />Home</Button>}
                 <section data-page="Home" hidden={section !== "Home"} className="space-y-6">
                   <h1 className="page-title">Find something to play</h1>
-                  <SearchPanel onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} providerVersion={state?.providerVersion ?? 0} radioVersion={state?.radioVersion ?? 0} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Home" && !nowPlayingOpen && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+                  <SearchPanel draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} providerVersion={state?.providerVersion ?? 0} radioVersion={state?.radioVersion ?? 0} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Home" && !nowPlayingOpen && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
                   <div hidden={!!homeQuery.trim()} className="space-y-6">
-                    <AvoidRadioHome origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} onBrowse={() => browseSection("Radio")} active={section === "Home" && !nowPlayingOpen && !homeQuery.trim()} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} />
+                    <AvoidRadioHome origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} onBrowse={() => browseSection("Radio")} active={section === "Home" && !nowPlayingOpen && !homeQuery.trim() && (!nativeHost || tv.browsing)} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} />
                     <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && !nowPlayingOpen && !homeQuery.trim() && (!nativeHost || tv.browsing)} onBrowse={browseSection} onProvider={provider => { setSelectedProvider(provider); setProviderRequest(value => value + 1); setOnlineRequest(null); browseSection("Online"); }} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} />
                   </div>
                 </section>
@@ -384,7 +384,7 @@ export function App() {
                 {(visited.has("Online") || section === "Online") && <section data-page="Online" hidden={section !== "Online"}><ProviderPanel active={section === "Online" && !nowPlayingOpen && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} key={`${credentials.origin}:${credentials.token}:${providerRequest}:${onlineRequest?.revision ?? 0}`} initialProvider={selectedProvider} initialItem={onlineRequest?.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
                 {(visited.has("Library") || section === "Library") && <section data-page="Library" hidden={section !== "Library"}><MediaLibrary active={section === "Library" && !nowPlayingOpen && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} onBrowse={browseSection} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
                 {(visited.has("Files") || section === "Files") && <section data-page="Files" hidden={section !== "Files"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => openSources("folders")} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} /></section>}
-                {(visited.has("Radio") || section === "Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel active={section === "Radio" && !nowPlayingOpen} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} host={nativeHost} onManage={() => openSources("radio")} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} /></section>}
+                {(visited.has("Radio") || section === "Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel active={section === "Radio" && !nowPlayingOpen && (!nativeHost || tv.browsing)} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} host={nativeHost} onManage={() => openSources("radio")} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} /></section>}
                 {(visited.has("Jellyfin") || section === "Jellyfin") && <section data-page="Jellyfin" hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => openSources("jellyfin")} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></section>}
                 </div>
               </div>
