@@ -10,7 +10,7 @@ The existing playback, controller-command, helper and source error paths now sav
 
 Each entry carries its first and last UTC observation, source category, count, coordinator build and session identifier. The current session's start time and identifier are also exported. Advanced displays full UTC dates, the originating version and commit, and Current session or Earlier session. Unknown build fields remain unknown. The diagnostic export format is now version 2.
 
-Entries expire seven days after their first observation. Cleanup runs on startup, on log access, and on a timer even while Advanced is closed. Shutdown flushes pending repeat counts. Consecutive equal sanitized source/message pairs are grouped within a session, preserving first and latest observation times. Repeat-count writes are coalesced for up to one second; an abrupt process exit can lose that final second of repeat metadata. The first error is written immediately. A later session creates a separate entry even when its message is identical.
+Entries expire seven days after their first observation. Cleanup runs on startup, on log access, and on a timer even while Advanced is closed. Shutdown flushes pending repeat counts. Consecutive equal sanitized source/message pairs are grouped within a session, preserving first and latest observation times. When the clock moves backward, a duplicate keeps the greatest previously observed timestamp. Expiry timers are capped at the signed 32-bit timer maximum and reschedule until the timestamp expires. Repeat-count writes are coalesced for up to one second; an abrupt process exit can lose that final second of repeat metadata. The first error is written immediately. A later session creates a separate entry even when its message is identical.
 
 The existing redactor runs before persistence and again on retained text when loading. Build fields use the existing build validator and remove supplied secrets while preserving valid commit hashes. No URLs, raw exceptions from diagnostic storage, or controller tokens are added as metadata.
 
@@ -37,6 +37,15 @@ Validation used Bun 1.4.2 and the frozen lockfile:
 - `bun run build` passed for the frontend and macOS arm64 Bun sidecar. No Rust or Linux AppImage qualification is claimed.
 
 The local run logs are in `.scratch/diagnostics-250/` in this task's worktree. GitHub Actions remains paused; no hosted checks were requested.
+
+## Review corrections
+
+Both reviewer findings were reproduced before changing the implementation:
+
+- [Expiry timer overflow](https://github.com/avoid-quest/couch/pull/254#discussion_r4003926790): recording 60 days ahead and then correcting the clock requested a 5,788,800,000 ms timeout. Bun emitted `TimeoutOverflowWarning` and reduced it to 1 ms. The timeout now caps at 2,147,483,647 ms and reschedules. The regression verifies the bounded initial and subsequent delay, retained data before expiry, and eventual removal.
+- [Backward duplicate timestamp](https://github.com/avoid-quest/couch/pull/254#discussion_r4003926807): moving from 12:01 back to 11:00 while repeating a 12:00 error made restart reject the entire history. Duplicate coalescing now preserves the maximum `lastAt`. The regression verifies the original and latest timestamps, all retained entries, the repeat count and continued persistence after restart.
+
+`bun test src/server/diagnostics-log.test.ts --test-name-pattern clock` failed both regressions before the fix and passed both afterward. Final focused validation passed 29 diagnostics/persistence/UI/build tests with 300 assertions and three hub tests with 45 assertions. `bun run typecheck` passed. No full Mac suite or build was repeated for these two code-line corrections; the coordinating task owns the combined integration run. GitHub Actions stays paused and the installed-TV gates below remain pending.
 
 ## Remaining installed-TV actions
 

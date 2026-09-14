@@ -43,7 +43,8 @@ export function createDiagnosticLog(secrets: readonly string[] = [], databasePat
     // Expire even while Advanced is closed. Failed writes retry without logging themselves.
     if (entries.length || db && error) {
       const expiry = entries.length ? Math.min(...entries.map(entry => Date.parse(entry.at))) + diagnosticLimits.retentionDays * 86_400_000 - Date.now() : 60_000;
-      timer = setTimeout(save, Math.max(1, error ? Math.min(expiry, 60_000) : expiry));
+      // Clock corrections can leave timestamps beyond the signed 32-bit timer range.
+      timer = setTimeout(save, Math.max(1, Math.min(expiry, error ? 60_000 : 2_147_483_647)));
       timer.unref();
     }
   }
@@ -78,7 +79,7 @@ export function createDiagnosticLog(secrets: readonly string[] = [], databasePat
       const at = new Date().toISOString();
       const last = entries.at(-1);
       if (last?.message === safeMessage && last.source === safeSource && last.sessionId === sessionId) {
-        last.lastAt = at;
+        last.lastAt = new Date(Math.max(Date.parse(last.lastAt), Date.parse(at))).toISOString();
         last.count = Math.min(Number.MAX_SAFE_INTEGER, last.count + 1);
         // Player-state notifications can repeat the same error many times a second.
         // Persist the first failure immediately and coalesce only its repeat count.

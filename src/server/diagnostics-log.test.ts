@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -122,4 +122,53 @@ test("unavailable directory cannot prevent logging or shutdown", () => {
   expect(() => history.add("Playback", "Still usable")).not.toThrow();
   expect(history.recent()).toHaveLength(1);
   expect(() => history.close()).not.toThrow();
+});
+
+
+test("correcting a future clock bounds expiry timers and reschedules until expiry", () => {
+  const path = fixture();
+  const corrected = Date.parse("2026-09-01T00:00:00Z");
+  const recorded = corrected + 60 * 86_400_000;
+  const timerMaximum = 2_147_483_647;
+  setSystemTime(recorded);
+  const first = log(path); first.add("Playback", "Future-dated failure"); first.close();
+  setSystemTime(corrected);
+  const scheduled = spyOn(globalThis, "setTimeout");
+  let restarted: ReturnType<typeof createDiagnosticLog> | undefined;
+  try {
+    restarted = log(path);
+    const firstTimer = scheduled.mock.calls.at(-1)!;
+    expect(firstTimer[1]).toBeGreaterThan(0);
+    expect(firstTimer[1]).toBeLessThanOrEqual(timerMaximum);
+    expect(restarted.error()).toBeNull();
+    expect(restarted.recent()).toHaveLength(1);
+    setSystemTime(corrected + firstTimer[1]!);
+    if (typeof firstTimer[0] !== "function") throw new Error("Expected expiry callback");
+    firstTimer[0]();
+    expect(scheduled.mock.calls.at(-1)![1]).toBeLessThanOrEqual(timerMaximum);
+    expect(JSON.parse(stored(path))).toHaveLength(1);
+    setSystemTime(recorded + diagnosticLimits.retentionDays * 86_400_000);
+    const nextTimer = scheduled.mock.calls.at(-1)!;
+    if (typeof nextTimer[0] !== "function") throw new Error("Expected expiry callback");
+    nextTimer[0]();
+    expect(stored(path)).toBe("[]");
+  } finally { restarted?.close(); scheduled.mockRestore(); }
+});
+
+test("backward clock changes preserve duplicate timestamps and the whole history on restart", () => {
+  const path = fixture();
+  setSystemTime(new Date("2026-09-14T12:00:00Z"));
+  const first = log(path);
+  first.add("Controller command", "Earlier failure");
+  first.add("Playback", "Repeated failure");
+  setSystemTime(new Date("2026-09-14T12:01:00Z"));
+  first.add("Playback", "Repeated failure");
+  setSystemTime(new Date("2026-09-14T11:00:00Z"));
+  first.add("Playback", "Repeated failure"); first.close();
+  const restarted = log(path);
+  expect(restarted.error()).toBeNull();
+  expect(restarted.recent()).toHaveLength(2);
+  expect(restarted.recent()[1]).toMatchObject({ at: "2026-09-14T12:00:00.000Z", lastAt: "2026-09-14T12:01:00.000Z", count: 3 });
+  restarted.add("Controller command", "Still durable"); restarted.close();
+  expect(log(path).recent()).toHaveLength(3);
 });
