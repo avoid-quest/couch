@@ -19,7 +19,7 @@ function expectedHelper(helpers: unknown, name: string): { version: string; sha2
   const value = helpers && typeof helpers === "object" ? (helpers as Record<string, unknown>)[name] : null;
   if (!value || typeof value !== "object") return null;
   const { version, sha256 } = value as Record<string, unknown>;
-  return typeof version === "string" && /^[\w.+-]{1,100}$/.test(version) && typeof sha256 === "string" && /^[a-f\d]{64}$/.test(sha256) ? { version, sha256 } : null;
+  return typeof version === "string" && /^[\w.+:~-]{1,100}$/.test(version) && typeof sha256 === "string" && /^[a-f\d]{64}$/.test(sha256) ? { version, sha256 } : null;
 }
 
 async function verifyPackage(path: string, expected: string, signal: AbortSignal): Promise<ToolObservation | null> {
@@ -79,7 +79,7 @@ export function createToolHealth(options: Options) {
     const packages: { installed: ToolObservation; path: string; resolved: string | null; identity: { dev: number; ino: number } | null; expectedVersion: string | null }[] = [];
     for (const tool of managedTools) {
       const expected = expectedHelper(options.helpers, tool.file), packagePath = join(directory, tool.file);
-      let installed: ToolObservation = observation("unknown", "Package integrity is available only for a packaged Ubuntu build with release helper metadata.");
+      let installed: ToolObservation = observation("unknown", "Package integrity is available only for a packaged build with release helper metadata.");
       if (options.packaged && expected && !signal.aborted) {
         try {
           installed = await verifyPackage(packagePath, expected.sha256, signal) ?? await probe(tool.name, packagePath, signal);
@@ -91,7 +91,20 @@ export function createToolHealth(options: Options) {
       }
       packages.push({ installed, path: packagePath, resolved: signal.aborted ? null : await realpath(packagePath).catch(() => null), identity: signal.aborted ? null : await stat(packagePath).catch(() => null), expectedVersion: expected?.version ?? null });
     }
-    if (installedOnly) return { checkedAt: new Date().toISOString(), cacheSeconds: 0, ffprobe: unknown(), tools: packages.map((value, index) => ({ name: managedTools[index]!.name, expectedVersion: value.expectedVersion, installed: value.installed, effective: { ...value.installed, source: "package" } })) };
+    let ffprobe: ToolObservation = unknown();
+    const probePath = options.packaged ? join(directory, "ffprobe") : env.COUCH_FFPROBE ?? Bun.which("ffprobe", { PATH: env.PATH ?? "/usr/bin:/bin" });
+    try {
+      const expected = expectedHelper(options.helpers, "ffprobe");
+      if (options.packaged) {
+        if (expected) {
+          ffprobe = await verifyPackage(probePath!, expected.sha256, signal) ?? await probe("ffprobe", probePath, signal);
+          if (ffprobe.status === "ready" && ffprobe.version !== expected.version) ffprobe = observation("corrupt", "The bundled ffprobe version differs from this release.");
+        }
+      } else ffprobe = await probe("ffprobe", probePath, signal);
+    } catch (error) {
+      ffprobe = observation((error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "corrupt", "The bundled ffprobe is unavailable. Reinstall a verified Couch AppImage.");
+    }
+    if (installedOnly) return { checkedAt: new Date().toISOString(), cacheSeconds: 0, ffprobe, tools: packages.map((value, index) => ({ name: managedTools[index]!.name, expectedVersion: value.expectedVersion, installed: value.installed, effective: { ...value.installed, source: "package" } })) };
     const tools: ManagedToolHealth[] = [];
     async function effectiveProbe(name: "yt-dlp" | "Deno" | "ffprobe", executable: string | null) {
       if (!executable) return { result: observation("missing", "The executable was not found."), packageIndex: -1 };
@@ -106,6 +119,10 @@ export function createToolHealth(options: Options) {
     }
     for (const [index, tool] of managedTools.entries()) {
       const packaged = packages[index]!;
+      if (options.packaged) {
+        tools.push({ name: tool.name, expectedVersion: packaged.expectedVersion, installed: packaged.installed, effective: { ...packaged.installed, source: "package" } });
+        continue;
+      }
       const override = env[tool.variable];
       const executable = override?.includes("/") ? override : Bun.which(override || tool.file, { PATH: env.PATH ?? "/usr/bin:/bin" });
       const { result, packageIndex } = await effectiveProbe(tool.name, executable);
@@ -113,7 +130,6 @@ export function createToolHealth(options: Options) {
       const source = usesPackage ? "package" : env[tool.variable] ? "environment" : executable ? "search-path" : "unavailable";
       tools.push({ name: tool.name, expectedVersion: packaged.expectedVersion, installed: packaged.installed, effective: { ...result, source } });
     }
-    const { result: ffprobe } = await effectiveProbe("ffprobe", Bun.which("ffprobe", { PATH: env.PATH ?? "/usr/bin:/bin" }));
     return { checkedAt: new Date().toISOString(), tools, ffprobe, cacheSeconds };
   }
 
@@ -121,9 +137,9 @@ export function createToolHealth(options: Options) {
     async verify(runtime: boolean) {
       const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(checkMilliseconds)]);
       const report = await collect(signal, true);
-      if (report.tools.some(tool => tool.installed.status !== "ready")) throw new Error("Package tools failed fresh hash/version checks.");
+      if (report.ffprobe.status !== "ready" || report.tools.some(tool => tool.installed.status !== "ready")) throw new Error("Package tools failed fresh hash/version checks.");
       const command = options.command ?? runDiagnosticCommand;
-      const safeEnv = { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" };
+      const safeEnv = { PATH: "/usr/bin:/bin", ...(env.LD_LIBRARY_PATH ? { LD_LIBRARY_PATH: env.LD_LIBRARY_PATH } : {}), LANG: "C", LC_ALL: "C" };
       // Fixed generated media exercises extraction without contacting a website
       // or using the effective tool overrides. No browser can choose these inputs.
       const wav = Buffer.alloc(46);
@@ -136,9 +152,9 @@ export function createToolHealth(options: Options) {
         if (await command(join(directory, "yt-dlp"), ["--ignore-config", "--no-plugin-dirs", "--no-cache-dir", "--force-generic-extractor", "--skip-download", "--get-url", source], safeEnv) !== source) throw new Error("Package extractor smoke failed.");
         if (await command(join(directory, "deno"), ["eval", "--no-config", "--no-lock", "console.log(6 * 7)"], safeEnv) !== "42") throw new Error("Package runtime smoke failed.");
         if (runtime) {
-          await probeMediaHelper("ffprobe", "/usr/bin/ffprobe", safeEnv, command);
-          const value = await command("/usr/bin/ffprobe", ["-v", "error", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", source], safeEnv);
-          if (value !== "pcm_s16le") throw new Error("Ubuntu ffprobe runtime smoke failed.");
+          await probeMediaHelper("ffprobe", join(directory, "ffprobe"), safeEnv, command);
+          const value = await command(join(directory, "ffprobe"), ["-v", "error", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", source], safeEnv);
+          if (value !== "pcm_s16le") throw new Error("Bundled ffprobe runtime smoke failed.");
         }
         signal.throwIfAborted();
       } finally { server.stop(true); }

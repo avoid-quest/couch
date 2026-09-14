@@ -1,6 +1,8 @@
 {
   "bundle": {
-    "targets": ["deb", "appimage"],
+    "targets": [
+      "appimage"
+    ],
     "resources": {
       "resources/tools/": "tools/",
       "resources/tools.json": "tools.json",
@@ -9,14 +11,15 @@
     },
     "linux": {
       "appimage": {
-        "files": { "/usr/share/doc/couch": "resources/notices/" }
-      },
-      "deb": {
-        "depends": ["gpgv", "dpkg", "libmpv2", "libgl1", "va-driver-all", "ffmpeg", "ca-certificates", "fonts-dejavu-core", "libxdo3"],
         "files": {
           "/usr/share/doc/couch": "resources/notices/",
-          "/usr/share/doc/couch/build-info.json": "build-info.json"
-        }
+          "/usr/lib/libmpv.so.2": "/usr/lib/x86_64-linux-gnu/libmpv.so.2",
+          "/usr/lib/libnss3.so": "/usr/lib/x86_64-linux-gnu/libnss3.so",
+          "/usr/lib/libsoftokn3.so": "/usr/lib/x86_64-linux-gnu/libsoftokn3.so",
+          "/usr/lib/libfreeblpriv3.so": "/usr/lib/x86_64-linux-gnu/libfreeblpriv3.so",
+          "/usr/lib/alsa-lib": "/usr/lib/x86_64-linux-gnu/alsa-lib/"
+        },
+        "bundleMediaFramework": true
       }
     }
   }

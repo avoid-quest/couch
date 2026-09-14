@@ -423,16 +423,6 @@ async fn copy(source: &Path, destination: &Path) -> Result<(), String> {
     )
     .await
 }
-async fn runtime_repair() -> Result<(), String> {
-    let mut repair = std::process::Command::new("/usr/bin/systemctl");
-    repair.args(["--no-ask-password", "start", "couch-runtime-repair.service"]);
-    command(
-        repair,
-        310,
-        "Ubuntu runtime repair failed. Inspect couch-runtime-repair.service through SSH.",
-    )
-    .await
-}
 async fn sizes(program: &str, arguments: &[&str], paths: &[&Path]) -> Result<Vec<u64>, String> {
     let mut command = tokio::process::Command::new(program);
     command
@@ -735,6 +725,9 @@ pub async fn run(
                     repair,
                     repair_runtime,
                 } => {
+                    if repair_runtime {
+                        return Err("Debian host maintenance requires the machine administrator. Rerun the verified installer; app updates cannot change host packages.".into());
+                    }
                     let previous = read_transaction(&directory, Some(request_id))?;
                     if !previous.is_null() {
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
@@ -812,7 +805,6 @@ pub async fn run(
                         result?;
                         if !closed { return Err("The data writers did not stop.".into()); }
                         backup(&directory, request_id, repair.then_some(bytes.as_slice())).await?;
-                        if repair_runtime { runtime_repair().await?; }
                         journal(&directory, &mut transaction, "installing", None)?;
                         update.install(&bytes).map_err(error)?;
                         save(&Path::new(APPLICATION).join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":summary.revision,"dataFormat":update.raw_json["dataFormat"],"archiveSha256":format!("{:x}", Sha256::digest(&bytes))})).map_err(error)?)?;
