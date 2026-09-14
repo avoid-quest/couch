@@ -7,9 +7,9 @@ import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "./upda
 import type { UpdateState } from "../shared/updates";
 import { ToolsSettings } from "./ToolsSettings";
 
-type Props = { credentials: { origin: string; token: string }; connected: boolean };
+type Props = { credentials: { origin: string; token: string }; connected: boolean; showTools?: boolean };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
-export function UpdatesSettings({ credentials, connected }: Props) {
+export function UpdatesSettings({ credentials, connected, showTools = true }: Props) {
   const [state, setState] = useState<UpdateState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
           const transaction = result.installation?.requestedTransaction ?? result.installation?.transaction;
           if (transaction && retry?.requestId === transaction.requestId && ["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase)) { clearUpdateRequest(credentials.origin); setRetry(null); }
         }
-      } catch { if (!controller.signal.aborted) setLoadError("Could not load update status. Check the TV connection and try again."); }
+      } catch { if (!controller.signal.aborted) setLoadError("Could not load update status. Check the app connection and try again."); }
       finally { if (!controller.signal.aborted) timer = setTimeout(() => void load(), 2_000); }
     };
     void load();
@@ -59,7 +59,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         setState(current => current ? { ...current, installation: { enabled: true, transaction: result.transaction } } : current);
       }
       else setState(result);
-    } catch { if (!controller.signal.aborted) setError("The request did not finish. Reconnect to see whether the TV accepted it."); }
+    } catch { if (!controller.signal.aborted) setError("The request did not finish. Reconnect to see whether the app accepted it."); }
     finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } if (mutation.current === controller) mutation.current = null; }
   };
   const transaction = state?.installation?.transaction;
@@ -75,21 +75,21 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       else await update("install", { install: { candidateId, requestId, confirmInterrupt } });
     } catch { setError("Could not save this update's retry identity. Allow local storage before installing."); }
   };
-  if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to the TV to check updates.</p>;
+  if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to the app to check updates.</p>;
   const problem = error ?? loadError;
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
-  const canStage = state?.currentCheck && candidate && candidate.expiresAt > Date.now() && state.status !== "ready";
-  const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && candidate && candidate.expiresAt > Date.now() && state.installation.repairAvailable !== false;
+  const canStage = state?.currentCheck && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now()) && state.status !== "ready";
+  const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now());
   return <div className="min-w-0 space-y-4">
-    <p className="text-muted-foreground">Release settings apply to this TV installation. Checks and downloads keep playback running.</p>
+    <p className="text-muted-foreground">Release settings apply to this installation. Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">
-      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating the TV"}</p>
+      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
-      <p>{transaction?.phase || "Waiting for the TV to confirm this request"}</p>
+      <p>{transaction?.phase || "Waiting for the app to confirm this request"}</p>
       {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
       {transaction?.error && <p>{transaction.error}</p>}
-      {!connected && <p>The TV is restarting or offline. This page will reconnect; keep it open.</p>}
+      {!connected && <p>Couch is restarting or offline. This page will reconnect; keep it open.</p>}
       {transaction?.phase === "operator-required" && <p>From the administrator's SSH account, inspect <code>sudo couch-session status</code> and use the documented <code>couch-recover</code> procedure. Do not reinstall or delete the data directory.</p>}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button>}
     </div>}
@@ -106,9 +106,9 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="break-all font-mono text-xs">{candidate.revision}</p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
-        <p className="text-muted-foreground">Download size: {(candidate.bytes / 1024 / 1024).toFixed(1)} MB</p>
+        <p className="text-muted-foreground">{candidate.bytes ? `Verified size: ${(candidate.bytes / 1024 / 1024).toFixed(1)} MB` : "The size and source commit will be verified after download."}</p>
         {!state.currentCheck && <p className="text-muted-foreground">This release has not been confirmed by a successful current check.</p>}
-        {state.status === "ready" && <p>The verified download is ready on this TV.</p>}
+        {state.status === "ready" && <p>The verified download is ready on this computer.</p>}
       </div>}
       {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
     </>}
@@ -120,7 +120,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     </div>
     {state && !retry && !installing && <div className="space-y-2">
       {confirming === "install" ? <>
-        <p>Install {candidate?.version} and restart the TV. Its viewing data will be backed up before AppImage replacement. Other remotes will disconnect.</p>
+        <p>Install {candidate?.version} and restart Couch. Its viewing data will be backed up before AppImage replacement. Other remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
@@ -128,12 +128,12 @@ export function UpdatesSettings({ credentials, connected }: Props) {
     </div>}
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
-      <p className="font-medium">Manual installation is not enabled on this TV.</p>
-      <p>Manual updates work independently of Auto when idle. This TV needs the signed AppImage appliance installation and an enrolled release feed.</p>
+      <p className="font-medium">Manual installation is not enabled on this installation.</p>
+      <p>Manual updates work independently of Auto when idle. Use the signed Debian AppImage and the supported desktop or TV setup.</p>
       <p>From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects. Keep SSH available for recovery.</p>
     </div>}
     {state?.installation?.enabled && !installing && state.status !== "ready" && <p className="text-muted-foreground">Check for updates, then download and verify an available release to enable Install update. You can install manually with either installation policy.</p>}
-    <p className="text-muted-foreground">Couch checks after startup and every 15 minutes. Keep the publishing Mac awake on the home network.</p>
+    <p className="text-muted-foreground">Couch checks the hosted release service after startup and every 15 minutes.</p>
     {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
     {state && <>
       <div className="space-y-2">
@@ -150,22 +150,22 @@ export function UpdatesSettings({ credentials, connected }: Props) {
           <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
         </Select>
-        <p className="text-muted-foreground">Auto downloads verified updates on the selected channel, then waits for five continuous minutes of stopped playback, no controller input and no active scans or imports. Pausing and radio reconnects keep waiting.</p>
-        {state.policy === "idle" && <p role="status">{state.waiting || "Waiting for five continuous idle minutes."}</p>}
+        <p className="text-muted-foreground">Auto downloads verified updates on the selected channel, then waits for ten continuous minutes of stopped playback, no controller input and no active scans or imports. Pausing and radio reconnects keep waiting.</p>
+        {state.policy === "idle" && <p role="status">{state.waiting || "Waiting for ten continuous idle minutes."}</p>}
       </div>
     </>}
-    <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
-      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>The AppImage release feed is not enrolled for installation. Use the supported appliance installer through SSH to enroll its signing key and endpoint.</p>}
-      {state?.installation?.enabled && state.installation.repairAvailable !== false && state.installation.current && !retry && !installing && <div className="space-y-2">
+    {showTools && <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
+      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>Retained recovery is available through couch-recover. Keep the previous verified AppImage and backup; an old hosted download may expire.</p>}
+      {state?.installation?.enabled && state.installation.current && !retry && !installing && <div className="space-y-2">
         <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
         {confirming === "repair" ? <>
-          <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
+          <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
           <p className="text-muted-foreground">Repair reinstalls Couch files. The machine administrator maintains Debian host packages.</p>
           <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button>
           <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
         </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button>}
       </div>}
-    </ToolsSettings>
+    </ToolsSettings>}
   </div>;
 }

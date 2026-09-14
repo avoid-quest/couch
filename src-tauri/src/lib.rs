@@ -183,24 +183,30 @@ async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> 
 }
 
 fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
+    start_coordinator(app, true)
+}
+
+fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), String> {
     let host = app.state::<Host>();
     if host.child.lock().expect("sidecar lock poisoned").is_some() {
         return Ok(());
     }
-    if let Some((player_receiver, display_receiver)) =
-        host.workers.lock().expect("worker lock poisoned").take()
-    {
-        let handle = app.clone();
-        let display_path = host.data_dir.join("display-output");
-        std::thread::Builder::new()
-            .name("display".into())
-            .spawn(move || display::run(handle, display_path, display_receiver))
-            .map_err(|error| error.to_string())?;
-        let handle = app.clone();
-        std::thread::Builder::new()
-            .name("native-player".into())
-            .spawn(move || player::run(handle, player_receiver))
-            .map_err(|error| error.to_string())?;
+    if playback {
+        if let Some((player_receiver, display_receiver)) =
+            host.workers.lock().expect("worker lock poisoned").take()
+        {
+            let handle = app.clone();
+            let display_path = host.data_dir.join("display-output");
+            std::thread::Builder::new()
+                .name("display".into())
+                .spawn(move || display::run(handle, display_path, display_receiver))
+                .map_err(|error| error.to_string())?;
+            let handle = app.clone();
+            std::thread::Builder::new()
+                .name("native-player".into())
+                .spawn(move || player::run(handle, player_receiver))
+                .map_err(|error| error.to_string())?;
+        }
     }
     let token = format!(
         "{}{}",
@@ -212,6 +218,7 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
         .sidecar("couch-server")
         .map_err(|error| error.to_string())?
         .env("COUCH_NATIVE", "1")
+        .env("COUCH_MAINTENANCE_ONLY", if playback { "0" } else { "1" })
         .env(
             "COUCH_BUNDLED_TOOLS",
             app.path()
@@ -233,7 +240,11 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
             "COUCH_PORT",
             std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
         );
-    for (variable, name) in [("COUCH_YT_DLP", "yt-dlp"), ("COUCH_DENO", "deno"), ("COUCH_FFPROBE", "ffprobe")] {
+    for (variable, name) in [
+        ("COUCH_YT_DLP", "yt-dlp"),
+        ("COUCH_DENO", "deno"),
+        ("COUCH_FFPROBE", "ffprobe"),
+    ] {
         let bundled = app
             .path()
             .resource_dir()
@@ -242,7 +253,9 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
             .join(name);
         if !cfg!(debug_assertions) {
             if !bundled.is_file() {
-                return Err(format!("This Couch bundle is missing {name}. Reinstall a verified complete AppImage."));
+                return Err(format!(
+                    "This Couch bundle is missing {name}. Reinstall a verified complete AppImage."
+                ));
             }
             sidecar = sidecar.env(variable, bundled);
             continue;
@@ -261,7 +274,7 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
     host.connection.send_replace(None);
     host.child_exited.send_replace(false);
     *host.child.lock().expect("sidecar lock poisoned") = Some(child);
-    host.local_running.store(true, Ordering::Relaxed);
+    host.local_running.store(playback, Ordering::Relaxed);
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
@@ -271,7 +284,9 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
                     match serde_json::from_slice::<SidecarMessage>(&line) {
                         Ok(SidecarMessage::Addresses { urls }) => {
                             host.connection.send_modify(|value| {
-                                if let Some(Ok(connection)) = value { connection.urls = urls.clone(); }
+                                if let Some(Ok(connection)) = value {
+                                    connection.urls = urls.clone();
+                                }
                             });
                             let _ = handle.emit_to("main", "connection-addresses", urls);
                         }
@@ -289,6 +304,14 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
                             if nonce.len() == 32
                                 && nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
                             {
+                                if !host.local_running.load(Ordering::Relaxed) {
+                                    let build: serde_json::Value = serde_json::from_str(
+                                        option_env!("COUCH_BUILD_INFO").unwrap_or("{}"),
+                                    )
+                                    .unwrap_or_default();
+                                    host.report_message(serde_json::json!({"type":"readiness","nonce":nonce,"ok":true,"build":{"version":build["version"],"revision":build["revision"],"dataFormat":build["dataFormat"]}}));
+                                    continue;
+                                }
                                 let _ = host.player.send(player::Request::Readiness {
                                     nonce,
                                     deadline: std::time::Instant::now()

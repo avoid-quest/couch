@@ -1,4 +1,4 @@
-const idleWindow = 5 * 60_000;
+const idleWindow = 10 * 60_000;
 
 export function createUpdateIdle(now = () => performance.now()) {
   let since = now();
@@ -24,7 +24,7 @@ export function createUpdateIdle(now = () => performance.now()) {
       else if (!["idle", "ended", "error"].includes(playback)) active = playback === "paused" ? "Waiting for playback to stop. Paused playback is still active." : "Waiting for playback to stop.";
       if (active) { activity(); return active; }
       const remaining = Math.max(0, idleWindow - (now() - since));
-      return remaining ? `Waiting for five continuous idle minutes. ${Math.ceil(remaining / 1000)} seconds remaining.` : null;
+      return remaining ? `Waiting for ten continuous idle minutes. ${Math.ceil(remaining / 1000)} seconds remaining.` : null;
     },
   };
 }

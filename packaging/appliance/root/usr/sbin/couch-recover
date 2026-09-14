@@ -4,7 +4,7 @@ set -euo pipefail
 fail() { echo "couch-recover: $*" >&2; exit 1; }
 [[ $# = 1 ]] || fail 'Usage: couch-recover /absolute/known-good-backup-directory; use sudo for the TV profile'
 backup=$(realpath "$1")
-[[ -f $backup/Couch.AppImage && -f $backup/build.json && -f $backup/SHA256SUMS ]] || fail 'Expected a retained AppImage, build.json and SHA256SUMS.'
+[[ -f $backup/Couch.AppImage.sig && -f $backup/Couch.AppImage && -f $backup/build.json && -f $backup/SHA256SUMS ]] || fail 'Expected a retained AppImage, build.json and SHA256SUMS.'
 tv=false
 if [[ $EUID = 0 ]]; then
     tv=true
@@ -30,8 +30,13 @@ mkdir -p "$state"
 # The checksum is pinned when the known-good bundle is backed up, not downloaded
 # from a feed during recovery. The operator chooses this retained snapshot.
 (cd "$backup" && sha256sum --check --status SHA256SUMS) || fail 'Backup checksum mismatch.'
+verification=$(mktemp -d)
+trap 'rm -rf "$verification"' EXIT
+base64 --decode < "$application/couch-updater.pub" > "$verification/key"
+base64 --decode < "$backup/Couch.AppImage.sig" > "$verification/signature"
+minisign -Vm "$backup/Couch.AppImage" -p "$verification/key" -x "$verification/signature" || fail 'Retained AppImage signature verification failed.'
 format=$(jq -er '.dataFormat | select(type == "number")' "$application/build.json")
-[[ $(jq -er '.dataFormat' "$backup/build.json") = "$format" ]] || fail 'Incompatible data format. Keep current data and obtain a forward fix; do not restore an old database.'
+jq -e --argjson format "$format" '(.readableDataFormats // [.dataFormat]) | index($format) != null' "$backup/build.json" >/dev/null || fail 'Incompatible data format. Keep current data and obtain a forward fix; do not restore an old database.'
 $tv && couch-session stop
 ! pgrep -u "$runtime_user" -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains; inspect it through SSH.'
 [[ $data = /* && -d $data ]] || fail 'The configured data directory is unavailable.'
@@ -48,10 +53,20 @@ sync -f "$failed"
 as_user sh -c 'umask 077; cat > "$1/Couch.AppImage.new"; chmod 0700 "$1/Couch.AppImage.new"' sh "$application" < "$backup/Couch.AppImage"
 as_user "$application/Couch.AppImage.new" --version > "$failed/recovery-build.json"
 jq -e --slurpfile expected "$backup/build.json" '.version == $expected[0].version and .revision == $expected[0].revision and .dataFormat == $expected[0].dataFormat' "$failed/recovery-build.json" >/dev/null || fail 'The retained AppImage does not match its recorded build.'
+jq -e --argjson format "$format" '(.readableDataFormats // [.dataFormat]) | index($format) != null' "$failed/recovery-build.json" >/dev/null || fail 'The signed retained app cannot read current data. Obtain a forward fix.'
 jq --arg hash "$(sha256sum "$application/Couch.AppImage.new" | cut -d ' ' -f1)" '. + {archiveSha256:$hash}' "$failed/recovery-build.json" > "$failed/recovery-with-hash.json"
 as_user sh -c 'umask 077; cat > "$1/build.json"' sh "$application" < "$failed/recovery-with-hash.json"
+as_user sh -c 'umask 077; cat > "$1/Couch.AppImage.sig"' sh "$application" < "$backup/Couch.AppImage.sig"
 as_user mv -f "$application/Couch.AppImage.new" "$application/Couch.AppImage"
 sync -f "$application"
+transaction=$data/updates/appimage/transaction.json
+if [[ -f $transaction ]]; then
+    jq --arg version "$(jq -r .version "$backup/build.json")" --arg revision "$(jq -r .revision "$backup/build.json")" '. + {phase:"restored", restoredVersion:$version, restoredRevision:$revision, error:"Operator restored the retained compatible app; current data was preserved."}' "$transaction" > "$failed/restored.json"
+    request=$(jq -er '.requestId | select(test("^[a-f0-9]{32}$"))' "$failed/restored.json")
+    as_user sh -c 'cat > "$1.new"; mv -f "$1.new" "$1"' sh "$transaction" < "$failed/restored.json"
+    as_user sh -c 'cat > "$1.new"; mv -f "$1.new" "$1"' sh "$data/updates/appimage/requests/$request.json" < "$failed/restored.json"
+    sync -f "$data"
+fi
 if $tv; then couch-session restart; else echo "Launch Couch from the desktop application menu."; fi
 echo "Known-good application restored; current user data retained. Failed data saved in $failed."
 echo 'Verify couch-session status/logs and retained phone reconnection before declaring recovery complete.'

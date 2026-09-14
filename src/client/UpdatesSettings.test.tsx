@@ -73,7 +73,7 @@ test("disconnect clears build details and aborts in-flight reads", async () => {
   expect(signal!.aborted).toBe(true);
   await act(async () => gate.resolve(Response.json(report)));
   expect(document.body.textContent).not.toContain("abc123");
-  expect(document.body.textContent).toContain("Connect to the TV");
+  expect(document.body.textContent).toContain("Connect to the app");
 });
 
 test("a rejected mutation remains visible after background status refresh", async () => {
@@ -131,7 +131,7 @@ test("a lost install reply keeps its retry identity through disconnect without r
   await act(async () => button("Install update").click());
   await act(async () => button("Install and restart").click());
   await render(false);
-  expect(document.body.textContent).toContain("The TV is restarting or offline");
+  expect(document.body.textContent).toContain("Couch is restarting or offline");
   await render(true);
   expect(installed).toHaveLength(1);
   await act(async () => button("Retry same request").click());
@@ -207,14 +207,14 @@ test("rejection of a legacy runtime repair clears its retry without changing its
   expect(button("Install update").disabled).toBe(false);
 });
 
-test("unenrolled AppImage explains installation requirements instead of hiding repair", async () => {
+test("hosted AppImage installs independently of retired hosted repair", async () => {
   report.status = "ready";
   report.installation = { enabled: true, transaction: null, repairAvailable: false };
   await render();
-  expect(document.body.textContent).toContain("release feed is not enrolled");
-  expect(document.body.textContent).toContain("signing key and endpoint");
+  expect(document.body.textContent).toContain("Retained recovery");
+  expect(document.body.textContent).toContain("old hosted download may expire");
   expect(button("Repair current release")).toBeUndefined();
-  expect(button("Install update").disabled).toBe(true);
+  expect(button("Install update").disabled).toBe(false);
 });
 
 
@@ -342,7 +342,7 @@ for (const intent of ["install", "repair-current"] as const) test(`a successful 
   expect(document.body.textContent).not.toContain("The running build differs");
 });
 
-for (const [phase, outcome] of [["trial", "Updating the TV"], ["failed", "Update stopped before installation"], ["restored", "Previous release restored"], ["operator-required", "Update needs SSH recovery"]] as const) test(`${phase} keeps its outcome when a different release is running`, async () => {
+for (const [phase, outcome] of [["trial", "Updating Couch"], ["failed", "Update stopped before installation"], ["restored", "Previous release restored"], ["operator-required", "Update needs SSH recovery"]] as const) test(`${phase} keeps its outcome when a different release is running`, async () => {
   report.installation = { enabled: true, transaction: { updateId: "a".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase, error: phase === "trial" ? null : "Original update error", restoredVersion: report.running.version, createdAt: 1, updatedAt: 2 } };
   await render();
   expect(document.body.textContent).toContain(outcome);

@@ -210,7 +210,9 @@ fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, Str
 
 async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String> {
     let host = app.state::<Host>();
-    if host.workers.lock().expect("worker lock poisoned").is_some() {
+    if host.workers.lock().expect("worker lock poisoned").is_some()
+        && host.child.lock().expect("sidecar lock poisoned").is_none()
+    {
         return Ok(());
     }
     if host
@@ -265,14 +267,16 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
         tokio::time::timeout(Duration::from_secs(10), exited.wait_for(|done| *done)).await
             .map_err(|_| "This computer has not finished saving. Retry after it stops; the remote has not opened.")?.map_err(error)?;
     }
-    let (sender, receiver) = tokio::sync::oneshot::channel();
-    host.player
-        .send(player::Request::Stop(sender))
-        .map_err(error)?;
-    tokio::time::timeout(Duration::from_secs(5), receiver)
-        .await
-        .map_err(|_| "Native playback has not stopped. Restart Couch before changing device.")?
-        .map_err(error)??;
+    if host.workers.lock().expect("worker lock poisoned").is_none() {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        host.player
+            .send(player::Request::Stop(sender))
+            .map_err(error)?;
+        tokio::time::timeout(Duration::from_secs(5), receiver)
+            .await
+            .map_err(|_| "Native playback has not stopped. Restart Couch before changing device.")?
+            .map_err(error)??;
+    }
     host.connection.send_replace(None);
     Ok(())
 }
@@ -441,6 +445,7 @@ pub async fn select_playback_device(
         modes.save(choice.clone())?;
     } else {
         close_remote(&app).await?;
+        stop_local(&app, true).await?;
         crate::start_local(&app)?;
         choice.mode = Some(mode);
         modes.save(choice.clone())?;
@@ -460,6 +465,7 @@ pub async fn retry_playback_device(
     match choice.mode {
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
+            crate::start_coordinator(&app, false)?;
             open_remote(
                 &app,
                 choice

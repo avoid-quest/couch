@@ -28,6 +28,7 @@ beforeEach(async () => {
       if (options.mode === "remote" && interruption && !options.confirmInterrupt) throw `confirmation-required:${interruption}`;
       choice = { ...choice, mode: options.mode, address: options.address ?? choice.address, targets: [...new Set([...choice.targets, ...(options.address ? [options.address] : [])])] };
     }
+    if (command === "connection_info") return { origin: "http://127.0.0.1:54321", token: "own-installation" } as T;
     if (command === "complete_local_setup") choice = { ...choice, targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
     if (command === "retry_playback_device" && connectionError) throw connectionError;
     return { ...choice } as T;
@@ -158,4 +159,24 @@ test("Another Couch opens focused address entry without a submenu", async () => 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Another Couch");
   expect(document.activeElement?.id).toBe("another-couch-address");
   expect((document.activeElement as HTMLInputElement).value).toBe("");
+});
+
+
+test("an unreachable remote cannot prevent this installation's update controls", async () => {
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  connectionError = "Cannot reach that Couch.";
+  request.mockImplementation((async (input, init) => {
+    expect(String(input)).toStartWith("http://127.0.0.1:54321/");
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer own-installation");
+    if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
+    return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, repairAvailable: false, transaction: null } });
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Update this app").click()); await flush();
+  expect(document.body.textContent).toContain("Updates for this computer");
+  expect(document.body.textContent).toContain("Hosted update");
+  expect(button("Install update").disabled).toBe(false);
+  expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);
+  expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
+  expect(choice.mode).toBe("remote");
 });
