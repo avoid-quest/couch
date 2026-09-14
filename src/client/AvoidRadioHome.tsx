@@ -99,6 +99,13 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
   }, [request, connected, active, catalog]);
 
   useEffect(() => {
+    if (!connected || !active || !Object.keys(programmes).length) return;
+    const expiresAt = Math.min(...Object.values(programmes).map(programme => programme.expiresAt));
+    const timer = setTimeout(() => setProgrammes(current => Object.fromEntries(Object.entries(current).filter(([, programme]) => programme.expiresAt > Date.now()))), Math.max(1, expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [programmes, connected, active]);
+
+  useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 3500);
     return () => clearTimeout(timer);

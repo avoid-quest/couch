@@ -96,3 +96,35 @@ test("inactive discovery makes no requests and disconnected controls cannot send
   expect(button("Play now: Station one").disabled).toBe(true);
   expect(button("Add to queue: Station one").disabled).toBe(true);
 });
+
+
+test("programme title and artwork expire even when the following metadata request fails", async () => {
+  let now = 1000, programmeReads = 0;
+  const clock = spyOn(Date, "now").mockImplementation(() => now);
+  const originalTimer = globalThis.setTimeout;
+  const scheduled = new Map<number, () => void>();
+  const timers = spyOn(globalThis, "setTimeout").mockImplementation(((...args: Parameters<typeof setTimeout>) => {
+    const [callback, delay] = args;
+    if (typeof callback === "function" && (delay === 1000 || delay === 60_000)) scheduled.set(delay, callback as () => void);
+    return originalTimer(...args);
+  }) as typeof setTimeout);
+  const originalRequest = request.getMockImplementation()!;
+  request.mockImplementation((async (input, init) => {
+    if (new URL(String(input)).pathname !== "/api/radio/avoid/programmes") return originalRequest(input, init);
+    if (++programmeReads > 1) return Response.json({ error: "Programme service unavailable" }, { status: 503 });
+    return Response.json({ programmes: { one: { title: "Expiring programme", artworkUrl: "https://provider.example/expiring.jpg", sampledAt: 1000, expiresAt: 2000 } } });
+  }) as typeof fetch);
+  try {
+    await render();
+    expect(document.body.textContent).toContain("Expiring programme");
+    expect(document.querySelector('img[src="https://provider.example/expiring.jpg"]')).not.toBeNull();
+    await act(async () => { now = 1500; scheduled.get(60_000)!(); });
+    await flush();
+    expect(programmeReads).toBe(2);
+    expect(document.body.textContent).toContain("Expiring programme");
+    await act(async () => { now = 2000; scheduled.get(1000)!(); });
+    expect(document.body.textContent).not.toContain("Expiring programme");
+    expect(document.querySelector('img[src="https://provider.example/expiring.jpg"]')).toBeNull();
+    expect(button("Add to queue: Station one").disabled).toBe(false);
+  } finally { timers.mockRestore(); clock.mockRestore(); }
+});
