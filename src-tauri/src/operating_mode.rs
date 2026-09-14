@@ -347,7 +347,6 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
         .always_on_top(true)
         .on_navigation(move |url| url.origin() == origin)
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-        .on_download(|_, _| false)
         .build()
         .map_err(error)?;
     remote.on_window_event(move |event| {
