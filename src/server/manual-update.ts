@@ -4,7 +4,7 @@ import { ControllerError, settingField } from "./controllers";
 import type { UpdateRequest } from "../shared/updates";
 
 type Install = { candidateId: string; requestId: string; confirmInterrupt: boolean };
-type Repair = { expectedCurrentId: string; requestId: string; confirmInterrupt: boolean; repairRuntime: boolean };
+type Repair = Omit<Extract<UpdateRequest, { op: "repair-current" }>, "op">;
 type Worker = { request: (request: UpdateRequest) => Promise<unknown> };
 const finished = new Set(["succeeded", "failed", "restored", "operator-required"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -55,6 +55,10 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       const id = body && typeof body === "object" && ("expectedCurrentId" in body ? body.expectedCurrentId : body.candidateId);
       const keys = repairing ? "confirmInterrupt,expectedCurrentId,repairRuntime,requestId" : "candidateId,confirmInterrupt,requestId";
       if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== keys || typeof id !== "string" || !/^[a-f0-9]{64}$/.test(id) || repairing && typeof (body as Repair).repairRuntime !== "boolean" || typeof body.requestId !== "string" || !/^[a-f0-9]{32}$/.test(body.requestId) || typeof body.confirmInterrupt !== "boolean") throw new ControllerError("Choose the verified candidate and confirm whether playback may stop.");
+      if (repairing && (body as Repair).repairRuntime !== false) {
+        unaccepted = true;
+        throw new ControllerError("System media dependencies are managed separately through SSH. Refresh and choose Repair current release to reinstall Couch files.", 409);
+      }
       authorize(identity);
       const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });
       return json({ transaction }, 202);

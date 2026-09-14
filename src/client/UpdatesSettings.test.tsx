@@ -154,13 +154,16 @@ test("repair warns before exact-current reinstall and preserves its intent after
   expect(sent).toHaveLength(0);
   expect(document.body.textContent).toContain("Other remotes will disconnect");
   expect(document.body.textContent).toContain("Missing authenticated current archives cause a failure");
+  expect(document.body.textContent).toContain("System media dependencies are managed separately through SSH");
+  expect(document.body.textContent).not.toContain("Also repair Ubuntu");
+  expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
   await act(async () => {
     for (const checkbox of document.querySelectorAll('input[type="checkbox"]')) (checkbox as HTMLInputElement).click();
     button("Repair and restart").click();
   });
   const saved = JSON.parse(window.localStorage.getItem("couch.update-request:http://localhost")!);
-  expect(saved).toMatchObject({ candidateId: current.candidateId, intent: "repair-current", repairRuntime: true, confirmInterrupt: true });
-  expect(sent).toEqual([{ repair: { expectedCurrentId: current.candidateId, requestId: saved.requestId, confirmInterrupt: true, repairRuntime: true } }]);
+  expect(saved).toMatchObject({ candidateId: current.candidateId, intent: "repair-current", repairRuntime: false, confirmInterrupt: true });
+  expect(sent).toEqual([{ repair: { expectedCurrentId: current.candidateId, requestId: saved.requestId, confirmInterrupt: true, repairRuntime: false } }]);
   expect(document.body.textContent).toContain(report.candidate!.version);
   expect(document.body.textContent).toContain("Verified download ready");
   await render(false); await render(true);
@@ -180,6 +183,28 @@ test("repair archive rejection clears its saved request and leaves the staged up
   expect(document.body.textContent).toContain("The enrolled release changed");
   expect(button("Install update").disabled).toBe(false);
   expect(button("Check for updates").disabled).toBe(false);
+});
+
+test("rejection of a legacy runtime repair clears its retry without changing its saved intent", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null, current: { candidateId: "f".repeat(64), version: report.running.version, revision: "abc123" } };
+  const saved = { candidateId: report.installation.current!.candidateId, requestId: "b".repeat(32), version: report.running.version, revision: "abc123", confirmInterrupt: true, intent: "repair-current", repairRuntime: true };
+  window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify(saved));
+  const sent: unknown[] = [];
+  request.mockImplementation((async (input, init) => {
+    if (String(input).endsWith("/repair")) {
+      sent.push(JSON.parse(String(init?.body)));
+      return Response.json({ accepted: false, error: "System media dependencies are managed separately through SSH." }, { status: 409 });
+    }
+    return String(input).includes("/api/tools") ? Response.json({}, { status: 503 }) : Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Retry same request").click());
+  expect(sent).toEqual([{ repair: { expectedCurrentId: saved.candidateId, requestId: saved.requestId, confirmInterrupt: true, repairRuntime: true } }]);
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  expect(document.body.textContent).toContain("System media dependencies are managed separately through SSH");
+  expect(button("Repair current release").disabled).toBe(false);
+  expect(button("Install update").disabled).toBe(false);
 });
 
 test("unenrolled AppImage explains installation requirements instead of hiding repair", async () => {
