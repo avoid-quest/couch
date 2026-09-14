@@ -12,7 +12,7 @@ rm -rf "$output/public"
 mkdir -p "$output/public"
 cp "src-tauri/target/release/bundle/appimage/Couch_${version}_amd64.AppImage"{,.sig} "$output/public/"
 bun scripts/package-setup.ts "$version" "$output/public"
-for archive in "$output/public"/*.tar.gz; do bunx --no-install tauri signer sign "$archive"; done
+for archive in "$output/public"/*.tar.gz; do bun x --no-install tauri signer sign "$archive"; done
 # Only the signing commands receive the private signing environment.
 unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 bun scripts/hosted-release.ts seal "$output"
