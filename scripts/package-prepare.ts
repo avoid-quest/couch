@@ -5,7 +5,7 @@ import { installMediaTools, mediaReleases } from "./setup-media";
 import inputs from "../packaging/inputs.json";
 import { packageManager, version } from "../package.json";
 import packageConfig from "../src-tauri/tauri.package.conf.json";
-import { releaseVersion } from "./release-version";
+import { publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
 
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
@@ -34,7 +34,7 @@ if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean comm
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
 await mkdir(staging, { recursive: true });
-await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, version: releaseVersion(version, process.env.COUCH_RELEASE_ID) }));
+await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
 // Populate Tauri's supported tool cache with verified inputs, before its bundler runs.
 const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "tauri");
 await mkdir(cache, { recursive: true });

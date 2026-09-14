@@ -860,7 +860,7 @@ test("catalog HTTP authenticates native CORS requests and shares only approved l
   expect(preflight.headers.get("access-control-allow-origin")).toBe("http://tauri.localhost");
   expect((await api("/api/library/sources", "invalid")).status).toBe(401);
   expect((await api("/api/library/sources", token, "GET", undefined, "https://foreign.example")).status).toBe(403);
-  expect((await api("/api/library/sources", token, "POST", { path: "/tmp" })).status).toBe(403);
+  expect((await api("/api/library/sources", token, "POST", { path: "/" })).status).toBe(403);
   const directory = realpathSync(join(databasePath, ".."));
   writeFileSync(join(directory, "Local song.mp3"), "not a real mp3; filename fallback");
   const host = new Peer(hub, hostToken);
