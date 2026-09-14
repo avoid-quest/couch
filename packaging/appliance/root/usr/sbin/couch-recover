@@ -2,24 +2,40 @@
 # Explicit SSH recovery replaces only a compatible known-good application.
 set -euo pipefail
 fail() { echo "couch-recover: $*" >&2; exit 1; }
-[[ $EUID = 0 && $# = 1 ]] || fail 'Usage: sudo couch-recover /absolute/known-good-backup-directory'
+[[ $# = 1 ]] || fail 'Usage: couch-recover /absolute/known-good-backup-directory; use sudo for the TV profile'
 backup=$(realpath "$1")
 [[ -f $backup/Couch.AppImage && -f $backup/build.json && -f $backup/SHA256SUMS ]] || fail 'Expected a retained AppImage, build.json and SHA256SUMS.'
-application=/var/lib/couch/application
+tv=false
+if [[ $EUID = 0 ]]; then
+    tv=true
+    runtime_user=couch-tv
+    application=/var/lib/couch/application
+    state=/var/lib/couch-installer
+    lock=/var/lib/couch-install-locks/tv.lock
+    data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
+    data=${data#\"}; data=${data%\"}
+else
+    runtime_user=$(id -un)
+    application=$HOME/.local/lib/couch
+    data=${COUCH_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/quest.avoid.couch}
+    state=${XDG_STATE_HOME:-$HOME/.local/state}/couch-recovery
+    lock=/var/lib/couch-install-locks/desktop-$(id -u).lock
+fi
+as_user() { if $tv; then runuser -u "$runtime_user" -- "$@"; else "$@"; fi; }
 [[ ! -L $application ]] || fail 'The application directory is a symbolic link; inspect it through SSH.'
-exec 9>/run/couch-install.lock
+[[ -f $lock ]] || fail 'Run the current signed setup before using recovery.'
+exec 9<"$lock"
 flock -n 9 || fail 'Another installation or recovery is running.'
+mkdir -p "$state"
 # The checksum is pinned when the known-good bundle is backed up, not downloaded
 # from a feed during recovery. The operator chooses this retained snapshot.
 (cd "$backup" && sha256sum --check --status SHA256SUMS) || fail 'Backup checksum mismatch.'
 format=$(jq -er '.dataFormat | select(type == "number")' "$application/build.json")
 [[ $(jq -er '.dataFormat' "$backup/build.json") = "$format" ]] || fail 'Incompatible data format. Keep current data and obtain a forward fix; do not restore an old database.'
-couch-session stop
-! pgrep -u couch-tv -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains; inspect it through SSH.'
-data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
-data=${data#\"}; data=${data%\"}
+$tv && couch-session stop
+! pgrep -u "$runtime_user" -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains; inspect it through SSH.'
 [[ $data = /* && -d $data ]] || fail 'The configured data directory is unavailable.'
-failed="/var/lib/couch-installer/failed-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+failed="$state/failed-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 install -d -m 0700 "$failed"
 cp -a "$data" "$failed/data"
 cp -a "$application/build.json" "$failed/"
@@ -29,13 +45,13 @@ else
     printf 'The current AppImage was absent before recovery.\n' > "$failed/missing-appimage.txt"
 fi
 sync -f "$failed"
-runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/Couch.AppImage.new; chmod 0700 /var/lib/couch/application/Couch.AppImage.new' < "$backup/Couch.AppImage"
-runuser -u couch-tv -- "$application/Couch.AppImage.new" --version > "$failed/recovery-build.json"
+as_user sh -c 'umask 077; cat > "$1/Couch.AppImage.new"; chmod 0700 "$1/Couch.AppImage.new"' sh "$application" < "$backup/Couch.AppImage"
+as_user "$application/Couch.AppImage.new" --version > "$failed/recovery-build.json"
 jq -e --slurpfile expected "$backup/build.json" '.version == $expected[0].version and .revision == $expected[0].revision and .dataFormat == $expected[0].dataFormat' "$failed/recovery-build.json" >/dev/null || fail 'The retained AppImage does not match its recorded build.'
 jq --arg hash "$(sha256sum "$application/Couch.AppImage.new" | cut -d ' ' -f1)" '. + {archiveSha256:$hash}' "$failed/recovery-build.json" > "$failed/recovery-with-hash.json"
-runuser -u couch-tv -- sh -c 'umask 077; cat > /var/lib/couch/application/build.json' < "$failed/recovery-with-hash.json"
-runuser -u couch-tv -- mv -f "$application/Couch.AppImage.new" "$application/Couch.AppImage"
+as_user sh -c 'umask 077; cat > "$1/build.json"' sh "$application" < "$failed/recovery-with-hash.json"
+as_user mv -f "$application/Couch.AppImage.new" "$application/Couch.AppImage"
 sync -f "$application"
-couch-session restart
+if $tv; then couch-session restart; else echo "Launch Couch from the desktop application menu."; fi
 echo "Known-good application restored; current user data retained. Failed data saved in $failed."
 echo 'Verify couch-session status/logs and retained phone reconnection before declaring recovery complete.'
