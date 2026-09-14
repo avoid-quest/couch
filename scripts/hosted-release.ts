@@ -144,6 +144,7 @@ async function seal(directory: string) {
     manifest.files[name] = { bytes: bytes.length, sha256: hash(bytes), ...(!name.endsWith(".sig") ? { signature: (await Bun.file(`${path}.sig`).text()).trim() } : {}) };
   }
   await verifyFiles(directory, manifest);
+  await Bun.write(join(directory, "inventory.json"), inventory);
   await Bun.write(join(directory, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 }
 
@@ -170,6 +171,7 @@ if (import.meta.main) {
   else {
     const manifest: Manifest = await Bun.file(join(directory, "manifest.json")).json();
     await verifyFiles(directory, manifest);
+    assert.equal(hash(await read(join(directory, "inventory.json"))), manifest.inventorySha256, "The retained inventory changed.");
     const key = process.env.COUCH_UPDATER_PUBLIC_KEY;
     if (key) assert.equal(manifest.publicKey, publicKey(key), "The artifact uses another signing key.");
     if (operation === "verify") console.log(`Verified ${manifest.version} from ${manifest.revision}`);
