@@ -14,7 +14,7 @@
     "desktop": "bun scripts/desktop.ts dev --no-dev-server",
     "desktop:build": "bun scripts/desktop.ts build",
     "package:prepare": "bun scripts/package-prepare.ts",
-    "package:build": "bun run package:prepare && PATCHELF=/usr/bin/patchelf bun scripts/desktop.ts build --bundles appimage --config .artifacts/tauri-release.conf.json -- --locked && bun scripts/package-verify-helpers.ts",
+    "package:build": "bun run package:prepare && LDAI_RUNTIME_FILE=\"${XDG_CACHE_HOME:-$HOME/.cache}/tauri/runtime-x86_64\" PATCHELF=/usr/bin/patchelf bun scripts/desktop.ts build --bundles appimage --config .artifacts/tauri-release.conf.json -- --locked && bun scripts/package-verify-helpers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:linux": "bun scripts/linux-test.ts",

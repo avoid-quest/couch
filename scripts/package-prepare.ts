@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, readdir, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { installMediaTools, mediaReleases } from "./setup-media";
@@ -42,6 +42,17 @@ for (const [name, input] of Object.entries(inputs.appimageTools)) {
   await download(input, join(cache, name));
   await chmod(join(cache, name), 0o755);
 }
+// Static PIE AppImage runtimes do not execute under Docker's Mac emulation.
+// Run the verified output plugin's unmodified executable from its extracted AppDir.
+const plugin = join(cache, "linuxdeploy-plugin-appimage.AppImage");
+const pluginBytes = new DataView(await Bun.file(plugin).arrayBuffer());
+const squashfsOffset = Number(pluginBytes.getBigUint64(40, true)) + pluginBytes.getUint16(58, true) * pluginBytes.getUint16(60, true);
+const extracted = join(cache, "appimage-output-plugin");
+await rm(extracted, { recursive: true, force: true });
+run(["unsquashfs", "-o", String(squashfsOffset), "-d", extracted, plugin]);
+await rm(plugin);
+await symlink(join(extracted, "AppRun"), plugin);
+await download(inputs.appimageRuntime, join(cache, "runtime-x86_64"));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
 await cp("/usr/bin/ffprobe", join(resources, "tools", "ffprobe"));
 // linuxdeploy adds this RPATH to resources under usr/lib; hash its final bytes.

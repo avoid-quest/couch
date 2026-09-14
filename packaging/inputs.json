@@ -54,5 +54,9 @@
       "url": "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage",
       "sha256": "0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"
     }
+  },
+  "appimageRuntime": {
+    "url": "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64",
+    "sha256": "1cc49bcf1e2ccd593c379adb17c9f85a36d619088296504de95b1d06215aebbf"
   }
 }
