@@ -150,7 +150,7 @@ if (native) {
             }
             // Let the accepted HTTP response leave before closing its listener.
             await Bun.sleep(250);
-            const result = await checkpointAppImage({ ...message, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
+            const result = await checkpointAppImage({ ...message, work: hub.updateWork, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
             send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
           })();
         }

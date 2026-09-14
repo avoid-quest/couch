@@ -1217,9 +1217,11 @@ test("active and uncertain recordings defer idle updates, while confirmed future
     for (const status of ["running", "checking", "pending"]) {
       job.status = status; job.start = Date.now() - 1; save();
       expect(hub.idleReason()).toContain("recordings");
+      expect(hub.updateWork()).toContain("recordings");
       now += 600_000; expect(hub.idleReason()).toContain("recordings");
     }
     job.status = "completed"; save();
+    expect(hub.updateWork()).toBeNull();
     expect(hub.idleReason()).toContain("ten continuous");
     now += 600_000; expect(hub.idleReason()).toBeNull();
   } finally { db.close(); }

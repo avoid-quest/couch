@@ -7,6 +7,7 @@ export function createUpdateIdle(now = () => performance.now()) {
   const activity = () => { since = now(); };
   return {
     activity,
+    workReason: () => work.values().next().value ?? null,
     playback(status: string, radioRetry: boolean) {
       if (playback !== status || reconnecting !== radioRetry || !["idle", "ended", "error"].includes(status) || radioRetry) activity();
       playback = status; reconnecting = radioRetry;

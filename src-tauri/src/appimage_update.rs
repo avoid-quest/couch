@@ -717,7 +717,7 @@ pub async fn run(
         if !transaction.is_null()
             && !matches!(
                 transaction["phase"].as_str(),
-                Some("succeeded" | "failed" | "operator-required" | "trial")
+                Some("succeeded" | "failed" | "operator-required" | "restored" | "trial")
             )
         {
             let _ = journal(&directory, &mut transaction, "operator-required", Some("The update was interrupted. Inspect the retained application and data through SSH.".into()));
