@@ -25,10 +25,20 @@ const hostLibraries = /^(ld-linux-x86-64\.so\.2|lib(c|m|pthread|dl|rt|resolv|uti
 const libraryPath = [join(appdir, "usr/lib"), join(appdir, "usr/lib/x86_64-linux-gnu")].join(":");
 const linkage = [];
 for (const path of elf) {
-  const result = Bun.spawnSync(["ldd", path], { env: { ...process.env, LD_LIBRARY_PATH: libraryPath } });
+  const result = Bun.spawnSync(["ldd", path], { env: { ...process.env, LC_ALL: "C", LD_LIBRARY_PATH: libraryPath } });
   const lines = result.stdout.toString() + result.stderr.toString();
   assert.ok(!lines.includes("not found"), `Unresolved dependency in ${relative(appdir, path)}: ${lines}`);
+  const staticDiagnostic = (result.exitCode === 1 && lines.trim() === "not a dynamic executable") || (result.exitCode === 0 && lines.trim() === "statically linked");
+  assert.ok(result.exitCode === 0 || staticDiagnostic, `ldd failed for ${relative(appdir, path)} (exit ${result.exitCode}): ${lines}`);
   const libraries = [...lines.matchAll(/(?:=>\s+)?(\/[^\s]+)\s+\(/g)].map(match => match[1]!);
+  if (!libraries.length) {
+    assert.ok(staticDiagnostic, `No dependency information for ${relative(appdir, path)}: ${lines}`);
+    // ldd uses the same failure for static binaries and ELF files it cannot load.
+    const inspection = Bun.spawnSync(["readelf", "--lint", "--file-header", "--program-headers", "--dynamic", "--wide", path], { env: { ...process.env, LC_ALL: "C" } });
+    const headers = inspection.stdout.toString();
+    assert.ok(inspection.exitCode === 0 && !inspection.stderr.length, `readelf failed for ${relative(appdir, path)}: ${inspection.stderr}`);
+    assert.ok(/Class:\s+ELF64\b/.test(headers) && /Machine:\s+Advanced Micro Devices X86-64\b/.test(headers) && /Type:\s+(EXEC|DYN)\b/.test(headers) && /^\s+LOAD\s/m.test(headers) && !/^\s+INTERP\s|\(NEEDED\)/m.test(headers), `Cannot confirm dependency-free ELF: ${relative(appdir, path)}`);
+  }
   for (const library of libraries) assert.ok(library.startsWith(appdir + "/") || hostLibraries.test(library.split("/").at(-1)!), `Unexpected host fallback: ${relative(appdir, path)} -> ${library}`);
   linkage.push({ path: relative(appdir, path), libraries: libraries.map(library => library.startsWith(appdir + "/") ? { owner: "Couch", path: relative(appdir, library) } : { owner: "Debian", path: library }) });
 }

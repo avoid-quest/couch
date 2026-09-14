@@ -19,7 +19,7 @@ function run(command: string[]) {
 }
 
 async function download(input: { url: string; sha256: string }, path: string) {
-  const response = await fetch(input.url, { signal: AbortSignal.timeout(120_000) });
+  const response = await fetch(input.url, { headers: { Accept: "application/octet-stream" }, signal: AbortSignal.timeout(120_000) });
   if (!response.ok) throw new Error(`Download failed: ${input.url} (${response.status})`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (sha256(bytes) !== input.sha256) throw new Error(`SHA-256 mismatch: ${input.url}`);
