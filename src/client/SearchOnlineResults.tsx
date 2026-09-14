@@ -39,6 +39,7 @@ function OnlineResults(props: Props) {
   const location = trail[trail.length - 1]!;
   const [detail, setDetail] = useState<ProviderItem | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
+  const restoreDetailFocus = useRef(false);
   const [page, setPage] = useState<SearchPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -57,7 +58,19 @@ function OnlineResults(props: Props) {
   const cache = useRef(new Map<string, SearchPage>());
   const key = JSON.stringify([props.origin, props.token, location.request]);
   useEffect(() => { if (trail.length === 1) props.onResults?.(providerNames[provider], { count: page?.items.length ?? 0, loading, error: !!error }); }, [trail.length, page?.items.length, loading, error, props.onResults, provider]);
-  useEffect(() => { if (!props.active) setDetail(null); }, [props.active]);
+  useEffect(() => {
+    if (!props.active) {
+      if (detail) { restoreDetailFocus.current = true; setDetail(null); }
+      return;
+    }
+    if (!restoreDetailFocus.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]")
+        && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true });
+      restoreDetailFocus.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [props.active, detail]);
 
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => { controller.abort(); request.current?.abort(); }; }, [props.origin, props.token, props.connected]);
   useEffect(() => {
@@ -159,7 +172,7 @@ function OnlineResults(props: Props) {
     {playlistUrl && page?.items.length && !loading && !error && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, playNow: true, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playing playlist on the playback computer.")}>Play playlist</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playlist added to Up next.")}>Add playlist to queue</Button>{props.onQualityChange && <QualityOptions id={`${qualityId}-playlist`} label="Playlist video quality" value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}</div>}
     {album && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url!, playNow: true }), "Starting album on the playback computer.")}>Play album</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url! }), "Album added to Up next.")}>Add album to queue</Button></div>}
     <ul className="search-online-grid">{page?.items.slice(0, visible).map(item => <li key={item.id} className="search-online-card"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="search-online-copy"><Button variant="ghost" className="search-result-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetail(item); }}><strong>{item.title}</strong><small>{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</small></Button></div>{itemActions(item)}</li>)}</ul>
-    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected) detailTrigger.current.focus({ preventScroll: true }); }}>
+    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>
       {detail && <><MediaArtwork thumbnail={detail.thumbnail} title={detail.title} className="search-detail-art" /><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{providerNames[provider]}{detail.live ? " · Live" : ""}</DialogDescription></DialogHeader>{detail.subtitle && <p>{detail.subtitle}</p>}{itemActions(detail, true)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}
     </DialogContent></Dialog>
     {page && (visible < page.items.length || page.nextCursor) && <Button variant="outline" disabled={!props.connected || loading} onClick={() => void more()}>Show more {providerNames[provider]}</Button>}

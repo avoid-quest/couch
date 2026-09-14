@@ -81,3 +81,28 @@ test("IPTV read failure has its own retry and leaves other setup types reachable
   await click("Jellyfin"); expect(document.getElementById("jellyfin-url")).not.toBeNull();
   expect(writes).toEqual([]);
 });
+
+test("reopening setup mounts the requested form without reading the last selected source", async () => {
+  await act(async () => root.render(<Harness />)); await click("Add source");
+  await click("IPTV"); await type("guide-source-name", "Unsubmitted draft"); await click("Close");
+  request.mockClear(); await click("Add source");
+  expect(document.getElementById("jellyfin-url")).not.toBeNull();
+  expect(request.mock.calls.map(([input]: [RequestInfo | URL]) => new URL(String(input)).pathname)).toEqual(["/api/jellyfin/connection"]);
+  await click("IPTV");
+  expect(document.querySelector<HTMLInputElement>("#guide-source-name")!.value).toBe("");
+});
+
+test("changing the requested source mounts only that form even when setup is already open", async () => {
+  const draw = async (source: "jellyfin" | "iptv" | "radio", open = true) => {
+    await act(async () => root.render(<SourceSetupDialog open={open} onOpenChange={() => {}} source={source} credentials={{ origin: "http://localhost", token: "paired" }} connected canManage version={1} radioVersion={1} libraryVersion={1} />)); await flush();
+  };
+  await draw("jellyfin");
+  request.mockClear(); await draw("iptv");
+  expect(document.getElementById("guide-playlist-url")).not.toBeNull();
+  expect(document.getElementById("jellyfin-url")).toBeNull();
+  expect(request.mock.calls.map(([input]: [RequestInfo | URL]) => new URL(String(input)).pathname)).toEqual(["/api/controllers/me", "/api/iptv/sources"]);
+  await draw("iptv", false);
+  request.mockClear(); await draw("radio");
+  expect(document.getElementById("radio-source-url")).not.toBeNull();
+  expect(request.mock.calls.map(([input]: [RequestInfo | URL]) => new URL(String(input)).pathname)).toEqual(["/api/radio/sources"]);
+});

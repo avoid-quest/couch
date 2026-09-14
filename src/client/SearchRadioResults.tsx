@@ -12,8 +12,9 @@ export function SearchRadioResults(props: Props) {
   return <RadioResults key={`${props.origin}:${props.token}`} {...props} />;
 }
 function RadioResults(props: Props) {
-  const [detail, setDetail] = useState<RadioStation | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
+  const restoreDetailFocus = useRef(false);
   const [stations, setStations] = useState<RadioStation[]>([]);
   const [favorites, setFavorites] = useState<RadioStation[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,9 +89,23 @@ function RadioResults(props: Props) {
     }, `${station.name} ${saved ? "removed from" : "added to"} Saved.`);
   }
   const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
-  const results = directory || avoid ? stations : [...new Map([...stations, ...(favorites ?? []).filter(matches)].map(station => [station.id, station])).values()];
+  const stationIds = new Set(stations.map(station => station.id));
+  const results = directory || avoid ? stations : [...stations, ...(favorites ?? []).filter(station => matches(station) && !stationIds.has(station.id))];
+  const detail = results.find(station => station.id === detailId);
   useEffect(() => { props.onResults?.(title, { count: results.length, loading, error: !!error }); }, [results.length, loading, error, props.onResults, title]);
-  useEffect(() => { if (!props.active) setDetail(null); }, [props.active]);
+  useEffect(() => {
+    if (!props.active) {
+      if (detail) { restoreDetailFocus.current = true; setDetailId(null); }
+      return;
+    }
+    if (!restoreDetailFocus.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]")
+        && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true });
+      restoreDetailFocus.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [props.active, detail]);
   const itemActions = (station: RadioStation) => {
     const saved = !!favorites?.some(item => item.id === station.id);
     return <div className="search-item-actions"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add to queue: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add to queue</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div>;
@@ -102,8 +117,8 @@ function RadioResults(props: Props) {
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
-    <ul className="search-results">{results.slice(0, visible).map(station => <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><Button variant="ghost" className="search-result-title" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetail(station); }}><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>{itemActions(station)}</li>)}</ul>
-    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
+    <ul className="search-results">{results.slice(0, visible).map(station => <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><Button variant="ghost" className="search-result-title" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>{itemActions(station)}</li>)}</ul>
+    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;
 }

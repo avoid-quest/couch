@@ -463,3 +463,129 @@ test("saved directory stations keep their source identity and do not create a ra
   await click("Add to queue: Evening directory");
   expect(commands.at(-1)).toMatchObject({ type: "enqueue", entry: { title: "Evening directory", kind: "radio" }, playNow: false });
 });
+
+test("disconnecting after an empty search no longer claims search completion", async () => {
+  empty = true; await render(); await search("nothing");
+  expect(document.body.textContent).toContain('No results for "nothing"');
+  const reads = paths.length;
+  await render(true, false);
+  expect(document.body.textContent).toContain("Reconnect to search and play your media");
+  expect(document.body.textContent).not.toContain('No results for "nothing"');
+  expect(paths).toHaveLength(reads);
+});
+
+test("radio details follow refreshed results, retain saved stations and close after removal", async () => {
+  integrated = true; radioFavorites = [station];
+  let currentStations = [station];
+  const original = request.getMockImplementation()!;
+  request.mockImplementation((async (input, init) => new URL(String(input)).pathname === "/api/radio/playlists/own/stations" ? Response.json({ stations: currentStations }) : original(input, init)) as typeof fetch);
+  await render(); await search("Evening"); await click("Details for Evening radio");
+  currentStations = [{ ...station, name: "Evening renamed", codec: "AAC", bitrate: 256 }];
+  await render(true, true, true, 1, 2);
+  let dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Evening renamed");
+  expect(dialog.textContent).toContain("AAC · 256 kbps");
+  await click("Add to queue: Evening renamed", dialog);
+  expect(commands.at(-1)).toMatchObject({ type: "enqueueRadio", stationId: station.id, playNow: false });
+  currentStations = [];
+  radioFavorites = [{ ...station, name: "Evening saved station" }];
+  await render(true, true, true, 1, 3);
+  dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Evening saved station");
+  await click("Remove Evening saved station from saved", dialog);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(button("Play now: Evening saved station")).toBeUndefined();
+});
+
+for (const label of ["Evening video", "Evening radio"]) {
+  test(`${label} closes while inactive and restores the original result on return`, async () => {
+    integrated = true; await render(); await search("Evening");
+    const opener = button(`Details for ${label}`); opener.focus(); await click(`Details for ${label}`);
+    await render(false);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    document.querySelector<HTMLInputElement>("#media-search")!.focus();
+    await render();
+    expect(document.activeElement).toBe(opener);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test(`${label} return does not steal focus from another open dialog`, async () => {
+    integrated = true; await render(); await search("Evening"); await click(`Details for ${label}`); await render(false);
+    const modal = document.createElement("div"); modal.setAttribute("role", "dialog"); modal.dataset.state = "open";
+    const focused = modal.appendChild(document.createElement("button")); document.body.append(modal); focused.focus();
+    await render();
+    expect(document.activeElement).toBe(focused);
+    modal.remove();
+  });
+
+  test(`${label} cannot restore an obsolete result after the query changes while inactive`, async () => {
+    integrated = true; await render(); await search("Evening");
+    const opener = button(`Details for ${label}`); await click(`Details for ${label}`); await render(false);
+    await search("new");
+    const input = document.querySelector<HTMLInputElement>("#media-search")!; input.focus();
+    await render();
+    expect(opener.isConnected).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  test(`${label} cancels pending focus restoration when hidden again`, async () => {
+    integrated = true; await render(); await search("Evening"); await click(`Details for ${label}`); await render(false);
+    const input = document.querySelector<HTMLInputElement>("#media-search")!; input.focus();
+    let frameId = 0;
+    const frames = new Map<number, FrameRequestCallback>();
+    const schedule = spyOn(globalThis, "requestAnimationFrame").mockImplementation(callback => { frames.set(++frameId, callback); return frameId; });
+    const cancel = spyOn(globalThis, "cancelAnimationFrame").mockImplementation(id => { frames.delete(id); });
+    try {
+      await render(); expect(frames.size).toBeGreaterThan(0);
+      await render(false); expect(cancel).toHaveBeenCalled();
+      await act(async () => { for (const callback of frames.values()) callback(0); });
+      expect(document.activeElement).toBe(input);
+    } finally { schedule.mockRestore(); cancel.mockRestore(); }
+  });
+}
+
+test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
+  const { SearchPanel } = await import("./SearchPanel");
+  const edits: string[] = [];
+  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />));
+  await draw("Owner draft", "route"); await flush();
+  const input = document.querySelector<HTMLInputElement>("#media-search")!;
+  expect(input.value).toBe("Owner draft"); expect(edits).toEqual([]);
+  await act(async () => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "Typed edit"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(edits).toEqual(["Typed edit"]); expect(input.value).toBe("Owner draft");
+  await draw("Accepted edit", "new route"); await flush();
+  expect(input.value).toBe("Accepted edit"); expect(edits).toEqual(["Typed edit"]);
+  await click("Clear search");
+  expect(edits).toEqual(["Typed edit", ""]); expect(input.value).toBe("Accepted edit");
+});
+
+test("standalone drafts follow route updates without reporting synthetic edits", async () => {
+  const { SearchPanel } = await import("./SearchPanel");
+  const edits: string[] = [];
+  const draw = async (query: string) => act(async () => root.render(<SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />));
+  await draw("first route"); await flush(); await draw("second route"); await flush();
+  expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("second route");
+  expect(edits).toEqual([]);
+});
+
+test("debounced drafts survive frequent parent renders, use the latest callback and support explicit retry", async () => {
+  const { SearchPanel } = await import("./SearchPanel");
+  const oldRoutes: string[] = [], newRoutes: string[] = [];
+  let setDraft!: (query: string) => void;
+  function Controlled({ latest }: { latest: boolean }) {
+    const [draftQuery, updateDraft] = useState(""); setDraft = updateDraft;
+    const [searchState, setRoute] = useState({ query: "", source: "All" });
+    return <SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />;
+  }
+  await act(async () => root.render(<Controlled latest={false} />));
+  await act(async () => setDraft("Evening"));
+  for (let tick = 0; tick < 5; tick++) {
+    await act(async () => root.render(<Controlled latest />));
+    await act(async () => { await Bun.sleep(75); });
+  }
+  await flush();
+  expect(oldRoutes).toEqual([]); expect(newRoutes).toEqual(["Evening"]);
+  const reads = paths.filter(path => path.includes("youtube/items")).length;
+  await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); await flush();
+  expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(reads + 1);
+});

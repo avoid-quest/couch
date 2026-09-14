@@ -1,5 +1,5 @@
 import { searchSources, type SearchRouteState } from "./routes";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Play, Plus, Search, X } from "lucide-react";
 import { AuthArtwork } from "./AuthArtwork";
 import "./search-panel.css";
@@ -35,13 +35,15 @@ type Props = {
   onBrowse: (section: string) => void;
   onManageSources?: (source?: SourceSetupKind) => void;
   onQueryChange?: (query: string) => void;
+  draftQuery?: string;
   searchState?: SearchRouteState;
   onSearchChange?: (state: SearchRouteState) => void;
 };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
 export function SearchPanel(props: Props) {
-  const [draft, setDraft] = useState(props.searchState?.query ?? "");
+  const [localDraft, setDraft] = useState(props.searchState?.query ?? "");
+  const draft = props.draftQuery ?? localDraft;
   const input = useRef<HTMLInputElement>(null);
   const [summaries, setSummaries] = useState<Record<string, SearchResultSummary>>({});
   const reportResults = useCallback((source: string, summary: SearchResultSummary) => setSummaries(current => ({ ...current, [source]: summary })), []);
@@ -50,16 +52,18 @@ export function SearchPanel(props: Props) {
   const [localFilter, setLocalFilter] = useState("All");
   const filter = props.searchState?.source ?? localFilter;
   const setFilter = (source: string) => { setLocalFilter(source); props.onSearchChange?.({ query: search.query, source }); };
-  useEffect(() => { if (props.searchState) { setDraft(props.searchState.query); props.onQueryChange?.(props.searchState.query); } }, [props.searchState?.query]);
+  useEffect(() => { if (props.draftQuery === undefined && props.searchState) setDraft(props.searchState.query); }, [props.draftQuery, props.searchState?.query]);
+  const changeDraft = (query: string) => { if (props.draftQuery === undefined) setDraft(query); props.onQueryChange?.(query); };
   const commit = (query: string, submit = false) => {
     const source = query !== search.query || /^https?:\/\//i.test(query) ? "All" : filter;
     setLinkNotice(""); setLocalFilter(source);
     setSearch(value => ({ query, attempt: value.attempt + Number(submit && query === search.query) }));
     props.onSearchChange?.({ query, source });
   };
+  const commitDraft = useEffectEvent(() => commit(draft.trim()));
   useEffect(() => {
     if (!props.active || !props.connected || draft.trim() === search.query) return;
-    const timer = setTimeout(() => commit(draft.trim()), 300);
+    const timer = setTimeout(() => commitDraft(), 300);
     return () => clearTimeout(timer);
   }, [draft, search.query, props.active, props.connected]);
   useEffect(() => { setSummaries({}); }, [search.query, props.origin, props.token]);
@@ -100,14 +104,14 @@ export function SearchPanel(props: Props) {
   }
   return <section ref={panel} className="search-panel catalog-panel min-w-0 space-y-5" aria-label="Search media">
     <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); commit(draft.trim(), true); }}>
-      <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search or paste a link</Label><Input ref={input} id="media-search" type="search" maxLength={4096} value={draft} onChange={event => { setDraft(event.target.value); props.onQueryChange?.(event.target.value); }} placeholder="Search or paste a link" /></div>
-      {draft && <Button variant="ghost" type="button" aria-label="Clear search" onClick={() => { setDraft(""); props.onQueryChange?.(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button>}
+      <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search or paste a link</Label><Input ref={input} id="media-search" type="search" maxLength={4096} value={draft} onChange={event => changeDraft(event.target.value)} placeholder="Search or paste a link" /></div>
+      {draft && <Button variant="ghost" type="button" aria-label="Clear search" onClick={() => { changeDraft(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button>}
     </form>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
     {search.query && <>
       {!url && filter !== "All" && !summaries[filter]?.count && <Button variant="outline" onClick={() => setFilter("All")}>Show all sources</Button>}
       {!url && scopes.length > 0 && <nav className="search-scopes" aria-label="Filter search results"><Button variant={filter === "All" ? "secondary" : "ghost"} aria-label="All sources" aria-pressed={filter === "All"} onClick={() => setFilter("All")}>All sources <span className="text-muted-foreground">{total}</span></Button>{scopes.map(([source, summary]) => <Button key={source} aria-label={source} variant={filter === source ? "secondary" : "ghost"} aria-pressed={filter === source} onClick={() => setFilter(source)}>{source} <span className="text-muted-foreground">{summary.count}</span></Button>)}</nav>}
-      {!url && completed && total === 0 && !Object.values(summaries).some(summary => summary.error) && <p role="status">No results for "{search.query}". Try a station, title or artist.</p>}
+      {props.connected && !url && completed && total === 0 && !Object.values(summaries).some(summary => summary.error) && <p role="status">No results for "{search.query}". Try a station, title or artist.</p>}
       {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} onResults={reportResults} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
         {(["avoid radio", "Radio playlists", "Radio directory"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source)}><SearchRadioResults {...props} onResults={reportResults} active={props.active && visible(source)} query={search.query} version={props.radioVersion ?? 0} source={source} /></div>)}
