@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -20,8 +20,8 @@ const input = async (selector: string, value: string) => act(async () => {
 });
 const render = async (connected = true) => act(async () => root.render(<Editor origin="http://localhost" token="administrator-token" id="item" connected={connected} onSaved={() => {}} />));
 beforeEach(async () => {
-  window = new Window({ url: "http://localhost" }); calls.length = 0;
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "FileReader", "Element", "Node", "MutationObserver", "NodeFilter", "DocumentFragment", "CustomEvent", "HTMLButtonElement", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+  window = new Window({ url: "http://localhost", settings: { disableErrorCapturing: true } }); calls.length = 0;
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "FileReader", "Element", "Node", "MutationObserver", "NodeFilter", "DocumentFragment", "CustomEvent", "HTMLButtonElement", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "Event", "MouseEvent", "setTimeout", "clearTimeout", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -43,9 +43,19 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  const content = document.querySelector('[role="dialog"]');
+  const onUnmount = mock();
+  content?.addEventListener("focusScope.autoFocusOnUnmount", onUnmount);
+  try {
+    await act(async () => root.unmount());
+    // Radix defers focus cleanup to a timeout; finish it before replacing DOM globals.
+    await window.happyDOM.waitUntilComplete();
+    if (content) expect(onUnmount).toHaveBeenCalledTimes(1);
+  } finally {
+    request.mockRestore(); await window.happyDOM.abort();
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+    originals.clear();
+  }
 });
 
 test("editor is local-only on the TV and saves only changed fields with the loaded revision", async () => {

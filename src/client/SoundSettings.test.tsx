@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -13,8 +13,8 @@ beforeEach(async () => {
     { id: "hdmi", name: "HDMI TV", state: "IDLE", availability: "available", muted: false, volume: 63 },
     { id: "analog", name: "Speakers", state: "SUSPENDED", availability: "unavailable", muted: true, volume: 25 },
   ], defaultOutput: "analog", test: null, canTest: true };
-  calls.length = 0; window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  calls.length = 0; window = new Window({ url: "http://localhost", settings: { disableErrorCapturing: true } });
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "setTimeout", "clearTimeout", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
   }
@@ -30,9 +30,19 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); window.happyDOM.abort();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  const content = document.querySelector('[role="listbox"]');
+  const onUnmount = mock();
+  content?.addEventListener("focusScope.autoFocusOnUnmount", onUnmount);
+  try {
+    await act(async () => root.unmount());
+    // Radix defers focus cleanup to a timeout; finish it before replacing DOM globals.
+    await window.happyDOM.waitUntilComplete();
+    if (content) expect(onUnmount).toHaveBeenCalledTimes(1);
+  } finally {
+    request.mockRestore(); await window.happyDOM.abort();
+    for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+    originals.clear();
+  }
 });
 const trigger = () => document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Sound output"]')!;
 const openOutputs = async () => act(async () => trigger().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" })));
