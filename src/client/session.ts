@@ -1,5 +1,5 @@
 import { buildKey, loadedBuild } from "../shared/build";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
 import type { ConnectionDetails, ControllerIdentity } from "../shared/controllers";
 import { knownConnection, rememberConnection } from "./connection";
@@ -14,10 +14,8 @@ export function createId() {
 }
 
 export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
-  const navigation = useRef(onNavigation);
-  navigation.current = onNavigation;
-  const [details, setDetails] = useState<ConnectionDetails | null>(() => knownConnection()?.details ?? null);
-  const [publicPlayer, setPublicPlayer] = useState<ConnectionDetails["player"]>();
+  const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
+  const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<SessionState | null>(null);
@@ -29,7 +27,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   useEffect(() => {
     setState(null);
-    setPublicPlayer(undefined);
+    setIdentity(null);
+    setCredentialRejected(false);
     ready.current = false;
     let disposed = false;
     const controller = new AbortController();
@@ -47,7 +46,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setPublicPlayer(undefined); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
@@ -60,9 +59,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         if (!response.ok) throw new Error("Server unavailable");
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
-        setDetails(next);
-        setPublicPlayer(next.player);
-        rememberConnection(origin, next);
+        setConnectionDetails({ origin, details: next });
         if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
         if (authenticate && credentials) {
           const asset = buildKey(loadedBuild);
@@ -73,6 +70,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
             if (response.status === 403) { setStatus("connection-rejected"); return; }
             if (!response.ok) throw new Error("Server unavailable");
             const current = buildKey(await response.json());
+            if (disposed) return;
             if (current !== asset) {
               setStatus("build-mismatch");
               try {
@@ -130,7 +128,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setState(message.state);
           setStatus("connected");
         } else if (message.type === "navigation") {
-          navigation.current?.(message.key);
+          navigate(message.key);
         } else if (message.type === "result") {
           const request = pending.current.get(message.requestId);
           if (!request) return;
@@ -165,14 +163,15 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, reconnectAttempt]);
 
-  useEffect(() => { setIdentity(null); setCredentialRejected(false); }, [credentials?.token]);
+  const origin = credentials?.origin ?? location.origin;
+  const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
+  const installationName = state?.installationName;
+  const player = state?.player.status;
+  const details = useMemo(() => publicDetails ? { ...publicDetails, name: installationName ?? publicDetails.name, player: player ?? publicDetails.player } : null, [publicDetails, installationName, player]);
 
   useEffect(() => {
-    if (!state || !details || !credentials) return;
-    const next = { ...details, name: state.installationName ?? details.name, player: state.player.status };
-    setDetails(next);
-    rememberConnection(credentials.origin, next);
-  }, [state?.installationName, state?.player.status, credentials?.origin]);
+    if (details) rememberConnection(origin, details);
+  }, [origin, details]);
 
   useEffect(() => {
     if (status !== "connected" || !credentials) return;
@@ -185,7 +184,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (!controller.signal.aborted) setIdentity(caller);
     }).catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, status, state?.controllerVersion]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, status, state?.controllerVersion]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -216,5 +215,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicPlayer : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
+  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
 }
