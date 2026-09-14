@@ -3,7 +3,10 @@
 The supported package is one signed Debian 13 amd64/X11 Tauri AppImage. It carries
 the native app, local/remote UI, compiled Bun backend, yt-dlp, Deno, ffprobe and
 application libraries. The installer provisions Debian's host packages and optional
-small TV session. See [installation and recovery](install-couch.md).
+small TV session. [PR #278](https://github.com/avoid-quest/couch/pull/278) owns the
+AppImage build. The upper [PR #279](https://github.com/avoid-quest/couch/pull/279)
+adds `scripts/package-setup.ts`, `tests/package/installer.sh` and the installation
+and recovery guide. Those files require the installer layer of the stack.
 
 `packaging/inputs.json` pins the Debian image, dated Debian/security snapshot,
 helper downloads, AppImage tools/runtime and notice inputs. JavaScript and Rust
@@ -33,40 +36,116 @@ execution still needs a booted host; container extraction does not test FUSE.
 
 ## Isolated Mac build
 
-GitHub Actions remains paused. Use the existing container builder locally:
+GitHub Actions remains paused. Use Git, host Bun and Docker Desktop with Linux
+containers on the Mac. The T480 only installs and runs Couch. Run these blocks
+in one Bash shell from a clean committed checkout after the
+[ordinary local checks](ci.md). The source's Debian, snapshot, Bun and Rust pins
+configure the builder. `/work` lives on the container's Linux filesystem.
 
-```sh
-docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
-  --build-arg BUN_VERSION=1.4.2 --build-arg RUST_VERSION=1.98.1 \
-  -t couch-debian-builder .
+```bash
+set -euo pipefail
+test -z "$(git status --porcelain)"
+couch_revision=$(git rev-parse HEAD)
 mkdir -p .artifacts
-git bundle create .artifacts/build-source.bundle HEAD
-docker run -d --init --platform linux/amd64 --name couch-package \
-  --cpus 6 --memory 10g couch-debian-builder
-docker cp .artifacts/build-source.bundle couch-package:/source.bundle
-docker exec couch-package git clone /source.bundle /work
-docker exec -w /work couch-package sh -c 'bun install --frozen-lockfile && bun run package:build'
-docker cp couch-package:/work/src-tauri/target/release/bundle/appimage .artifacts/
-docker cp couch-package:/work/.artifacts/appimage-inventory.json .artifacts/
+couch_work=$(mktemp -d "$PWD/.artifacts/mac-package.XXXXXX")
+couch_image="couch-debian-builder:${couch_revision:0:12}"
+couch_container="couch-package-${couch_revision:0:12}-$$"
+git bundle create "$couch_work/source.bundle" HEAD
+docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
+  --build-arg "DEBIAN_IMAGE=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
+  --build-arg "DEBIAN_SNAPSHOT=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" \
+  --build-arg "BUN_VERSION=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" \
+  --build-arg "RUST_VERSION=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" \
+  -t "$couch_image" packaging 2>&1 | tee "$couch_work/compiler-image.log"
+docker image inspect "$couch_image" > "$couch_work/compiler-image.json"
+docker run -d --init --platform linux/amd64 --name "$couch_container" \
+  --cpus 6 --memory 10g --memory-swap 10g --pids-limit 1024 "$couch_image"
+trap 'docker stop "$couch_container" >/dev/null' EXIT
+docker cp "$couch_work/source.bundle" "$couch_container:/source.bundle"
+docker exec "$couch_container" git clone --no-checkout /source.bundle /work
+docker exec -w /work "$couch_container" git checkout --detach "$couch_revision"
+docker exec -i -w /work "$couch_container" bash -euo pipefail <<'BUILD' 2>&1 | tee "$couch_work/package-build.log"
+  unset COUCH_RELEASE_ID
+  bun install --frozen-lockfile
+  bun run package:build
+BUILD
+docker cp "$couch_container:/work/src-tauri/target/release/bundle/appimage/." "$couch_work/"
+docker cp "$couch_container:/work/.artifacts/appimage-inventory.json" "$couch_work/"
+docker cp "$couch_container:/work/src-tauri/build-info.json" "$couch_work/"
+docker cp "$couch_container:/work/src-tauri/resources/build-inputs.json" "$couch_work/"
+docker cp "$couch_container:/work/src-tauri/resources/build-packages.tsv" "$couch_work/"
 ```
 
-The source bundle is private build input. Never upload it as distribution material.
-The selected source timestamp supplies `SOURCE_DATE_EPOCH`. Keep the container
-until setup/material archives, signing and checks finish, then stop it.
+This builds an isolated candidate at the committed product version. It clears
+the POC's `COUCH_RELEASE_ID`; allocating the new release line belongs to
+[#276](https://github.com/avoid-quest/couch/issues/276). The selected source
+timestamp supplies `SOURCE_DATE_EPOCH`. Keep `$couch_work` private, including its
+source bundle, compiler identity, logs, build inputs and inventory. A source
+bundle is never distribution material.
 
-Run `bun scripts/package-setup.ts <version> <output-directory>` in that checkout
-to assemble the explicitly allowlisted setup and dependency-material archives.
-Sign each archive and the AppImage with the pinned Tauri signer. Isolated checks
-use a disposable local signing key; only the release ticket owns enrollment and
-production signing/publication. Do not publish diagnostics, source bundles,
-private documentation, user configuration, databases, backups or keys.
+## Setup archives and installer check
 
-The ordinary installer and TV setup have a disposable Debian fixture at
-`tests/package/installer.sh`. It uses real Minisign verification and doubles APT,
-services and successful FUSE access. It is a logic check, not pristine-machine
-acceptance. Release acceptance, including GUI/playback, boot, actual library loads
-and signed hosted A-to-B updates with the Mac offline, belongs to #277 after the
-hosted-release implementation in #276.
+Continue only from a checkout containing the upper installer layer, PR #279.
+The following commands use the same source revision as the AppImage. Archive
+assembly uses its generated dependency notices and an explicit public-file
+allowlist:
+
+```bash
+docker exec -i -w /work "$couch_container" bash -euo pipefail <<'SETUP' 2>&1 | tee "$couch_work/setup-build.log"
+  test -f scripts/package-setup.ts
+  couch_version=$(bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
+  bun scripts/package-setup.ts "$couch_version" .artifacts/distribution
+SETUP
+docker cp "$couch_container:/work/.artifacts/distribution" "$couch_work/"
+docker run --rm -i --init --platform linux/amd64 --network none \
+  --cpus 2 --memory 2g --memory-swap 2g --pids-limit 256 \
+  --mount "type=bind,source=$couch_work,target=/input,readonly" \
+  -e "COUCH_SOURCE_REVISION=$couch_revision" "$couch_image" \
+  bash -euo pipefail <<'FIXTURE' 2>&1 | tee "$couch_work/installer-fixture.log"
+  git clone --no-checkout /input/source.bundle /work
+  cd /work
+  git checkout --detach "$COUCH_SOURCE_REVISION"
+  bash tests/package/installer.sh
+FIXTURE
+```
+
+The installer fixture changes accounts and system files only inside that fresh
+disposable container. It uses real Minisign verification with a disposable key
+and fixture AppImage, and doubles APT, services and successful FUSE access.
+It checks installer logic, not installation of the built candidate.
+
+After copying the outputs and completing the checks, stop the builder. The EXIT
+trap also stops it on failure. The stopped container retains `/work` for inspection:
+
+```bash
+docker stop "$couch_container"
+trap - EXIT
+```
+
+These steps need neither a Docker client nor `tauri-driver` inside the builder.
+Host Docker starts both containers. No Docker socket, host networking or
+privileged container is required for these package and installer checks.
+
+## Build and qualify
+
+The [retained #275 evidence](https://github.com/avoid-quest/couch/blob/61e610c73777d74d284fbfaaa2596b0cd5b7edf6/docs/evidence/debian-package-275/README.md)
+records the checked revisions, repeated AppImage/archive builds, disposable
+signatures and installer diagnostics. It does not establish pristine-machine
+acceptance for another revision. The commands above build and check local
+candidates; they do not publish a release.
+
+Sign the AppImage and both public archives with the pinned Tauri signer when
+checking a candidate, using a disposable local key. Production key enrollment,
+version allocation, signed hosting and the Debian Actions release workflow belong
+to [#276](https://github.com/avoid-quest/couch/issues/276). Publish only those
+allowlisted assets through that release path. Diagnostics, source bundles, private
+documentation, user configuration, databases, backups and keys stay private.
+
+Pristine Debian GUI/playback, boot, actual loaded-library traces and signed hosted
+A-to-B updates with the Mac offline belong to
+[#277](https://github.com/avoid-quest/couch/issues/277), after #276. The retained
+Ubuntu runtime/companion fixtures are
+[historical POC checks](tauri-releases.md#historical-ubuntu-qualification-and-publication).
 
 Official references: [Tauri AppImage packaging](https://v2.tauri.app/distribute/appimage/),
 [sidecars](https://v2.tauri.app/develop/sidecar/),
