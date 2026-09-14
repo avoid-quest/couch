@@ -39,7 +39,12 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
     const end = buffer.indexOf("\n");
     const line = buffer.slice(0, end);
     buffer = buffer.slice(end + 1);
-    return JSON.parse(line);
+    const result = JSON.parse(line) as SidecarMessage;
+    if (result.type === "addresses") {
+      expect(result.urls.every(url => url.startsWith("http://"))).toBe(true);
+      return message();
+    }
+    return result;
   }
 
   const ready = await message();
