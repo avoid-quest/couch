@@ -262,9 +262,8 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   const first = peer(token), second = peer(secondToken);
   const wait = async (condition: () => boolean) => { for (let i = 0; i < 200 && !condition(); i++) await Bun.sleep(5); expect(condition()).toBeTrue(); };
   await wait(() => messages.length >= 2);
-  expect((await api("iptv/sources", "POST", source.definition, token)).status).toBe(403);
-  const claim = await (await api("controllers/claim-code")).json() as { code: string };
-  expect((await api("controllers/claim", "POST", { code: claim.code }, token)).status).toBe(200);
+  expect((await api("iptv/sources", "POST", source.definition, secondToken)).status).toBe(403);
+  expect((await (await api("controllers/me", "GET", undefined, token)).json()).authority).toBe("administrator");
   const saved = await (await api("iptv/sources", "POST", source.definition, token)).json() as { source: GuideSource };
   const page = await (await api("iptv/guide", "GET", undefined, secondToken)).json() as GuidePage;
   const id = page.channels[0]!.id;

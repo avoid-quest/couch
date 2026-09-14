@@ -22,6 +22,9 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     calls.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined, signal: init?.signal as AbortSignal });
     expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer admin");
+    if (String(input).endsWith("/api/settings")) return Response.json({ name: "TV" });
+    if (String(input).endsWith("/api/controllers")) return Response.json({ controllers: [] });
+    if (String(input).endsWith("/api/settings/sharing")) return Response.json({ enabled: false });
     if (String(input).endsWith("/api/tools")) return Response.json({ checkedAt: new Date().toISOString(), cacheSeconds: 10, tools: [], ffprobe: { status: "missing", version: null, error: "Executable was not found." } });
     return Response.json(report);
   }) as typeof fetch);
@@ -347,15 +350,20 @@ test("manual installation stays discoverable when maintenance support is disable
   expect(button("Check for updates").disabled).toBe(false);
 });
 
-for (const authority of ["host", "controller"] as const) test(`${authority} can discover Updates without accessing administrator operations`, async () => {
+for (const authority of ["host", "controller"] as const) test(`Updates gives ${authority} its permitted operations`, async () => {
   const { Settings } = await import("./Settings");
   await act(async () => root.render(<Settings initialOpen credentials={{ origin: "http://localhost", token: "admin" }} connected status="connected" identity={{ authority, controller: null, claimAvailable: false }} host={authority === "host" ? { urls: [], pairingCode: "fixture" } as never : null} details={null} administratorClaimed pairingRequired={false} reachable name="TV" version={0} onReconnect={() => {}} onPairAgain={() => {}} onCommand={async () => false} videoQualityPreference={{ quality: "best", error: null, save: () => {} }} jellyfinVersion={0} radioVersion={0} libraryVersion={0} />));
   const updates = document.querySelector<HTMLElement>('[data-settings-page="updates"]');
   expect(updates).toBeTruthy();
   await act(async () => updates!.click());
-  expect(document.body.textContent).toContain("Use an administrator remote to install updates");
-  expect(button("Install update")).toBeUndefined();
-  expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
+  if (authority === "host") {
+    expect(button("Check for updates").disabled).toBe(false);
+    expect(calls.some(call => call.url.includes("/api/updates"))).toBe(true);
+  } else {
+    expect(document.body.textContent).toContain("An administrator can install updates");
+    expect(button("Install update")).toBeUndefined();
+    expect(calls.some(call => call.url.includes("/api/updates"))).toBe(false);
+  }
 });
 
 

@@ -49,6 +49,9 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
   if (process.platform !== "win32") expect((await stat(dir)).mode & 0o777).toBe(0o700);
   const health = () => fetch(`${ready.origin}/api/health`).then(response => response.json());
   expect((await health()).player).toBe("unavailable");
+  expect((await fetch(`${ready.origin}/api/build`)).status).toBe(503);
+  expect((await fetch(`${ready.origin}/api/connection`).then(response => response.json())).remoteControlEnabled).toBe(false);
+  expect((await fetch(`${ready.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true }) })).status).toBe(200);
   expect((await fetch(`${ready.origin}/api/build`)).status).toBe(401);
   const identity = await fetch(`${ready.origin}/api/build`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
   expect(identity).toMatchObject({ version: "0.1.0", packaged: false });
