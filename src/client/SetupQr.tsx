@@ -24,6 +24,6 @@ export function SetupQr({ url, credentials }: { url: string; credentials: { orig
   const link = new URL(url);
   link.hash = code ? `pair=${code}` : "";
   return <div className="shrink-0 space-y-2">
-    {code ? <><QRCodeSVG value={link.href} size={160} marginSize={4} level="M" title="Pair another device" className="h-40 w-40 rounded-md" /><p className="text-sm text-muted-foreground">Scan to pair a device</p></> : error ? <Button variant="outline" className="min-h-11" onClick={() => setAttempt(value => value + 1)}>Retry pairing QR</Button> : <p role="status">Loading pairing QR…</p>}
+    {code ? <><QRCodeSVG value={link.href} size={160} marginSize={4} level="M" title="Pair another device" className="h-40 w-40 rounded-md" /><p className="text-sm text-muted-foreground">Scan to pair a device</p></> : error ? <><p role="alert">Could not load the QR. Use the address and TV code, or retry.</p><Button variant="outline" className="min-h-11" onClick={() => setAttempt(value => value + 1)}>Retry pairing QR</Button></> : <p role="status">Loading pairing QR…</p>}
   </div>;
 }

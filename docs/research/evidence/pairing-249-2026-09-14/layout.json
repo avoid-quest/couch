@@ -1,0 +1,154 @@
+[
+  {
+    "width": 1920,
+    "height": 1080,
+    "scale": 1,
+    "dialog": {
+      "x": 510,
+      "y": 299.125,
+      "width": 900,
+      "height": 481.75,
+      "scrollWidth": 900,
+      "clientWidth": 900
+    },
+    "qr": {
+      "x": 538,
+      "y": 408.375,
+      "width": 200,
+      "height": 200,
+      "scrollWidth": 200,
+      "clientWidth": 200
+    },
+    "code": {
+      "x": 766,
+      "y": 543.375,
+      "width": 616,
+      "height": 145.5,
+      "scrollWidth": 616,
+      "clientWidth": 616
+    },
+    "close": {
+      "x": 1298.828125,
+      "y": 704.875,
+      "width": 83.171875,
+      "height": 48,
+      "scrollWidth": 81,
+      "clientWidth": 81
+    },
+    "directionalCloseRestoresFocus": true
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "scale": 1.35,
+    "dialog": {
+      "x": 352.5,
+      "y": 214.8671875,
+      "width": 1215,
+      "height": 650.265625,
+      "scrollWidth": 900,
+      "clientWidth": 900
+    },
+    "qr": {
+      "x": 390.296875,
+      "y": 362.3046875,
+      "width": 270,
+      "height": 270,
+      "scrollWidth": 200,
+      "clientWidth": 200
+    },
+    "code": {
+      "x": 698.09375,
+      "y": 544.5390625,
+      "width": 831.609375,
+      "height": 196.40625,
+      "scrollWidth": 616,
+      "clientWidth": 616
+    },
+    "close": {
+      "x": 1418.125,
+      "y": 762.5390625,
+      "width": 111.578125,
+      "height": 64.796875,
+      "scrollWidth": 81,
+      "clientWidth": 81
+    },
+    "directionalCloseRestoresFocus": true
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "scale": 1.75,
+    "dialog": {
+      "x": 172.5,
+      "y": 118.46875,
+      "width": 1575,
+      "height": 843.0625,
+      "scrollWidth": 900,
+      "clientWidth": 900
+    },
+    "qr": {
+      "x": 221.5,
+      "y": 309.65625,
+      "width": 350,
+      "height": 350,
+      "scrollWidth": 200,
+      "clientWidth": 200
+    },
+    "code": {
+      "x": 620.5,
+      "y": 545.90625,
+      "width": 1078,
+      "height": 254.625,
+      "scrollWidth": 616,
+      "clientWidth": 616
+    },
+    "close": {
+      "x": 1554.4375,
+      "y": 828.53125,
+      "width": 144.0625,
+      "height": 84,
+      "scrollWidth": 81,
+      "clientWidth": 81
+    },
+    "directionalCloseRestoresFocus": true
+  },
+  {
+    "width": 1280,
+    "height": 720,
+    "scale": 1.75,
+    "dialog": {
+      "x": 70,
+      "y": 28,
+      "width": 1140,
+      "height": 664,
+      "scrollWidth": 651,
+      "clientWidth": 651
+    },
+    "qr": {
+      "x": 119,
+      "y": 270.375,
+      "width": 350,
+      "height": 350,
+      "scrollWidth": 200,
+      "clientWidth": 200
+    },
+    "code": {
+      "x": 518,
+      "y": 574.875,
+      "width": 643,
+      "height": 254.625,
+      "scrollWidth": 367,
+      "clientWidth": 367
+    },
+    "close": {
+      "x": 1016.9375,
+      "y": 857.5,
+      "width": 144.0625,
+      "height": 84,
+      "scrollWidth": 81,
+      "clientWidth": 81
+    },
+    "directionalCloseRestoresFocus": true
+  }
+]
