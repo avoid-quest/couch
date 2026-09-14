@@ -1,5 +1,9 @@
 # Debian package and installer checks
 
+The [review follow-up](review-2026-09-14/README.md) records the newer candidate and
+its checks after review fixes. This original candidate record retains its own
+source and artifact identities below.
+
 This records the isolated implementation checks for [#275](https://github.com/avoid-quest/couch/issues/275).
 The candidate was built and signed locally. Nothing was published or deployed.
 GitHub Actions remained disabled. Hosted releases belong to #276; the final
