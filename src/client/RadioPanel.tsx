@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { RadioStation } from "../shared/radio";
+import { AvoidRadioHome } from "./AvoidRadioHome";
 import { PlaylistRadioPanel } from "./PlaylistRadioPanel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,8 @@ type Props = {
   canPlay: boolean;
   version: number;
   onEnqueue: (station: RadioStation, playNow: boolean) => Promise<boolean>;
+  active?: boolean;
+  currentStationId?: string;
 };
 
 const message = (error: unknown) => error instanceof Error ? error.message : "The radio request failed.";
@@ -34,7 +37,7 @@ function StationArtwork({ station }: { station: RadioStation }) {
     : <span className="radio-monogram grid size-12 shrink-0 place-items-center rounded-lg bg-muted text-base font-semibold text-primary" aria-hidden="true">{station.name.slice(0, 2).toUpperCase()}</span>;
 }
 
-export function RadioPanel({ origin, token, connected, canPlay, version, onEnqueue, onManage, host }: Props) {
+export function RadioPanel({ origin, token, connected, canPlay, version, onEnqueue, onManage, host, active = true, currentStationId }: Props) {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState("");
@@ -68,6 +71,11 @@ export function RadioPanel({ origin, token, connected, canPlay, version, onEnque
       .catch(reason => { if (!controller.signal.aborted) setError(message(reason)); });
     return () => { controller.abort(); };
   }, [request, connected, version]);
+
+  useEffect(() => {
+    searchRequest.current?.abort();
+    setResults(null); setFavorites([]); setQuery(""); setCountry(""); setError(null); setNotice(""); setSearching(false); setBusy(null);
+  }, [origin, token]);
 
   useEffect(() => () => { searchRequest.current?.abort(); }, []);
 
@@ -105,7 +113,7 @@ export function RadioPanel({ origin, token, connected, canPlay, version, onEnque
     setBusy(station.id);
     setError(null);
     try {
-      if (await onEnqueue(station, playNow)) setNotice(playNow ? `Starting ${station.name} on the TV.` : `${station.name} added to the shared queue.`);
+      if (await onEnqueue(station, playNow)) setNotice(playNow ? `Starting ${station.name}.` : `${station.name} added to queue.`);
     } catch (reason) { setError(message(reason)); }
     finally { setBusy(null); }
   }
@@ -115,7 +123,7 @@ export function RadioPanel({ origin, token, connected, canPlay, version, onEnque
     return <li className="radio-station min-w-0" key={station.id}>
       <Card className="catalog-card h-full justify-between gap-3 p-3">
         <div className="radio-station-heading flex items-center gap-3"><StationArtwork key={station.logoUrl || station.id} station={station} /><div className="min-w-0"><h3 className="line-clamp-2 break-words text-base font-medium" title={station.name}>{station.name}</h3><p className="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">{[station.groupTitle, station.countryCode, station.codec, station.bitrate ? `${station.bitrate} kbps` : ""].filter(Boolean).join(" · ") || "Internet radio"}</p></div></div>
-        <div className="radio-actions"><Button className="radio-play" disabled={!connected || !canPlay || busy !== null} aria-label={`Play ${station.name}`} onClick={() => void enqueue(station, true)}><Play aria-hidden="true" />Play</Button><Button variant="secondary" className="secondary-button" aria-label="Add to queue" disabled={!connected || busy !== null} onClick={() => void enqueue(station)}><Plus aria-hidden="true" />Queue</Button><Button variant={saved ? "secondary" : "ghost"} size="icon" className={`radio-favorite ${saved ? "saved" : ""}`} disabled={!connected || busy !== null} aria-label={`${saved ? "Remove" : "Save"} ${station.name} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(station, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button></div>
+        <div className="flex flex-wrap items-center gap-2"><Button className="radio-play" disabled={!connected || !canPlay || busy !== null} aria-label={`Play now: ${station.name}`} onClick={() => void enqueue(station, true)}><Play aria-hidden="true" />Play now</Button><Button variant="secondary" className="secondary-button" aria-label={`Add to queue: ${station.name}`} disabled={!connected || busy !== null} onClick={() => void enqueue(station)}><Plus aria-hidden="true" />Add to queue</Button><Button variant={saved ? "secondary" : "ghost"} size="icon" className={`radio-favorite ${saved ? "saved" : ""}`} disabled={!connected || busy !== null} aria-label={`${saved ? "Remove" : "Save"} ${station.name} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(station, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button></div>
       </Card>
     </li>;
   })}</ul>;
@@ -125,6 +133,7 @@ export function RadioPanel({ origin, token, connected, canPlay, version, onEnque
     {error && <Alert variant="destructive" className="radio-error"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p className="radio-notice text-sm text-primary" role="status">{notice}</p>}
     {favorites.length > 0 && <div className="radio-group space-y-3"><h3 className="flex items-center gap-2 text-base font-medium">Favorites <Badge variant="secondary">{favorites.length}</Badge></h3>{cards(favorites)}</div>}
+    <AvoidRadioHome origin={origin} token={token} connected={connected} canPlay={canPlay} version={version} onEnqueue={onEnqueue} active={active} currentStationId={currentStationId} />
     <PlaylistRadioPanel host={host} onManage={onManage} connected={connected} version={version} request={request} renderStations={cards} />
     {!favorites.length && <p className="radio-empty text-sm text-muted-foreground">Star a station to keep it at the top of your radio.</p>}
     <div className="radio-directory space-y-4 border-t pt-5">
