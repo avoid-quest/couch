@@ -7,6 +7,7 @@ import { application, channelArgs, downloadUrl, publicFiles, publicKey, releaseV
 type FileIdentity = { bytes: number; sha256: string; signature?: string };
 export type Manifest = {
   schemaVersion: 1;
+  buildRun?: { id: number; attempt: number };
   version: string;
   revision: string;
   publicKey: string;
@@ -43,6 +44,7 @@ export function validateManifest(manifest: Manifest) {
   releaseVersion(manifest.version);
   assert.match(manifest.revision, /^[a-f0-9]{40}$/);
   publicKey(manifest.publicKey);
+  if (manifest.buildRun) assert.ok(Number.isSafeInteger(manifest.buildRun.id) && manifest.buildRun.id > 0 && Number.isSafeInteger(manifest.buildRun.attempt) && manifest.buildRun.attempt > 0);
   assert.match(manifest.inventorySha256, /^[a-f0-9]{64}$/);
   assert.deepEqual(Object.keys(manifest.files).sort(), publicFiles(manifest.version).sort(), "The public asset allowlist differs.");
   for (const [name, file] of Object.entries(manifest.files)) {
@@ -100,7 +102,11 @@ export async function verifyPublic(manifest: Manifest, channel: Channel, fetcher
     const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
     assert.equal(response.status, 200, `Public download is not ready: ${url} (${response.status}). Retry verification of the existing release.`);
     assert.equal(new URL(response.url || url).protocol, "https:");
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const maximum = expected?.bytes ?? 64 * 1024;
+    assert.ok(response.body, "The download body is missing.");
+    const chunks: Uint8Array[] = []; let size = 0;
+    for await (const chunk of response.body) { size += chunk.byteLength; assert.ok(size <= maximum, "The download exceeds its expected size."); chunks.push(chunk); }
+    const bytes = Buffer.concat(chunks, size);
     if (expected) {
       assert.equal(bytes.length, expected.bytes, `Public download size differs: ${url}`);
       assert.equal(hash(bytes), expected.sha256, `Public download bytes differ: ${url}`);
@@ -125,10 +131,13 @@ async function seal(directory: string) {
   assert.equal(build.dirty, false, "Release source must be committed.");
   assert.equal(build.target, "x86_64-unknown-linux-gnu");
   assert.equal(build.packaged, true);
-  assert.equal(build.version, (await Bun.file(".artifacts/tauri-release.conf.json").json()).version);
+  const config = await Bun.file(".artifacts/tauri-release.conf.json").json();
+  assert.equal(build.version, config.version);
+  assert.equal(config.plugins.updater.pubkey, publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY));
   const inventory = await read(".artifacts/appimage-inventory.json");
   assert.deepEqual(JSON.parse(new TextDecoder().decode(inventory)).build, build);
   const manifest: Manifest = { schemaVersion: 1, version: build.version, revision: build.revision, publicKey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), inventorySha256: hash(inventory), files: {} };
+  if (process.env.GITHUB_RUN_ID) manifest.buildRun = { id: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT) };
   for (const name of publicFiles(build.version)) {
     const path = join(directory, "public", name);
     const bytes = await read(path);
@@ -210,7 +219,8 @@ if (import.meta.main) {
       verifyCloud(release, manifest, channel);
       if (operation === "publish") {
         assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), manifest.version, channel);
-        release = JSON.parse(cn(["publish", application, releaseId!, ...channels]));
+        cn(["publish", application, releaseId!, ...channels]);
+        release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
         verifyCloud(release, manifest, channel);
         assert.equal(release.status, "Published");
       }

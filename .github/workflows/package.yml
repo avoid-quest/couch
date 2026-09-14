@@ -87,13 +87,18 @@ jobs:
           BUILD_RUN: ${{ inputs.build-run }}
           CHANNEL: ${{ inputs.channel }}
           READINESS_ONLY: ${{ inputs.readiness-only }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p .artifacts/hosted-release
           printf '%s\n' "$NOTES" > .artifacts/hosted-release/notes.md
           if [ "$BUILD_RUN" != 0 ]; then
             sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
             bun scripts/hosted-release.ts verify .artifacts/hosted-release
-            test "$(jq -r .revision .artifacts/hosted-release/manifest.json)" = "$(jq -r .head_sha .artifacts/run.json)"
+            source_run=$(jq -er '.buildRun.id' .artifacts/hosted-release/manifest.json)
+            source_attempt=$(jq -er '.buildRun.attempt' .artifacts/hosted-release/manifest.json)
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$source_run/attempts/$source_attempt" > .artifacts/source-run.json
+            jq -e '.path == ".github/workflows/package.yml" and .event == "workflow_dispatch" and .head_branch == "main"' .artifacts/source-run.json
+            test "$(jq -r .revision .artifacts/hosted-release/manifest.json)" = "$(jq -r .head_sha .artifacts/source-run.json)"
           else
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
           fi
@@ -138,8 +143,23 @@ jobs:
           run-id: ${{ inputs.build-run }}
           github-token: ${{ github.token }}
           path: .artifacts/hosted-release
+      - name: Select the original source and qualification work
+        id: qualification
+        env:
+          BUILD_RUN: ${{ inputs.build-run }}
+        run: |
+          if [ "$BUILD_RUN" != 0 ] && [ -f .artifacts/hosted-release/qualified.json ]; then
+            echo 'needed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'needed=true' >> "$GITHUB_OUTPUT"
+            if [ "$BUILD_RUN" != 0 ]; then
+              revision=$(jq -er .revision .artifacts/hosted-release/manifest.json)
+              git fetch origin "$revision"
+              git checkout --detach "$revision"
+            fi
+          fi
       - name: Prepare the pinned Debian builder
-        if: inputs.build-run == 0
+        if: steps.qualification.outputs.needed == 'true'
         run: |
           docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
             --build-arg "DEBIAN_IMAGE=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
@@ -152,21 +172,24 @@ jobs:
           git bundle create /tmp/source.bundle HEAD
           docker cp /tmp/source.bundle couch-build:/source.bundle
           docker exec couch-build git clone /source.bundle /work
-          docker exec -w /work couch-build git checkout --detach "$GITHUB_SHA"
-          # Keep caches on runner paths for the supported cache action, never in public assets.
-          mkdir -p .artifacts/cache/target .artifacts/cache/registry .artifacts/cache/git .artifacts/cache/bun
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: inputs.build-run == 0
+          docker exec -w /work couch-build git checkout --detach "$(git rev-parse HEAD)"
+          rustup show active-toolchain
+          mkdir -p src-tauri/target "$HOME/.cargo/registry" "$HOME/.cargo/git" .artifacts/cache/bun
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        if: steps.qualification.outputs.needed == 'true'
         with:
-          path: .artifacts/cache
-          key: debian-13-release-${{ runner.arch }}-${{ hashFiles('packaging/inputs.json', 'rust-toolchain.toml', 'src-tauri/Cargo.lock', 'bun.lock') }}
+          workspaces: src-tauri
+          cache-bin: false
+          cache-on-failure: true
+          key: debian-13-release-${{ hashFiles('packaging/inputs.json', 'bun.lock') }}
+          cache-directories: .artifacts/cache/bun
       - name: Restore compiler and dependency caches
-        if: inputs.build-run == 0
+        if: steps.qualification.outputs.needed == 'true'
         run: |
           docker exec couch-build mkdir -p /work/src-tauri/target /root/.cargo/registry /root/.cargo/git /root/.bun/install/cache
-          docker cp .artifacts/cache/target/. couch-build:/work/src-tauri/target
-          docker cp .artifacts/cache/registry/. couch-build:/root/.cargo/registry
-          docker cp .artifacts/cache/git/. couch-build:/root/.cargo/git
+          docker cp src-tauri/target/. couch-build:/work/src-tauri/target
+          docker cp "$HOME/.cargo/registry/." couch-build:/root/.cargo/registry
+          docker cp "$HOME/.cargo/git/." couch-build:/root/.cargo/git
           docker cp .artifacts/cache/bun/. couch-build:/root/.bun/install/cache
       - name: Build and sign the complete AppImage and public archives
         if: inputs.build-run == 0
@@ -174,25 +197,31 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD couch-build bash scripts/hosted-build.sh
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh
+      - name: Prepare retained-byte qualification without rebuilding the AppImage
+        if: steps.qualification.outputs.needed == 'true' && inputs.build-run > 0
+        run: |
+          docker exec couch-build mkdir -p /work/.artifacts/hosted-release
+          docker cp .artifacts/hosted-release/. couch-build:/work/.artifacts/hosted-release/
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY couch-build bash -c 'bun install --frozen-lockfile && bun run package:prepare && bun run build'
       - name: Qualify the exact signed bytes
-        if: inputs.build-run == 0
+        if: steps.qualification.outputs.needed == 'true'
         run: |
           docker exec -w /work couch-build bash scripts/hosted-qualify.sh
           docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
           docker exec -w /work couch-build bun -e 'const p=".artifacts/hosted-release/qualified.json"; const q=await Bun.file(p).json(); q.checks.push("installer"); await Bun.write(p,JSON.stringify(q,null,2))'
       - name: Retain build bytes, receipts and caches
-        if: ${{ always() && inputs.build-run == 0 }}
+        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
         run: |
           mkdir -p .artifacts/hosted-release
           docker cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/
-          docker cp couch-build:/work/.artifacts/appimage-inventory.json .artifacts/hosted-release/inventory.json
-          docker cp couch-build:/work/src-tauri/target/. .artifacts/cache/target/
-          docker cp couch-build:/root/.cargo/registry/. .artifacts/cache/registry/
-          docker cp couch-build:/root/.cargo/git/. .artifacts/cache/git/
+          docker cp couch-build:/work/.artifacts/appimage-inventory.json .artifacts/hosted-release/inventory.json || test -f .artifacts/hosted-release/inventory.json
+          docker cp couch-build:/work/src-tauri/target/. src-tauri/target/
+          docker cp couch-build:/root/.cargo/registry/. "$HOME/.cargo/registry/"
+          docker cp couch-build:/root/.cargo/git/. "$HOME/.cargo/git/"
           docker cp couch-build:/root/.bun/install/cache/. .artifacts/cache/bun/
       - name: Stop the builder
-        if: ${{ always() && inputs.build-run == 0 }}
+        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
         run: docker stop couch-build
       - name: Verify retained candidate
         run: |
@@ -237,6 +266,14 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
           bun scripts/hosted-release.ts upload .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
 
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: hosted-upload-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release/receipts/
+          if-no-files-found: warn
+          retention-days: 7
+
   publish:
     needs: [draft, candidate, upload]
     if: ${{ inputs.publish && !inputs.readiness-only }}
@@ -266,6 +303,14 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
           bun scripts/hosted-release.ts publish .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: hosted-publish-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release/receipts/
+          if-no-files-found: warn
+          retention-days: 7
 
   readiness:
     needs: [draft, candidate, publish]
