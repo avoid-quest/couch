@@ -1,0 +1,2 @@
+bash: line 1: /work/.artifacts/hosted-release/public/Couch_0.1.0-preview.1_amd64.AppImage: cannot execute binary file: Exec format error
+cmp: squashfs-root/usr/lib/Couch/release.json: No such file or directory
