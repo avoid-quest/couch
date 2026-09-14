@@ -4,11 +4,11 @@ import { BrowserRouter, HashRouter, useLocation, useNavigate } from "react-route
 import { pathForSection, sectionForPath } from "../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../shared/settings-pages";
 
-export const searchSources = ["All", "YouTube", "RaiPlay", "Radio", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
+export const searchSources = ["All", "YouTube", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
 export type SearchRouteState = { query: string; source: string };
 export function readSearchState(search: string): SearchRouteState {
   const params = new URLSearchParams(search);
-  return { query: (params.get("q") ?? "").slice(0, 4096), source: searchSources.find(source => source === params.get("source")) ?? "All" };
+  return { query: (params.get("q") ?? "").slice(0, 4096), source: searchSources.find(source => source === (params.get("source") === "Radio" ? "Radio playlists" : params.get("source"))) ?? "All" };
 }
 export function searchLocation(state: SearchRouteState) {
   const params = new URLSearchParams();
