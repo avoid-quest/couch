@@ -1,0 +1,44 @@
+{
+  "integratedSource": "b38b01f5beb92c8f6e08ae0ffae70d715c41b18c",
+  "signedSource": "7ff0aeaff2ac41e4a8e068fa0243e42e78df3900",
+  "retainedTag": "qualification/hosted-276/2026-09-15",
+  "manifestSha256": "1a491fd539c2d12822bcc118eb9356b00d721228a5fb60cf646919b3b924c700",
+  "inventorySha256": "ba8b80b64ac1cf1bea7b975433b127a3638080bc4c9f1ff06e51c438b72e8445",
+  "publicKeySha256": "6f5bafe4109d97e686e86f633385c8f4a7ead143db0f184c4e942acbe065f409",
+  "files": {
+    "Couch_0.1.0-preview.1_amd64.AppImage": {
+      "bytes": 289085944,
+      "sha256": "58ed2f8d8907e19b28dd147c60d70469df6b3a10515b79a5f1435f88f897ed25",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZ0hITThzZ0x0elY4ekc4NGZNNlJndGcwWmxiUndYbDdMQnplZGpSSFEydTd4eG9pYTBkYnhkVGNwVnpONTJna3dxWWx5UElsdHRMalhKRk9vM3Y0b1lkbjlRMGlyWFFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDI0MTE4CWZpbGU6Q291Y2hfMC4xLjAtcHJldmlldy4xX2FtZDY0LkFwcEltYWdlCmNJS3d4RGt2anNDdGVCdE92RlJGMjFUTTJFUDg3S045WXJibmtHTXd2cjZDampqM3dRQzJycngzVHRZZ2NmQ295OThvOUlFZzlnNVpzbGlaSnM5YUN3PT0K"
+    },
+    "Couch_0.1.0-preview.1_amd64.AppImage.sig": {
+      "bytes": 428,
+      "sha256": "e2b6b29c0099746b365b05d425ba70b682795e63ae410d12dc312a80d1b8fb6b"
+    },
+    "couch-setup-0.1.0-preview.1.tar.gz": {
+      "bytes": 16613,
+      "sha256": "c557ef2279108dad4f93dbbef64199ea7a52bd24ed0553fa817b7af6fd6f71fc",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZ0hITThzZ0x0elk0d3RNbjh0VnkzdlVTRFFjRjVpbVZyRkZtc285Q0JvejRhaWFHSWk5VTh2anBQY2U3bGVCcEtRQUlBOFpxSXIvbHJteUxWNkVDMkxiaG5aWXh4REFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDI0MTQ5CWZpbGU6Y291Y2gtc2V0dXAtMC4xLjAtcHJldmlldy4xLnRhci5negpMbVFIT2F1UkwyQjRUYWI0Y3pDTjVvL3U0Y1I4QTFqMGY3MGFObnVqRnNRY05vT1VPdnp0L0VMQlA0QittNW5Fd3RhMWcxaFZxWVkvNURFbVZCeHhCdz09Cg=="
+    },
+    "couch-setup-0.1.0-preview.1.tar.gz.sig": {
+      "bytes": 428,
+      "sha256": "dfc3ac271869f44c62e84fa63187f045d36fe428e89cfb9078fd2c99048518ea"
+    },
+    "couch-distribution-material-0.1.0-preview.1.tar.gz": {
+      "bytes": 3108667,
+      "sha256": "caa1f131f251653051fcc3b5c9b4c95943fac580fa1f19d06e13ef423bbd76dd",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTZ0hITThzZ0x0eldmbEtPdGN4ajV3RW1nT2dnRy9CMDdHYi84QTFYTktYT1VYT2dnaUxqVmk3YXc3VVZWcUpkVXBxdXVGR25aNkFpUWlxV1h6dThZU3JiMDFyMWwxQUFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDI0MTQ4CWZpbGU6Y291Y2gtZGlzdHJpYnV0aW9uLW1hdGVyaWFsLTAuMS4wLXByZXZpZXcuMS50YXIuZ3oKeCt5OG1GMC9kUERZU3JVUHliUFlvTnFDVDVvd1p6SE01eE5TOWhWMXJBNDRjSlFsQ0MzQTFILzZqK0syNXdpYXJDNFl6OXppZWh1d2tWKzBGbzhUQlE9PQo="
+    },
+    "couch-distribution-material-0.1.0-preview.1.tar.gz.sig": {
+      "bytes": 448,
+      "sha256": "87e20e198d8b5485ea44a3bf6562fbce95539a75691c1893aef5aa0a64d648a3"
+    }
+  },
+  "qualificationReceiptPresent": false,
+  "keyEnrollment": "disposable qualification key only",
+  "vmIds": {
+    "minimal": "19C197A2-BAE0-49B4-B487-2E5C515747A9",
+    "xfce": "C8DD4D22-CDFB-4BEC-AA3B-BE7EE2C21B78"
+  },
+  "macOffline": false
+}

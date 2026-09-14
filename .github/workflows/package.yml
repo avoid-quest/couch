@@ -1,6 +1,6 @@
 name: Package
 
-# Repository Actions is paused. An owner must separately enable an authorized run.
+# Enable repository Actions only after the local release checks pass.
 on:
   workflow_dispatch:
     inputs:
@@ -32,7 +32,7 @@ on:
       publish:
         type: boolean
         default: false
-        description: Request publication after qualification and protected-environment approval
+        description: Publish after qualification through the main-only release environment
       notes:
         type: string
         required: true
@@ -150,7 +150,11 @@ jobs:
         env:
           BUILD_RUN: ${{ inputs.build-run }}
         run: |
-          if [ "$BUILD_RUN" != 0 ] && [ -f .artifacts/hosted-release/qualified.json ]; then
+          if [ "$BUILD_RUN" != 0 ] && jq -e --slurpfile manifest .artifacts/hosted-release/manifest.json '
+            .version == $manifest[0].version and .revision == $manifest[0].revision and
+            .files == $manifest[0].files and
+            .checks == ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", "installer"]
+          ' .artifacts/hosted-release/qualified.json > /dev/null 2>&1; then
             echo 'needed=false' >> "$GITHUB_OUTPUT"
           else
             echo 'needed=true' >> "$GITHUB_OUTPUT"
@@ -211,20 +215,28 @@ jobs:
         run: |
           docker exec -w /work couch-build bash scripts/hosted-qualify.sh
           docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
-          docker exec -w /work couch-build bun -e 'const p=".artifacts/hosted-release/qualified.json"; const q=await Bun.file(p).json(); q.checks.push("installer"); await Bun.write(p,JSON.stringify(q,null,2))'
-      - name: Retain build bytes, receipts and caches
+          docker exec -w /work couch-build bun -e 'const manifest=await Bun.file(".artifacts/hosted-release/manifest.json").json(); await Bun.write(".artifacts/hosted-release/qualified.json",JSON.stringify({version:manifest.version,revision:manifest.revision,files:manifest.files,checks:["signatures","typecheck","bun","native","signed-manifest-extraction","installer"]},null,2))'
+      - name: Retain compiler and dependency caches after any build outcome
+        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
+        run: |
+          if docker container inspect couch-build > /dev/null 2>&1; then
+            mkdir -p src-tauri/target "$HOME/.cargo/registry" "$HOME/.cargo/git" .artifacts/cache/bun
+            copy_cache() { docker cp "couch-build:$1/." "$2/" || echo "::warning::Could not retain cache $1"; }
+            copy_cache /work/src-tauri/target src-tauri/target
+            copy_cache /root/.cargo/registry "$HOME/.cargo/registry"
+            copy_cache /root/.cargo/git "$HOME/.cargo/git"
+            copy_cache /root/.bun/install/cache .artifacts/cache/bun
+          fi
+      - name: Retain build bytes and receipts
         if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
         run: |
           mkdir -p .artifacts/hosted-release
           docker cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/
           docker cp couch-build:/work/.artifacts/appimage-inventory.json .artifacts/hosted-release/inventory.json || test -f .artifacts/hosted-release/inventory.json
-          docker cp couch-build:/work/src-tauri/target/. src-tauri/target/
-          docker cp couch-build:/root/.cargo/registry/. "$HOME/.cargo/registry/"
-          docker cp couch-build:/root/.cargo/git/. "$HOME/.cargo/git/"
-          docker cp couch-build:/root/.bun/install/cache/. .artifacts/cache/bun/
       - name: Stop the builder
         if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
-        run: docker stop couch-build
+        run: |
+          if docker container inspect couch-build > /dev/null 2>&1; then docker stop couch-build; fi
       - name: Verify retained candidate
         run: |
           sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign

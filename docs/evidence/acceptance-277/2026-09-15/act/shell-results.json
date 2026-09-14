@@ -1,0 +1,202 @@
+[
+  {
+    "name": "receipt-original-missing",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-fixed-missing",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-complete",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": false,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-fixed-complete",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": false,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-partial",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "receipt-fixed-partial",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-wrong-revision",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "receipt-fixed-wrong-revision",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-wrong-version",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "receipt-fixed-wrong-version",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-wrong-files",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "receipt-fixed-wrong-files",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "receipt-original-malformed",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "",
+    "output": "needed=false\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "receipt-fixed-malformed",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "MOCK git fetch origin b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\nMOCK git checkout --detach b38b01f5beb92c8f6e08ae0ffae70d715c41b18c\n",
+    "output": "needed=true\n",
+    "pass": true,
+    "desiredNeeded": true,
+    "demonstratesOriginalFailure": false
+  },
+  {
+    "name": "original-missing-output",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "",
+    "trace": "cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/\n",
+    "output": "",
+    "pass": true,
+    "demonstratesOriginalFailure": true
+  },
+  {
+    "name": "fixed-missing-output",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "container inspect couch-build\ncp couch-build:/work/src-tauri/target/. src-tauri/target/\ncp couch-build:/root/.cargo/registry/. /Users/devit/.codex/worktrees/ccb6/modern-kodi/.artifacts/acceptance-277/act/shell/fixed-missing-output/home/.cargo/registry/\ncp couch-build:/root/.cargo/git/. /Users/devit/.codex/worktrees/ccb6/modern-kodi/.artifacts/acceptance-277/act/shell/fixed-missing-output/home/.cargo/git/\ncp couch-build:/root/.bun/install/cache/. .artifacts/cache/bun/\n",
+    "output": "",
+    "pass": true
+  },
+  {
+    "name": "fixed-first-cache-fails",
+    "exit": 0,
+    "stdout": "::warning::Could not retain cache /work/src-tauri/target\n",
+    "stderr": "",
+    "trace": "container inspect couch-build\ncp couch-build:/work/src-tauri/target/. src-tauri/target/\ncp couch-build:/root/.cargo/registry/. /Users/devit/.codex/worktrees/ccb6/modern-kodi/.artifacts/acceptance-277/act/shell/fixed-first-cache-fails/home/.cargo/registry/\ncp couch-build:/root/.cargo/git/. /Users/devit/.codex/worktrees/ccb6/modern-kodi/.artifacts/acceptance-277/act/shell/fixed-first-cache-fails/home/.cargo/git/\ncp couch-build:/root/.bun/install/cache/. .artifacts/cache/bun/\n",
+    "output": "",
+    "pass": true
+  },
+  {
+    "name": "fixed-no-container",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "container inspect couch-build\n",
+    "output": "",
+    "pass": true
+  },
+  {
+    "name": "fixed-stop-no-container",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "trace": "container inspect couch-build\n",
+    "output": "",
+    "pass": true
+  }
+]

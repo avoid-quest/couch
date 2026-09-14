@@ -2,9 +2,10 @@
 
 This implements [Deliver hosted Stable/Preview releases and Tauri updates](https://github.com/avoid-quest/couch/issues/276).
 The [accepted policy](https://github.com/avoid-quest/couch/issues/266#issuecomment-5669079411)
-owns release and update behavior. Actions is disabled. This configuration does not
-authorize enabling it, publishing to CrabNebula, deploying the website or changing
-any T480 installation.
+owns release and update behavior. The owner has authorized release publication and
+Actions activation after local checks pass, using the selected Blacksmith workers.
+The [acceptance preparation record](evidence/acceptance-277/2026-09-15/README.md)
+records the current gates. Physical T480 changes remain outside this work.
 
 [Local qualification evidence](evidence/hosted-release-276/2026-09-15/README.md)
 records the signed candidate, exact sources, passed checks and remaining hosted gates.
@@ -33,7 +34,7 @@ live inside the signed AppImage at `usr/lib/Couch/release.json`; they are extrac
 only after signature verification. The app checks Debian 13 amd64/X11, declared
 host packages, FUSE access and compatible data before interruption.
 
-The jobs run in order: draft, build/sign, qualify, explicit upload, protected
+The jobs run in order: draft, build/sign, qualify, explicit upload, manual
 publication, public readiness. Publication defaults off. The source must be a
 committed main revision. Fresh candidates start in Preview. Every signed asset,
 size, SHA-256, source revision, public key and inventory hash is recorded in
@@ -77,23 +78,26 @@ Public files use
 
 ## Owner setup before an authorized hosted run
 
-The repository currently has no release secrets, release variables or configured
-release environments. Prepare these in GitHub only when separately authorized:
+The owner authorized this setup on 15 September 2026. Both environments restrict
+deployment to main. Publication requires the explicit `publish=true` dispatch
+input after qualification; the owner removed the separate reviewer requirement.
 
-1. Create `couch-release`, restricted to main, and `couch-publication`, restricted
-   to main with required owner approval and prevention of self-review. Put
+1. Create `couch-release` and `couch-publication`, both restricted to main. Put
    `CN_API_KEY` in both environments. Put `TAURI_SIGNING_PRIVATE_KEY` and
    `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in `couch-release`. Keep the key and
    password in an owner-held offline backup. Both channels use the same key.
+   The new encrypted key and password are retained in the owner's private local
+   configuration. The owner will make the offline copy later.
 2. Set repository variable `COUCH_UPDATER_PUBLIC_KEY` to the Tauri public-key file
    contents, including its outer base64 wrapper. The builder embeds it in the app.
    Never put a private key in a variable, PR check, cache or artifact.
-3. Review the pinned workflow and Cloud CLI output. Separately authorize enabling
-   Actions and setting `COUCH_RELEASES_ENABLED=true`. A manual main dispatch is
-   still required. No PR event receives release secrets.
-4. Keep `publish=false` for a build/qualification/upload trial. Publication needs
-   both an explicit request and protected-environment approval. The current task
-   authorizes neither publication nor website deployment.
+3. Run the local `act` checks and review the pinned workflow and Cloud CLI output
+   before enabling Actions and setting `COUCH_RELEASES_ENABLED=true`. The owner
+   authorized activation once ready. A manual main dispatch is still required.
+   No PR event receives release secrets.
+4. Keep `publish=false` for a build/qualification/upload trial. Use `publish=true`
+   for the authorized publication after qualification succeeds. The main-only
+   publication environment holds only the provider credential.
 
 The initial version is `0.1.0-preview.1`. Bump `package.json`, the Tauri config,
 Cargo package version and Cargo lock's Couch entry together in a reviewed commit.
@@ -112,7 +116,7 @@ main Package dispatches. It never relabels bytes with the new run's revision.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f channel=preview -f publish=false -f notes='Describe this release'
 
-# Retry qualification/upload, or request protected publication of the same draft.
+# Retry qualification/upload, or publish the same qualified draft.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
   -f artifact-kind=hosted-release -f release-id=DRAFT_ID \
