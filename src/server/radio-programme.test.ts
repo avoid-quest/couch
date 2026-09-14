@@ -48,21 +48,21 @@ test("one shared request preserves track text, carries only provider cookie, and
   expect(f.hasTimer()).toBe(false);
 });
 
-test("station changes abort old work and ignore late responses; stop cancels polling", async () => {
+test("station changes ignore late responses without aborting shared work; stop cancels polling", async () => {
   const pending = Promise.withResolvers<Response>();
   const signals: AbortSignal[] = [];
   const f = fixture(async (_url, init) => { signals.push(init!.signal!); return signals.length === 1 ? pending.promise : Response.json(payload({ title: "Second" })); });
   f.watcher.observe(state());
   f.watcher.load("two", "radio:two", "https://stream.example/live");
   f.watcher.observe(state("two", "radio:two"));
-  expect(signals[0]?.aborted).toBe(true);
+  expect(signals[0]?.aborted).toBe(false);
   await tick();
   pending.resolve(Response.json(payload({ title: "Old" })));
   await tick();
   expect(f.publish.mock.calls.filter(call => call[1]).map(call => call[1]?.title)).toEqual(["Second"]);
   f.watcher.observe(state("two", "radio:two", "idle"));
   expect(f.hasTimer()).toBe(false);
-  expect(signals[1]?.aborted).toBe(true);
+  expect(signals[1]?.aborted).toBe(false);
   f.watcher.close();
 });
 

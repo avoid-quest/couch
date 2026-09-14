@@ -47,19 +47,30 @@ export function createRadioMetadata({ fetch: request = globalThis.fetch, now = D
   let cookie: string | undefined;
   let limitedUntil = 0;
 
+  async function wait(work: Promise<Result>, callerSignal?: AbortSignal): Promise<Result> {
+    if (!callerSignal) return work;
+    const canceled = Promise.withResolvers<Result>();
+    const cancel = () => canceled.resolve({ programme: null, retryAt: now() });
+    callerSignal.addEventListener("abort", cancel, { once: true });
+    if (callerSignal.aborted) cancel();
+    try { return await Promise.race([work, canceled.promise]); }
+    finally { callerSignal.removeEventListener("abort", cancel); }
+  }
+
   return {
     async get(stationId: string, streamUrl: string, callerSignal?: AbortSignal): Promise<Result> {
+      if (signal?.aborted || callerSignal?.aborted) return { programme: null, retryAt: now() };
       const key = `${stationId}\0${streamUrl}`;
       const cached = cache.get(key);
       if (cached && cached.retryAt > now()) return cached;
       if (limitedUntil > now()) return { programme: null, retryAt: limitedUntil };
       const existing = pending.get(key);
-      if (existing) return existing;
+      if (existing) return wait(existing, callerSignal);
       const work = (async () => {
         let result: Result = { programme: null, retryAt: now() + 60_000 };
         try {
           const response = await request(`${endpoint}?${new URLSearchParams({ stationId })}`, {
-            redirect: "error", signal: AbortSignal.any([signal, callerSignal, AbortSignal.timeout(10_000)].filter((value): value is AbortSignal => !!value)),
+            redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)].filter((value): value is AbortSignal => !!value)),
             headers: { Accept: "application/json", "User-Agent": "Couch/0.1", ...(cookie ? { Cookie: cookie } : {}) },
           });
           const sessionCookie = response.headers.getSetCookie().map(value => value.split(";")[0]!).find(value => /^radio_session_id=[A-Za-z0-9_-]{1,200}$/.test(value));
@@ -76,14 +87,15 @@ export function createRadioMetadata({ fetch: request = globalThis.fetch, now = D
             if (current) result = { programme: current, retryAt: current.expiresAt };
           }
         } catch { /* Programme metadata never prevents browsing or audio playback. */ }
-        if (!signal?.aborted && !callerSignal?.aborted) {
+        if (!signal?.aborted) {
           if (cache.size >= 100) cache.delete(cache.keys().next().value!);
           cache.set(key, result);
         }
         return result;
       })().finally(() => { pending.delete(key); });
       pending.set(key, work);
-      return work;
+      // A caller can leave without canceling another listener's shared fetch.
+      return wait(work, callerSignal);
     },
   };
 }

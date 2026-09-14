@@ -18,7 +18,7 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
         if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
         if (path === "/api/radio/avoid" || path === "/api/radio/avoid/programmes") {
           if (request.method !== "GET") return methods("GET");
-          const result = path.endsWith("/programmes") ? { programmes: await radio.avoidProgrammes() } : await radio.avoid(new URL(request.url).searchParams.get("refresh") === "true");
+          const result = path.endsWith("/programmes") ? { programmes: await radio.avoidProgrammes(request.signal) } : await radio.avoid(new URL(request.url).searchParams.get("refresh") === "true");
           if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
           return Response.json(result);
         }

@@ -194,18 +194,27 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
   return {
     metadata,
     avoid,
-    async avoidProgrammes() {
-      const { stations } = await avoid();
+    async avoidProgrammes(callerSignal?: AbortSignal) {
       const programmes: Record<string, import("../shared/radio").RadioProgrammeDetails> = {};
-      // Keep metadata traffic bounded if the provider expands its catalog.
-      for (let offset = 0; offset < Math.min(stations.length, 50); offset += 3) {
-        await Promise.all(stations.slice(offset, Math.min(offset + 3, 50)).map(async current => {
-          if (!current.tvgId) return;
-          const result = await metadata.get(current.tvgId, current.url);
-          if (result.programme) programmes[current.id] = result.programme;
-        }));
-      }
-      return programmes;
+      // Include catalog loading in the budget, below the client's 45s timeout.
+      const signal = AbortSignal.any([shutdown.signal, callerSignal, AbortSignal.timeout(30_000)].filter((value): value is AbortSignal => !!value));
+      if (signal.aborted) return programmes;
+      const canceled = Promise.withResolvers<void>();
+      const cancel = () => canceled.resolve();
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        const catalog = await Promise.race([avoid(), canceled.promise]);
+        if (!catalog) return programmes;
+        // Finish only the current shared requests after this caller leaves.
+        for (let offset = 0; !signal.aborted && offset < Math.min(catalog.stations.length, 50); offset += 3) {
+          await Promise.all(catalog.stations.slice(offset, Math.min(offset + 3, 50)).map(async current => {
+            if (!current.tvgId) return;
+            const result = await metadata.get(current.tvgId, current.url, signal);
+            if (result.programme && !signal.aborted) programmes[current.id] = result.programme;
+          }));
+        }
+        return programmes;
+      } finally { signal.removeEventListener("abort", cancel); }
     },
     async search({ q = "", countrycode = "" }: { q?: string; countrycode?: string } = {}) {
       assertOpen();
@@ -261,7 +270,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       canonical.hash = "";
       url = canonical.href;
       const id = radioId(`playlist:${url}`);
-      if (!getPlaylist(id) && db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM radio_playlists").get()!.count >= 30) throw new RadioError("You can save up to 30 radio playlists.");
+      if (id !== avoidRadioPlaylistId && !getPlaylist(id) && db.query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM radio_playlists WHERE id != ?").get(avoidRadioPlaylistId)!.count >= 30) throw new RadioError("You can save up to 30 custom radio playlists.");
       db.query("INSERT INTO radio_playlists (id, name, url) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name").run(id, name.trim(), url);
       return refreshPlaylist(id, authorize);
     },

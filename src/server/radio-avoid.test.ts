@@ -58,14 +58,31 @@ test("default feed failure retains stations, retries explicitly, and does not al
 });
 
 test("paired controllers may browse default radio but cannot change source definitions", async () => {
-  const radio = fixture();
+  const request = mock(async () => new Response(feed));
+  const radio = fixture({ fetch: request as unknown as typeof fetch });
   const settings = createRadioSettings(radio);
   const identity = () => ({ authority: "controller" as const, controller: null, claimAvailable: false });
   const read = await settings.handle(new Request("http://localhost/api/radio/avoid"), identity);
   expect(read.status).toBe(200);
   expect((await read.json()).stations).toHaveLength(1);
+  expect((await settings.handle(new Request("http://localhost/api/radio/avoid?refresh=true"), identity)).status).toBe(200);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect((await settings.handle(new Request(`http://localhost/api/radio/playlists/${avoidRadioPlaylistId}/refresh`, { method: "POST" }), identity)).status).toBe(403);
   expect((await settings.handle(new Request("http://localhost/api/radio/sources"), identity)).status).toBe(403);
   expect((await settings.handle(new Request("http://localhost/api/radio/avoid"), () => null)).status).toBe(401);
+});
+
+test.each(["before", "after"])("default radio loaded %s custom imports leaves all 30 custom slots available", async when => {
+  const radio = fixture();
+  expect(radio.playlists()).toEqual([]);
+  if (when === "before") await radio.avoid();
+  for (let index = 0; index < 30; index++) await radio.addPlaylist({ name: `Custom ${index}`, url: `https://example.com/${index}.m3u` });
+  if (when === "after") await radio.avoid();
+  expect(radio.playlists()).toHaveLength(31);
+  await expect(radio.addPlaylist({ name: "One too many", url: "https://example.com/30.m3u" })).rejects.toThrow("30 custom radio playlists");
+  expect((await radio.addPlaylist({ name: "Renamed", url: "https://example.com/0.m3u" })).name).toBe("Renamed");
+  expect((await radio.addPlaylist({ name: "avoid radio", url: avoidRadioPlaylistUrl })).id).toBe(avoidRadioPlaylistId);
+  expect(radio.playlists()).toHaveLength(31);
 });
 
 test("metadata cache shares discovery and playback requests, respects expiry and keeps provider description and URL", async () => {
@@ -81,6 +98,22 @@ test("metadata cache shares discovery and playback requests, respects expiry and
   time = 902000;
   expect((await metadata.get("one", "https://stream.example/one")).programme).toBeNull();
   expect(request).toHaveBeenCalledTimes(2);
+});
+
+test.each([0, 1])("canceling metadata caller %i leaves the other caller and shared cache healthy", async canceledIndex => {
+  const release = Promise.withResolvers<Response>();
+  let upstreamSignal: AbortSignal | undefined;
+  const request = mock(async (_url: unknown, init?: RequestInit) => { upstreamSignal = init?.signal ?? undefined; return release.promise; });
+  const metadata = createRadioMetadata({ now: () => 1000, fetch: request as unknown as typeof fetch });
+  const callers = [new AbortController(), new AbortController()];
+  const results = callers.map(caller => metadata.get("one", "https://stream.example/one", caller.signal));
+  callers[canceledIndex]!.abort();
+  expect((await results[canceledIndex])?.programme).toBeNull();
+  expect(upstreamSignal?.aborted).toBe(false);
+  release.resolve(Response.json(payload()));
+  expect((await results[1 - canceledIndex])?.programme?.title).toBe("Current programme");
+  expect((await metadata.get("one", "https://stream.example/one")).programme?.title).toBe("Current programme");
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 test("unsafe programme links are dropped and provider rate limits apply across stations", async () => {
