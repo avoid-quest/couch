@@ -18,7 +18,7 @@ import type { ProviderId, VideoQuality } from "../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { QualityOptions } from "./QualitySelect";
-import { useEnqueueVideoQuality } from "./video-quality";
+import { supportsWebVideoQuality, useEnqueueVideoQuality } from "./video-quality";
 import { createId } from "./session";
 import type { SourceSetupKind } from "./SourceSetupDialog";
 
@@ -114,7 +114,7 @@ export function SearchPanel(props: Props) {
         {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} onResults={reportResults} onChooseSource={source => { focusSource.current = source; setFilter(source); }} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
         {filter === "Bandcamp" && <p className="search-capability">Paste a Bandcamp album or track link.</p>}
       </>}
-      {url && !linkedProvider && <Card className="search-start"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play now</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Add to queue</Button><QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} /></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
+      {url && !linkedProvider && <Card className="search-start"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play now</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Add to queue</Button>{supportsWebVideoQuality(url) && <QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} />}</div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
       {url && /^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && <Button variant="outline" onClick={() => props.onManageSources?.("streaming-community")}>StreamingCommunity settings</Button>}
     </>}
   </section>;
