@@ -101,11 +101,33 @@ recovery and leaves the global primary output unchanged. Couch chooses its own
 fullscreen output using the confirmed [Display setting](display.md), with the
 laptop panel as its first recovery choice when the saved output is unavailable.
 With no saved choice, Couch prefers an enabled external output. Logind ignores
-idle time. With an external display connected or the laptop docked, lid
-closure leaves the TV running. With only the laptop display, lid closure suspends
-on AC and battery. The power button, suspend key and administrator power commands
-retain their normal behavior. No power targets are masked. Package defaults live
-under `/usr/lib/systemd/`; administrator drop-ins under `/etc` retain priority.
+idle time. On AC power, closing the lid leaves Couch and its phone remote
+available, including with HDMI unplugged or the TV off. An undocked laptop on
+battery with no external display still suspends on lid closure. Docked or
+multi-display lid closure continues to leave Couch running. A TV that is off may
+still report its HDMI connector as connected to Linux.
+
+The power button, suspend key and administrator power commands retain their normal
+behavior. No power targets are masked. The companion supplies
+`/usr/lib/systemd/logind.conf.d/50-couch.conf`. To override its defaults, use a
+later drop-in such as `/etc/systemd/logind.conf.d/90-local-power.conf`; settings
+in the main `/etc/systemd/logind.conf` have lower precedence than drop-ins.
+An `/etc/systemd/logind.conf.d/50-couch.conf` file replaces the vendor file,
+and a symlink at that path to `/dev/null` disables it. Package upgrades preserve
+these administrator files. Inspect all contributing files with
+`systemd-analyze cat-config systemd/logind.conf`.
+
+This policy requires a companion upgrade; an in-app AppImage update alone does
+not install it. During an idle maintenance window, run the
+[supported installer](install-couch.md) with the trusted AppImage and new companion
+package. To keep the application version, use a verified copy of the installed
+AppImage outside `/var/lib/couch/application`. The installer preserves data,
+pairings and configuration, then reloads logind with SIGHUP before starting the
+TV session. A direct APT companion upgrade needs a subsequent
+`sudo systemctl kill --kill-whom=main --signal=HUP systemd-logind.service`
+or reboot to activate the policy. `systemctl daemon-reload` alone does not reload
+logind's power settings. See the [lid acceptance procedure](qualification/lid-power.md)
+for the separate physical checks.
 
 Build the companion package on Linux with `sh scripts/build-appliance.sh`. It
 needs `git` and `dpkg-deb` only and records its Git revision in
