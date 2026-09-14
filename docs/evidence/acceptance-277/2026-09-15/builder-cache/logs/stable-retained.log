@@ -1,0 +1,198 @@
+[draft] ⭐ Run Set up job
+[draft] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[draft]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[draft]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[draft]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[draft]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[draft]   ✅  Success - Set up job
+[draft] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[draft]   | STEP:draft:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[draft]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [31.967292ms]
+[draft] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[draft]   | STEP:draft:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[draft]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [30.898167ms]
+[draft] ⭐ Run Main Validate retained run provenance
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/2] user= workdir=
+[draft]   | STEP:draft:2:Validate retained run provenance
+[draft]   ✅  Success - Main Validate retained run provenance [30.601541ms]
+[draft] ⭐ Run Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/3] user= workdir=
+[draft]   | STEP:draft:3:actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[draft]   ✅  Success - Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c [31.583875ms]
+[draft] ⭐ Run Main Check the candidate inputs
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[draft]   | STEP:draft:4:Check the candidate inputs
+[draft]   ✅  Success - Main Check the candidate inputs [32.006792ms]
+[draft] ⭐ Run Main Install supported Cloud CLI
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[draft]   | STEP:draft:5:Install supported Cloud CLI
+[draft]   ✅  Success - Main Install supported Cloud CLI [30.732417ms]
+[draft] ⭐ Run Main Draft the effective Tauri version or retained promotion
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/draft] user= workdir=
+[draft]   | STEP:draft:6:Draft the effective Tauri version or retained promotion
+[draft]   ✅  Success - Main Draft the effective Tauri version or retained promotion [30.279334ms]
+[draft]   ⚙  ::set-output:: release-id=local-mock-release
+[draft] ⭐ Run Main Record completed job
+[draft]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/7] user= workdir=
+[draft]   | JOB_OK:draft
+[draft]   ✅  Success - Main Record completed job [31.504167ms]
+[draft] ⭐ Run Complete job
+[draft] Cleaning up container for job draft
+[draft]   ✅  Success - Complete job
+[draft] 🏁  Job succeeded
+[candidate] ⭐ Run Set up job
+[candidate] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[candidate]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[candidate]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[candidate]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[candidate]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[candidate]   ✅  Success - Set up job
+[candidate] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[candidate]   | STEP:candidate:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[candidate]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [30.725417ms]
+[candidate] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[candidate]   | STEP:candidate:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[candidate]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [32.162625ms]
+[candidate] ⭐ Run Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/2] user= workdir=
+[candidate]   | STEP:candidate:2:actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[candidate]   ✅  Success - Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c [33.649125ms]
+[candidate] ⭐ Run Main Select the original source and qualification work
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/qualification] user= workdir=
+[candidate]   | STEP:candidate:3:Select the original source and qualification work
+[candidate]   ✅  Success - Main Select the original source and qualification work [39.770167ms]
+[candidate]   ⚙  ::set-output:: needed=false
+[candidate] ⭐ Run Main Verify retained candidate
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/16] user= workdir=
+[candidate]   | STEP:candidate:16:Verify retained candidate
+[candidate]   ✅  Success - Main Verify retained candidate [30.573584ms]
+[candidate] ⭐ Run Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/17] user= workdir=
+[candidate]   | STEP:candidate:17:actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[candidate]   ✅  Success - Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f [30.390875ms]
+[candidate] ⭐ Run Main Record completed job
+[candidate]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/18] user= workdir=
+[candidate]   | JOB_OK:candidate
+[candidate]   ✅  Success - Main Record completed job [30.665584ms]
+[candidate] ⭐ Run Complete job
+[candidate] Cleaning up container for job candidate
+[candidate]   ✅  Success - Complete job
+[candidate] 🏁  Job succeeded
+[upload] ⭐ Run Set up job
+[upload] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[upload]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[upload]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[upload]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[upload]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[upload]   ✅  Success - Set up job
+[upload] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[upload]   | STEP:upload:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[upload]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [31.105458ms]
+[upload] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[upload]   | STEP:upload:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[upload]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [30.448542ms]
+[upload] ⭐ Run Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/2] user= workdir=
+[upload]   | STEP:upload:2:actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[upload]   ✅  Success - Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c [30.939583ms]
+[upload] ⭐ Run Main crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/3] user= workdir=
+[upload]   | STEP:upload:3:crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
+[upload]   ✅  Success - Main crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c [31.988ms]
+[upload] ⭐ Run Main Upload only the qualified allowlist and inspect Cloud
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[upload]   | STEP:upload:4:Upload only the qualified allowlist and inspect Cloud
+[upload]   ✅  Success - Main Upload only the qualified allowlist and inspect Cloud [32.943875ms]
+[upload] ⭐ Run Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[upload]   | STEP:upload:5:actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[upload]   ✅  Success - Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f [31.668209ms]
+[upload] ⭐ Run Main Record completed job
+[upload]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/6] user= workdir=
+[upload]   | JOB_OK:upload
+[upload]   ✅  Success - Main Record completed job [30.87125ms]
+[upload] ⭐ Run Complete job
+[upload] Cleaning up container for job upload
+[upload]   ✅  Success - Complete job
+[upload] 🏁  Job succeeded
+[publish] ⭐ Run Set up job
+[publish] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[publish]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[publish]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[publish]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[publish]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[publish]   ✅  Success - Set up job
+[publish] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[publish]   | STEP:publish:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[publish]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [30.260875ms]
+[publish] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[publish]   | STEP:publish:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[publish]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [32.098833ms]
+[publish] ⭐ Run Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/2] user= workdir=
+[publish]   | STEP:publish:2:actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[publish]   ✅  Success - Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c [30.916ms]
+[publish] ⭐ Run Main crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/3] user= workdir=
+[publish]   | STEP:publish:3:crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
+[publish]   ✅  Success - Main crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c [31.218916ms]
+[publish] ⭐ Run Main Publish the complete qualified release
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[publish]   | STEP:publish:4:Publish the complete qualified release
+[publish]   ✅  Success - Main Publish the complete qualified release [30.78075ms]
+[publish] ⭐ Run Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[publish]   | STEP:publish:5:actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[publish]   ✅  Success - Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f [33.483291ms]
+[publish] ⭐ Run Main Record completed job
+[publish]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/6] user= workdir=
+[publish]   | JOB_OK:publish
+[publish]   ✅  Success - Main Record completed job [34.755292ms]
+[publish] ⭐ Run Complete job
+[publish] Cleaning up container for job publish
+[publish]   ✅  Success - Complete job
+[publish] 🏁  Job succeeded
+[readiness] ⭐ Run Set up job
+[readiness] 🚀  Start image=couch-local-systemd-arm64-5832:latest
+[readiness]   🐳  docker pull image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 username= forcePull=false
+[readiness]   🐳  docker create image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[readiness]   🐳  docker run image=couch-local-systemd-arm64-5832:latest platform=linux/arm64 entrypoint=["tail" "-f" "/dev/null"] cmd=[] network="none"
+[readiness]   🐳  docker exec cmd=[node --no-warnings -e console.log(process.execPath)] user= workdir=
+[readiness]   ✅  Success - Set up job
+[readiness] ⭐ Run Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/0] user= workdir=
+[readiness]   | STEP:readiness:0:actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+[readiness]   ✅  Success - Main actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 [31.799333ms]
+[readiness] ⭐ Run Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/1] user= workdir=
+[readiness]   | STEP:readiness:1:oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+[readiness]   ✅  Success - Main oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 [32.517542ms]
+[readiness] ⭐ Run Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/2] user= workdir=
+[readiness]   | STEP:readiness:2:actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+[readiness]   ✅  Success - Main actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c [32.244125ms]
+[readiness] ⭐ Run Main Verify every public file and the installer/updater endpoints
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/3] user= workdir=
+[readiness]   | STEP:readiness:3:Verify every public file and the installer/updater endpoints
+[readiness]   ✅  Success - Main Verify every public file and the installer/updater endpoints [32.812ms]
+[readiness] ⭐ Run Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/4] user= workdir=
+[readiness]   | STEP:readiness:4:actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+[readiness]   ✅  Success - Main actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f [33.124333ms]
+[readiness] ⭐ Run Main Record completed job
+[readiness]   🐳  docker exec cmd=[bash -e /var/run/act/workflow/5] user= workdir=
+[readiness]   | JOB_OK:readiness
+[readiness]   ✅  Success - Main Record completed job [33.510875ms]
+[readiness] ⭐ Run Complete job
+[readiness] Cleaning up container for job readiness
+[readiness]   ✅  Success - Complete job
+[readiness] 🏁  Job succeeded
+time="2026-09-15T01:38:12+02:00" level=info msg="Using docker host 'unix:///Users/devit/.docker/run/docker.sock', and daemon socket '-'"

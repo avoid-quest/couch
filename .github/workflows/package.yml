@@ -164,15 +164,38 @@ jobs:
               git checkout --detach "$revision"
             fi
           fi
-      - name: Prepare the pinned Debian builder
+      - name: Read the pinned Debian builder inputs
+        id: builder-inputs
         if: steps.qualification.outputs.needed == 'true'
         run: |
-          docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
-            --build-arg "DEBIAN_IMAGE=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
-            --build-arg "DEBIAN_SNAPSHOT=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" \
-            --build-arg "BUN_VERSION=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" \
-            --build-arg "RUST_VERSION=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" \
-            -t couch-release-builder packaging
+          echo "debian-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" >> "$GITHUB_OUTPUT"
+          echo "debian-snapshot=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" >> "$GITHUB_OUTPUT"
+          echo "bun-version=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" >> "$GITHUB_OUTPUT"
+          echo "rust-version=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        if: steps.qualification.outputs.needed == 'true'
+      - name: Prepare the pinned Debian builder
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        if: steps.qualification.outputs.needed == 'true'
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: packaging
+          file: packaging/Dockerfile.mac
+          platforms: linux/amd64
+          tags: couch-release-builder
+          load: true
+          push: false
+          build-args: |
+            DEBIAN_IMAGE=${{ steps.builder-inputs.outputs.debian-image }}
+            DEBIAN_SNAPSHOT=${{ steps.builder-inputs.outputs.debian-snapshot }}
+            BUN_VERSION=${{ steps.builder-inputs.outputs.bun-version }}
+            RUST_VERSION=${{ steps.builder-inputs.outputs.rust-version }}
+          cache-from: type=gha,version=2,scope=couch-debian-builder-amd64
+          cache-to: type=gha,version=2,scope=couch-debian-builder-amd64,mode=min,ignore-error=true
+      - name: Start the pinned Debian builder
+        if: steps.qualification.outputs.needed == 'true'
+        run: |
           docker create --name couch-build --init --cpus 4 --memory 10g couch-release-builder
           docker start couch-build
           git bundle create /tmp/source.bundle HEAD
