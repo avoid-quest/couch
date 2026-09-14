@@ -1,0 +1,15 @@
+root:root 755 /usr/lib/couch-appliance
+root:root 644 /usr/lib/couch-appliance/session
+root:root 644 /usr/lib/couch-appliance/initialize-audio
+root:root 644 /usr/lib/couch-appliance/set-autostart
+root:root 644 /usr/sbin/couch-session
+64f1aa522b06243057d70cd4fefc65db27c52f9ab1525a5db236f412dc6f550a  /usr/lib/couch-appliance/session
+e0742c13e724cc63bae46bfb4ce2c5294a3941f24a95b3ef7088bf5c750c49f7  /usr/lib/couch-appliance/initialize-audio
+4bd5151c0e7f025b5b7ec76633af5a9b8c0170d78c20698e52aed36d40350f53  /usr/lib/couch-appliance/set-autostart
+5e4ae001e6d0968a43f6afb7747cf45a78eef9b3ace9ac251e972bf0d9bb34cc  /usr/sbin/couch-session
+f: /usr/lib/couch-appliance/session
+drwxr-xr-x root root /
+drwxr-xr-x root root usr
+drwxr-xr-x root root lib
+drwxr-xr-x root root couch-appliance
+-rw-r--r-- root root session

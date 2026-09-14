@@ -5,7 +5,8 @@ The [accepted policy](https://github.com/avoid-quest/couch/issues/266#issuecomme
 owns release and update behavior. The owner has authorized release publication and
 Actions activation after local checks pass, using the selected Blacksmith workers.
 The [acceptance preparation record](evidence/acceptance-277/2026-09-15/README.md)
-records the current gates. Physical T480 changes remain outside this work.
+records the current gates. The owner subsequently authorized the freshly installed
+Debian T480 to consume published packages for acceptance. It never builds Couch.
 
 [Local qualification evidence](evidence/hosted-release-276/2026-09-15/README.md)
 records the signed candidate, exact sources, passed checks and remaining hosted gates.

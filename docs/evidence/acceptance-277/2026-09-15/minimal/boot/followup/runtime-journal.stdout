@@ -1,0 +1,76 @@
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Queued start job for default target default.target.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Created slice app.slice - User Application Slice.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Created slice session.slice - User Core Session Slice.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Reached target paths.target - Paths.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Reached target timers.target - Timers.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Starting dbus.socket - D-Bus User Message Bus Socket...
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Listening on pipewire-pulse.socket - PipeWire PulseAudio.
+2026-09-14T23:24:35+00:00 couch-minimal systemd[856]: Listening on pipewire.socket - PipeWire Multimedia System Sockets.
+2026-09-14T23:24:36+00:00 couch-minimal systemd[856]: Starting ssh-agent.socket - OpenSSH Agent socket...
+2026-09-14T23:24:37+00:00 couch-minimal systemd[856]: Listening on dbus.socket - D-Bus User Message Bus Socket.
+2026-09-14T23:24:38+00:00 couch-minimal systemd[856]: Listening on ssh-agent.socket - OpenSSH Agent socket.
+2026-09-14T23:24:38+00:00 couch-minimal systemd[856]: Reached target sockets.target - Sockets.
+2026-09-14T23:24:38+00:00 couch-minimal systemd[856]: Reached target basic.target - Basic System.
+2026-09-14T23:24:38+00:00 couch-minimal systemd[856]: Starting dbus.service - D-Bus User Message Bus...
+2026-09-14T23:24:38+00:00 couch-minimal systemd[856]: Started pipewire.service - PipeWire Multimedia Service.
+2026-09-14T23:24:39+00:00 couch-minimal systemd[856]: Started filter-chain.service - PipeWire filter chain daemon.
+2026-09-14T23:24:39+00:00 couch-minimal systemd[856]: Started wireplumber.service - Multimedia Service Session Manager.
+2026-09-14T23:24:40+00:00 couch-minimal systemd[856]: Started pipewire-pulse.service - PipeWire PulseAudio.
+2026-09-14T23:24:42+00:00 couch-minimal systemd[856]: Started dbus.service - D-Bus User Message Bus.
+2026-09-14T23:24:42+00:00 couch-minimal systemd[856]: mpris-proxy.service - Bluetooth mpris proxy skipped, unmet condition check ConditionUser=!@system
+2026-09-14T23:24:42+00:00 couch-minimal systemd[856]: Reached target default.target - Main User Target.
+2026-09-14T23:24:42+00:00 couch-minimal systemd[856]: Startup finished in 13.369s.
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:46+00:00 couch-minimal pipewire[887]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:47+00:00 couch-minimal pipewire-pulse[900]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+2026-09-14T23:24:47+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:47+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+2026-09-14T23:24:47+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:47+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+2026-09-14T23:24:47+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+2026-09-14T23:24:48+00:00 couch-minimal wireplumber[893]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+2026-09-14T23:24:48+00:00 couch-minimal wireplumber[893]: wp-internal-comp-loader: Loading profile 'main'
+2026-09-14T23:24:53+00:00 couch-minimal wireplumber[893]: wp-device: SPA handle 'api.libcamera.enum.manager' could not be loaded; is it installed?
+2026-09-14T23:24:53+00:00 couch-minimal wireplumber[893]: s-monitors-libcamera: PipeWire's libcamera SPA plugin is missing or broken. Some camera types may not be supported.
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Activating special unit exit.target...
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Stopped target default.target - Main User Target.
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Stopping dbus.service - D-Bus User Message Bus...
+2026-09-14T23:25:11+00:00 couch-minimal wireplumber[893]: m-dbus-connection: <WpDBusConnection:0x55d21c3a3400> DBus connection closed: Underlying GIOStream returned 0 bytes on an async read
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Stopping filter-chain.service - PipeWire filter chain daemon...
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Stopping pipewire-pulse.service - PipeWire PulseAudio...
+2026-09-14T23:25:11+00:00 couch-minimal wireplumber[893]: m-dbus-connection: <WpDBusConnection:0x55d21c3a3400> Trying to reconnect after core sync
+2026-09-14T23:25:11+00:00 couch-minimal systemd[856]: Stopped dbus.service - D-Bus User Message Bus.
+2026-09-14T23:25:12+00:00 couch-minimal systemd[856]: Stopped filter-chain.service - PipeWire filter chain daemon.
+2026-09-14T23:25:12+00:00 couch-minimal systemd[856]: Stopped pipewire-pulse.service - PipeWire PulseAudio.
+2026-09-14T23:25:12+00:00 couch-minimal systemd[856]: Stopping wireplumber.service - Multimedia Service Session Manager...
+2026-09-14T23:25:12+00:00 couch-minimal wireplumber[893]: wireplumber: stopped by signal: Terminated
+2026-09-14T23:25:12+00:00 couch-minimal wireplumber[893]: wireplumber: disconnected from pipewire
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped wireplumber.service - Multimedia Service Session Manager.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: wireplumber.service: Consumed 2.110s CPU time, 3.4M memory peak.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopping pipewire.service - PipeWire Multimedia Service...
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped pipewire.service - PipeWire Multimedia Service.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Removed slice session.slice - User Core Session Slice.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: session.slice: Consumed 4.995s CPU time, 9.9M memory peak.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped target basic.target - Basic System.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped target paths.target - Paths.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped target sockets.target - Sockets.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopped target timers.target - Timers.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Closed dbus.socket - D-Bus User Message Bus Socket.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Closed pipewire-pulse.socket - PipeWire PulseAudio.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Closed pipewire.socket - PipeWire Multimedia System Sockets.
+2026-09-14T23:25:13+00:00 couch-minimal systemd[856]: Stopping ssh-agent.socket - OpenSSH Agent socket...
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: Closed ssh-agent.socket - OpenSSH Agent socket.
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: Removed slice app.slice - User Application Slice.
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: app.slice: Consumed 1.135s CPU time, 3.3M memory peak.
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: Reached target shutdown.target - Shutdown.
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: Finished systemd-exit.service - Exit the Session.
+2026-09-14T23:25:14+00:00 couch-minimal systemd[856]: Reached target exit.target - Exit the Session.

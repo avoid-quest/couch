@@ -1,0 +1,46 @@
+00:00.0 Host bridge [0600]: Intel Corporation 82G33/G31/P35/P31 Express DRAM Controller [8086:29c0]
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+00:01.0 Ethernet controller [0200]: Red Hat, Inc. Virtio network device [1af4:1000]
+	Subsystem: Red Hat, Inc. Device [1af4:0001]
+	Kernel driver in use: virtio-pci
+00:02.0 VGA compatible controller [0300]: Red Hat, Inc. Virtio 1.0 GPU [1af4:1050] (rev 01)
+	Subsystem: Red Hat, Inc. QEMU [1af4:1100]
+	Kernel driver in use: virtio-pci
+00:03.0 USB controller [0c03]: NEC Corporation uPD720200 USB 3.0 Host Controller [1033:0194] (rev 03)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+00:04.0 Communication controller [0780]: Red Hat, Inc. Virtio console [1af4:1003]
+	Subsystem: Red Hat, Inc. Device [1af4:0003]
+	Kernel driver in use: virtio-pci
+00:05.0 Unclassified device [00ff]: Red Hat, Inc. Virtio RNG [1af4:1005]
+	Subsystem: Red Hat, Inc. Device [1af4:0004]
+	Kernel driver in use: virtio-pci
+00:1d.0 USB controller [0c03]: Intel Corporation 82801I (ICH9 Family) USB UHCI Controller #1 [8086:2934] (rev 03)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: uhci_hcd
+	Kernel modules: uhci_hcd
+00:1d.1 USB controller [0c03]: Intel Corporation 82801I (ICH9 Family) USB UHCI Controller #2 [8086:2935] (rev 03)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: uhci_hcd
+	Kernel modules: uhci_hcd
+00:1d.2 USB controller [0c03]: Intel Corporation 82801I (ICH9 Family) USB UHCI Controller #3 [8086:2936] (rev 03)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: uhci_hcd
+	Kernel modules: uhci_hcd
+00:1d.7 USB controller [0c03]: Intel Corporation 82801I (ICH9 Family) USB2 EHCI Controller #1 [8086:293a] (rev 03)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: ehci-pci
+	Kernel modules: ehci_pci
+00:1f.0 ISA bridge [0601]: Intel Corporation 82801IB (ICH9) LPC Interface Controller [8086:2918] (rev 02)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: lpc_ich
+	Kernel modules: lpc_ich
+00:1f.2 SATA controller [0106]: Intel Corporation 82801IR/IO/IH (ICH9R/DO/DH) 6 port SATA Controller [AHCI mode] [8086:2922] (rev 02)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: ahci
+	Kernel modules: ahci
+00:1f.3 SMBus [0c05]: Intel Corporation 82801I (ICH9 Family) SMBus Controller [8086:2930] (rev 02)
+	Subsystem: Red Hat, Inc. QEMU Virtual Machine [1af4:1100]
+	Kernel driver in use: i801_smbus
+	Kernel modules: i2c_i801

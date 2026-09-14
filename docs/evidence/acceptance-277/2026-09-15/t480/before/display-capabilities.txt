@@ -1,0 +1,14 @@
+CPU instruction support
+sse4_1=yes
+sse4_2=yes
+avx=yes
+avx2=yes
+
+DRM connector status and modes, no EDID
+/sys/class/drm/card0-DP-1=disconnected
+/sys/class/drm/card0-DP-2=disconnected
+/sys/class/drm/card0-HDMI-A-1=disconnected
+/sys/class/drm/card0-HDMI-A-2=disconnected
+/sys/class/drm/card0-eDP-1=connected
+1920x1080
+1920x1080

@@ -1,0 +1,6 @@
+Signature and comment signature verified
+Trusted comment: timestamp:1789424118	file:Couch_0.1.0-preview.1_amd64.AppImage
+Signature and comment signature verified
+Trusted comment: timestamp:1789424148	file:couch-distribution-material-0.1.0-preview.1.tar.gz
+Signature and comment signature verified
+Trusted comment: timestamp:1789424149	file:couch-setup-0.1.0-preview.1.tar.gz

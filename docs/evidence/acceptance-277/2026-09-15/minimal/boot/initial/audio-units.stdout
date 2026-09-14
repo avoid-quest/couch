@@ -1,0 +1,16 @@
+○ pipewire.service - PipeWire Multimedia Service
+     Loaded: loaded (/usr/lib/systemd/user/pipewire.service; enabled; preset: enabled)
+     Active: inactive (dead)
+        Job: 16
+TriggeredBy: ● pipewire.socket
+
+○ pipewire-pulse.service - PipeWire PulseAudio
+     Loaded: loaded (/usr/lib/systemd/user/pipewire-pulse.service; enabled; preset: enabled)
+     Active: inactive (dead)
+        Job: 21
+TriggeredBy: ● pipewire-pulse.socket
+
+○ wireplumber.service - Multimedia Service Session Manager
+     Loaded: loaded (/usr/lib/systemd/user/wireplumber.service; enabled; preset: enabled)
+     Active: inactive (dead)
+        Job: 19

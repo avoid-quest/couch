@@ -1,0 +1,2 @@
+ls: cannot access '/run/user/102': No such file or directory
+ls: cannot access '/run/user/102/bus': No such file or directory
