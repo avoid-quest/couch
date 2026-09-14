@@ -81,6 +81,18 @@ test("device appearance, TV appearance and connection have separate pages", asyn
   expect(document.querySelector("#remote-interface-size")).toBeNull();
 });
 
+test("Connection shows an alias warning alongside its working recovery IP", async () => {
+  const ip = "http://192.168.1.20:4100";
+  const lanError = "Custom LAN address 1 was ignored. Direct IP access remains available.";
+  await render({ details: { ...props.details!, urls: [ip], lanError } });
+  await select("connection");
+  expect(document.querySelector<HTMLAnchorElement>(`a[href="${ip}"]`)?.textContent).toBe(ip);
+  expect(document.body.textContent).toContain(lanError);
+  await render({ details: { ...props.details!, urls: ["http://couch.home:4100", ip], lanError: null } });
+  expect(document.body.textContent).not.toContain(lanError);
+  expect(document.querySelector(`a[href="${ip}"]`)).not.toBeNull();
+});
+
 test("administrator pages stay gated and demotion removes remote management", async () => {
   await render(); await select("connection");
   expect(document.querySelector('[aria-label="Paired remotes"]')).not.toBeNull();

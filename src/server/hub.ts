@@ -81,7 +81,7 @@ type SocketData = { trusted: boolean; controllerId: string | null; authorize: ()
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
-  const advertised = (options.advertisedUrls ?? []).map(value => {
+  const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
@@ -526,9 +526,9 @@ export function createHub(options: HubOptions) {
   const server: Bun.Server<SocketData> = Bun.serve(serveOptions);
 
   const port = server.port!;
-  const allowedHosts = new Set([...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
-  const allowedOrigins = new Set([...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
+  const allowedHosts = new Set(options.managedLan ? [new URL(origin).host] : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
+  const allowedOrigins = new Set(options.managedLan ? [origin] : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const urls: string[] = advertised.length ? [...new Set(advertised)] : hostname === "0.0.0.0" || hostname === "::"
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
     : [origin];
@@ -537,7 +537,7 @@ export function createHub(options: HubOptions) {
 
   if (options.managedLan) {
     lan = createLanListener({
-      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, advertised,
+      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS, advertised: options.advertisedUrls ?? [],
       start: network => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;

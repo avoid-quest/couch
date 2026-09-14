@@ -1,75 +1,63 @@
 # Named LAN address
 
-Set `COUCH_ADVERTISE_URLS` in `/etc/couch/appliance.env` to the origin that phones
-should open. It accepts comma-separated HTTP or HTTPS origins without credentials,
-paths, queries or fragments. Couch uses these addresses for Connection links, QR
-codes and its exact Host/Origin allowlists. The existing `COUCH_HOST` and
-`COUCH_PORT` settings control the separate HTTP listener, normally `0.0.0.0:4100`.
-Tauri keeps using its private loopback connection.
+This guide covers the Debian 13 app's direct LAN listener. Enable Allow remote
+control locally and verify the IP address shown in Connection before adding a
+name. Couch uses HTTP on port 4100 by default. Sharing off leaves only the
+loopback listener used by the local app.
 
-Use [Caddy's official Ubuntu package](https://caddyserver.com/docs/install#debian-ubuntu-raspbian)
-to serve the named origin on port 80 or 443. Its systemd service owns the proxy and
-certificate storage independently of Couch AppImage updates. Merge the relevant
-site block below into the administrator's `/etc/caddy/Caddyfile`; retain any
-existing sites. The examples assume Couch's default port 4100.
+The machine/network administrator owns IP assignment, LAN DNS and any narrowly
+scoped firewall rule. Couch setup does not install a proxy or DNS daemon,
+configure router forwarding or expose Couch to the internet. LAN TLS is deferred.
 
-For `http://couch.avoid.local` on port 80, set:
+## Select the local address
 
-```sh
-COUCH_ADVERTISE_URLS=http://couch.avoid.local
-```
-
-```caddyfile
-http://couch.avoid.local {
-    reverse_proxy 127.0.0.1:4100
-}
-```
-
-For `https://couch.avoid.local` on port 443, use:
+Couch discovers its private IPv4 address every ten seconds. With several eligible
+interfaces, set `COUCH_LAN_INTERFACE` to the intended interface. If that interface
+has multiple private IPv4 addresses, also set `COUCH_LAN_ADDRESS` to the specific
+local address to use. For example, if `eth0` owns `192.168.1.20`:
 
 ```sh
-COUCH_ADVERTISE_URLS=https://couch.avoid.local
+COUCH_LAN_INTERFACE=eth0
+COUCH_LAN_ADDRESS=192.168.1.20
 ```
 
-```caddyfile
-https://couch.avoid.local {
-    tls internal
-    reverse_proxy 127.0.0.1:4100
-}
+The selected address must already belong to that interface. These variables do
+not assign an IP address. Couch binds only that address and admits peers from its
+subnet. If a pinned address disappears, Couch reports the missing selection and
+closes LAN access until it returns. Update the selection if the administrator
+changes the assigned address.
+
+Set the variables in the desktop app's launching environment, or in
+`/etc/couch/appliance.env` for TV setup, then restart Couch. Schedule the restart
+around playback.
+
+## Add an optional DNS name
+
+Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
+The name must work from the TV and each phone that will use it. Add its HTTP
+origin using the same port as Couch:
+
+```sh
+COUCH_ADVERTISE_URLS=http://couch.home:4100
 ```
 
-[Caddy renews local certificates automatically](https://caddyserver.com/docs/automatic-https#local-https)
-and redirects HTTP to HTTPS for the HTTPS site. Its
-[reverse proxy preserves Host and supports WebSockets](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy),
-so Couch's pairing and token checks still apply. Keep the original Host and Origin
-headers. Couch does not use forwarded headers to grant access.
+Set this in the same launching environment or TV environment file and restart
+Couch. Multiple names can be comma-separated. Origins cannot contain credentials,
+paths, queries or fragments. HTTPS and names on a different port are unsupported
+by this listener. Setting an origin does not create a DNS or mDNS record.
 
-Validate the edited Caddyfile with `sudo caddy validate --config /etc/caddy/Caddyfile`,
-then apply it with `sudo systemctl reload caddy`. Restart Couch through General to
-load the changed environment. Schedule this restart around playback. The old IP
-address remains available with the default listener, and existing pairings and
-data remain intact. Opening a different origin has separate browser storage and
-may require pairing that browser again. An HTTPS page cannot use insecure HTTP
-LAN addresses as a browser fallback.
+Couch checks each name before admitting its Host and Origin or adding it to
+Connection links and QR codes. A failed lookup, timeout, wrong address or invalid
+origin omits that alias and displays a warning. The direct IP listener and
+recovery URL remain available. Valid aliases continue working, and a repaired
+alias returns after a successful refresh. Couch never forwards an existing
+pairing credential to an advertised alias; a browser opening a new origin may
+need pairing again.
 
-The chosen name must resolve to the TV from each phone. `.local` names use
-[link-local mDNS](https://www.rfc-editor.org/rfc/rfc6762.html#section-3); Caddy does
-not publish them. Arrange the named mDNS record on the phone network, or choose a
-name served by your existing LAN DNS. Setting an origin does not configure DNS,
-mDNS, firewall rules or router port forwarding.
+After configuration, open the named URL from the intended phone network, pair,
+open Settings and reconnect after a Couch restart. Keep the IP URL shown in
+Connection available for DNS recovery.
 
-For local HTTPS, each phone/browser must trust the Caddy root certificate. The
-[Ubuntu service stores its public root](https://caddyserver.com/docs/running#local-https-with-systemd)
-at `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Transfer that
-public file through a trusted administrator channel and install it on the intended
-devices. On iPhone, follow Apple's
-[certificate trust instructions](https://support.apple.com/en-us/102390).
-Installing the root on the TV does not trust it on phones. Keep Caddy's persistent
-data and private keys protected across upgrades; replacing its CA requires clients
-to trust the replacement. Never distribute the CA private key.
-
-After configuration, verify the named URL without certificate warnings, pair,
-open Settings and reconnect after a Couch restart. HTTPS browser requests use WSS
-automatically. Application tests cover the proxied Host/Origin and authentication
-contract; actual name resolution, TLS trust and port reachability require this
-check on the intended phone network.
+The [earlier proxy and local TLS guide](https://github.com/avoid-quest/couch/blob/a742d35a4e03764ef613620cf82471b9eafdac8f/docs/lan-origin.md)
+records the POC setup. It does not describe this Debian listener. Existing POC
+installations are outside this setup's migration scope.

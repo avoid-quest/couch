@@ -200,7 +200,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
     <div className="min-w-0 space-y-1">
       <p className="font-medium">TV addresses on your network</p>
       {urls.map(url => <a key={url} href={url} target="_blank" rel="noreferrer" className="block min-h-11 content-center break-all text-muted-foreground underline underline-offset-4">{url}</a>)}
-      {!urls.length && <p className="text-muted-foreground">{details?.lanError ?? "No advertised address is known. Check the TV's network connection."}</p>}
+      {(details?.lanError || !urls.length) && <p className="text-muted-foreground">{details?.lanError ?? "No advertised address is known. Check the TV's network connection."}</p>}
       <p className="text-muted-foreground">Use a LAN address, or a custom domain already configured on this network.</p>
     </div>
   </div>;
