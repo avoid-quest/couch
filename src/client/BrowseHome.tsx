@@ -13,7 +13,7 @@ import type { Credentials } from "./session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
 
-const sources = [{ section: "Radio", label: "Radio directory & playlists" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Library", label: "Local library" }, { section: "Files", label: "Local files" }];
+const sources = [{ section: "Radio", label: "Radio directory & playlists" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "Local library" }];
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
   position: item.progress?.position ?? 0, duration: item.progress?.duration ?? item.duration,
