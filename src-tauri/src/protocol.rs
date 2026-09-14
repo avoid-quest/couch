@@ -15,6 +15,7 @@ pub struct ConnectionInfo {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SidecarMessage {
+    Addresses { urls: Vec<String> },
     Bluetooth {
         #[serde(rename = "requestId")]
         request_id: String,

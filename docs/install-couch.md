@@ -38,7 +38,7 @@ executing it or provisioning host packages.
 
 ```sh
 mkdir couch-setup
- tar -xzf couch-setup-<V>.tar.gz -C couch-setup
+tar -xzf couch-setup-<V>.tar.gz -C couch-setup
 ```
 
 ## Existing desktop
@@ -93,12 +93,22 @@ availability and runtime-user access to `/dev/fuse`. Missing physical graphics,
 audio or Bluetooth devices cannot be repaired by downloading another helper.
 Keep Debian current using its ordinary administrator tools.
 
-Couch discovers its LAN address. Enable Allow remote control locally and use the
+Couch discovers and refreshes its private IPv4 LAN address every ten seconds.
+Sharing off leaves only the loopback listener; sharing on binds the selected LAN
+address and checks peers against that interface's subnet. Remote mode stops the
+local backend. If multiple eligible networks exist, choose one by launching with
+`COUCH_LAN_INTERFACE=<interface>`, or add that variable to the TV account's
+`/etc/couch/appliance.env`. Couch reports an unavailable network or occupied port.
+Enable Allow remote control locally and use the
 address and pairing code shown by Couch. The default is HTTP on port 4100.
 The machine/network administrator owns IP assignment and any narrowly scoped
 firewall rule. Setup does not disable a firewall, configure router forwarding,
 install a proxy/DNS daemon or require an internet-facing address. Optional custom
-LAN DNS must point directly to this machine on port 4100. LAN TLS remains deferred.
+LAN DNS must point directly to this machine on port 4100. Set
+`COUCH_ADVERTISE_URLS=http://<your-LAN-name>:4100` in the launching environment.
+Couch checks that DNS resolves only to the selected address and keeps the IP
+address visible for recovery. A new origin may need pairing again; Couch never
+forwards an existing pairing credential to an advertised alias. LAN TLS remains deferred.
 
 Persistent data lives outside app bytes at
 `$XDG_DATA_HOME/quest.avoid.couch`, defaulting to

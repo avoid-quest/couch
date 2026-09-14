@@ -45,6 +45,8 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
+  managedLan: native,
+  onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
   ...(appimage ? { restart: appimageUpdates.restart } : {}),
   ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
