@@ -30,7 +30,7 @@ async function search(query: string) {
 }
 async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost", defaultQuality: "auto" | "1080p" = "1080p") {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel onManageSources={administrator ? () => browsed.push("Manage sources") : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  await act(async () => root.render(<SearchPanel onManageSources={administrator ? () => browsed.push("Source settings") : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
   await flush();
 }
 beforeEach(async () => {
@@ -65,6 +65,7 @@ beforeEach(async () => {
     if (url.pathname.startsWith("/api/providers/")) return Response.json({ items: [] });
     if (url.pathname === "/api/radio/playlists") return Response.json({ playlists: integrated ? [{ id: "own", name: "My radio" }] : [] });
     if (url.pathname === "/api/radio/playlists/own/stations") return Response.json({ stations: integrated ? [station] : [] });
+    if (url.pathname === "/api/radio/avoid") return Response.json({ stations: [] });
     if (url.pathname === "/api/radio/stations") return Response.json({ stations: integrated ? [{ ...station, sourceId: undefined, id: "directory-one", name: "Directory radio" }] : [] });
     if (url.pathname === "/api/jellyfin") return Response.json({ connected: connectedJellyfin, serverName: "Home" });
     if (url.pathname === "/api/jellyfin/items") return jellyfinError ? Response.json({ error: "Jellyfin server unavailable" }, { status: 502 }) : Response.json({ items: empty ? [] : [{ id: "remote", title: "Evening song", kind: "Audio", detail: "Artist", duration: 80, resumePosition: 0, played: false }], total: empty ? 0 : 55, startIndex: Number(url.searchParams.get("startIndex")) });
@@ -88,22 +89,22 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} cross-source inspec
   expect(document.body.textContent).toContain("40 results"); expect(document.body.textContent).toContain("55 results");
   scroller.scrollTop = 480;
   expect(queued).toEqual([]);
-  expect(button("Resume now: Evening movie")).toBeUndefined();
+  expect(!!button("Resume now: Evening movie")).toBe(true);
   await click("Details for Evening movie");
   expect(queued).toEqual([]);
   let dialog = document.querySelector('[role="dialog"]')!;
-  expect(dialog.textContent).toContain("An evening story"); await click("Resume now: Evening movie", dialog); await click("Add next: Evening movie", dialog); await click("Close", dialog);
+  expect(dialog.textContent).toContain("An evening story"); await click("Resume now: Evening movie", dialog); await click("Add to queue: Evening movie", dialog); await click("Close", dialog);
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Details for Evening movie"); expect(scroller.scrollTop).toBe(480);
   await click("Details for Evening song"); dialog = document.querySelector('[role="dialog"]')!;
-  await click("Play now: Evening song", dialog); await click("Add next: Evening song", dialog); await click("Close", dialog);
+  await click("Play now: Evening song", dialog); await click("Add to queue: Evening song", dialog); await click("Close", dialog);
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Details for Evening song");
   expect(queued).toEqual([["Library", "local", { playNow: true }], ["Library", "local", undefined], ["Jellyfin", "remote", { playNow: true }], ["Jellyfin", "remote", undefined]]);
   await render(false); scroller.scrollTop = 0; await render();
   expect(scroller.scrollTop).toBe(480); expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
-  await click("YouTube"); expect(browsed).toEqual([]);
+  await click("Jellyfin"); expect(browsed).toEqual([]);
   expect(paths).toContain("/api/providers/youtube/items?q=Evening");
   expect(document.querySelector('[aria-label="Library search results"]')?.closest("[hidden]")).not.toBeNull();
-  await click("All"); expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
+  await click("All sources"); expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
 });
 test("one unavailable source does not hide local results and retries only that source", async () => {
   jellyfinError = true; await render(); await search("Evening");
@@ -114,7 +115,7 @@ test("one unavailable source does not hide local results and retries only that s
 });
 test("missing folders retain searchable items with disabled play and queue", async () => {
   unavailable = true; connectedJellyfin = false; await render(); await search("Evening");
-  expect(document.body.textContent).toContain("NAS: folder unavailable"); expect(button("Add next: Evening movie").disabled).toBe(true);
+  expect(document.body.textContent).toContain("NAS: folder unavailable"); expect(button("Add to queue: Evening movie").disabled).toBe(true);
   await click("Details for Evening movie"); expect(button("Resume now: Evening movie").disabled).toBe(true); await click("Close");
   expect(document.body.textContent).toContain("Jellyfin is not connected"); expect(paths.some(path => path.startsWith("/api/jellyfin/items"))).toBe(false);
 });
@@ -132,8 +133,8 @@ test("new queries cancel delayed old responses and disconnected playback stays d
   expect(document.body.textContent).toContain("Searching Library");
   await search("new"); await act(async () => release?.()); await flush();
   expect(document.body.textContent).toContain("New movie"); expect(document.body.textContent).not.toContain("Evening movie");
-  await render(true, true, false); await click("Details for New movie"); expect(button("Resume now: New movie").disabled).toBe(true); expect(button("Add next: New movie").disabled).toBe(false); await click("Close");
-  await render(true, false); expect(button("Add next: New movie").disabled).toBe(true);
+  await render(true, true, false); await click("Details for New movie"); expect(button("Resume now: New movie").disabled).toBe(true); expect(button("Add to queue: New movie").disabled).toBe(false); await click("Close");
+  await render(true, false); expect(button("Add to queue: New movie").disabled).toBe(true);
 });
 
 test("progress broadcasts retain open details and focused result nodes during refresh", async () => {
@@ -142,7 +143,7 @@ test("progress broadcasts retain open details and focused result nodes during re
   await render(true, true, true, 2);
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog).not.toBeNull(); expect(dialog.textContent).toContain("Evening movie");
-  await click("Add next: Evening movie", dialog); await click("Close", dialog);
+  await click("Add to queue: Evening movie", dialog); await click("Close", dialog);
   expect(document.activeElement).toBe(trigger);
   delayedQuery = "Evening"; connectedJellyfin = false;
   await render(true, true, true, 3);
@@ -158,7 +159,7 @@ test("TV playback hides details and Home restores their result focus", async () 
   await render(false);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   // TV Home first focuses its source tab. Search restores the detail opener after that render.
-  button("Search").focus();
+  document.querySelector<HTMLInputElement>("#media-search")!.focus();
   await render(); await act(async () => { await Bun.sleep(30); });
   expect(document.activeElement).toBe(opener);
   expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
@@ -182,7 +183,7 @@ test("one submitted search integrates online and configured radio with default q
   integrated = true; await render(); await search("Evening");
   for (const path of ["/api/providers/youtube/items?q=Evening", "/api/providers/raiplay/items?q=Evening", "/api/providers/twitch/items?q=Evening", "/api/radio/stations?q=Evening", "/api/radio/playlists/own/stations?q=Evening"]) expect(paths).toContain(path);
   await click("Play now: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: video.url, quality: "1080p", playNow: true });
-  await click("Add next: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", quality: "1080p", playNow: false });
+  await click("Add to queue: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", quality: "1080p", playNow: false });
   await click("Play now: Evening radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueueRadio", stationId: station.id, playNow: true });
   await click("Play now: Directory radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueue", entry: { title: "Directory radio", kind: "radio" } });
   await click("Save Evening video"); expect(onlineFavorites).toEqual([video]); expect(button("Remove Evening video from saved").getAttribute("aria-pressed")).toBe("true");
@@ -211,7 +212,7 @@ test("provider URL opens its existing catalogue, Bandcamp album commands remain 
 test("filters retain query and source results, and broadcasts refresh saved state without repeating online searches", async () => {
   integrated = true; await render(); await search("Evening");
   const count = paths.filter(path => path.includes("youtube/items")).length;
-  await click("Radio"); await click("YouTube"); expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(count);
+  await click("Radio playlists"); await click("YouTube"); expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(count);
   expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("Evening");
   onlineFavorites = [video]; await render(true, true, true, 1, 2); expect(button("Remove Evening video from saved").getAttribute("aria-pressed")).toBe("true");
   expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(count);
@@ -226,7 +227,7 @@ test("Search applies a temporary online quality override once and returns to the
   await act(async () => option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush();
   await act(async () => document.querySelector<HTMLElement>('[data-slot="popover-content"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))); await flush();
   await click("Play now: Evening video"); expect(commands.at(-1)).toMatchObject({ quality: "720p" });
-  await click("Add next: Evening video"); expect(commands.at(-1)).toMatchObject({ quality: "1080p" });
+  await click("Add to queue: Evening video"); expect(commands.at(-1)).toMatchObject({ quality: "1080p" });
 });
 test("a superseded online search cannot overwrite the current provider results", async () => {
   integrated = true;
@@ -284,15 +285,13 @@ test("RaiPlay searches include matching live channels even when the programme ca
   await click("Play now: Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
 });
 
-test("Search starts with direct browsing actions and no page-level quality control", async () => {
+test("the empty discovery field has no filters, heading or premature requests", async () => {
   await render(true, true, true, 1, 1, "http://localhost", "auto");
-  expect(document.querySelector('[role="combobox"]')).toBeNull();
-  expect(document.body.textContent).not.toContain("Video default");
-  await act(async () => ([...document.querySelectorAll(".search-shortcuts button")].find(element => element.textContent === "TV folders") as HTMLButtonElement).click());
-  expect(browsed).toEqual(["Files"]);
-  expect(commands).toEqual([]);
+  expect(document.querySelector("h1")).toBeNull();
+  expect(document.querySelector(".search-scopes")).toBeNull();
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.placeholder).toBe("Search or paste a link");
+  expect(paths).toEqual([]);
 });
-
 
 for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} search channel opens broadcasts and restores its browse control without playback`, async () => {
   const { SearchOnlineResults } = await import("./SearchOnlineResults");
@@ -315,31 +314,41 @@ for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} sear
 });
 
 for (const manage of [false, true]) test(`${manage ? "administrator" : "guest"} can recover from an unconfigured source without losing their query`, async () => {
-  administrator = manage; connectedJellyfin = false; integrated = true;
-  await render(); await search("Evening"); await click("Jellyfin");
+  integrated = true; administrator = manage; connectedJellyfin = false;
+  await render(); await search("Evening");
   const source = document.querySelector('[aria-label="Jellyfin search results"]')!;
   expect(source.textContent).toContain("Jellyfin is not connected");
-  expect(!!button("Manage sources", source)).toBe(manage);
-  if (manage) { await click("Manage sources", source); expect(browsed).toEqual(["Manage sources"]); }
+  expect(!!button("Source settings", source)).toBe(manage);
+  if (manage) { await click("Source settings", source); expect(browsed).toEqual(["Source settings"]); }
   await click("Search YouTube", source);
   expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
   expect(button("YouTube").getAttribute("aria-pressed")).toBe("true");
   await flush(); expect(document.activeElement).toBe(button("YouTube"));
   expect(button("Play now: Evening video").textContent).toBe("Play now");
-  expect(button("Add next: Evening video").textContent).toBe("Add next");
+  expect(button("Add to queue: Evening video").textContent).toBe("Add to queue");
   expect(commands).toEqual([]);
-  await click("Add next: Evening video");
+  await click("Add to queue: Evening video");
   expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", playNow: false });
   expect(document.body.textContent).toContain("added to the end of Up next. Playback is unchanged.");
   await click("Play now: Evening video");
   expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", playNow: true });
-  expect(document.body.textContent).toContain("Starting Evening video on the TV.");
+  expect(document.body.textContent).toContain("Starting Evening video on the playback computer.");
 });
 
-test("submitting search leaves keyboard focus on the selected source for directional browsing", async () => {
-  integrated = true; await render(); await click("YouTube"); await search("Evening"); await flush();
-  expect(document.activeElement).toBe(button("YouTube"));
-  expect(commands).toEqual([]);
+test("typing searches in place after debounce and keeps input focus", async () => {
+  integrated = true; await render();
+  const input = document.querySelector<HTMLInputElement>("#media-search")!;
+  await act(async () => { input.focus(); Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "Evening"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  expect(paths).toEqual([]);
+  await act(async () => { await Bun.sleep(350); }); await flush();
+  expect(paths).toContain("/api/providers/youtube/items?q=Evening");
+  expect(document.activeElement === input).toBe(true);
+  expect(button("YouTube").textContent).toBe("YouTube 2");
+  expect(!!button("avoid radio")).toBe(false);
+  expect(button("Radio playlists").textContent).toBe("Radio playlists 1");
+  await click("Clear search");
+  expect(input.value).toBe(""); expect(document.activeElement === input).toBe(true);
+  expect(document.querySelector(".search-scopes")).toBeNull();
 });
 
 for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchronous"} route updates focus the newly selected source after recovery`, async () => {
@@ -356,4 +365,46 @@ for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchrono
   if (deferred) await act(async () => updateRoute?.());
   expect(document.activeElement).toBe(button("YouTube"));
   expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("Evening");
+});
+
+for (const label of ["Evening video", "Evening radio"]) test(`${label} details preserve browsing focus and expose separate play and queue commands`, async () => {
+  integrated = true; await render(); await search("Evening");
+  const opener = button(`Details for ${label}`); opener.focus();
+  await click(`Details for ${label}`);
+  expect(commands).toEqual([]);
+  const dialog = document.querySelector('[role="dialog"]')!;
+  await click(`Add to queue: ${label}`, dialog);
+  expect(commands.at(-1)).toMatchObject({ playNow: false });
+  await click(`Play now: ${label}`, dialog);
+  expect(commands.at(-1)).toMatchObject({ playNow: true });
+  await click("Close", dialog);
+  expect(document.activeElement === opener).toBe(true);
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("Evening");
+});
+
+test("avoid radio has its own matching group and retries a stale catalog without reloading other sources", async () => {
+  const { avoidRadioPlaylistId } = await import("../shared/radio");
+  integrated = true;
+  const own = { ...station, id: "avoid-one", sourceId: avoidRadioPlaylistId, name: "Evening avoid" };
+  const original = request.getMockImplementation()!;
+  let refreshRequested = false;
+  request.mockImplementation((async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/api/radio/avoid") {
+      refreshRequested = url.searchParams.get("refresh") === "true";
+      return Response.json({ stations: [own], playlist: { error: refreshRequested ? null : "Using saved avoid stations" } });
+    }
+    if (url.pathname === "/api/radio/playlists") return Response.json({ playlists: [{ id: "own" }, { id: avoidRadioPlaylistId }] });
+    return original(input, init);
+  }) as typeof fetch);
+  radioFavorites = [own]; await render(); await search("Evening");
+  expect(button("avoid radio").textContent).toBe("avoid radio 1");
+  expect(button("Radio playlists").textContent).toBe("Radio playlists 1");
+  expect(document.querySelector('[aria-label="Radio playlists search results"]')?.textContent).not.toContain("Evening avoid");
+  expect(paths.some(path => path.includes(`/playlists/${avoidRadioPlaylistId}/stations`))).toBe(false);
+  const youtubeReads = paths.filter(path => path.includes("youtube/items")).length;
+  await click("Retry avoid radio");
+  expect(refreshRequested).toBe(true);
+  expect(document.body.textContent).not.toContain("Using saved avoid stations");
+  expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(youtubeReads);
 });

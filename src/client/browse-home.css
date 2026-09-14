@@ -46,3 +46,7 @@
   .browse-section-heading h2 { font-size: 16px; }
   .browse-sources > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.browse-home .browse-sources > div { display: flex; flex-wrap: wrap; }
+.browse-media-grid .browse-actions { margin-top: 12px; gap: 4px; }
+.browse-media-grid .browse-actions button { padding-inline: 10px; }

@@ -61,13 +61,13 @@ test("browse home uses one history for continued and finished playback and prese
   expect(played).toHaveLength(1);
   await act(async () => button("Play Halfway home from start").click());
   expect(played).toEqual([[unfinished, { fromStart: false }], [unfinished, { fromStart: true }]]);
-  for (const source of ["Library", "Find something to play", "Radio", "Live TV", "Jellyfin", "TV folders"]) await act(async () => button(source).click());
-  expect(browsed).toEqual(["Library", "Search", "Radio", "Guide", "Jellyfin", "Files"]);
+  for (const source of ["Local library", "YouTube", "Radio directory & playlists", "Live TV", "Jellyfin", "Local files"]) await act(async () => button(source).click());
+  expect(browsed).toEqual(["Library", "Online", "Radio", "Guide", "Jellyfin", "Files"]);
 });
 test("hidden home does not fetch and unavailable playback does not prevent browsing", async () => {
   await renderHome(true, false); expect(requests).toEqual([]);
   await renderHome(true, true, false); expect(button("Resume Halfway home").disabled).toBe(true);
-  expect(button("Find something to play").disabled).toBe(false);
+  expect(button("YouTube").disabled).toBe(false);
   await renderHome(false); expect(button("Resume Halfway home").disabled).toBe(true);
 });
 test("home history failure has an independent retry", async () => {
@@ -138,7 +138,7 @@ test("library artwork cards open details without playback and retain actual libr
   await act(async () => button("Details for A library film").click());
   expect(played).toEqual([]);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("TV folders");
-  await act(async () => button("Add A library film to Up next").click());
+  await act(async () => button("Add to queue: A library film").click());
   expect(added).toEqual([{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }]);
   expect(played).toEqual([]);
   await act(async () => button("Save A library film for later").click());
@@ -146,7 +146,7 @@ test("library artwork cards open details without playback and retain actual libr
   expect(saved?.[1]?.method).toBe("POST");
   expect(JSON.parse(String(saved?.[1]?.body))).toEqual({ reference: { kind: "library", id: "next" } });
   expect(played).toEqual([]);
-  await act(async () => button("Play A library film").click());
+  await act(async () => button("Play now A library film").click());
   expect(played).toEqual([[{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }, { fromStart: false }]]);
 });
 
@@ -177,8 +177,8 @@ test("an empty TV home offers catalog browsing without a local-file placeholder"
   expect(document.body.textContent).not.toContain("From your library");
   expect(document.body.textContent).not.toContain("Library folders are managed");
   expect(document.querySelector(".browse-empty, .browse-hero")).toBeNull();
-  expect(document.querySelector('[aria-label="Browse media"]')?.hasAttribute("hidden")).toBe(false);
-  await act(async () => button("Library").click());
+  expect(document.querySelector('[aria-label="Browse sources"]')?.hasAttribute("hidden")).toBe(false);
+  await act(async () => button("Local library").click());
   expect(browsed).toEqual(["Library"]);
   expect(played).toEqual([]);
 });

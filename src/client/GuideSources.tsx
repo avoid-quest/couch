@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export type GuideRequest = (path: string, init?: RequestInit) => Promise<Response>;
-type Props = { request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean; controllerVersion: number; origin: string; token: string };
+type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean; controllerVersion: number; origin: string; token: string };
 
-export function GuideSources({ request, sources, host, connected, controllerVersion, origin, token }: Props) {
+export function GuideSources({ inline = false, request, sources, host, connected, controllerVersion, origin, token }: Props) {
   const [open, setOpen] = useState(false);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [editing, setEditing] = useState<GuideSource | null>(null);
@@ -30,7 +30,7 @@ export function GuideSources({ request, sources, host, connected, controllerVers
       .then(async response => { const value = await response.json() as ControllerIdentity; if (response.ok && !controller.signal.aborted) setIdentity(value); }).catch(() => {});
     return () => controller.abort();
   }, [origin, token, connected, controllerVersion]);
-  useEffect(() => { if (!open || !administrator) { setPlaylistUrl(""); setGuideUrl(""); } }, [open, administrator]);
+  useEffect(() => { if (!open && !inline || !administrator) { setPlaylistUrl(""); setGuideUrl(""); } }, [open, inline, administrator]);
 
   async function mutate(path: string, method: string, value?: unknown) {
     setBusy(true); setError(null); setNotice("");
@@ -47,10 +47,7 @@ export function GuideSources({ request, sources, host, connected, controllerVers
   }
   const edit = (source: GuideSource | null) => { setEditing(source); setName(source?.name ?? ""); setPlaylistUrl(""); setGuideUrl(""); setError(null); };
   if (!administrator) return <p className="text-sm text-muted-foreground">An administrator can add or refresh guide sources.</p>;
-  return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Guide sources</Button></DialogTrigger>
-    <DialogContent className="guide-sources max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
-      <DialogHeader><DialogTitle>Guide sources</DialogTitle><DialogDescription>Add a supported M3U channel list and its XMLTV guide. Use feeds you are allowed to watch.</DialogDescription></DialogHeader>
+  const content = <>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
       <ul className="space-y-3">{sources.map(source => <li className="space-y-2 rounded-lg border p-3" key={source.id}>
@@ -72,6 +69,13 @@ export function GuideSources({ request, sources, host, connected, controllerVers
         <p className="text-sm text-muted-foreground">Use minute-precision program times with numeric timezone offsets or UTC. Custom playback headers, DRM and catch-up are unavailable.</p>
         <div className="flex flex-wrap gap-2"><Button disabled={busy || !connected}><Plus aria-hidden="true" />{busy ? "Loading guide…" : editing ? "Replace source" : "Import guide"}</Button>{editing && <Button type="button" variant="outline" disabled={busy} onClick={() => edit(null)}>Cancel replacement</Button>}</div>
       </form>
+  </>;
+  if (inline) return <section className="space-y-4" aria-label="IPTV sources"><h3 className="text-lg font-medium">IPTV</h3><p className="text-sm text-muted-foreground">Add an M3U channel list and its XMLTV guide.</p>{content}</section>;
+  return <Dialog open={open} onOpenChange={setOpen}>
+    <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Guide sources</Button></DialogTrigger>
+    <DialogContent className="guide-sources max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
+      <DialogHeader><DialogTitle>Guide sources</DialogTitle><DialogDescription>Add a supported M3U channel list and its XMLTV guide. Use feeds you are allowed to watch.</DialogDescription></DialogHeader>
+      {content}
     </DialogContent>
   </Dialog>;
 }

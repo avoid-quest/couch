@@ -41,3 +41,9 @@
   .search-source .search-result-row { flex-wrap: wrap; }
   .search-source .search-result-row > .search-item-actions { width: 100%; padding-left: 60px; }
 }
+
+.search-panel .search-result-row > .search-item-actions { flex-shrink: 0; }
+@media (max-width: 760px) {
+  .search-panel .search-result-row { flex-wrap: wrap; }
+  .search-panel .search-result-row > .search-item-actions { width: 100%; padding-left: 0; }
+}

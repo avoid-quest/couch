@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { RadioPlaylistSummary, RadioStation } from "../shared/radio";
+import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioStation } from "../shared/radio";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
 import { createId } from "./session";
 import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
 
-type Props = SearchPlaybackProps & { query: string; version: number; directory?: boolean };
+type Props = SearchPlaybackProps & { query: string; version: number; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
   return <RadioResults key={`${props.origin}:${props.token}`} {...props} />;
 }
 function RadioResults(props: Props) {
+  const [detail, setDetail] = useState<RadioStation | null>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const [stations, setStations] = useState<RadioStation[]>([]);
   const [favorites, setFavorites] = useState<RadioStation[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,8 @@ function RadioResults(props: Props) {
   const [visible, setVisible] = useState(6);
   const lifetime = useRef<AbortController | null>(null);
   const previousSearch = useRef("");
-  const title = props.directory ? "Radio directory" : "Your radio stations";
+  const title = props.source ?? (props.directory ? "Radio directory" : "Radio playlists");
+  const directory = title === "Radio directory", avoid = title === "avoid radio";
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
   useEffect(() => {
     if (!props.connected) { setFavorites(null); return; }
@@ -38,8 +42,14 @@ function RadioResults(props: Props) {
     async function load() {
       if (props.query.length > 100) throw new Error("Search radio with at most 100 characters.");
       const query = new URLSearchParams({ q: props.query });
-      if (props.directory) return (await readSearch<{ stations: RadioStation[] }>(props, `/api/radio/stations?${query}`, controller.signal)).stations;
-      const { playlists } = await readSearch<{ playlists: RadioPlaylistSummary[] }>(props, "/api/radio/playlists", controller.signal);
+      if (avoid) {
+        const { playlist, stations } = await readSearch<AvoidRadioCatalog>(props, `/api/radio/avoid${retry ? "?refresh=true" : ""}`, controller.signal);
+        if (!controller.signal.aborted && playlist?.error) setError(playlist.error);
+        return stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase()));
+      }
+      if (directory) return (await readSearch<{ stations: RadioStation[] }>(props, `/api/radio/stations?${query}`, controller.signal)).stations;
+      const { playlists: allPlaylists } = await readSearch<{ playlists: RadioPlaylistSummary[] }>(props, "/api/radio/playlists", controller.signal);
+      const playlists = allPlaylists.filter(playlist => playlist.id !== avoidRadioPlaylistId);
       const results: RadioStation[][] = Array.from({ length: playlists.length }, () => []);
       const failures: string[] = [];
       let index = 0;
@@ -56,7 +66,7 @@ function RadioResults(props: Props) {
     }
     void load().then(result => { if (!controller.signal.aborted) setStations(result); }).catch(reason => { if (!controller.signal.aborted) setError(searchError(reason)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [props.origin, props.token, props.connected, props.query, props.directory, props.directory ? 0 : props.version, retry]);
+  }, [props.origin, props.token, props.connected, props.query, title, directory ? 0 : props.version, retry]);
   async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done: string) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal; setBusy(true); setActionError(""); setNotice("");
@@ -65,7 +75,7 @@ function RadioResults(props: Props) {
     finally { if (!signal.aborted) setBusy(false); }
   }
   function play(station: RadioStation, playNow: boolean) {
-    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false, playNow ? `Starting ${station.name} on the TV.` : `${station.name} added to the end of Up next. Playback is unchanged.`);
+    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false, playNow ? `Starting ${station.name} on the playback computer.` : `${station.name} added to the end of Up next. Playback is unchanged.`);
   }
   function save(station: RadioStation, saved: boolean) {
     void action(async signal => {
@@ -73,18 +83,22 @@ function RadioResults(props: Props) {
       if (!signal.aborted) setFavorites(current => saved ? current?.filter(entry => entry.id !== station.id) ?? [] : [...current?.filter(entry => entry.id !== station.id) ?? [], station]);
     }, `${station.name} ${saved ? "removed from" : "added to"} Saved.`);
   }
-  const matches = (station: RadioStation) => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
-  const results = props.directory ? stations : [...new Map([...stations, ...(favorites ?? []).filter(matches)].map(station => [station.id, station])).values()];
+  const matches = (station: RadioStation) => station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
+  const results = directory || avoid ? stations : [...new Map([...stations, ...(favorites ?? []).filter(matches)].map(station => [station.id, station])).values()];
+  useEffect(() => { props.onResults?.(title, { count: results.length, loading, error: !!error }); }, [results.length, loading, error, props.onResults, title]);
+  useEffect(() => { if (!props.active) setDetail(null); }, [props.active]);
+  const itemActions = (station: RadioStation) => {
+    const saved = !!favorites?.some(item => item.id === station.id);
+    return <div className="search-item-actions"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add to queue: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add to queue</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div>;
+  };
   return <section aria-label={`${title} search results`} aria-busy={loading} className="search-source"><div className="search-source-heading"><h2>{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
     {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Retry {title}</Button></p>}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
-    {!loading && !error && !results.length && <p className="text-muted-foreground">{props.directory ? "No matching stations in the directory." : "No matching stations in your radio sources."}</p>}
+    {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
-    <ul className="search-results">{results.slice(0, visible).map(station => {
-      const saved = !!favorites?.some(item => item.id === station.id);
-      return <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><div className="search-radio-copy"><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></div><div className="search-item-actions"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add next: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add next</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div></li>;
-    })}</ul>
+    <ul className="search-results">{results.slice(0, visible).map(station => <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><Button variant="ghost" className="search-result-title" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetail(station); }}><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>{itemActions(station)}</li>)}</ul>
+    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;
 }
