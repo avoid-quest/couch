@@ -1,126 +1,73 @@
-# Ubuntu package
+# Debian AppImage
 
-Couch's production package supports Ubuntu 24.04 x86_64. Download the `.deb`
-from an authenticated successful Package workflow artifact, verify its SHA-256
-against the artifact's `SHA256SUMS`, then install it within an existing graphical
-desktop:
+The supported package is one signed Debian 13 amd64/X11 Tauri AppImage. It carries
+the native app, local/remote UI, compiled Bun backend, yt-dlp, Deno, ffprobe and
+application libraries. The installer provisions Debian's host packages and optional
+small TV session. See [installation and recovery](install-couch.md).
+
+`packaging/inputs.json` pins the Debian image, dated Debian/security snapshot,
+helper downloads, AppImage tools/runtime and notice inputs. JavaScript and Rust
+use their existing lockfiles. `bun run package:build` requires committed source,
+Debian 13 amd64 and the pinned Bun. It prepares Tauri sidecar/resources, uses the
+standard AppImage bundler and checks the resulting helpers and library closure.
+
+Tauri CLI 2.11.4 uses linuxdeploy. Its default exclusion list omits libraries such
+as libstdc++, X11 and font libraries. The package configuration includes those
+application-owned libraries through Tauri's `appimage.files`, along with libmpv,
+NSS modules and ALSA plugins. Tauri copies WebKit processes and its GTK/GStreamer
+plugins copy their dynamically loaded modules. Kernel, glibc and device-side
+GL/EGL/graphics drivers remain host prerequisites.
+
+The verified linuxdeploy output plugin is extracted with Debian's `unsquashfs`.
+Tauri's tool cache points to its unchanged executable because the plugin's static
+PIE AppImage wrapper cannot run under the Mac's container emulation. This changes
+only build-tool execution. The final app keeps the pinned standard AppImage
+runtime. Build AppDir on a Linux filesystem; the Mac bind mount failed while
+linuxdeploy copied ELF dependencies. A Docker volume is suitable.
+
+The generated inventory records every bundled file/hash, ELF linkage, explicitly
+loaded components, build packages and input versions. Unexpected host-library
+fallbacks or changed helper hashes fail the build. The executable's `--version`
+output records the same app/backend identity and helper hashes. FUSE-mounted
+execution still needs a booted host; container extraction does not test FUSE.
+
+## Isolated Mac build
+
+GitHub Actions remains paused. Use the existing container builder locally:
 
 ```sh
-sudo apt install ./Couch_0.1.0_amd64.deb
-couch
+docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
+  --build-arg BUN_VERSION=1.4.2 --build-arg RUST_VERSION=1.98.1 \
+  -t couch-debian-builder .
+mkdir -p .artifacts
+git bundle create .artifacts/build-source.bundle HEAD
+docker run -d --init --platform linux/amd64 --name couch-package \
+  --cpus 6 --memory 10g couch-debian-builder
+docker cp .artifacts/build-source.bundle couch-package:/source.bundle
+docker exec couch-package git clone /source.bundle /work
+docker exec -w /work couch-package sh -c 'bun install --frozen-lockfile && bun run package:build'
+docker cp couch-package:/work/src-tauri/target/release/bundle/appimage .artifacts/
+docker cp couch-package:/work/.artifacts/appimage-inventory.json .artifacts/
 ```
 
-Use the actual filename in the artifact. APT installs Couch's declared native
-runtime dependencies, including libmpv, ffmpeg for ffprobe, and the VA-API driver
-set. The drivers are required even with `--no-install-recommends`; installing
-libmpv alone can leave Intel video decoding unavailable. Driver installation
-does not prove that a particular codec or playback session uses hardware decoding.
-The destination
-does not need Bun, Node, npm, Rust, compilers, development headers or a source
-checkout. The package does not configure login, autostart or audio services.
-[Boot a fresh Ubuntu machine directly into Couch TV](https://github.com/avoid-quest/couch/issues/3)
-owns that provisioning.
+The source bundle is private build input. Never upload it as distribution material.
+The selected source timestamp supplies `SOURCE_DATE_EPOCH`. Keep the container
+until setup/material archives, signing and checks finish, then stop it.
 
-`/usr/bin/couch` owns the native window/player and starts one `/usr/bin/couch-server`
-child. Keep supervision on `couch`; starting another server competes for the same
-port and data. A failed coordinator causes the native owner to exit nonzero.
-Normal shutdown first closes the coordinator and its database. The compiled
-coordinator contains the real browser assets and serves the LAN remote on port
-4100. Packaged yt-dlp and Deno live in Tauri's resource directory under
-`/usr/lib/Couch/tools`. The host passes their absolute paths to its child.
-Package preparation uses Ubuntu's `patchelf` to set their `$ORIGIN` RPATH before
-recording release hashes. AppImage bundling uses the same `/usr/bin/patchelf`,
-and a final AppDir hash check rejects any subsequent helper modification.
+Run `bun scripts/package-setup.ts <version> <output-directory>` in that checkout
+to assemble the explicitly allowlisted setup and dependency-material archives.
+Sign each archive and the AppImage with the pinned Tauri signer. Isolated checks
+use a disposable local signing key; only the release ticket owns enrollment and
+production signing/publication. Do not publish diagnostics, source bundles,
+private documentation, user configuration, databases, backups or keys.
 
-The data default remains `$XDG_DATA_HOME/quest.avoid.couch`, or
-`$HOME/.local/share/quest.avoid.couch` when XDG_DATA_HOME is unset. The native host
-also honors `COUCH_DATA_DIR`. When adopting an existing installation, retain its
-account, data directory and permissions. Set an absolute `COUCH_DATA_DIR` for a
-previous custom directory, including a source-run `.data` directory. The package
-has no maintainer script that moves, replaces or removes user data. Reinstall and
-removal leave profiles, pairings, sources and media in that directory. An account
-change requires an explicit data handoff by the appliance installer.
+The ordinary installer and TV setup have a disposable Debian fixture at
+`tests/package/installer.sh`. It uses real Minisign verification and doubles APT,
+services and successful FUSE access. It is a logic check, not pristine-machine
+acceptance. Release acceptance, including GUI/playback, boot, actual library loads
+and signed hosted A-to-B updates with the Mac offline, belongs to #277 after the
+hosted-release implementation in #276.
 
-`couch --version` and `couch-server --version` emit the same JSON without starting
-the GUI/server or writing data. Paired callers can GET `/api/build` with their
-existing Bearer token. The result records application version, source revision,
-dirty-source status, target, embedded Bun version and packaged helper versions
-and hashes. The package also installs the identity and redistribution notices
-under `/usr/share/doc/couch`. The build input inventory records lockfile hashes,
-Rust/Bun versions, helper checksums and the resolved Ubuntu build packages.
-
-## Build and qualify
-
-The [Package workflow](../.github/workflows/package.yml) uses the pinned project
-Tauri CLI through the official Tauri action. It builds Debian and AppImage on Ubuntu
-24.04 x86_64. JavaScript and Rust dependencies stay locked; language tools,
-helper archives, notice downloads, action revisions, the Ubuntu snapshot and
-clean runtime image have explicit pins. Ubuntu's GitHub runner image metadata
-and resolved build package inventory remain part of each run's evidence.
-
-After ordinary checks, run Package manually on the intended revision. Before
-the workflow lands on main, add the `qualify-package` label to the ready-for-review
-PR. The workflow checks out that event's exact PR head. It never publishes a
-release or uses signing credentials. Artifact names identify the build run and attempt; build metadata records the exact source head.
-After a new commit, remove and reapply the label to request fresh qualification.
-A prior success does not qualify a changed head. Review `result.json`, the package
-hash and embedded source revision before consuming the artifact.
-
-Package runs only by manual dispatch or the explicit PR label, rather than on every main merge. It builds both formats once, then a two-format matrix qualifies the same binaries in separate clean Ubuntu containers. Re-running failed qualification jobs reuses that build and its identity. For a fixture fix, manual dispatch accepts `build-run` and `build-attempt` to qualify saved bytes with the current tests, skipping compilation and release output. Evidence keeps the original binary build identity; the run records the test revision. The private downloader requires the overall workflow's latest attempt to have succeeded. Build inputs and diagnostics are retained for seven days; qualified packages for thirty days.
-
-Check runs native tests for Tauri source/configuration, toolchain, dependency and build-script changes. Package fixtures run source checks and their explicit qualification instead of recompiling unchanged Rust tests. Signed APT and installer tests run within Check while the installed migration still needs them. Cargo caches use stable profile keys. Check writes only on main; explicit package qualification also saves its release cache so a packaging fix can reuse compiled dependencies. Workflow edits no longer create new copies of all compiled dependencies.
-
-The source archive shipped beside the package includes the modified native
-dependencies and rebuild instructions. Keep it accessible to the package's
-recipients with its notices. The private CI artifact is separate from the signed
-LAN publication owned by
-[Publish signed Couch releases on the home network](https://github.com/avoid-quest/couch/issues/5).
-
-On a configured Ubuntu build machine, `bun run package:build` prepares the
-verified helpers/notices and invokes the same locked Tauri build. Start with a
-clean committed source tree. `tests/package/qualify.ts` accepts the emitted Debian
-file and uses Docker plus the official tauri-driver 2.0.6 on the build machine.
-The Bun test runner stays outside the destination container. Linux Docker host
-networking connects that runner to tauri-driver's loopback-only listener. The
-native proxy, native WebDriver and HTTP-browser WebDriver use separate ports.
-Docker's init reaps exited children after WebDriver closes the native window;
-the restart check still requires exactly one coordinator process.
-
-The clean container first installs only the package's production closure through
-APT, records it and checks for forbidden development commands/libraries. It then
-adds Xvfb, Openbox, a silent PulseAudio sink and WebDriver as qualification
-fixtures. It receives only the package, driver, generated media/data and test
-launcher files. No application source or developer runtime is mounted.
-
-Ubuntu's systemd dependency includes `systemd-dev`, which contains shared D-Bus
-XML and pkg-config directory metadata. The fixture records and verifies that
-its paths stay under `/usr/share`; this data-only package is the sole exception
-to the `-dev` package-name check. `libsystemd-dev`, `libudev-dev` and other
-development libraries remain forbidden.
-
-An older Debian version of the same binary is the upgrade fixture because no
-previous production release exists. The test adopts an existing profile,
-authorized remote, library source and extra data file, upgrades to the exact
-artifact, reinstalls it, and verifies hashes before launch. It then opens the
-installed native UI, scans metadata with ffprobe, plays local and extracted
-webpage media, executes Deno, pairs a real HTTP browser, and checks persistence
-after restart. This tests package/data ownership across APT operations; it does
-not claim compatibility with an unbuilt historical Couch release.
-
-`result.json`, package/source hashes, production and test dependency inventories,
-native linkage, build identities, screenshots and logs accompany the artifact.
-Each local qualification attempt writes a new evidence directory, preserving
-earlier logs without reusing readiness, failure or result markers.
-The display smoke uses software rendering and silent audio. Physical video,
-sound and boot-session results must be recorded separately on their owning
-issues.
-
-## AppImage qualification
-
-The Package workflow also builds an AppImage from the same committed source and pinned helpers. Its separate `couch-appimage-RUN.ATTEMPT` artifact is uploaded only after the exact AppImage passes clean Ubuntu 24.04 qualification. It contains the AppImage, matching source/build identity, SHA-256 hashes and runtime evidence. Redistribution notices are inside `/usr/share/doc/couch` in the bundle.
-
-Run `bun tests/package/qualify.ts path/to/Couch.AppImage` on an Ubuntu 24.04 x86_64 Docker host with Bun, ffmpeg and tauri-driver 2.0.6 installed. The runtime container has no development tools. The test uses AppImage's extract-and-run mode because Docker does not provide a FUSE mount. It checks the native host/sidecar identity, pinned helper discovery, existing library scan, native video/audio and subtitle pixels, real browser pairing and retained authorization/data after restart without autoplay.
-
-The supported Ubuntu runtime supplies `libwebkit2gtk-4.1-0`, `libfuse2t64`, `fuse3` (the mount helper), ffmpeg/ffprobe, GL and VA-API drivers, CA certificates and fonts. The qualification installs and records these explicit prerequisites before adding the browser driver, so its WebKit dependencies are not hidden test prerequisites. Normal `./Couch.AppImage` launch requires working FUSE; Docker qualification uses the documented `APPIMAGE_EXTRACT_AND_RUN=1` mode. Normal mounted launch remains an installed-system check. Xvfb, the browser driver and PulseAudio's null sink are test fixtures. Software rendering verifies bundle behavior, not T480 hardware decoding, audible output or physical subtitle geometry. Those remain installed-device acceptance requirements. Tauri's [AppImage guidance](https://v2.tauri.app/distribute/appimage/) describes the build-host compatibility boundary; this artifact targets Ubuntu 24.04.
-
-This qualification increment does not enroll an update key or migrate an installed appliance. Keep the current Debian session and updater until signed AppImage updates, installed migration and operator SSH recovery qualify. Keep user data outside the bundle at the existing absolute `COUCH_DATA_DIR` with its current account and permissions.
+Official references: [Tauri AppImage packaging](https://v2.tauri.app/distribute/appimage/),
+[sidecars](https://v2.tauri.app/develop/sidecar/),
+[the pinned bundler](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/linux/appimage/linuxdeploy.rs).

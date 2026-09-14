@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
-import { lstat, readdir, readlink } from "node:fs/promises";
+import { lstat, readdir, readlink, realpath } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
-const appdir = resolve(process.argv[2] ?? "src-tauri/target/release/bundle/appimage/Couch.AppDir");
+const appdir = await realpath(resolve(process.argv[2] ?? "src-tauri/target/release/bundle/appimage/Couch.AppDir"));
 const output = process.argv[3] ?? ".artifacts/appimage-inventory.json";
 const sha256 = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
 const files: { path: string; size?: number; sha256?: string; link?: string }[] = [];

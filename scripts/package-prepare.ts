@@ -39,6 +39,7 @@ await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packag
 const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "tauri");
 await mkdir(cache, { recursive: true });
 for (const [name, input] of Object.entries(inputs.appimageTools)) {
+  await rm(join(cache, name), { force: true });
   await download(input, join(cache, name));
   await chmod(join(cache, name), 0o755);
 }
