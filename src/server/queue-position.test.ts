@@ -43,13 +43,15 @@ test("legacy entries stay upcoming; Stop and restart retain position without aut
   expect(f.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two" });
   f.close();
   const restarted = f.start();
-  expect(restarted.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two", queue: entries });
+  expect(restarted.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two", queue: [entries[1], entries[0], ...entries.slice(2)] });
   expect(restarted.commands).toEqual([{ type: "volume", volume: 42 }]);
 });
 
 test("restart during playback retains the last selection and replay moves the boundary backward", () => {
   const f = fixture();
-  f.session.command({ type: "play", entryId: "three" });
+  f.session.command({ type: "play", entryId: "one" });
+  f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! });
+  f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! });
   f.close();
   const restarted = f.start();
   expect(restarted.session.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "three" });
@@ -60,7 +62,8 @@ test("restart during playback retains the last selection and replay moves the bo
 
 test("reorder follows the cursor identity and deleting current keeps the previous boundary and stops", () => {
   const f = fixture();
-  f.session.command({ type: "play", entryId: "two" });
+  f.session.command({ type: "play", entryId: "one" });
+  f.session.command({ type: "next", playbackId: f.session.state.player.playbackId! });
   f.session.command({ type: "move", entryId: "four", beforeEntryId: "three" });
   expect(f.session.state.queue.map(entry => entry.id)).toEqual(["one", "two", "four", "three"]);
   expect(f.session.state.queueCursorEntryId).toBe("two");
@@ -113,11 +116,14 @@ test("failed progress completion rolls back the cursor and continues observing t
   const playbackId = f.session.state.player.playbackId!;
   f.session.observe({ ...idle, playbackId, status: "playing", position: 10, duration: 100 });
   f.session.observe({ ...idle, playbackId, status: "playing", position: 20, duration: 100 });
+  const queue = f.session.state.queue;
   const save = spyOn(f.store, "saveProgress").mockImplementation(() => { throw new Error("Disk full"); });
   try {
     expect(() => f.session.command({ type: "play", entryId: "two" })).toThrow();
     expect(f.store.queueCursorEntryId()).toBe("local");
     expect(f.session.state.currentEntryId).toBe("local");
+    expect(f.session.state.queue).toEqual(queue);
+    expect(f.start().session.state.queue).toEqual(queue);
   } finally { save.mockRestore(); }
   f.session.observe({ ...idle, playbackId, status: "paused", position: 40, duration: 100 });
   expect(f.store.progress("household", "library:local")?.position).toBe(40);

@@ -1,10 +1,10 @@
 import { buildKey, loadedBuild } from "../shared/build";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
 import type { ConnectionDetails, ControllerIdentity } from "../shared/controllers";
 import { knownConnection, rememberConnection } from "./connection";
 
-export type Credentials = { origin: string; token: string };
+export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 
@@ -13,13 +13,9 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, onOrigin?: (origin: string) => void) {
-  const navigation = useRef(onNavigation);
-  navigation.current = onNavigation;
-  const changeOrigin = useRef(onOrigin);
-  changeOrigin.current = onOrigin;
-  const [details, setDetails] = useState<ConnectionDetails | null>(() => knownConnection()?.details ?? null);
-  const [publicPlayer, setPublicPlayer] = useState<ConnectionDetails["player"]>();
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
+  const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
+  const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<SessionState | null>(null);
@@ -31,7 +27,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   useEffect(() => {
     setState(null);
-    setPublicPlayer(undefined);
+    setIdentity(null);
+    setCredentialRejected(false);
     ready.current = false;
     let disposed = false;
     const controller = new AbortController();
@@ -49,62 +46,59 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     };
 
     const retryLater = () => { retry = setTimeout(() => void connect(), Math.min(500 * 2 ** attempt++, 8_000)); };
-    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setPublicPlayer(undefined); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
+    const pairingRequired = () => { authenticate = false; ready.current = false; setState(null); setIdentity(null); setCredentialRejected(true); setStatus("pairing-required"); rejectPending(); void connect(); };
     const connect = async () => {
       if (disposed) return;
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
-      const cached = knownConnection();
-      const origins = [...new Set([credentials?.origin ?? cached?.origin ?? location.origin, ...(credentials && !changeOrigin.current ? [] : cached?.details.urls ?? [])])];
-      let origin: string | undefined;
-      for (const candidate of origins) {
-        try {
-          const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
-          if (authenticate && credentials) {
-            const asset = buildKey(loadedBuild);
-            if (asset) {
-              const response = await fetch(`${candidate}/api/build`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
-              if (disposed) return;
-              if (response.status === 401) { pairingRequired(); return; }
-              if (response.status === 403) { setStatus("connection-rejected"); return; }
-              if (!response.ok) throw new Error("Server unavailable");
-              const current = buildKey(await response.json());
-              if (current !== asset) {
-                setStatus("build-mismatch");
-                try {
-                  const key = `couch.asset-refresh:${candidate}`;
-                  if (current && sessionStorage.getItem(key) !== current) {
-                    sessionStorage.setItem(key, current);
-                    location.reload();
-                  }
-                } catch { /* Keep the refresh prompt when browser storage is unavailable. */ }
-                return;
-              }
-              try { sessionStorage.removeItem(`couch.asset-refresh:${candidate}`); } catch { /* Storage is optional after the build matches. */ }
-            }
-            const response = await fetch(`${candidate}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
+      // A remembered pairing belongs to this origin. Advertised aliases are
+      // address guidance, not permission to send a credential elsewhere.
+      const origin = credentials?.origin ?? location.origin;
+      try {
+        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
+        const response = await fetch(`${origin}/api/connection`, { signal });
+        if (!response.ok) throw new Error("Server unavailable");
+        const next = await response.json() as ConnectionDetails;
+        if (disposed) return;
+        setConnectionDetails({ origin, details: next });
+        if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
+        if (authenticate && credentials) {
+          const asset = buildKey(loadedBuild);
+          if (asset) {
+            const response = await fetch(`${origin}/api/build`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
             if (disposed) return;
             if (response.status === 401) { pairingRequired(); return; }
             if (response.status === 403) { setStatus("connection-rejected"); return; }
             if (!response.ok) throw new Error("Server unavailable");
-            const caller = await response.json() as ControllerIdentity;
+            const current = buildKey(await response.json());
             if (disposed) return;
-            setIdentity(caller);
-            setCredentialRejected(false);
+            if (current !== asset) {
+              setStatus("build-mismatch");
+              try {
+                const key = `couch.asset-refresh:${origin}`;
+                if (current && sessionStorage.getItem(key) !== current) {
+                  sessionStorage.setItem(key, current);
+                  location.reload();
+                }
+              } catch { /* Keep the refresh prompt when browser storage is unavailable. */ }
+              return;
+            }
+            try { sessionStorage.removeItem(`couch.asset-refresh:${origin}`); } catch { /* Storage is optional after the build matches. */ }
           }
-          const response = await fetch(`${candidate}/api/connection`, { signal });
-          if (!response.ok) throw new Error("Server unavailable");
-          const next = await response.json() as ConnectionDetails;
+          const response = await fetch(`${origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
           if (disposed) return;
-          setDetails(next);
-          setPublicPlayer(next.player);
-          rememberConnection(candidate, next);
-          origin = candidate;
-          break;
-        } catch { if (disposed) return; }
+          if (response.status === 401) { pairingRequired(); return; }
+          if (response.status === 403) { setStatus("connection-rejected"); return; }
+          if (!response.ok) throw new Error("Server unavailable");
+          const caller = await response.json() as ControllerIdentity;
+          if (disposed) return;
+          setIdentity(caller);
+          setCredentialRejected(false);
+        }
+      } catch {
+        if (!disposed) { setStatus("server-unavailable"); retryLater(); }
+        return;
       }
-      if (!origin) { setStatus("server-unavailable"); retryLater(); return; }
       if (!authenticate || !credentials) { setStatus("pairing-required"); attempt = 0; retry = setTimeout(() => void connect(), 5_000); return; }
-      if (origin !== credentials.origin && changeOrigin.current) { changeOrigin.current(origin); return; }
       const url = new URL("/api/ws", origin);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
@@ -134,7 +128,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           setState(message.state);
           setStatus("connected");
         } else if (message.type === "navigation") {
-          navigation.current?.(message.key);
+          navigate(message.key);
         } else if (message.type === "result") {
           const request = pending.current.get(message.requestId);
           if (!request) return;
@@ -167,16 +161,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current?.close();
       socket.current = null;
     };
-  }, [credentials?.origin, credentials?.token, reconnectAttempt]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, reconnectAttempt]);
 
-  useEffect(() => { setIdentity(null); setCredentialRejected(false); }, [credentials?.token]);
+  const origin = credentials?.origin ?? location.origin;
+  const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
+  const installationName = state?.installationName;
+  const player = state?.player.status;
+  const details = useMemo(() => publicDetails ? { ...publicDetails, name: installationName ?? publicDetails.name, player: player ?? publicDetails.player } : null, [publicDetails, installationName, player]);
 
   useEffect(() => {
-    if (!state || !details || !credentials) return;
-    const next = { ...details, name: state.installationName ?? details.name, player: state.player.status };
-    setDetails(next);
-    rememberConnection(credentials.origin, next);
-  }, [state?.installationName, state?.player.status, credentials?.origin]);
+    if (details) rememberConnection(origin, details);
+  }, [origin, details]);
 
   useEffect(() => {
     if (status !== "connected" || !credentials) return;
@@ -189,7 +184,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (!controller.signal.aborted) setIdentity(caller);
     }).catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, status, state?.controllerVersion]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, status, state?.controllerVersion]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -220,5 +215,5 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     });
   }, []);
 
-  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicPlayer : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
+  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
 }

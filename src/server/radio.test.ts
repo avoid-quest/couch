@@ -143,7 +143,7 @@ test("programme lookup trusts only stations currently imported from the avoid fe
   await radio.refreshPlaylist(own.id);
   expect(radio.programmeStation(`radio:${station.id}`)).toEqual({ id: "avoid-radio-one", streamUrl: stream });
   expect(radio.getPlayable(station.id).source).toBe(stream);
-  radio.removePlaylist(own.id);
-  expect(radio.programmeStation(`radio:${station.id}`)).toBeNull();
+  expect(() => radio.removePlaylist(own.id)).toThrow("cannot be removed");
+  expect(radio.programmeStation(`radio:${station.id}`)).toEqual({ id: "avoid-radio-one", streamUrl: stream });
   expect(radio.getPlayable(station.id).source).toBe(stream);
 });

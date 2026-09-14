@@ -20,7 +20,7 @@ function profileName(value: unknown) {
   return name;
 }
 
-export function openStore(path: string) {
+export function openStore(path: string, remoteControlEnabled = false) {
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -82,9 +82,14 @@ export function openStore(path: string) {
     CREATE TABLE IF NOT EXISTS streamingcommunity_origin (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
     INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
+    CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
+
+  db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
+  db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
 
   const stored = db.query<{ queue: string; volume: number }, []>("SELECT queue, volume FROM session WHERE id = 1").get()!;
   const hash = (token: string) => new Bun.CryptoHasher("sha256").update(token).digest("hex");
@@ -95,9 +100,6 @@ export function openStore(path: string) {
     const device = controller(id);
     if (!device) throw new ControllerError("This remote is no longer paired.", 404);
     return device;
-  };
-  const protectAdministrator = (device: Controller) => {
-    if (device.role === "administrator" && !db.query("SELECT 1 FROM devices WHERE role = 'administrator' AND id != ? LIMIT 1").get(device.id)) throw new ControllerError("Keep at least one administrator. Approve another remote first.", 409);
   };
   db.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL)");
   db.query("INSERT OR IGNORE INTO installation_setup VALUES (1, ?)").run(administratorExists() || legacyPairedInstallation ? "complete" : "general");
@@ -119,13 +121,15 @@ export function openStore(path: string) {
   };
 
   return {
+    installationId() { return db.query<{ installationId: string }, []>("SELECT installationId FROM installation_identity WHERE id = 1").get()!.installationId; },
+    remoteControlEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_sharing WHERE id = 1").get()!.enabled; },
+    saveRemoteControlEnabled(enabled: boolean) { db.query("INSERT INTO installation_sharing VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
     streamingCommunityOrigin: () => db.query<{ origin: string }, []>("SELECT origin FROM streamingcommunity_origin WHERE id = 1").get()?.origin ?? streamingCommunityOrigin,
     saveStreamingCommunityOrigin: (origin: string) => { db.query("INSERT INTO streamingcommunity_origin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET origin = excluded.origin").run(origin); },
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },
     setupStep,
     advanceSetup(expected: unknown) {
       return db.transaction(() => {
-        if (!administratorExists()) throw new ControllerError("Claim an administrator before continuing setup.", 409);
         const current = setupStep();
         if (expected !== current || current === "complete") throw new ControllerError("Setup changed. Review the current step and try again.", 409);
         const next = setupSteps[setupSteps.indexOf(current) + 1]!;
@@ -271,7 +275,10 @@ export function openStore(path: string) {
       const label = controllerName(name === undefined ? "Remote" : name);
       const token = crypto.randomUUID() + crypto.randomUUID();
       const now = Date.now();
-      db.query("INSERT INTO devices VALUES (?, ?, ?, 'controller', ?, ?)").run(hash(token), crypto.randomUUID(), label, now, now);
+      db.transaction(() => {
+        const role = db.query("SELECT 1 FROM devices LIMIT 1").get() ? "controller" : "administrator";
+        db.query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)").run(hash(token), crypto.randomUUID(), label, role, now, now);
+      }).immediate();
       return token;
     },
     isPaired(token: string) {
@@ -288,15 +295,14 @@ export function openStore(path: string) {
     setControllerRole(id: string, role: unknown) {
       if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Controller or Administrator.");
       return db.transaction(() => {
-        const device = requireController(id);
-        if (role === "controller") protectAdministrator(device);
+        requireController(id);
         db.query("UPDATE devices SET role = ? WHERE id = ?").run(role, id);
         return controller(id)!;
       }).immediate();
     },
     revokeController(id: string) {
       db.transaction(() => {
-        protectAdministrator(requireController(id));
+        requireController(id);
         db.query("DELETE FROM devices WHERE id = ?").run(id);
       }).immediate();
     },

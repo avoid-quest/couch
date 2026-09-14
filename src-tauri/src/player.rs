@@ -19,6 +19,7 @@ pub enum Request {
     Observe,
     Diagnostics(String),
     Readiness { nonce: String, deadline: std::time::Instant },
+    Stop(tokio::sync::oneshot::Sender<Result<(), String>>),
     Shutdown,
 }
 
@@ -56,6 +57,11 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                         pending.store(false, Ordering::Relaxed);
                     });
                 }
+                continue;
+            }
+            Ok(Request::Stop(reply)) => {
+                let result = player.command(&app, PlaybackCommand::Stop);
+                let _ = reply.send(result);
                 continue;
             }
             Ok(Request::Command(command)) => player.command(&app, command),
@@ -254,7 +260,9 @@ impl Player {
             PlaybackCommand::Stop => {
                 self.segment = None;
                 let result = self.close(app);
-                self.session_key = None;
+                if result.is_ok() {
+                    self.session_key = None;
+                }
                 // The coordinator retires this playback ID before requesting stop.
                 // Report a close failure against that stopped session as well.
                 self.state = PlayerState {

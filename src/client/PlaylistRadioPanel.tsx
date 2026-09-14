@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import type { RadioPlaylistSummary, RadioStation } from "../shared/radio";
+import { avoidRadioPlaylistId, type RadioPlaylistSummary, type RadioStation } from "../shared/radio";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ export function PlaylistRadioPanel({ connected, version, request, renderStations
   const [attempt, setAttempt] = useState(0);
   const selected = playlists.find(playlist => playlist.id === selectedId);
 
+  useEffect(() => { setPlaylists([]); setSelectedId(""); setStations([]); setDraft(""); setQuery(""); setError(null); }, [request]);
+
   useEffect(() => {
     if (!connected) return;
     const controller = new AbortController();
@@ -35,8 +37,9 @@ export function PlaylistRadioPanel({ connected, version, request, renderStations
       .then(response => response.json() as Promise<{ playlists: RadioPlaylistSummary[] }>)
       .then(body => {
         if (controller.signal.aborted) return;
-        setPlaylists(body.playlists);
-        setSelectedId(current => body.playlists.some(playlist => playlist.id === current) ? current : body.playlists[0]?.id ?? "");
+        const custom = body.playlists.filter(playlist => playlist.id !== avoidRadioPlaylistId);
+        setPlaylists(custom);
+        setSelectedId(current => custom.some(playlist => playlist.id === current) ? current : custom[0]?.id ?? "");
       })
       .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load playlists."); });
     return () => controller.abort();
@@ -81,7 +84,7 @@ export function PlaylistRadioPanel({ connected, version, request, renderStations
       <h3 id="radio-playlists-title" className="flex items-center gap-2 text-lg font-medium">Your playlists <Badge variant="secondary">{playlists.length}</Badge></h3>
       <Button variant="outline" className="min-h-11" data-action="radio-settings" data-tv-local-only={host ? "" : undefined} disabled={!connected} onClick={onManage}>Manage radio sources</Button>
     </div>
-    {!playlists.length && <p className="text-sm text-muted-foreground">An administrator can add a radio playlist in Settings &gt; Sources.</p>}
+    {!playlists.length && <p className="text-sm text-muted-foreground">Custom radio playlists are optional.</p>}
     {error && <Alert variant="destructive" className="radio-playlist-error"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p className="break-words">{error}</p><Button variant="outline" disabled={!connected} onClick={() => { setError(null); setAttempt(value => value + 1); }}>Try again</Button></AlertDescription></Alert>}
     {playlists.length > 0 && <div className="radio-playlist-selection space-y-3">
       <div className="radio-playlist-toolbar">

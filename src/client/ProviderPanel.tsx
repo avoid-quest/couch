@@ -18,6 +18,7 @@ type Props = {
   historyVersion?: number;
   onPlayHistory: HistoryPlayback;
   initialItem?: ProviderItem;
+  initialProvider?: ProviderId;
   origin: string;
   token: string;
   connected: boolean;
@@ -57,8 +58,12 @@ function duration(seconds: number) {
 }
 
 export function ProviderPanel(props: Props) {
-  const [provider, setProvider] = useState<ProviderId>(props.initialItem?.provider ?? "youtube");
+  const [provider, setProvider] = useState<ProviderId>(props.initialItem?.provider ?? props.initialProvider ?? "youtube");
   const [initialItem, setInitialItem] = useState(props.initialItem);
+  useEffect(() => {
+    setProvider(props.initialItem?.provider ?? props.initialProvider ?? "youtube");
+    setInitialItem(props.initialItem);
+  }, [props.initialItem, props.initialProvider]);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality);
   const enqueue = async (item: ProviderItem, playNow: boolean) => {
     const ok = await props.onEnqueue(item, playNow, item.provider === "bandcamp" ? undefined : quality);

@@ -63,8 +63,8 @@ export function createDiagnostics(options: Options) {
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const headers: Record<string, string> = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status: number) => Response.json(body, { status, headers });
-      const permitted = () => identity()?.authority === "administrator";
-      if (!permitted()) return json({ error: "An administrator remote is required to view diagnostics." }, 403);
+      const permitted = () => ["host", "administrator"].includes(identity()?.authority ?? "");
+      if (!permitted()) return json({ error: "An administrator is required to view diagnostics." }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const path = new URL(request.url).pathname;
       if (path !== "/api/diagnostics" && path !== "/api/diagnostics/export") return json({ error: "Not found." }, 404);

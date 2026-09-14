@@ -17,6 +17,8 @@ test("Bluetooth inventory and mutations require current administration, with a s
   expect(calls).toEqual([]);
   expect((await bluetoothSettings(request({ op: "scan", owner: "somebody-else" }), () => admin, invoke)).status).toBe(200);
   expect(calls[0]).toEqual({ op: "scan", owner: "admin-one" });
+  expect((await bluetoothSettings(request({ op: "scan" }), () => ({ authority: "host", controller: null, claimAvailable: false }), invoke)).status).toBe(200);
+  expect(calls[1]).toEqual({ op: "scan", owner: "host" });
   expect((await bluetoothSettings(request({ op: "reconnect", device: "AA:BB:CC:DD:EE:FF" }), () => admin, invoke)).status).toBe(400);
   expect((await bluetoothSettings(request({ op: "pair", device: "../hci0" }), () => admin, invoke)).status).toBe(400);
 });

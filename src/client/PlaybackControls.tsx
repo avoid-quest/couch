@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Action, PlayerState, SessionState } from "../shared/protocol";
 import type { Credentials } from "./session";
 import { AuthArtwork } from "./AuthArtwork";
@@ -40,7 +41,8 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
   const { available, audioReady, transportReady } = playbackCapabilities(state, connected);
   const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
   const hasMedia = !!current;
-  const artwork = connected && radio ? state?.radioProgramme?.artworkUrl || current?.thumbnail : current?.thumbnail;
+  const programme = connected && radio && state?.radioProgramme?.playbackId === player?.playbackId ? state?.radioProgramme : null;
+  const artwork = programme?.artworkUrl || current?.thumbnail;
   const session = presentation === "session";
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} />;
   const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
@@ -56,28 +58,28 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     <h1 className="media-title" title={current?.title}>{current?.title || (session ? "What would you like to play?" : "Nothing playing")}</h1>
     <p className="source-label">{current ? <>{sourceLabel(current.source)}{session && <> · <span className="playback-status">{!connected ? "Reconnecting" : state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</span>{current.live && " · LIVE"}</>}</> : !connected ? "Reconnecting to your TV. You can still browse." : player?.status === "unavailable" ? "Your TV player is offline. Browse now and play when it reconnects." : "Search your sources, pick something saved, or keep watching."}</p>
     {current && state?.playedBy && <p className="source-label">Started from {state.playedBy.name}</p>}
-    {connected && radio && state?.radioProgramme && <figure className="radio-programme">
-      {!session && state.radioProgramme.artworkUrl && <MediaArtwork key={state.radioProgramme.artworkUrl} thumbnail={state.radioProgramme.artworkUrl} title={state.radioProgramme.title} />}
-      <figcaption>Programme: {state.radioProgramme.title}<small>via radio.avoid.quest</small></figcaption>
+    {programme && <figure className="radio-programme">
+      {!session && programme.artworkUrl && <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} />}
+      <figcaption>Programme: {programme.title}{programme.description && <p className="radio-programme-description">{programme.description}</p>}<small>{programme.programmeUrl ? <a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme on radio.avoid.quest</a> : "via radio.avoid.quest"}</small></figcaption>
     </figure>}
     {radio && player?.nowPlaying && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
-    {state?.radioRetry && ["loading", "error"].includes(player?.status ?? "") && <div className="radio-retry" role="status">
+    {state?.radioRetry && ["loading", "error"].includes(player?.status ?? "") && <Alert className="radio-retry" role="status"><AlertDescription>
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>
       {player?.status === "error" && current && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button>}
-    </div>}
+    </AlertDescription></Alert>}
     {state?.webRetry && <div className="radio-retry" role="status">
       <p>Checking the expired stream. Recovery is limited to one attempt. Stop cancels recovery.</p>
       {player?.playbackId && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "pause", playbackId: player.playbackId!, paused: !state.webRetry!.paused })}>{state.webRetry.paused ? "Resume after recovery" : "Stay paused after recovery"}</Button>}
     </div>}
-    {state?.systemAudio?.error && <p role="alert">{state.systemAudio.error}</p>}
+    {state?.systemAudio?.error && <Alert variant="destructive"><AlertDescription>{state.systemAudio.error}</AlertDescription></Alert>}
     {player?.status === "error" && current && state?.systemAudio && <Button disabled={!available || !audioReady} onClick={() => void run({ type: "play", entryId: current.id })}>Resume playback</Button>}
-    {player?.error && player.status !== "unavailable" && <p className="playback-error" role="alert">{player.error}</p>}
+    {player?.error && player.status !== "unavailable" && <Alert variant="destructive" className="playback-error"><AlertDescription>{player.error}</AlertDescription></Alert>}
     {state && <PlaybackTimeline state={state} connected={connected} run={run} />}
     {hasMedia && <div className="transport-row">
       {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} onExpand={onExpand} />}
       {session ? <div className="session-volume-row">{volume}{onRemote && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
-    {state?.progressError && <p className="playback-error" role="alert">{state.progressError}</p>}
+    {state?.progressError && <Alert variant="destructive" className="playback-error"><AlertDescription>{state.progressError}</AlertDescription></Alert>}
     {!session && !hasMedia && <div className="player-settings">{settings}</div>}
   </div>;
 }

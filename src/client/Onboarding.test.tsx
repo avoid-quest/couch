@@ -25,7 +25,7 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
     calls.push({ url: String(input), body: init?.body });
     if (String(input).endsWith("/pairing-code")) return Response.json({ code: "123456" });
-    if (String(input).endsWith("/claim-code")) return Response.json({ code: "1234567890", expiresAt: Date.now() + 60_000 });
+    if (String(input).endsWith("/api/sound")) return Response.json({ outputs: [], defaultOutput: null, test: null, canTest: false });
     if (String(input).endsWith("/api/controllers")) return Response.json({ controllers: [admin.controller] });
     if (String(input).endsWith("/api/settings")) return Response.json({ name: "Living room" });
     return Response.json({});
@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 test("a paired administrator resumes setup automatically and completion returns to normal Settings", async () => {
   await render("general");
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Claim and name");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Step 1 of 4 · Name");
   expect(document.querySelector('[aria-label="Settings pages"]')).toBeNull();
   const next = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!;
   expect(next.disabled).toBe(false);
@@ -69,16 +69,17 @@ test("failed progress saves remain retryable and disconnected setup cannot advan
   await render("general", admin, false);
   expect([...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Continue to screen")!.disabled).toBe(true);
 });
-test("the TV welcome shows its pairing QR and separate codes, then follows its administrator's saved step", async () => {
+test("the local host can complete optional setup without a phone or administrator claim", async () => {
   await render("general", { controller: null, authority: "host", claimAvailable: true }, true, true);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Welcome to Couch");
-  expect(document.querySelector('[data-pairing-code]')?.textContent).toBe("123456");
-  expect(document.querySelector('[data-administrator-code]')?.textContent).toBe("1234567890");
-  expect(document.querySelector("svg title")?.textContent).toBe("Pair another device");
+  expect(document.querySelector("#tv-name")).not.toBeNull();
+  expect(document.querySelector('[data-administrator-code]')).toBeNull();
+  expect(calls.some(call => call.url.endsWith("/claim-code"))).toBe(false);
   expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
   await render("sound", { controller: null, authority: "host", claimAvailable: false }, true, true);
   expect(document.body.textContent).toContain("Step 3 of 4 · Sound");
-  expect(document.body.textContent).toContain("Continue on your administrator phone");
+  expect(document.body.textContent).toContain("I heard the test sound");
+  expect(calls.some(call => call.url.endsWith("/api/sound"))).toBe(true);
   expect(document.querySelector('[data-administrator-code]')).toBeNull();
   await render("complete", { controller: null, authority: "host", claimAvailable: false }, true, true);
   expect(document.querySelector('[role="dialog"]')).toBeNull();

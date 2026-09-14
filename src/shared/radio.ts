@@ -22,3 +22,22 @@ export interface RadioPlaylist {
 }
 
 export type RadioPlaylistSummary = Omit<RadioPlaylist, "url">;
+
+export const avoidRadioPlaylistId = "544da8af-6077-80f3-a15b-884c42740444";
+export const avoidRadioPlaylistUrl = "https://radio.avoid.quest/playlist.m3u";
+
+export interface RadioProgrammeDetails {
+  stationId: string;
+  provider: "radio.avoid.quest";
+  title: string;
+  artworkUrl?: string;
+  description?: string;
+  programmeUrl?: string;
+  sampledAt: number;
+  expiresAt: number;
+}
+
+export interface AvoidRadioCatalog {
+  playlist: RadioPlaylistSummary;
+  stations: RadioStation[];
+}

@@ -1,13 +1,16 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Action } from "../shared/protocol";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
 import { QualityOptions } from "./QualitySelect";
 import { isYouTubePlaylistUrl } from "../shared/providers";
 import { createId } from "./session";
 
+export type SearchResultSummary = { count: number; loading: boolean; error: boolean };
 export type SearchPlaybackProps = {
+  onResults?: (source: string, summary: SearchResultSummary) => void;
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   onCommand?: (action: Action) => Promise<boolean>;
 };
@@ -34,6 +37,9 @@ function OnlineResults(props: Props) {
   const qualityId = useId();
   const [trail, setTrail] = useState<Location[]>([{ request: props.url ? { url: props.url } : { query: props.query }, title: providerNames[provider] }]);
   const location = trail[trail.length - 1]!;
+  const [detail, setDetail] = useState<ProviderItem | null>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
+  const restoreDetailFocus = useRef(false);
   const [page, setPage] = useState<SearchPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +57,20 @@ function OnlineResults(props: Props) {
   const views = useRef(new Map<string, { visible: number; top: number }>());
   const cache = useRef(new Map<string, SearchPage>());
   const key = JSON.stringify([props.origin, props.token, location.request]);
+  useEffect(() => { if (trail.length === 1) props.onResults?.(providerNames[provider], { count: page?.items.length ?? 0, loading, error: !!error }); }, [trail.length, page?.items.length, loading, error, props.onResults, provider]);
+  useEffect(() => {
+    if (!props.active) {
+      if (detail) { restoreDetailFocus.current = true; setDetail(null); }
+      return;
+    }
+    if (!restoreDetailFocus.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]")
+        && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true });
+      restoreDetailFocus.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [props.active, detail]);
 
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => { controller.abort(); request.current?.abort(); }; }, [props.origin, props.token, props.connected]);
   useEffect(() => {
@@ -121,7 +141,7 @@ function OnlineResults(props: Props) {
       const ok = await props.onCommand?.({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
-    }, playNow ? `Starting ${item.title} on the TV.` : `${item.title} added to the end of Up next. Playback is unchanged.`);
+    }, playNow ? `Starting ${item.title} on the playback computer.` : `${item.title} added to the end of Up next. Playback is unchanged.`);
   }
   function save(item: ProviderItem, saved: boolean) {
     void action(async signal => {
@@ -131,6 +151,15 @@ function OnlineResults(props: Props) {
   }
   const playlistUrl = provider === "youtube" && isYouTubePlaylistUrl(location.request.url ?? location.request.query ?? "") ? location.request.url ?? location.request.query : undefined;
   const album = provider === "bandcamp" && /\/album\//.test(location.request.url ?? "") && !!page?.items.length && page.items.every(item => item.kind === "media");
+  const itemActions = (item: ProviderItem, inDetail = false) => {
+    const saved = !!favorites?.some(entry => entry.id === item.id);
+    return <div className="search-item-actions">
+      {item.kind === "media" ? <><Button data-search-item={item.id} aria-label={`Play now: ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play now</Button><Button variant="secondary" aria-label={`Add to queue: ${item.title}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Add to queue</Button></> : <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => { setDetail(null); open(item); }}>Open</Button>}
+      {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => { setDetail(null); open(item, `${item.id}-broadcasts`); }}>Past broadcasts</Button>}
+      {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}${inDetail ? "-detail" : ""}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
+      <Button variant="ghost" aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Saved" : "Save"}</Button>
+    </div>;
+  };
   return <section ref={section} aria-label={`${providerNames[provider]} search results`} aria-busy={loading} className="search-source" onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented && trail.length > 1 && props.active) { event.preventDefault(); back(); } }}>
     <div className="search-source-heading"><h2>{providerNames[provider]}</h2>{trail.length > 1 && <Button variant="outline" data-back onClick={back}>Back to results</Button>}</div>
     {trail.length > 1 && <h3>{page?.title || location.title}</h3>}
@@ -140,17 +169,12 @@ function OnlineResults(props: Props) {
     {page?.warning && <p role="status">{page.warning}</p>}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
-    {playlistUrl && page?.items.length && !loading && !error && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, playNow: true, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playing playlist on the TV.")}>Play playlist</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playlist added to Up next.")}>Up next: playlist</Button>{props.onQualityChange && <QualityOptions id={`${qualityId}-playlist`} label="Playlist video quality" value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}</div>}
-    {album && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url!, playNow: true }), "Starting album on the TV.")}>Play album</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url! }), "Album added to Up next.")}>Up next: album</Button></div>}
-    <ul className="search-online-grid">{page?.items.slice(0, visible).map(item => {
-      const saved = !!favorites?.some(entry => entry.id === item.id);
-      return <li key={item.id} className="search-online-card"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="search-online-copy"><h3>{item.title}</h3><p>{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</p></div><div className="search-item-actions">
-        {item.kind === "media" ? <><Button data-search-item={item.id} aria-label={`Play now: ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play now</Button><Button variant="secondary" aria-label={`Add next: ${item.title}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Add next</Button></> : <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => open(item)}>Open</Button>}
-        {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => open(item, `${item.id}-broadcasts`)}>Past broadcasts</Button>}
-        {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
-        <Button variant="ghost" aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Saved" : "Save"}</Button>
-      </div></li>;
-    })}</ul>
+    {playlistUrl && page?.items.length && !loading && !error && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, playNow: true, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playing playlist on the playback computer.")}>Play playlist</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(async () => { const ok = await props.onCommand!({ type: "enqueueProviderPlaylist", provider: "youtube", url: playlistUrl, quality: props.quality }); if (ok) props.onEnqueued(); return ok; }, "Playlist added to Up next.")}>Add playlist to queue</Button>{props.onQualityChange && <QualityOptions id={`${qualityId}-playlist`} label="Playlist video quality" value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}</div>}
+    {album && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url!, playNow: true }), "Starting album on the playback computer.")}>Play album</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url! }), "Album added to Up next.")}>Add album to queue</Button></div>}
+    <ul className="search-online-grid">{page?.items.slice(0, visible).map(item => <li key={item.id} className="search-online-card"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="search-online-copy"><Button variant="ghost" className="search-result-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetail(item); }}><strong>{item.title}</strong><small>{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</small></Button></div>{itemActions(item)}</li>)}</ul>
+    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>
+      {detail && <><MediaArtwork thumbnail={detail.thumbnail} title={detail.title} className="search-detail-art" /><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{providerNames[provider]}{detail.live ? " · Live" : ""}</DialogDescription></DialogHeader>{detail.subtitle && <p>{detail.subtitle}</p>}{itemActions(detail, true)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}
+    </DialogContent></Dialog>
     {page && (visible < page.items.length || page.nextCursor) && <Button variant="outline" disabled={!props.connected || loading} onClick={() => void more()}>Show more {providerNames[provider]}</Button>}
   </section>;
 }

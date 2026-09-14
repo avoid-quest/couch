@@ -17,7 +17,7 @@
 .couch-shell .nav-count { margin-left: auto; font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--muted); }
 .couch-shell .media-browser { min-width: 0; padding: 32px var(--shell-gutter) calc(var(--shell-footer) + 32px); gap: 0; border: 0; border-radius: 0; background: transparent; }
 .couch-shell .media-browser > section { min-width: 0; }
-.couch-shell .media-browser > section[hidden] { display: none; }
+.couch-shell .media-browser [hidden] { display: none; }
 .couch-shell .browse-back { margin-bottom: 18px; }
 .couch-shell .pair-card { max-width: 480px; margin: 48px auto; }
 .couch-shell .session-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 25; display: flex; align-items: center; gap: 20px; min-height: var(--shell-footer); padding: 12px 32px; border-top: 1px solid var(--border); background: #212120; }

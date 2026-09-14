@@ -12,7 +12,7 @@ export type ProfilePlaybackPreferences = { audioLanguage: string; subtitleLangua
 export type PlaybackPreferences = { profile: ProfilePlaybackPreferences; device: { audioDelay: number } };
 export type ExternalSubtitle = { source: string; title: string; language?: string };
 export type NowPlaying = { title: string; artist?: string };
-export type RadioProgramme = { playbackId: string; stationId: string; provider: "radio.avoid.quest"; title: string; artworkUrl?: string; sampledAt: number; expiresAt: number };
+export type RadioProgramme = { playbackId: string; stationId: string; provider: "radio.avoid.quest"; title: string; artworkUrl?: string; description?: string; programmeUrl?: string; sampledAt: number; expiresAt: number };
 export type RadioRetry = { attempt: number; maximum: number; retryAt: number | null };
 export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 

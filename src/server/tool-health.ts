@@ -149,8 +149,8 @@ export function createToolHealth(options: Options) {
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
-      const permitted = () => identity()?.authority === "administrator";
-      if (!permitted()) return json({ error: "An administrator remote is required to check media tools." }, 403);
+      const permitted = () => ["host", "administrator"].includes(identity()?.authority ?? "");
+      if (!permitted()) return json({ error: "An administrator is required to check media tools." }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const url = new URL(request.url);
       if (!["/api/tools", "/api/tools/ubuntu"].includes(url.pathname)) return json({ error: "Not found." }, 404);

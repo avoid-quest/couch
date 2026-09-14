@@ -3,11 +3,11 @@ import type { RadioPlaylistSummary } from "../shared/radio";
 import { ControllerError } from "./controllers";
 import { RadioError, type createRadio } from "./radio";
 
-export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist">) {
+export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "avoid" | "avoidProgrammes">) {
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const path = new URL(request.url).pathname;
-      const browsing = path === "/api/radio/playlists" && request.method === "GET";
+      const browsing = ["/api/radio/playlists", "/api/radio/avoid", "/api/radio/avoid/programmes"].includes(path) && request.method === "GET";
       const authorize = () => {
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
@@ -16,6 +16,12 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
       const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
       try {
         if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
+        if (path === "/api/radio/avoid" || path === "/api/radio/avoid/programmes") {
+          if (request.method !== "GET") return methods("GET");
+          const result = path.endsWith("/programmes") ? { programmes: await radio.avoidProgrammes(request.signal) } : await radio.avoid(new URL(request.url).searchParams.get("refresh") === "true");
+          if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
+          return Response.json(result);
+        }
         if (browsing) {
           const playlists: RadioPlaylistSummary[] = radio.playlists().map(({ id, name, stationCount, updatedAt, error }) => ({
             id, name, stationCount, updatedAt, error: error ? "This source needs attention in Settings > Sources. Cached stations are still available." : null,

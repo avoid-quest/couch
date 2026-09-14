@@ -2,17 +2,20 @@ import { Link } from "react-router";
 import { usePageRoute } from "./routes";
 import { useUpdateActivity } from "./update-activity";
 import { loadedBuild } from "../shared/build";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
+import { isNativeHost } from "./native-context";
+import { PlaybackDevice, LocalSharingPrompt } from "./PlaybackDevice";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
-import type { ProviderItem } from "../shared/providers";
+import type { ProviderId, ProviderItem } from "../shared/providers";
 import type { RadioStation } from "../shared/radio";
 import { createId, useSession, type Credentials } from "./session";
-import { knownConnection } from "./connection";
 import { BrowseHome } from "./BrowseHome";
 import { SavedSection } from "./SavedSection";
-import { SessionHome } from "./SessionHome";
+import { AvoidRadioHome } from "./AvoidRadioHome";
+import { SourceSetupDialog } from "./SourceSetupDialog";
+import { NowPlaying } from "./NowPlaying";
 import { pairingCodeFromHash } from "./pairing-link";
 import { PairingDialog } from "./PairingDialog";
 import "./device-header.css";
@@ -38,7 +41,7 @@ import { useInterfaceSize } from "./interface-size";
 import { TvAppearancePreview } from "./AppearanceSettings";
 import { AuthArtwork } from "./AuthArtwork";
 import { applyTvNavigation, useNavigation } from "./navigation";
-import { House, Search, LibraryBig, Bookmark, ListMusic, Settings2, ArrowLeft } from "lucide-react";
+import { House, Bookmark, ListMusic, Settings2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,14 +49,16 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from "@/components/ui/dialog";
 
 const tokenKey = "couch.remote-token";
-const nativeHost = isTauri();
+const installationKey = "couch.remote-installation-id";
+const nativeHost = isNativeHost();
 
 function storedCredentials(): Credentials | null {
   if (nativeHost) return null;
   try {
     const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
     if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
-    return token ? { origin: knownConnection()?.origin ?? location.origin, token } : null;
+    const installationId = localStorage.getItem(installationKey);
+    return token && installationId ? { origin: location.origin, token, installationId } : null;
   } catch {
     return null;
   }
@@ -76,14 +81,42 @@ export function App() {
   const videoQualityPreference = useVideoQualityPreference();
   const homeSection = "Home";
   const { section, visited, sectionUrl, changePage, back, searchState, changeSearch, settingsSection, changeSettingsSection } = usePageRoute();
-  const librarySection = ["Library", "Online", "Files", "Radio", "Guide", "Jellyfin"].includes(section);
-  const [sourcesRequest, setSourcesRequest] = useState(0);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
+  const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
+  const [remoteControlEnabled, setRemoteControlEnabled] = useState(false);
+  const [homeQuery, setHomeQuery] = useState(searchState.query);
+  useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>("youtube");
+  const [providerRequest, setProviderRequest] = useState(0);
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+  const playbackTrigger = useRef<HTMLElement | null>(null);
+  const browsingScroll = useRef(0);
+  const showNowPlaying = () => {
+    playbackTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    browsingScroll.current = (document.querySelector(".tv-browser") ?? document.scrollingElement)?.scrollTop ?? 0;
+    setNowPlayingOpen(true);
+    requestAnimationFrame(() => {
+      const container = document.querySelector(".tv-browser") ?? document.scrollingElement;
+      if (container) container.scrollTop = 0;
+    });
+  };
+  const closeNowPlaying = () => {
+    setNowPlayingOpen(false);
+    requestAnimationFrame(() => {
+      const container = document.querySelector(".tv-browser") ?? document.scrollingElement;
+      if (container) container.scrollTop = browsingScroll.current;
+      const target = playbackTrigger.current?.isConnected ? playbackTrigger.current : document.querySelector<HTMLElement>(".session-bar-open") ?? document.querySelector<HTMLElement>('.primary-nav [aria-current="page"]');
+      target?.focus({ preventScroll: true });
+    });
+  };
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
-  useEffect(() => setOnlineRequest(null), [credentials?.origin, credentials?.token]);
+  useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); setNowPlayingOpen(false); }, [credentials?.origin, credentials?.token]);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingOpen, setPairingOpen] = useState(false);
   const shortcutFocus = useRef<string | null>(null);
   const changeSection = (name: string) => {
+    setNowPlayingOpen(false);
     if (name === "Remote") { setRemoteOpen(true); return; }
     const destination = name === "For later" ? "Saved" : name;
     shortcutFocus.current = null; changePage(destination);
@@ -96,9 +129,9 @@ export function App() {
     const target = tab ?? document.querySelector<HTMLElement>(`[data-page="${section}"] button:not(:disabled), [data-page="${section}"] input:not(:disabled), .browse-back`);
     if (target && !target.closest("[hidden]")) target.focus({ preventScroll: true });
   }, [section]);
-  const navigation = useRef<(key: NavigationKey) => void>(() => {});
-  const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, key => navigation.current(key), nativeHost ? undefined : origin => setCredentials(current => current ? { ...current, origin } : null));
+  const { state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
   useUpdateActivity(credentials, connected);
+  useEffect(() => setRemoteControlEnabled(details?.remoteControlEnabled === true), [details?.remoteControlEnabled]);
   useEffect(() => {
     if (!nativeHost || !credentials) return;
     const stop = new AbortController();
@@ -115,7 +148,7 @@ export function App() {
   }, [credentials]);
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
-  navigation.current = key => {
+  function handleNavigation(key: NavigationKey) {
     if (!nativeHost) return;
     document.documentElement.setAttribute("data-keyboard", "");
     if (key === "home") {
@@ -134,8 +167,9 @@ export function App() {
       if (!tv.controlsVisible) return;
     }
     requestAnimationFrame(() => applyTvNavigation(key));
-  };
+  }
   useNavigation(() => {
+    if (nowPlayingOpen) { closeNowPlaying(); return; }
     if (nativeHost && tv.dismissLayer()) return;
     if (remoteOpen) { setRemoteOpen(false); return; }
     if (section !== homeSection) {
@@ -216,27 +250,27 @@ export function App() {
     setPairing(true);
     setError(null);
     try {
-      const origin = credentials?.origin ?? knownConnection()?.origin ?? location.origin;
+      const origin = credentials?.origin ?? location.origin;
       const response = await fetch(`${origin}/api/pair`, {
         method: "POST",
         signal: AbortSignal.timeout(8_000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: pairingCode.trim(), name: remoteName.trim() }),
       });
-      const result = await response.json() as { token?: string; error?: string };
-      if (!response.ok || !result.token) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the TV." : result.error || "Could not pair with the player.");
-      try { localStorage.setItem(tokenKey, result.token); } catch { /* Pairing still works for this tab. */ }
-      setCredentials({ origin, token: result.token });
+      const result = await response.json() as { token?: string; installationId?: string; error?: string };
+      if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the playback computer." : result.error || "Could not pair with the player.");
+      try { localStorage.setItem(tokenKey, result.token); localStorage.setItem(installationKey, result.installationId); } catch { /* Pairing still works for this tab. */ }
+      setCredentials({ origin, token: result.token, installationId: result.installationId });
       setPairingCode("");
     } catch (reason) {
-      setError(`${errorText(reason)} Check that your device and TV are on the same network, then try Connect again.`);
+      setError(`${errorText(reason)} Check that your device and playback computer are on the same network, then try Connect again.`);
     } finally {
       setPairing(false);
     }
   };
 
   const unpair = () => {
-    try { localStorage.removeItem(tokenKey); localStorage.removeItem("modern-kodi.remote-token"); } catch { /* Storage may be disabled. */ }
+    try { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); } catch { /* Storage may be disabled. */ }
     setCredentials(null);
     setError(null);
   };
@@ -292,12 +326,14 @@ export function App() {
           artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
-        <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
+        <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { setNowPlayingOpen(false); if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <div className="header-status">
-          {host && <Button variant="ghost" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
+          {nativeHost ? <PlaybackDevice /> : <span className="text-sm text-muted-foreground" aria-label={`Playback on ${state?.installationName ?? details?.name ?? "Couch"}`}>Play on {state?.installationName ?? details?.name ?? "Couch"}</span>}
+          {host && remoteControlEnabled && <Button variant="ghost" className="pair-shortcut" onClick={() => setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
-          {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
-          {(!credentials || pairingRequired) && <Settings setupStep={state?.setupStep} libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} />}
+          {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" onClick={() => setNowPlayingOpen(false)} aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
+          {(!credentials || pairingRequired) && <Settings libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} />}
+          {credentials && !pairingRequired && !nativeHost && <Button variant="ghost" size="icon" aria-label="Remote" title="Remote" onClick={() => setRemoteOpen(true)}><Icon name="remote" /></Button>}
           <DigitalClock />
         </div>
       </header>
@@ -305,10 +341,10 @@ export function App() {
         {!credentials || pairingRequired ? (
           <Card className="pair-card">
             <div className="pair-icon"><Icon name="screen" /></div>
-            <p className="eyebrow">{nativeHost ? "Your media center" : "One screen. A shared queue."}</p>
-            <h1>{nativeHost ? "Starting your player" : "Connect to your TV"}</h1>
-            {!nativeHost && credentials && <p role="alert">The TV rejected this browser's credential. Pair again to restore access.</p>}
-            <p className="muted">{nativeHost ? "The local player and your remotes connect here." : "Enter the pairing code shown on the TV. This device becomes a remote for the same player."}</p>
+            <p className="eyebrow">{nativeHost ? "Your media center" : "Play on another computer"}</p>
+            <h1>{nativeHost ? "Starting your player" : "Connect to Couch"}</h1>
+            {!nativeHost && credentials && <p role="alert">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
+            <p className="muted">{nativeHost ? "The local player and your remotes connect here." : "Scan the QR or enter the code shown on the playback computer."}</p>
             {nativeHost ? <Button disabled={booting} className="primary-button" onClick={() => setHostAttempt((attempt) => attempt + 1)}>{booting ? "Starting…" : "Try again"}</Button> : (
               <form onSubmit={pair} className="pair-form">
                 <Label htmlFor="remote-name">Device name</Label>
@@ -325,27 +361,36 @@ export function App() {
             {player?.status === "unavailable" && <p className="notice">{player.error || "The TV player is unavailable. You can still prepare the queue."}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
-                {([{name:"Home", label:"Home", icon:House}, {name:"Search", label:"Search", icon:Search}, {name:"Library", label:"Library", icon:LibraryBig}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} data-source={name} aria-current={(section === name || name === "Library" && librarySection || name === "Home" && !librarySection && !["Search","Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
+                {([{name:"Home", label:"Home", icon:House}, {name:"Saved", label:"Saved", icon:Bookmark}, {name:"Queue", label:"Up next", icon:ListMusic}, {name:"Settings", label:"Settings", icon:Settings2}]).map(({name,label,icon:NavIcon}) => <Button key={name} asChild variant="ghost"><Link to={sectionUrl(name)} onClick={() => setNowPlayingOpen(false)} data-source={name} aria-current={(section === name || name === "Home" && !["Saved","Queue","Settings"].includes(section)) ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span>{name === "Queue" && upcomingCount > 0 && <span className="nav-count">{upcomingCount}</span>}</Link></Button>)}
               </nav>
               <div className="media-browser">
-                {!["Home","Search","Library","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection(librarySection ? "Library" : "Home")}><ArrowLeft aria-hidden="true" />{librarySection ? "Library" : "Home"}</Button>}
-                {(visited.has("Browse") || section === "Browse") && <section data-page="Browse" hidden={section !== "Browse"}><h1 className="page-title">Browse sources</h1><nav className="browse-source-list" aria-label="Browse media">{["Library","Online","Guide","Radio","Jellyfin"].map(name => <Button key={name} variant="outline" onClick={() => browseSection(name)}>{name}</Button>)}</nav></section>}
-                {(visited.has("Home") || section === "Home") && <section data-page="Home" hidden={section !== "Home"}>{nativeHost ? <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && tv.browsing} onBrowse={browseSection} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} /> : <SessionHome state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onPlay={playHistory} active={section === "Home"} />}</section>}
+                {nowPlayingOpen && <NowPlaying state={state} credentials={credentials} connected={connected} run={run} onBack={closeNowPlaying} onBrowse={browseSection} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} />}
+                <div hidden={nowPlayingOpen}>
+                {!["Home","Saved","Queue","Settings"].includes(section) && <Button className="browse-back" variant="ghost" onClick={() => changeSection("Home")}><ArrowLeft aria-hidden="true" />Home</Button>}
+                <section data-page="Home" hidden={section !== "Home"} className="space-y-6">
+                  <h1 className="page-title">Find something to play</h1>
+                  <SearchPanel draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} providerVersion={state?.providerVersion ?? 0} radioVersion={state?.radioVersion ?? 0} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Home" && !nowPlayingOpen && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+                  <div hidden={!!homeQuery.trim()} className="space-y-6">
+                    <AvoidRadioHome origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} onBrowse={() => browseSection("Radio")} active={section === "Home" && !nowPlayingOpen && !homeQuery.trim() && (!nativeHost || tv.browsing)} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} />
+                    <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={section === "Home" && !nowPlayingOpen && !homeQuery.trim() && (!nativeHost || tv.browsing)} onBrowse={browseSection} onProvider={provider => { setSelectedProvider(provider); setProviderRequest(value => value + 1); setOnlineRequest(null); browseSection("Online"); }} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} />
+                  </div>
+                </section>
                 <section data-page="Queue" hidden={section !== "Queue"}>
                   <QueuePanel defaultQuality={videoQualityPreference.quality} state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} run={run} />
                 </section>
-                {(visited.has("Search") || section === "Search") && <section data-page="Search" hidden={section !== "Search"}><SearchPanel onManageSources={nativeHost || identity?.authority === "administrator" ? () => setSourcesRequest(value => value + 1) : undefined} searchState={searchState} onSearchChange={changeSearch} onCommand={run} providerVersion={state?.providerVersion ?? 0} radioVersion={state?.radioVersion ?? 0} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={section === "Search" && (!nativeHost || tv.browsing)} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} onBrowse={changeSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} /></section>}
-                {(visited.has("Saved") || section === "Saved") && <section data-page="Saved" hidden={section !== "Saved"}><SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} active={section === "Saved"} onBrowse={browseSection} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} /></section>}
-                <section data-page="Settings" hidden={section !== "Settings"}><Settings inline section={settingsSection} onSectionChange={changeSettingsSection} active={section === "Settings"} onOpenRequest={() => changeSection("Settings")} setupStep={state?.setupStep} libraryVersion={state?.libraryVersion ?? 0} sourcesRequest={sourcesRequest} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} /></section>
-                {(visited.has("Guide") || section === "Guide") && <section data-page="Guide" hidden={section !== "Guide"}><GuidePanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} host={nativeHost} version={state?.iptvVersion ?? 0} recordingsVersion={state?.recordingsVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} currentSource={state?.queue.find(entry => entry.id === state.currentEntryId)?.source} onGoLive={() => { if (state?.player.playbackId) void run({ type: "goLive", playbackId: state.player.playbackId }); }} active={section === "Guide"} /></section>}
-                {(visited.has("Online") || section === "Online") && <section data-page="Online" hidden={section !== "Online"}><ProviderPanel active={section === "Online" && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} key={`${credentials.origin}:${credentials.token}:${onlineRequest?.revision ?? 0}`} initialItem={onlineRequest?.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
-                {(visited.has("Library") || section === "Library") && <section data-page="Library" hidden={section !== "Library"}><MediaLibrary active={section === "Library" && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} onBrowse={browseSection} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
-                {(visited.has("Files") || section === "Files") && <section data-page="Files" hidden={section !== "Files"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} /></section>}
-                {(visited.has("Radio") || section === "Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel host={nativeHost} onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} /></section>}
-                {(visited.has("Jellyfin") || section === "Jellyfin") && <section data-page="Jellyfin" hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => setSourcesRequest(value => value + 1)} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></section>}
+                {(visited.has("Saved") || section === "Saved") && <section data-page="Saved" hidden={section !== "Saved"}><SavedSection state={state} credentials={credentials} connected={connected} canPlay={available} active={section === "Saved" && !nowPlayingOpen} onBrowse={browseSection} onEnqueueProvider={enqueueProvider} onEnqueueRadio={enqueueRadio} onOpenProvider={openProvider} /></section>}
+                <section data-page="Settings" hidden={section !== "Settings"}><Settings onRemoteControlChange={setRemoteControlEnabled} inline section={settingsSection} onSectionChange={changeSettingsSection} active={section === "Settings"} onOpenRequest={() => changeSection("Settings")} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={connectionPlayerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} /></section>
+                {(visited.has("Guide") || section === "Guide") && <section data-page="Guide" hidden={section !== "Guide"}><GuidePanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} host={nativeHost} version={state?.iptvVersion ?? 0} recordingsVersion={state?.recordingsVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} currentSource={state?.queue.find(entry => entry.id === state.currentEntryId)?.source} onGoLive={() => { if (state?.player.playbackId) void run({ type: "goLive", playbackId: state.player.playbackId }); }} active={section === "Guide" && !nowPlayingOpen} /></section>}
+                {(visited.has("Online") || section === "Online") && <section data-page="Online" hidden={section !== "Online"}><ProviderPanel active={section === "Online" && !nowPlayingOpen && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} key={`${credentials.origin}:${credentials.token}:${providerRequest}:${onlineRequest?.revision ?? 0}`} initialProvider={selectedProvider} initialItem={onlineRequest?.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
+                {(visited.has("Library") || section === "Library") && <section data-page="Library" hidden={section !== "Library"}><MediaLibrary active={section === "Library" && !nowPlayingOpen && (!nativeHost || tv.browsing)} historyVersion={state?.libraryVersion ?? 0} onPlayHistory={playHistory} onBrowse={browseSection} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, quality })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} /></section>}
+                {(visited.has("Files") || section === "Files") && <section data-page="Files" hidden={section !== "Files"}><LibraryPanel canManage={nativeHost || identity?.authority === "administrator"} onManage={() => openSources("folders")} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.libraryVersion ?? 0} onQueueAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })} onEnqueue={(itemId, options) => enqueueCatalog("enqueueLibrary", itemId, options)} /></section>}
+                {(visited.has("Radio") || section === "Radio") && <section data-page="Radio" hidden={section !== "Radio"}><RadioPanel active={section === "Radio" && !nowPlayingOpen && (!nativeHost || tv.browsing)} currentStationId={current?.source.startsWith("radio:") ? current.source.slice(6) : undefined} host={nativeHost} onManage={() => openSources("radio")} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} /></section>}
+                {(visited.has("Jellyfin") || section === "Jellyfin") && <section data-page="Jellyfin" hidden={section !== "Jellyfin"}><JellyfinPanel onManage={() => openSources("jellyfin")} origin={credentials.origin} token={credentials.token} canPlay={available} host={nativeHost} connected={connected} version={state?.jellyfinVersion ?? 0} onEnqueue={(itemId, options) => enqueueCatalog("enqueueJellyfin", itemId, options)} /></section>}
+                </div>
               </div>
             </div>
-            {current && active && (nativeHost || section !== "Home") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => nativeHost ? tv.closeBrowser() : changeSection("Home")} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} />}
+            <SourceSetupDialog iptvVersion={state?.iptvVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} version={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} libraryVersion={state?.libraryVersion ?? 0} />
+            {current && (active || player?.status === "error") && !nowPlayingOpen && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={showNowPlaying} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} />}
             <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} /></DialogContent></Dialog>
           </>
         )}
@@ -354,7 +399,8 @@ export function App() {
           <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={tv.openHome}><House aria-hidden="true" />Home</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}
-        {host && <PairingDialog host={host} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} />}
+        {nativeHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
+        {host && remoteControlEnabled && <PairingDialog host={host} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} />}
 
       </main>
 

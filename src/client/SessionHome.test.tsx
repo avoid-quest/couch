@@ -89,7 +89,7 @@ test("seek controls clamp commands, remain focused during player updates and hid
   await render({ ...state, queue: state.queue.map(entry => ({ ...entry, live: true })), player: { ...state.player, seekable: false, duration: null } });
   expect(button("Seek backward 10 seconds")).toBeUndefined();
   expect(document.querySelector('.seek-control')).toBeNull();
-  expect(button("Pause").disabled).toBe(false);
+  expect(button("Pause")).toBeUndefined();
   expect(button("Stop playback").disabled).toBe(false);
 });
 

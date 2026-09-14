@@ -8,14 +8,15 @@ const state: DisplayState = { outputs: [], saved: null, current: null, notice: n
 const admin = () => ({ authority: "administrator" }) as ControllerIdentity;
 const request = (path: string, body?: unknown) => new Request(`http://localhost/api/display${path}`, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-test("only a paired administrator can read or move native screens", async () => {
+test("the host and paired administrators can read or move native screens", async () => {
   let calls = 0;
   const invoke = async () => { calls++; return state; };
-  for (const identity of [() => null, () => ({ authority: "host" }) as ControllerIdentity, () => ({ authority: "controller" }) as ControllerIdentity]) {
+  for (const identity of [() => null, () => ({ authority: "controller" }) as ControllerIdentity]) {
     expect((await displaySettings(request(""), identity, invoke)).status).toBe(identity() ? 403 : 401);
     expect((await displaySettings(request("/preview", { output: "HDMI-1" }), identity, invoke)).status).toBe(identity() ? 403 : 401);
   }
   expect(calls).toBe(0);
+  expect((await displaySettings(request(""), () => ({ authority: "host" }) as ControllerIdentity, invoke)).status).toBe(200);
 });
 
 test("display routes expose only read, preview, confirm and cancel operations", async () => {

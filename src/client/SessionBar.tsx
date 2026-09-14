@@ -6,7 +6,7 @@ import type { Credentials } from "./session";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";
-import { PlaybackTimeline, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
+import { playbackCapabilities, PlaybackTimeline, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
 import "./session-bar.css";
 
 export function SessionBar({ state, credentials, connected, run, onOpen, onRemote }: {
@@ -40,17 +40,20 @@ export function SessionBar({ state, credentials, connected, run, onOpen, onRemot
   }, []);
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
-  if (!current || !player?.playbackId) return null;
-  return <footer ref={bar} className="session-bar" aria-label="Current TV playback" onFocusCapture={event => {
+  const radio = current?.kind === "radio" || current?.source.startsWith("radio:");
+  const programme = connected && radio && state?.radioProgramme?.playbackId === player?.playbackId ? state?.radioProgramme : null;
+  const artwork = programme?.artworkUrl || current?.thumbnail;
+  if (!current || !player || !playbackCapabilities(state, connected).active && player.status !== "error") return null;
+  return <footer ref={bar} className="session-bar" aria-label="Current playback" onFocusCapture={event => {
     // Dialogs and selects bubble through React portals but own their focus recovery.
     focusedControl.current = event.currentTarget.contains(event.target) ? event.target : null;
   }} onBlurCapture={event => {
     if (!event.currentTarget.contains(event.target)) return;
     if (event.target.isConnected && !event.target.matches(":disabled") && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
   }}>
-    <button className="session-bar-open" onClick={onOpen} aria-label={`Open current playback: ${current.title}`}>
-      <span className="session-bar-art" aria-hidden="true">{current.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : <Play />}</span>
-      <span><small>{player.status === "playing" ? "Playing" : player.status === "paused" ? "Paused" : player.status === "loading" ? "Loading" : player.status === "error" ? "Playback error" : player.status === "ended" ? "Finished" : "Offline"}{state?.playedBy && ` · From ${state.playedBy.name}`}</small><strong>{current.title}</strong></span>
+    <button className="session-bar-open" onClick={onOpen} aria-label={`Open Now playing: ${current.title}`}>
+      <span className="session-bar-art" aria-hidden="true">{current.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : artwork ? <MediaArtwork key={artwork} thumbnail={artwork} title={programme?.title || current.title} /> : <Play />}</span>
+      <span><small>{!connected ? "Reconnecting" : player.status === "error" ? "Playback error" : player.status === "paused" ? "Paused" : player.status === "loading" ? state?.radioRetry ? "Reconnecting" : "Loading" : current.live || radio ? "Live" : "Playing"}{state?.installationName && ` · ${state.installationName}`}</small><strong>{current.title}</strong>{programme && <small className="session-bar-programme">{programme.title}</small>}</span>
     </button>
     <div className="session-bar-transport">
       <PlaybackTransport state={state!} credentials={credentials} connected={connected} run={run} compact />

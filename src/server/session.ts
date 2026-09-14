@@ -92,14 +92,18 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     state.queueError = null;
     cancelWebRecovery();
   };
-  const saveQueueCursor = (entryId: string, required = true, beforeCommit?: () => void) => {
+  const saveQueueCursor = (entryId: string, required = true, beforeCommit?: () => void, queue = state.queue) => {
     let completingProgress = false;
-    try { store.saveQueueCursor(entryId, () => { completingProgress = true; beforeCommit?.(); completingProgress = false; }); state.queueError = null; }
+    try { store.saveQueueCursor(entryId, () => {
+      if (queue !== state.queue) store.saveQueue(queue, entryId);
+      completingProgress = true; beforeCommit?.(); completingProgress = false;
+    }); state.queueError = null; }
     catch (error) {
       if (completingProgress) throw error;
       state.queueError = "Could not save the queue position. Check the TV's storage before restarting.";
       if (required) { broadcast(); throw new Error(state.queueError); }
     }
+    state.queue = queue;
     state.queueCursorEntryId = entryId;
   };
   const enrichEntry = (entryId: string, source: string, metadata: Metadata) => {
@@ -261,16 +265,23 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     broadcast();
     return true;
   };
-  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor) => {
+  const play = (entryId: string, fromStart = false, retry = false, authorize = () => {}, goLive = false, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) => {
     authorize();
     available();
     options.prepareAudio?.();
     audioInterrupted = false;
     const entry = state.queue.find(entry => entry.id === entryId);
     if (!entry) throw new Error("That queue entry no longer exists.");
+    const index = state.queue.indexOf(entry);
+    const cursor = state.queue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
+    // Play now moves the chosen item or explicit album ahead of waiting entries.
+    // Next and replay keep the existing order before the playback boundary.
+    const selected = new Set([entryId, ...selectedEntryIds]);
+    const waiting = state.queue.slice(cursor + 1);
+    const queue = index > cursor + 1 ? [...state.queue.slice(0, cursor + 1), ...waiting.filter(item => selected.has(item.id)), ...waiting.filter(item => !selected.has(item.id))] : state.queue;
     audioOnly = false;
     cancelPreparation();
-    progress.finish(true, save => saveQueueCursor(entry.id, true, () => persistProgress(save, true)));
+    progress.finish(true, save => saveQueueCursor(entry.id, true, () => persistProgress(save, true), queue));
     if (retry) state.radioRetry = { ...state.radioRetry!, retryAt: null };
     else cancelRadioRetry();
     activePlayIntent = ++playIntent;
@@ -488,9 +499,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (cancelReconnect("Radio reconnect canceled by a newer playback request.")) broadcast();
       return ++playIntent;
     },
-    playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
+    playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
       if (intent !== playIntent) throw new Error("Added to the queue. Playback was canceled by a newer control.");
-      play(entryId, fromStart, false, authorize, false, playedBy);
+      play(entryId, fromStart, false, authorize, false, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();

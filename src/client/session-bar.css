@@ -38,6 +38,11 @@
   .couch-shell.remote-shell .session-bar-controls .transport-forward { grid-column: 5; grid-row: 2; }
   .couch-shell.remote-shell .session-bar-remote { grid-column: 6; grid-row: 2; }
   .couch-shell.remote-shell .session-bar:not(:has(.transport-back)) .session-bar-volume [data-slot="slider"] { grid-column: 2 / 6; }
+  .couch-shell.remote-shell footer.session-bar:not(:has(.play-button)) { grid-template-columns: 44px minmax(0, 1fr) repeat(3, 44px); }
+  .couch-shell.remote-shell .session-bar:not(:has(.play-button)) .transport-stop { grid-column: 3; }
+  .couch-shell.remote-shell .session-bar:not(:has(.play-button)) .playback-settings > button,
+  .couch-shell.remote-shell .session-bar:not(:has(.play-button)) .session-bar-remote { grid-column: 5; }
+  .couch-shell.remote-shell .session-bar:not(:has(.play-button)) .session-bar-volume [data-slot="slider"] { grid-column: 2 / 5; }
 }
 @media (max-width: 399px) {
   .couch-shell.remote-shell .session-bar-art { display: none; }

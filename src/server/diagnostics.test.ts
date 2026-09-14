@@ -45,10 +45,10 @@ test("recent log is sanitized, bounded, deduplicated and copied", () => {
   log.close();
 });
 
-test("ordinary controllers and native host cannot trigger collection or export", async () => {
+test("ordinary controllers cannot trigger collection or export", async () => {
   let calls = 0;
   const diagnostics = collector({ system: async () => { calls++; return []; } });
-  for (const authority of ["controller", "host"] as const) {
+  for (const authority of ["controller"] as const) {
     for (const path of ["", "/export"]) expect((await diagnostics.handle(request(path), () => ({ ...administrator, authority }))).status).toBe(403);
   }
   expect((await diagnostics.handle(request(), () => null)).status).toBe(403);

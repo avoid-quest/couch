@@ -48,16 +48,18 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
   expect(ready.token).toBe(token);
   if (process.platform !== "win32") expect((await stat(dir)).mode & 0o777).toBe(0o700);
   const health = () => fetch(`${ready.origin}/api/health`).then(response => response.json());
+  const enableSharing = () => fetch(`${ready.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true }) });
   expect((await health()).player).toBe("unavailable");
-  expect((await fetch(`${ready.origin}/api/build`)).status).toBe(401);
-  const identity = await fetch(`${ready.origin}/api/build`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
-  expect(identity).toMatchObject({ version: "0.1.0", packaged: false });
+  expect((await fetch(`${ready.origin}/api/build`)).status).toBe(503);
+  expect((await fetch(`${ready.origin}/api/connection`).then(response => response.json())).remoteControlEnabled).toBe(false);
 
   const observation: HostMessage = {
     type: "player",
     state: { playbackId: null, status: "idle", position: 0, duration: null, volume: 50, seekable: false, error: null },
   };
   if (reason === "AppImage admission") {
+    expect((await enableSharing()).status).toBe(503);
+    expect((await fetch(`${ready.origin}/api/connection`).then(response => response.json())).remoteControlEnabled).toBe(false);
     const status = await message();
     expect(status.type).toBe("appimageUpdate");
     if (status.type !== "appimageUpdate") throw new Error("Missing startup status");
@@ -69,6 +71,10 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
     expect(await message()).toEqual({ type: "observe" });
     expect((await health()).player).toBe("unavailable");
   }
+  expect((await enableSharing()).status).toBe(200);
+  expect((await fetch(`${ready.origin}/api/build`)).status).toBe(401);
+  const identity = await fetch(`${ready.origin}/api/build`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
+  expect(identity).toMatchObject({ version: "0.1.0", packaged: false });
   // Split a message to cover pipe chunk boundaries rather than assuming one read per line.
   const line = `${JSON.stringify(observation)}\n`;
   child.stdin.write(line.slice(0, 12));

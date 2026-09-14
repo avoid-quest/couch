@@ -1,9 +1,10 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
+import { isNativeHost } from "./native-context";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Music2 } from "lucide-react";
 import { Icon } from "./Icon";
 
-const nativeHost = isTauri();
+const nativeHost = isNativeHost();
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export function VideoStage({ active, title, audioOnly = false, subtitle, artwork }: {

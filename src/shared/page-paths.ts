@@ -9,5 +9,5 @@ export const pagePaths: Record<string, string> = {
 
 export const frontendPaths = ["/settings/remotes", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path)];
 
-export const sectionForPath = (pathname: string) => settingsPageForPath(pathname) ? "Settings" : Object.entries(pagePaths).find(([, path]) => path === (pathname.replace(/\/$/, "") || "/"))?.[0];
-export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : section] ?? "/";
+export const sectionForPath = (pathname: string) => ["/search", "/browse"].includes(pathname.replace(/\/$/, "")) ? "Home" : settingsPageForPath(pathname) ? "Settings" : Object.entries(pagePaths).find(([, path]) => path === (pathname.replace(/\/$/, "") || "/"))?.[0];
+export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : ["Search", "Browse"].includes(section) ? "Home" : section] ?? "/";

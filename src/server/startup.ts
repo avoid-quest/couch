@@ -61,7 +61,7 @@ export function createStartup(fullscreen: Backend["fullscreen"], backend?: Backe
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
-      const authorize = () => { if (identity()?.authority !== "administrator") throw new ControllerError("An administrator remote is required.", 403); };
+      const authorize = () => { if (!["host", "administrator"].includes(identity()?.authority ?? "")) throw new ControllerError("An administrator is required.", 403); };
       try {
         authorize();
         if (request.method !== "GET" && request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });

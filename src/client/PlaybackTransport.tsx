@@ -11,6 +11,7 @@ type Props = { state: SessionState; connected: boolean; run: (action: Action) =>
 export function playbackCapabilities(state: SessionState | null, connected: boolean) {
   const player = state?.player;
   const current = state?.queue.find(entry => entry.id === state.currentEntryId);
+  const live = current?.live || current?.kind === "radio" || current?.source.startsWith("radio:");
   const available = connected && !!player && player.status !== "unavailable";
   const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
   return {
@@ -18,7 +19,8 @@ export function playbackCapabilities(state: SessionState | null, connected: bool
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
     audioReady: !state?.systemAudio || state.systemAudio.volume !== null,
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
-    seekable: !!player?.seekable && !current?.live,
+    seekable: !!player?.seekable,
+    pausable: !live || !!player?.seekable,
     hasNext: currentIndex >= 0 && currentIndex < (state?.queue.length ?? 0) - 1,
   };
 }
@@ -45,14 +47,14 @@ export function PlaybackTimeline({ state, connected, run }: Props) {
 export function PlaybackTransport({ state, credentials, connected, run, compact = false, onExpand }: Props & { credentials: Credentials; compact?: boolean; onExpand?: () => void }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
-  const { available, active, transportReady, seekable, hasNext } = playbackCapabilities(state, connected);
+  const { available, active, transportReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
   const seekBy = (seconds: number) => {
     if (player.playbackId && transportReady && seekable) void run({ type: "seek", playbackId: player.playbackId, position: Math.max(0, Math.min(player.duration ?? Infinity, player.position + seconds)) });
   };
   return <div className={`transport-buttons${compact ? " session-bar-controls" : ""}`} role="group" aria-label="Playback controls">
     {seekable && <Button variant="ghost" size="icon" className="icon-button transport-back flex-col gap-0" aria-label="Seek backward 10 seconds" title="Back 10 seconds" disabled={!transportReady} onClick={() => seekBy(-10)}><RotateCcw aria-hidden="true" /><span aria-hidden="true" className="text-[10px] leading-none">10</span></Button>}
-    <Button size="icon" className="play-button" aria-label={player.status === "playing" ? "Pause" : "Resume"} title={player.status === "playing" ? "Pause" : "Resume"} disabled={!transportReady}
-      onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" }); }}><Icon name={player.status === "playing" ? "pause" : "play"} /></Button>
+    {pausable && <Button size="icon" className="play-button" aria-label={player.status === "playing" ? "Pause" : "Resume"} title={player.status === "playing" ? "Pause" : "Resume"} disabled={!transportReady}
+      onClick={() => { if (player.playbackId) void run({ type: "pause", playbackId: player.playbackId, paused: player.status === "playing" }); }}><Icon name={player.status === "playing" ? "pause" : "play"} /></Button>}
     {seekable && <Button variant="ghost" size="icon" className="icon-button transport-forward flex-col gap-0" aria-label="Seek forward 10 seconds" title="Forward 10 seconds" disabled={!transportReady} onClick={() => seekBy(10)}><RotateCw aria-hidden="true" /><span aria-hidden="true" className="text-[10px] leading-none">10</span></Button>}
     {hasNext && <Button variant="ghost" size="icon" className="icon-button transport-next" aria-label="Next in queue" title="Next in queue" disabled={!transportReady}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" /></Button>}

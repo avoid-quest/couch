@@ -161,7 +161,7 @@ for (const action of ["replace", "disconnect"] as const) test(`${action} publish
   expect(context.notifications.every(notification => notification.role === "administrator")).toBe(true);
 });
 
-test("a claimed phone manages through the HTTP hub while ordinary controllers browse and profiles stay separate", async () => {
+test("the first paired phone manages through the HTTP hub while ordinary controllers browse and profiles stay separate", async () => {
   const upstream = server();
   const hostToken = "private-host-token-for-jellyfin-settings-tests";
   const hub = createHub({ hostname: "127.0.0.1", port: 0, databasePath: ":memory:", hostToken, sendPlayer: () => {} });
@@ -169,8 +169,7 @@ test("a claimed phone manages through the HTTP hub while ordinary controllers br
   const api = (token: string, path: string, method = "GET", body?: unknown) => fetch(`${hub.origin}${path}`, { method, headers: { Origin: hub.origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const pair = async () => (await (await api("", "/api/pair", "POST", { code: hub.pairingCode })).json() as { token: string }).token;
   const owner = await pair(), guest = await pair();
-  const { code } = await (await api(hostToken, "/api/controllers/claim-code")).json() as { code: string };
-  expect((await api(owner, "/api/controllers/claim", "POST", { code })).status).toBe(200);
+  expect((await (await api(owner, "/api/controllers/me")).json()).authority).toBe("administrator");
   const profiles = await (await api(guest, "/api/profiles")).json();
   expect((await api(guest, "/api/jellyfin", "POST", upstream.credentials)).status).toBe(403);
   expect((await api(owner, "/api/jellyfin", "POST", upstream.credentials)).status).toBe(200);

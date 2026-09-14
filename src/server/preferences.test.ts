@@ -220,9 +220,7 @@ test("temporary controls need no preference write and expire when the item chang
 test("defaults reject stale profiles and unlabelled tracks while profile guards retain controller authority", () => {
   const { store, session, playbackId } = connected();
   const token = store.pair();
-  const controller = store.controllerForToken(token)!;
-  store.createControllerClaim("1234567890", false);
-  store.consumeControllerClaim(controller.id, "1234567890");
+  expect(store.controllerForToken(token)?.role).toBe("administrator");
   const guest = session.createProfile("Guest");
   for (const status of ["playing", "paused", "loading"] as const) {
     session.observe({ ...session.state.player, status });

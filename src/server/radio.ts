@@ -2,7 +2,8 @@ import { Database } from "bun:sqlite";
 import { Resolver } from "node:dns/promises";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { RadioPlaylist, RadioStation } from "../shared/radio";
+import { avoidRadioPlaylistId, avoidRadioPlaylistUrl, type AvoidRadioCatalog, type RadioPlaylist, type RadioStation } from "../shared/radio";
+import { createRadioMetadata } from "./radio-metadata";
 import { radioHttpUrl as httpUrl, radioId, readRadioPlaylist } from "./radio-playlists";
 
 const uuid = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
@@ -89,6 +90,8 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
   const pending = new Map<string, Promise<RadioStation[]>>();
   const refreshes = new Map<string, { promise: Promise<RadioPlaylist>; controller: AbortController }>();
   const shutdown = new AbortController();
+  const metadata = createRadioMetadata({ fetch: request, signal: shutdown.signal });
+  let avoidRetryAt = 0;
   let closed = false;
   let directory: { expires: number; servers: string[] } | undefined;
   let discovery: Promise<string[]> | undefined;
@@ -144,6 +147,21 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     return promise;
   }
 
+  async function avoid(refresh = false): Promise<AvoidRadioCatalog> {
+    assertOpen();
+    db.query("INSERT OR IGNORE INTO radio_playlists (id, name, url) VALUES (?, ?, ?)").run(avoidRadioPlaylistId, "avoid radio", avoidRadioPlaylistUrl);
+    let playlist = getPlaylist(avoidRadioPlaylistId)!;
+    if (refreshes.has(avoidRadioPlaylistId) || (refresh || !playlist.updatedAt || playlist.updatedAt < Date.now() - 60 * 60_000) && (refresh || avoidRetryAt <= Date.now())) {
+      avoidRetryAt = Date.now() + 60_000;
+      try { playlist = await refreshPlaylist(avoidRadioPlaylistId); }
+      catch { assertOpen(); playlist = getPlaylist(avoidRadioPlaylistId)!; }
+    }
+    const stations = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE source_id = ? ORDER BY position").all(avoidRadioPlaylistId)
+      .map(row => station(JSON.parse(row.station)));
+    const { url: _url, ...summary } = playlist;
+    return { playlist: summary, stations };
+  }
+
   async function servers() {
     if (directory && directory.expires > Date.now()) return directory.servers;
     discovery ??= discover().then(result => {
@@ -174,6 +192,30 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
   }
 
   return {
+    metadata,
+    avoid,
+    async avoidProgrammes(callerSignal?: AbortSignal) {
+      const programmes: Record<string, import("../shared/radio").RadioProgrammeDetails> = {};
+      // Include catalog loading in the budget, below the client's 45s timeout.
+      const signal = AbortSignal.any([shutdown.signal, callerSignal, AbortSignal.timeout(30_000)].filter((value): value is AbortSignal => !!value));
+      if (signal.aborted) return programmes;
+      const canceled = Promise.withResolvers<void>();
+      const cancel = () => canceled.resolve();
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        const catalog = await Promise.race([avoid(), canceled.promise]);
+        if (!catalog) return programmes;
+        // Finish only the current shared requests after this caller leaves.
+        for (let offset = 0; !signal.aborted && offset < Math.min(catalog.stations.length, 50); offset += 3) {
+          await Promise.all(catalog.stations.slice(offset, Math.min(offset + 3, 50)).map(async current => {
+            if (!current.tvgId) return;
+            const result = await metadata.get(current.tvgId, current.url, signal);
+            if (result.programme && !signal.aborted) programmes[current.id] = result.programme;
+          }));
+        }
+        return programmes;
+      } finally { signal.removeEventListener("abort", cancel); }
+    },
     async search({ q = "", countrycode = "" }: { q?: string; countrycode?: string } = {}) {
       assertOpen();
       q = q.trim();
@@ -228,13 +270,14 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       canonical.hash = "";
       url = canonical.href;
       const id = radioId(`playlist:${url}`);
-      if (!getPlaylist(id) && db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM radio_playlists").get()!.count >= 30) throw new RadioError("You can save up to 30 radio playlists.");
+      if (id !== avoidRadioPlaylistId && !getPlaylist(id) && db.query<{ count: number }, [string]>("SELECT COUNT(*) AS count FROM radio_playlists WHERE id != ?").get(avoidRadioPlaylistId)!.count >= 30) throw new RadioError("You can save up to 30 custom radio playlists.");
       db.query("INSERT INTO radio_playlists (id, name, url) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name").run(id, name.trim(), url);
       return refreshPlaylist(id, authorize);
     },
     refreshPlaylist,
     removePlaylist(id: string) {
       const playlist = requirePlaylist(id);
+      if (playlist.id === avoidRadioPlaylistId) throw new RadioError("avoid radio is included with Couch and cannot be removed.");
       refreshes.get(playlist.id)?.controller.abort();
       refreshes.delete(playlist.id);
       db.transaction(() => {
@@ -254,7 +297,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       assertOpen();
       if (!source.startsWith("radio:")) return null;
       const row = db.query<{ station: string }, [string, string]>("SELECT s.station FROM radio_playlist_stations s JOIN radio_playlists p ON p.id = s.source_id WHERE s.id = ? AND p.url = ?")
-        .get(source.slice(6), "https://radio.avoid.quest/playlist.m3u");
+        .get(source.slice(6), avoidRadioPlaylistUrl);
       const current = row ? station(JSON.parse(row.station)) : null;
       return current?.tvgId ? { id: current.tvgId, streamUrl: current.url } : null;
     },

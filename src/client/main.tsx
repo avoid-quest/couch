@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { NativeModeGate } from "./PlaybackDevice";
 import { App } from "./App";
 import { CouchRouter } from "./routes";
 import "./theme.css";
@@ -12,6 +13,6 @@ document.documentElement.classList.add("dark");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <CouchRouter><App /></CouchRouter>
+    <NativeModeGate><CouchRouter><App /></CouchRouter></NativeModeGate>
   </StrictMode>,
 );

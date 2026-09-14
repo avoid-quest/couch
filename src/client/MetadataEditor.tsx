@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { isTauri } from "@tauri-apps/api/core";
+import { isNativeHost } from "./native-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
   const artworkInput = useRef<HTMLInputElement | null>(null);
   const clearSelectedArtwork = () => { setArtwork(null); if (artworkInput.current) artworkInput.current.value = ""; };
   const prefix = useId();
-  const native = isTauri();
+  const native = isNativeHost();
   const busy = !connected || pending || reading;
   const reset = (value: MetadataView) => { setMetadata(value); setDraft(draftOf(value.values)); clearSelectedArtwork(); setClearArtwork(false); setClearMatch(false); setPreview(null); };
   const cancel = () => { request.current?.abort(); request.current = null; fileRead.current?.abort(); fileRead.current = null; };

@@ -96,6 +96,8 @@ test("cue library queue, saved playlist and relative progress survive restart wi
   session.command({ type: "play", entryId: entry.id });
   expect(await loaded.promise).toMatchObject({ startPosition: 2, segment: { start: 400 / 75, end: 875 / 75 } });
   session.command({ type: "stop" });
+  const playbackQueue = session.state.queue.map(item => item.source);
+  expect(playbackQueue).toEqual([tracks[1]!, tracks[0]!, ...tracks.slice(2)].map(track => `library:${track.id}`));
   playlists.close(); store.close(); await library.close();
   const reopened = createLibrary({ databasePath, folders, ffprobePath: null });
   const store2 = openStore(databasePath);
@@ -104,7 +106,7 @@ test("cue library queue, saved playlist and relative progress survive restart wi
   cleanups.push(() => { playlists2.close(); store2.close(); return reopened.close(); });
   await reopened.scan(source.id);
   expect(session2.state.currentEntryId).toBeNull();
-  expect(session2.state.queue.map(item => item.source)).toEqual(tracks.map(track => `library:${track.id}`));
+  expect(session2.state.queue.map(item => item.source)).toEqual(playbackQueue);
   expect(reopened.albumTracks(album.id).items.map(track => track.id)).toEqual(tracks.map(track => track.id));
   const detail = await playlists2.handle(new Request(`http://localhost/api/playlists/${snapshot.playlist.id}`), () => {});
   expect(detail.status).toBe(200);

@@ -5,6 +5,15 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "allow-connection-info",
+    "allow-set-video-rect",
+    "allow-choose-media",
+    "allow-choose-folder",
+    "allow-playback-device",
+    "allow-select-playback-device",
+    "allow-retry-playback-device",
+    "allow-complete-local-setup",
+    "allow-show-playback-device",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen"
   ]
