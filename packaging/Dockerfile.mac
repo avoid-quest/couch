@@ -22,6 +22,7 @@ RUN test -n "$BUN_VERSION" \
     && curl --proto '=https' --tlsv1.2 -fsSL https://bun.sh/install -o /tmp/install-bun.sh \
     && bash /tmp/install-bun.sh "bun-v$BUN_VERSION" \
     && cp /root/.bun/bin/bun /usr/local/bin/bun \
+    && ln -s bun /usr/local/bin/bunx \
     && rm /tmp/install-bun.sh
 RUN test -n "$RUST_VERSION" \
     && curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup.sh \
