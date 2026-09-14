@@ -25,11 +25,7 @@ setup=$(cd -- "$(dirname -- "$0")" && pwd)
 $tv && [[ -z $desktop_user ]] || ! $tv || fail 'Choose either --tv or --desktop-user.'
 if $tv; then
     desktop_user=couch-tv
-    [[ -f /var/lib/couch-installer/tv-files.sha256 ]] || first_tv=true
-    if [[ -e /etc/X11/default-display-manager ]]; then
-        [[ $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'Another display manager is configured. Keep this desktop or select LightDM deliberately before TV setup.'
-        [[ -f /var/lib/couch-installer/tv-files.sha256 ]] || fail 'LightDM already has a desktop policy. Use ordinary installation, or configure TV login deliberately before setup.'
-    fi
+    lock=/var/lib/couch-install-locks/tv.lock
     if getent passwd couch-tv >/dev/null; then
         [[ $(getent passwd couch-tv | cut -d: -f6) = /var/lib/couch && $(id -Gn couch-tv) = couch-tv && $(passwd -S couch-tv | awk '{print $2}') = L ]] || fail 'The existing couch-tv account is not the locked Couch runtime account.'
     fi
@@ -44,6 +40,7 @@ else
     compgen -G '/usr/share/xsessions/*.desktop' >/dev/null || fail 'An existing X11 desktop is required. Use --tv for a minimal Debian device.'
     [[ ${XDG_SESSION_TYPE:-x11} = x11 ]] || fail 'Log into an X11 desktop before installing Couch.'
     application=$user_home/.local/lib/couch
+    lock=/var/lib/couch-install-locks/desktop-$(id -u "$desktop_user").lock
 fi
 [[ $user_home != *$'\n'* && $user_home != *'"'* && $user_home != *'%'* ]] || fail 'The account home path cannot be used in desktop integration.'
 exec 9>/run/couch-install.lock
@@ -55,12 +52,29 @@ cp -- "$app" "$staging/Couch.AppImage"
 base64 --decode < "$public_key" > "$staging/key"
 base64 --decode < "$signature" > "$staging/signature"
 minisign -Vm "$staging/Couch.AppImage" -p "$staging/key" -x "$staging/signature" || fail 'AppImage signature verification failed.'
+# Root owns the directory; desktop recovery can read its lock but cannot replace it.
+# Keep the same inode across retries and deny other accounts access to the lock.
+install -d -m 0755 /var/lib/couch-install-locks
+touch "$lock"
+if ! $tv; then chown "$desktop_user" "$lock"; fi
+chmod 0400 "$lock"
+exec 8<"$lock"
+flock -n 8 || fail 'Another Couch installation or recovery is running.'
 if [[ -f $application/Couch.AppImage ]]; then
     cmp -s "$staging/Couch.AppImage" "$application/Couch.AppImage" || fail 'A different Couch app is installed. Use its signed app updater; setup preserves existing app bytes and data.'
 fi
 if $tv; then
+    state=/var/lib/couch-installer
+    [[ -f $state/tv-setup.complete ]] || first_tv=true
+    if [[ -e /etc/X11/default-display-manager ]]; then
+        [[ $(cat /etc/X11/default-display-manager) = /usr/sbin/lightdm ]] || fail 'Another display manager is configured. Keep this desktop or select LightDM deliberately before TV setup.'
+        [[ -f $state/tv-setup.pending || -f $state/tv-setup.complete ]] || fail 'LightDM already has a desktop policy. Use ordinary installation, or configure TV login deliberately before setup.'
+    fi
     # Refuse unknown session overrides before installing packages or changing login.
     [[ ! -e /etc/systemd/system/couch-tv.service && ! -e /etc/systemd/user/couch-tv.service ]] || fail 'An administrator Couch service override exists. Inspect it before TV setup.'
+    install -d -m 0700 "$state"
+    # APT may configure LightDM before setup reaches the managed-file ledger.
+    if $first_tv; then touch "$state/tv-setup.pending"; sync -f "$state"; fi
 fi
 mapfile -t packages < <(jq -r '.common[]' "$setup/host-packages.json")
 if $tv; then mapfile -t extra < <(jq -r '.audio[], .tv[]' "$setup/host-packages.json"); packages+=("${extra[@]}")
@@ -102,8 +116,6 @@ if ! $tv; then
     printf '[Desktop Entry]\nType=Application\nName=Couch\nExec="%s/Couch.AppImage"\nIcon=%s/.local/share/icons/couch.png\nTerminal=false\nCategories=AudioVideo;\n' "$application" "$user_home" | as_user sh -c 'cat > "$1/.local/share/applications/couch.desktop"' sh "$user_home"
     echo "Installed Couch for $desktop_user. Launch Couch from the desktop application menu in an X11 session."
 else
-    state=/var/lib/couch-installer
-    install -d -m 0700 "$state"
     touch "$state/tv-files.sha256"
     while IFS= read -r file; do
         source=$setup/tv/$file
@@ -125,6 +137,8 @@ else
     if $first_tv; then
         systemctl enable lightdm.service
         systemctl set-default graphical.target
+        mv "$state/tv-setup.pending" "$state/tv-setup.complete"
+        sync -f "$state"
     fi
     echo 'TV setup is ready. Reboot when convenient to start the Couch session.'
     echo 'Keep your administrator account. Recovery: sudo couch-session logs; sudo couch-session restart'

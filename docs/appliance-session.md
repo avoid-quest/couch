@@ -1,4 +1,32 @@
-# Ubuntu TV session
+# TV session
+
+The supported Debian 13 x86_64 setup uses the explicit `--tv` profile in the
+[installation guide](install-couch.md). It installs the existing Couch session
+and `/usr/lib/systemd/logind.conf.d/50-couch.conf`. Ordinary desktop setup leaves
+login and power policy unchanged. The TV drop-in ignores AC lid closure, retains
+undocked battery lid suspend, and preserves administrator drop-ins and masks under `/etc`.
+Reboot applies the policy; setup does not restart LightDM or logind. Debian's
+[logind configuration reference](https://manpages.debian.org/trixie/systemd/logind.conf.5.en.html)
+defines the lid settings and drop-in precedence. Physical lid behavior still needs
+the [hardware acceptance procedure](qualification/lid-power.md).
+
+Debian setup records `tv-setup.pending` under `/var/lib/couch-installer` before
+APT can configure LightDM. It records `tv-setup.complete` only after enabling
+LightDM and selecting the graphical boot target. Rerun the same signed setup
+after an interruption to finish those steps. The separate file-hash ledger
+preserves administrator edits. Once setup completes, later runs preserve the
+administrator's boot-service and default-target choices.
+
+Setup and recovery share persistent locks in the root-owned directory
+`/var/lib/couch-install-locks`, one per desktop account and one for the TV profile.
+Desktop recovery can read its lock but cannot replace it. Changing `XDG_STATE_HOME`
+does not bypass an installation or another recovery. Setup creates the locks
+before touching application files; recovery requires that setup state.
+
+## Legacy Ubuntu companion
+
+The following describes the earlier Ubuntu companion packaging and qualification.
+Use the linked Debian installation guide for new installations.
 
 `couch-appliance` supplies the production session for Ubuntu 24.04 x86_64. It
 installs the OS runtime dependencies separately from the Tauri AppImage. Install through the documented `install-couch` entry

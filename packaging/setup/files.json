@@ -54,6 +54,7 @@
     "usr/lib/couch-appliance/initialize-audio",
     "usr/lib/couch-appliance/session",
     "usr/lib/couch-appliance/set-autostart",
+    "usr/lib/systemd/logind.conf.d/50-couch.conf",
     "usr/lib/systemd/user/couch-tv.service",
     "usr/lib/systemd/system/couch-autostart@.service",
     "usr/sbin/couch-session",

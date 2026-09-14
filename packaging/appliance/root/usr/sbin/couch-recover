@@ -11,6 +11,7 @@ if [[ $EUID = 0 ]]; then
     runtime_user=couch-tv
     application=/var/lib/couch/application
     state=/var/lib/couch-installer
+    lock=/var/lib/couch-install-locks/tv.lock
     data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
     data=${data#\"}; data=${data%\"}
 else
@@ -18,12 +19,14 @@ else
     application=$HOME/.local/lib/couch
     data=${COUCH_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/quest.avoid.couch}
     state=${XDG_STATE_HOME:-$HOME/.local/state}/couch-recovery
+    lock=/var/lib/couch-install-locks/desktop-$(id -u).lock
 fi
 as_user() { if $tv; then runuser -u "$runtime_user" -- "$@"; else "$@"; fi; }
 [[ ! -L $application ]] || fail 'The application directory is a symbolic link; inspect it through SSH.'
-mkdir -p "$state"
-exec 9>"$state/recovery.lock"
+[[ -f $lock ]] || fail 'Run the current signed setup before using recovery.'
+exec 9<"$lock"
 flock -n 9 || fail 'Another installation or recovery is running.'
+mkdir -p "$state"
 # The checksum is pinned when the known-good bundle is backed up, not downloaded
 # from a feed during recovery. The operator chooses this retained snapshot.
 (cd "$backup" && sha256sum --check --status SHA256SUMS) || fail 'Backup checksum mismatch.'
