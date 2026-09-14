@@ -51,7 +51,8 @@ browser with its existing administrator pairing, not a new physical phone.
 
 Pending human steps for #251: on a real phone joined to the TV's network, open
 the advertised address, name and pair the browser using the TV code or scan the
-Connections QR, then follow Search to a chosen result. During the coordinated
+Connections QR on this configured TV. A fresh TV instead shows the QR on
+Claim and name. Then follow Search to a chosen result. During the coordinated
 appliance window, choose Play, confirm picture and sound, distinguish adding
 next from playing now, pause and recover from an unavailable source. Record the
 phone/browser, installed build, date and each result. Do not mark the phone
@@ -66,7 +67,7 @@ pairing-dialog QR additionally belong to #248 and #249 below.
 | Music, CUE and ReplayGain | [Continuity](audio-continuity.md), [CUE #30](https://github.com/avoid-quest/couch/issues/30), [ReplayGain #31](https://github.com/avoid-quest/couch/issues/31) | Measured lossless 44.1 kHz FLAC continuity covers local, mounted-folder and Jellyfin software captures; not every format, slow open or physical speaker |
 | Video metadata, corrections and collections | [Library](media-library-27.md), [metadata](../metadata.md), [current collection UI](https://github.com/avoid-quest/couch/blob/f60f3daea2dd9e11c2ed483ce094866ec8d0ce8c/src/client/CollectionsPanel.tsx) | Local NFO/artwork/correction/export work exists; live TMDB matching still needs authorized API access |
 | Guide scheduling and completed recordings | [Recording evidence](../recordings.md), [closed #66](https://github.com/avoid-quest/couch/issues/66) | Historical generated-media/backend tests qualify their named paths; no Tvheadend is deployed on the audited TV and no physical tuner reception is claimed |
-| Desktop controllers | [Mac/browser qualification](desktop-controllers-171.md), [selected #171 scope](https://github.com/avoid-quest/couch/issues/171) | Mac browser scope delivered; Windows verification is unrecorded; native Mac/Windows playback not delivered |
+| Desktop controllers | [Mac/browser qualification](desktop-controllers-171.md), [selected #171 scope](https://github.com/avoid-quest/couch/issues/171) | Safari/website-app loopback checks completed; Mac-to-installed-TV LAN/Search/commands/playback acceptance remains pending; Windows/Edge verification deferred; native Mac/Windows playback not delivered |
 
 These existing documents retain their original source identities, failed attempts
 and acceptance boundaries. Old references to temporary artifact directories are

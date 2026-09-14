@@ -14,14 +14,18 @@ For a real TV, start with the [Ubuntu installer](install-couch.md), using the
 trusted publisher's AppImage and companion package. The current private release
 path builds on the Mac and installs on the TV. Phones need only a browser.
 
-1. Join the TV's local network. Open **Pair a remote** on the TV and type its
-   advertised address into the phone browser, including any port. The project
-   website `couch.avoid.quest` is not your TV's address. The verified appliance
-   uses `http://couch.avoid.local`; other installations can advertise another URL.
-2. Name the browser and enter the six-digit controller code. Alternatively,
-   scan the pairing QR in **Settings > Connections** on the TV or an existing
-   administrator remote. That QR fills the controller code; submit the pairing
-   form to connect. The separate administrator code grants setup authority.
+1. Join the TV's local network. A fresh unclaimed TV shows its address, pairing
+   QR and controller code on **Claim and name**. Scan that QR or type the address
+   into your phone browser, including any port. On a configured TV, open
+   **Pair a remote** for its address/code or **Settings > Connections** for the
+   QR. Setup hides the normal Settings navigation until it finishes.
+   The project website `couch.avoid.quest` is not your TV's address. The verified
+   appliance uses `http://couch.avoid.local`; use the address your TV advertises.
+2. Name the browser and enter the six-digit controller code, or use the code
+   filled by the QR. Submit the pairing form to connect. On a fresh TV, continue
+   through **Claim and name** with the separate administrator code shown on the
+   TV, then finish the remaining setup steps before opening Search. An existing
+   administrator remote can also show a pairing QR in **Settings > Connections**.
 3. Open **Search** in the main navigation. Enter a title, artist, station or
    supported media link, then select **Search**. **All** groups results by source;
    select **YouTube**, **Radio**, **TV folders** or another source to narrow them.
@@ -194,8 +198,10 @@ default. This preference does not change the TV's display resolution.
 
 An unclaimed TV opens setup at **Claim and name**, with its local address, a
 controller-pairing QR code, the six-digit controller pairing code and a separate ten-digit
-administrator code. Pair your phone first, then open its **Settings > TV**
-and enter the administrator code. It expires after ten minutes and works once.
+administrator code. Pair your phone first, then enter that administrator code
+on the phone's **Claim and name** setup step. For administrator recovery on an
+already configured TV, use **Settings > TV**. The code expires after ten minutes
+and works once.
 If it expires before use, select **Get new code** on the TV. Competing first
 claims grant administration to one remote; existing paired devices remain ordinary
 controllers.
@@ -206,8 +212,10 @@ read-only on the TV and ordinary remotes. Administrator status belongs to the
 paired browser credential. It does not change the watching profile, local history
 or connected Jellyfin account.
 
-**Connections** is available before pairing and while disconnected. It shows the
-known TV name, address and LAN links. When authenticated, it also shows this
+During first-run setup, use the QR on **Claim and name**; Connections is absent
+from the setup navigation. On a configured TV, **Connections** is available
+before pairing and while disconnected. It shows the known TV name, address and
+LAN links. When authenticated, it also shows this
 remote's name and role; the host and administrators can see the pairing QR. Server and player availability are separate: a
 reachable server can still have an unavailable player. Rejected or revoked
 credentials return to pairing without repeatedly trying the same credential.

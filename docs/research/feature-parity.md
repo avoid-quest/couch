@@ -16,7 +16,7 @@ source/build identities, evidence boundaries and current acceptance owners.
 
 | Area | Implemented software | Remaining or excluded scope |
 | --- | --- | --- |
-| TV and controllers | Fullscreen Linux player; Home, Search, Library, Saved, Up next and Settings; browser remotes; pairing, controller names/roles/revocation | Guest journey #248 and pairing-dialog QR #249 are open; CEC #38 is not planned; Windows controller verification is unrecorded |
+| TV and controllers | Fullscreen Linux player; Home, Search, Library, Saved, Up next and Settings; browser remotes; pairing, controller names/roles/revocation | Guest journey #248 and pairing-dialog QR #249 are open; CEC #38 is not planned; Mac loopback checks completed, installed-TV journey pending; Windows controller verification deferred |
 | Administration | Separate administrator claim/recovery; TV name, startup, updates, output controls; phone folder and Jellyfin setup | Real first-run media/display/audio acceptance #23 |
 | Playback and subtitles | libmpv tracks, chapters, speed/delays, uploaded text sidecars, Jellyfin text subtitles, saved profile defaults | YouTube rendering #150; display #13, sound #14 and sizing/subtitle geometry #12; HDR/refresh unqualified; subtitle search/download excluded |
 | Library and metadata | Local/already-mounted folders, FTS search, profiles and editing/removal, history/resume, NFO/artwork, corrections/export and collections | Real folder scan/play/recovery #17; integrated NAS mounting excluded; live TMDB matching needs authorized access |

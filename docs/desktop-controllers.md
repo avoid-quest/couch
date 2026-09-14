@@ -7,8 +7,10 @@ controller computer.
 
 ## Connect
 
-1. Connect your computer to the TV's network. On the TV, open **Pair a remote**
-   and copy one of its addresses into your browser, including the port.
+1. Connect your computer to the TV's network. A fresh TV shows its address and
+   pairing QR on **Claim and name**. On a configured TV, open **Pair a remote**
+   for the address/code or **Settings > Connections** for the QR. Type the
+   address into your browser, including any port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
    and enter the TV's six-digit pairing code.
 3. Open **Search** for a title or link, or **Library** for provider catalogs and
@@ -61,7 +63,11 @@ and use its advertised address consistently.
 
 The owner selected this controller scope on
 [8 September 2026](https://github.com/avoid-quest/couch/issues/171#issuecomment-5581948822).
-Mac browser-controller acceptance was delivered. Windows verification remains
-unrecorded; native Mac/Windows playback and a separate server were not delivered.
+The completed Mac checks used Safari and its website app against a loopback
+fixture. They cover pairing, app installation, empty-library browsing and
+reconnect. The Mac-to-installed-TV journey, including LAN access, populated
+Search, playback commands and physical playback, remains pending. Windows/Edge
+verification was deferred; native Mac/Windows playback and a separate server
+were not delivered.
 See [desktop controller qualification](qualification/desktop-controllers-171.md)
 for the tested platforms and outstanding acceptance.

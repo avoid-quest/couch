@@ -1,0 +1,27 @@
+# Linux build/qualification tools for the temporary Mac delivery path.
+# Pass the source revision's pins as documented in docs/tauri-releases.md.
+ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:1e0a86e57d247923571b75e0aaf48a1449cf8c543d51fb3e07a4a7d7bfa79316
+ARG COUCH_BUILD_PLATFORM=linux/amd64
+FROM --platform=${COUCH_BUILD_PLATFORM} ${UBUNTU_IMAGE}
+ARG UBUNTU_SNAPSHOT
+ARG BUN_VERSION
+ARG RUST_VERSION
+ENV DEBIAN_FRONTEND=noninteractive
+RUN test -n "$UBUNTU_SNAPSHOT" && apt-get update --snapshot "$UBUNTU_SNAPSHOT" \
+    && apt-get install -y --no-install-recommends --snapshot "$UBUNTU_SNAPSHOT" \
+       build-essential ca-certificates curl git pkg-config unzip \
+       libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev \
+       ffmpeg libfuse2t64 librsvg2-dev patchelf docker.io jq acl procps \
+    && rm -rf /var/lib/apt/lists/*
+RUN test -n "$BUN_VERSION" \
+    && curl --proto '=https' --tlsv1.2 -fsSL https://bun.sh/install -o /tmp/install-bun.sh \
+    && bash /tmp/install-bun.sh "bun-v$BUN_VERSION" \
+    && cp /root/.bun/bin/bun /usr/local/bin/bun \
+    && rm /tmp/install-bun.sh
+RUN test -n "$RUST_VERSION" \
+    && curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup.sh \
+    && sh /tmp/rustup.sh -y --profile minimal --default-toolchain "$RUST_VERSION" \
+    && rm /tmp/rustup.sh
+ENV PATH="/root/.cargo/bin:${PATH}" CARGO_BUILD_JOBS=2 PATCHELF=/usr/bin/patchelf
+RUN cargo install tauri-driver --version 2.0.6 --locked
+CMD ["sleep", "infinity"]

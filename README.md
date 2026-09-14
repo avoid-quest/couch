@@ -69,9 +69,10 @@ publication path while GitHub Actions is paused. For source development, use the
 [Linux development instructions](docs/usage.md#run-from-source-for-development)
 or Docker preview above.
 
-Open the LAN address shown in **Pair a remote** on your phone and enter the
-six-digit code. **Settings > Connections** on the TV or an administrator remote
-also has a pairing QR. Use **Search** to find a title or paste a supported link;
+On a fresh TV, scan the QR or use the address and six-digit controller code
+on **Claim and name**. On a configured TV, **Pair a remote** shows its address
+and code; **Settings > Connections** on the TV or an administrator remote has
+the pairing QR. Use **Search** to find a title or paste a supported link;
 **Library** opens the provider catalogs, Radio, Live TV, Jellyfin and TV folders.
 An administrator manages folders and Jellyfin in **Settings > Sources**.
 
