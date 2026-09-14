@@ -18,6 +18,7 @@ for (const [source, target] of [
   ["src-tauri/icons/128x128.png", "couch.png"],
   ["docs/install-couch.md", "README.md"],
 ]) await cp(source!, join(staging, "setup", target!));
+await Bun.write(join(staging, "setup/README.md"), (await Bun.file(join(staging, "setup/README.md")).text()).replaceAll("<V>", version!));
 for (const file of setup.files) {
   const destination = join(staging, "setup/tv", file);
   await mkdir(resolve(destination, ".."), { recursive: true });
