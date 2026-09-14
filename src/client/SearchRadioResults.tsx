@@ -23,6 +23,7 @@ function RadioResults(props: Props) {
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const forceRefresh = useRef(false);
   const [visible, setVisible] = useState(6);
   const lifetime = useRef<AbortController | null>(null);
   const previousSearch = useRef("");
@@ -44,7 +45,9 @@ function RadioResults(props: Props) {
       if (props.query.length > 100) throw new Error("Search radio with at most 100 characters.");
       const query = new URLSearchParams({ q: props.query });
       if (avoid) {
-        const { playlist, stations } = await readSearch<AvoidRadioCatalog>(props, `/api/radio/avoid${retry ? "?refresh=true" : ""}`, controller.signal);
+        const refresh = forceRefresh.current;
+        forceRefresh.current = false;
+        const { playlist, stations } = await readSearch<AvoidRadioCatalog>(props, `/api/radio/avoid${refresh ? "?refresh=true" : ""}`, controller.signal);
         if (!controller.signal.aborted && playlist?.error) setError(playlist.error);
         return stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase()));
       }
@@ -94,7 +97,7 @@ function RadioResults(props: Props) {
   };
   return <section aria-label={`${title} search results`} aria-busy={loading} className="search-source"><div className="search-source-heading"><h2>{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
-    {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Retry {title}</Button></p>}
+    {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => { forceRefresh.current = avoid; setRetry(value => value + 1); }}>Retry {title}</Button></p>}
     {error && !directory && !avoid && (props.onManageSources ? <Button variant="outline" onClick={() => props.onManageSources?.("radio")}>Source settings</Button> : <p className="text-sm text-muted-foreground">Ask an administrator to manage this source.</p>)}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}

@@ -388,13 +388,17 @@ test("avoid radio has its own matching group and retries a stale catalog without
   integrated = true;
   const own = { ...station, id: "avoid-one", sourceId: avoidRadioPlaylistId, name: "Evening avoid" };
   const original = request.getMockImplementation()!;
-  let refreshRequested = false;
+  let refreshed = false, savedUnavailable = false;
+  const avoidReads: boolean[] = [];
   request.mockImplementation((async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname === "/api/radio/avoid") {
-      refreshRequested = url.searchParams.get("refresh") === "true";
-      return Response.json({ stations: [own], playlist: { error: refreshRequested ? null : "Using saved avoid stations" } });
+      const force = url.searchParams.get("refresh") === "true";
+      avoidReads.push(force);
+      refreshed ||= force;
+      return Response.json({ stations: [own], playlist: { error: refreshed ? null : "Using saved avoid stations" } });
     }
+    if (url.pathname === "/api/radio/favorites" && savedUnavailable) return Response.json({ error: "Favorites unavailable" }, { status: 503 });
     if (url.pathname === "/api/radio/playlists") return Response.json({ playlists: [{ id: "own" }, { id: avoidRadioPlaylistId }] });
     return original(input, init);
   }) as typeof fetch);
@@ -405,9 +409,20 @@ test("avoid radio has its own matching group and retries a stale catalog without
   expect(paths.some(path => path.includes(`/playlists/${avoidRadioPlaylistId}/stations`))).toBe(false);
   const youtubeReads = paths.filter(path => path.includes("youtube/items")).length;
   await click("Retry avoid radio");
-  expect(refreshRequested).toBe(true);
+  expect(avoidReads).toEqual([false, true]);
   expect(document.body.textContent).not.toContain("Using saved avoid stations");
   expect(paths.filter(path => path.includes("youtube/items"))).toHaveLength(youtubeReads);
+  // A completed refresh broadcasts radioVersion. Following reads must use its cache.
+  await render(true, true, true, 1, 2);
+  expect(avoidReads).toEqual([false, true, false]);
+  savedUnavailable = true;
+  await render(true, true, true, 1, 3);
+  savedUnavailable = false;
+  const avoidResults = document.querySelector('[aria-label="avoid radio search results"]')!;
+  await click("Retry saved status", avoidResults);
+  expect(avoidReads.filter(Boolean)).toHaveLength(1);
+  expect(avoidReads.at(-1)).toBe(false);
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("Evening");
 });
 
 for (const manage of [false, true]) for (const [source, failedPath, setup] of [
