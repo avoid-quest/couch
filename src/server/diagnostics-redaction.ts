@@ -1,4 +1,4 @@
-export const diagnosticLimits = { recentEntries: 80, messageCharacters: 500, exportBytes: 128 * 1024, snapshotSeconds: 5, helperSeconds: 300 };
+export const diagnosticLimits = { recentEntries: 80, retentionDays: 7, historyBytes: 64 * 1024, messageCharacters: 500, exportBytes: 128 * 1024, snapshotSeconds: 5, helperSeconds: 300 };
 const removed = "[redacted]";
 
 // Never preserve URLs, including apparently public ones. Credentials can also
@@ -19,17 +19,4 @@ export function redactDiagnosticText(value: unknown, secrets: readonly string[] 
     .replace(/\b(?=[A-Za-z0-9_+/-]{24,}\b)(?=[A-Za-z0-9_+/-]*\d)(?=[A-Za-z0-9_+/-]*[A-Za-z])[A-Za-z0-9_+/-]{24,}\b/g, removed)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
   return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
-}
-
-export function createDiagnosticLog(secrets: readonly string[] = []) {
-  const entries: { at: string; source: string; message: string }[] = [];
-  return {
-    add(source: string, message: unknown) {
-      const safe = redactDiagnosticText(message, secrets);
-      if (!safe || entries.at(-1)?.message === safe && entries.at(-1)?.source === source) return;
-      entries.push({ at: new Date().toISOString(), source: redactDiagnosticText(source, secrets, 60), message: safe });
-      if (entries.length > diagnosticLimits.recentEntries) entries.shift();
-    },
-    recent: () => entries.map(entry => ({ ...entry })),
-  };
 }

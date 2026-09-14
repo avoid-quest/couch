@@ -10,11 +10,11 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 let request: ReturnType<typeof spyOn>;
 const calls: { url: string; signal: AbortSignal }[] = [];
 const report: Diagnostics = {
-  formatVersion: 1, collectedAt: "2026-09-06T12:00:00Z", collectionMs: 2,
+  formatVersion: 2, sessionId: "current", sessionStartedAt: "2026-09-06T10:00:00Z", historyError: null, collectedAt: "2026-09-06T12:00:00Z", collectionMs: 2,
   build: { version: "0.1.0", revision: "abcdef1", target: "x86_64-unknown-linux-gnu", packaged: true },
   system: [{ name: "Available storage", value: null, source: "Filesystem unavailable" }],
   native: null, nativeError: "Native host is not connected.", helpers: [], configuration: [], sources: [], recent: [],
-  limits: { recentEntries: 80, messageCharacters: 500, exportBytes: 131072, snapshotSeconds: 5, helperSeconds: 300 },
+  limits: { recentEntries: 80, retentionDays: 7, historyBytes: 65536, messageCharacters: 500, exportBytes: 131072, snapshotSeconds: 5, helperSeconds: 300 },
 };
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.textContent === label)!;
 const render = async (connected = true, token = "admin") => act(async () => root.render(<AdvancedSettings credentials={{ origin: "http://localhost", token }} connected={connected} />));
@@ -101,4 +101,13 @@ test("leaving Advanced aborts an export and prevents a late download", async () 
     await act(async () => gate.resolve(Response.json(report)));
     expect(click).not.toHaveBeenCalled();
   } finally { click.mockRestore(); }
+});
+
+test("retained failures show UTC dates, original builds, session and duplicate details", async () => {
+  request.mockResolvedValue(Response.json({ ...report, historyError: "Recent errors could not be saved.", recent: [
+    { at: "2026-09-05T12:00:00.000Z", lastAt: "2026-09-05T12:01:00.000Z", count: 2, source: "Playback", message: "Output unavailable", sessionId: "earlier", build: { ...report.build, version: "0.1.0+build.49" } },
+    { at: "2026-09-06T12:00:00.000Z", lastAt: "2026-09-06T12:00:00.000Z", count: 1, source: "Controller command", message: "No such item", sessionId: "current", build: report.build },
+  ] }));
+  await render();
+  for (const text of ["2026-09-05 12:00:00.000 UTC", "2026-09-05 12:01:00.000 UTC", "Earlier session", "Current session", "0.1.0+build.49", "2 occurrences", "Playback", "Controller command", "could not be saved", "7 days, 80 entries or 64 KiB"]) expect(document.body.textContent).toContain(text);
 });

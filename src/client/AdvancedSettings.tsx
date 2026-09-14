@@ -4,6 +4,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { DiagnosticFact, Diagnostics } from "../shared/diagnostics";
 
+const diagnosticTime = (at: string) => at.replace("T", " ").replace("Z", " UTC");
+
 function Facts({ facts }: { facts: DiagnosticFact[] }) {
   return <dl className="divide-y rounded-lg border px-3">{facts.map((fact, index) => <div key={index} className="min-w-0 py-2">
     <dt className="text-xs text-muted-foreground">{fact.name}</dt>
@@ -68,7 +70,7 @@ export function AdvancedSettings({ credentials, connected }: { credentials: { or
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {notice && <p role="status">{notice}</p>}
     {report && <>
-      <p className="text-xs text-muted-foreground">Collected {new Date(report.collectedAt).toLocaleString()}. Helper checks are cached for up to {report.limits.helperSeconds / 60} minutes.</p>
+      <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for up to {report.limits.helperSeconds / 60} minutes.</p>
       <section className="space-y-2"><h3 className="font-medium">Build and system</h3><Facts facts={[
         { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged coordinator" : "Development coordinator" },
         { name: "Commit", value: report.build.revision, source: "Coordinator build" },
@@ -83,7 +85,18 @@ export function AdvancedSettings({ credentials, connected }: { credentials: { or
       <section className="space-y-2"><h3 className="font-medium">Media helpers</h3><Facts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
       <section className="space-y-2"><h3 className="font-medium">Effective configuration</h3><Facts facts={report.configuration} /></section>
       <section className="space-y-2"><h3 className="font-medium">Sources</h3>{report.sources.length ? <Facts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
-      <section className="space-y-2"><h3 className="font-medium">Recent errors</h3><p className="text-xs text-muted-foreground">Errors from this session.</p>{report.recent.length ? <ol className="max-h-72 space-y-3 overflow-y-auto rounded-lg border p-3">{report.recent.map((entry, index) => <li key={index} className="min-w-0 break-words"><p className="text-xs text-muted-foreground">{new Date(entry.at).toLocaleTimeString()} · {entry.source}</p><p>{entry.message}</p></li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}</section>
+      <section className="space-y-2">
+        <h3 className="font-medium">Recent errors</h3>
+        <p className="text-xs text-muted-foreground">Up to {report.limits.retentionDays} days, {report.limits.recentEntries} entries or {report.limits.historyBytes / 1024} KiB. Dates and times are UTC.</p>
+        <p className="text-xs text-muted-foreground">Current session started {diagnosticTime(report.sessionStartedAt)}.</p>
+        {report.historyError && <p role="status">{report.historyError}</p>}
+        {report.recent.length ? <ol className="max-h-72 space-y-3 overflow-y-auto rounded-lg border p-3">{report.recent.map((entry, index) => <li key={index} className="min-w-0 break-words">
+          <p className="text-xs text-muted-foreground">{diagnosticTime(entry.at)} · {entry.source} · {entry.sessionId === report.sessionId ? "Current session" : "Earlier session"}</p>
+          <p>{entry.message}</p>
+          <p className="text-xs text-muted-foreground">Build {entry.build.version ?? "unknown"} · Commit {entry.build.revision ?? "unknown"}</p>
+          {entry.count > 1 && <p className="text-xs text-muted-foreground">{entry.count} occurrences. Last: {diagnosticTime(entry.lastAt)}</p>}
+        </li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}
+      </section>
     </>}
   </div>;
 }

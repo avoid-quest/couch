@@ -524,6 +524,7 @@ export function createHub(options: HubOptions) {
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
     const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), server.stop(true)]);
+    diagnostics.close();
     store.close();
     if (progressError) throw progressError;
     const failed = results.find(result => result.status === "rejected");
