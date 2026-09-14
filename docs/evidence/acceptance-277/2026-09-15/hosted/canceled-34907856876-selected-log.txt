@@ -1,0 +1,12 @@
+candidate	Prepare the pinned Debian builder	2026-09-14T23:25:40.7680271Z #8 writing image sha256:333bc8bfd8313199f908bc65d8ffa4ca27fd331374830cfee9bba7775656b3cc done
+candidate	Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:25:48.9586302Z No cache found.
+candidate	Build and sign the complete AppImage and public archives	2026-09-14T23:27:29.4463124Z ##[error]The operation was canceled.
+candidate	Retain build bytes and receipts	2026-09-14T23:27:40.4524117Z Error response from daemon: Could not find the file /work/.artifacts/hosted-release/. in container couch-build
+candidate	Run actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f	2026-09-14T23:27:40.8995133Z ##[error]No files were found with the provided path: .artifacts/hosted-release/. No artifacts will be uploaded.
+candidate	Post Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:27:41.7280122Z ... Saving cache ...
+candidate	Post Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:27:44.1239453Z Sent 608587277 of 608587277 (100.0%), 1531.4 MBs/sec
+candidate	Complete runner	2026-09-14T23:27:47.0040913Z Docker cleanup complete: 1 container(s), 0 network(s), 0 volume(s), 0 image(s) removed
+candidate	Complete runner	2026-09-14T23:27:47.0069167Z Docker container cache activated, computing hash...
+candidate	Complete runner	2026-09-14T23:27:47.0155896Z [docker-manifest] Image manifest: 1 image(s), 2403484175 bytes working set, 0 bytes evicted, 0 bytes reclaimable (deferred)
+candidate	Complete runner	2026-09-14T23:27:47.0666132Z couch-release-builder   latest    2.4GB
+candidate	Complete runner	2026-09-14T23:27:47.6304633Z {"status":"ok"}Docker container hash mismatch - committing

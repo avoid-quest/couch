@@ -1,0 +1,59 @@
+[+0.00s] DEBUG: Logging to /var/log/lightdm/lightdm.log
+[+0.00s] DEBUG: Starting Light Display Manager 1.32.0, UID=0 PID=776
+[+0.00s] DEBUG: Loading configuration dirs from /usr/share/lightdm/lightdm.conf.d
+[+0.00s] DEBUG: Loading configuration from /usr/share/lightdm/lightdm.conf.d/01_debian.conf
+[+0.00s] DEBUG: Loading configuration dirs from /usr/local/share/lightdm/lightdm.conf.d
+[+0.00s] DEBUG: Loading configuration dirs from /etc/xdg/lightdm/lightdm.conf.d
+[+0.00s] DEBUG: Loading configuration from /etc/lightdm/lightdm.conf
+[+0.01s] DEBUG: Registered seat module local
+[+0.01s] DEBUG: Registered seat module xremote
+[+0.01s] DEBUG: Using D-Bus name org.freedesktop.DisplayManager
+[+0.10s] DEBUG: _g_io_module_get_default: Found default implementation local (GLocalVfs) for ‘gio-vfs’
+[+0.68s] DEBUG: Monitoring logind for seats
+[+0.68s] DEBUG: New seat added from logind: seat0
+[+0.68s] DEBUG: Seat seat0: Loading properties from config section Seat:*
+[+0.68s] DEBUG: Seat seat0 has property CanMultiSession=no
+[+0.68s] DEBUG: Seat seat0: Starting
+[+0.68s] DEBUG: Seat seat0: Creating greeter session
+[+0.70s] DEBUG: Seat seat0: Creating display server of type x
+[+1.05s] DEBUG: Seat seat0: Plymouth is running on VT 1, but this is less than the configured minimum of 7 so not replacing it
+[+1.05s] DEBUG: Quitting Plymouth
+[+1.25s] DEBUG: Using VT 7
+[+1.25s] DEBUG: Seat seat0: Starting local X display on VT 7
+[+1.25s] DEBUG: XServer 0: Logging to /var/log/lightdm/x-0.log
+[+1.26s] DEBUG: XServer 0: Writing X server authority to /var/run/lightdm/root/:0
+[+1.26s] DEBUG: XServer 0: Launching X Server
+[+1.34s] DEBUG: Launching process 791: /usr/bin/X :0 -seat seat0 -auth /var/run/lightdm/root/:0 -nolisten tcp vt7 -novtswitch
+[+1.34s] DEBUG: XServer 0: Waiting for ready signal from X server :0
+[+1.34s] WARNING: Could not enumerate user data directory /var/lib/lightdm/data: Error opening directory '/var/lib/lightdm/data': No such file or directory
+[+1.54s] DEBUG: Acquired bus name org.freedesktop.DisplayManager
+[+1.55s] DEBUG: Registering seat with bus path /org/freedesktop/DisplayManager/Seat0
+[+36.88s] DEBUG: Got signal 10 from process 791
+[+36.88s] DEBUG: XServer 0: Got signal from X server :0
+[+36.88s] DEBUG: XServer 0: Connecting to XServer :0
+[+37.16s] DEBUG: Seat seat0: Display server ready, starting session authentication
+[+37.18s] DEBUG: Session pid=896: Started with service 'lightdm-greeter', username 'lightdm'
+[+38.35s] DEBUG: Session pid=896: Authentication complete with return value 0: Success
+[+38.35s] DEBUG: Seat seat0: Session authenticated, running command
+[+38.36s] DEBUG: Session pid=896: Running command /usr/sbin/lightdm-gtk-greeter
+[+38.47s] DEBUG: Loading users from org.freedesktop.Accounts
+[+38.47s] DEBUG: User /org/freedesktop/Accounts/User1000 added
+[+38.77s] DEBUG: Creating shared data directory /var/lib/lightdm/data/lightdm
+[+38.79s] DEBUG: Session pid=896: Logging to /var/log/lightdm/seat0-greeter.log
+[+56.74s] DEBUG: Activating VT 7
+[+56.75s] DEBUG: Activating login1 session c1
+[+56.86s] DEBUG: Seat seat0 changes active session to c1
+[+56.86s] DEBUG: Session c1 is already active
+[+69.65s] DEBUG: Greeter connected version=1.32.0 api=1 resettable=false
+[+87.09s] DEBUG: Greeter start authentication
+[+87.12s] DEBUG: Session pid=967: Started with service 'lightdm', username '(null)'
+[+87.53s] DEBUG: Session pid=967: Got 1 message(s) from PAM
+[+87.53s] DEBUG: Prompt greeter with 1 message(s)
+[+1305.93s] DEBUG: Greeter start authentication for probe
+[+1305.93s] DEBUG: Session pid=967: Sending SIGTERM
+[+1306.18s] DEBUG: Session pid=2589: Started with service 'lightdm', username 'probe'
+[+1306.18s] DEBUG: Session pid=967: Terminated with signal 15
+[+1306.18s] DEBUG: Session: Failed during authentication
+[+1306.18s] DEBUG: Seat seat0: Session stopped
+[+1310.79s] DEBUG: Session pid=2589: Got 1 message(s) from PAM
+[+1310.79s] DEBUG: Prompt greeter with 1 message(s)

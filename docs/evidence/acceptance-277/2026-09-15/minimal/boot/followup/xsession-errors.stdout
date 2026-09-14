@@ -1,0 +1,7 @@
+Xsession: X session started for couch-tv at Mon Sep 14 11:24:39 PM UTC 2026
+dbus-update-activation-environment: setting DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/102/bus
+dbus-update-activation-environment: setting DISPLAY=:0
+dbus-update-activation-environment: setting XAUTHORITY=/var/lib/couch/.Xauthority
+dbus-update-activation-environment: setting XDG_CURRENT_DESKTOP=Couch
+localuser:couch-tv being added to access control list
+/usr/lib/couch-appliance/session: Permission denied

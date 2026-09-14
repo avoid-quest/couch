@@ -12,13 +12,17 @@ The retained `0.1.0-preview.1` candidate still identifies source `7ff0aeaff2ac41
 
 Application code, dependencies, installer and packaged setup files match the integrated source. Differences from the signed source are the previously recorded builder/test-tool fixes, two portable test expectations and documentation/evidence. [Archive comparison](archive-inventory.json) confirms all 17 setup files match main, including the README after version substitution. The distribution archive has 1,402 regular files under its approved dependency-material entries, without archive links or traversal paths. This is an archive/inventory check; it does not establish execution of every bundled library.
 
-At the initial preflight, Actions was disabled and [secret names](secret-names.json), [variable names](variable-names.json) and [environments](environments.json) were empty. Actions remains disabled until the requested local `act` checks pass. The owner subsequently authorized release publication and hosted activation once ready, removed the separate publication reviewer requirement, and deferred the offline signing-key backup. Main-only release environments and release credentials are now configured; the initial receipts remain unchanged. No production publication, site deployment, T480 operation or existing-installation change was performed.
+At the initial preflight, Actions was disabled and [secret names](secret-names.json), [variable names](variable-names.json) and [environments](environments.json) were empty. The owner subsequently authorized release publication and hosted activation after local `act` checks, removed the separate publication reviewer requirement, and deferred the offline signing-key backup. Main-only release environments and release credentials are configured; the initial receipts remain unchanged. No T480 operation or existing-installation change was performed.
+
+After local checks passed, the owner approved merging [Preserve release caches and requalify incomplete candidates](https://github.com/avoid-quest/couch/pull/286) and running the release. Its squash merge is `7f480f382699cd0f4013406802ae6010911d8862`. Actions is enabled and `COUCH_RELEASES_ENABLED=true`. [The authorized Preview run](https://github.com/avoid-quest/couch/actions/runs/34907856876) used that revision, the production key and `publish=true`. It was canceled before publication when the minimal VM exposed the nonexecutable TV session script described below. No qualified assets were produced. The [cache receipts](hosted/builder-cache-observations.md) record successful retention after cancellation; actual reuse remains to be measured on the next run.
+
+An unsupported `gh stack merge` option caused the first merge command to fail. An incorrectly chained dispatch then started [a run on the previous main](https://github.com/avoid-quest/couch/actions/runs/34907749143). It was canceled immediately before any job steps executed. This does not establish zero billed usage. The single nonstack PR was then merged with `gh pr merge --squash --match-head-commit`, its exact merged workflow was verified, and the authorized run above was dispatched.
 
 ## Hosted gate
 
 [Endpoint checks](public-endpoints.json) used curl and normal HTTPS redirects. The download page returned 200 after one redirect. The enrolled key, Stable and Preview installer selectors, and both updater feeds from `0.0.0` returned 404. These are availability observations, not verified artifact downloads. The [initial Python urllib attempt](public-endpoints-urllib-initial.json) returned 403 for every endpoint; it is retained separately rather than attributed to CrabNebula's release state.
 
-There are no authorized hosted A/B artifacts, Cloud release/asset IDs, enrolled-key receipt, public-readiness receipt or final-version promotion receipt for this run. The Mac stayed online and hosted the VMs, SSH access and initial artifact transfer. No Mac-offline condition was exercised. Turning off this Mac would also stop these local emulated guests; the final run needs an independently powered authorized Debian target or VM host and a separately recorded Mac shutdown/network-disconnection interval.
+There are no qualified hosted A/B artifacts, enrolled-key receipt, public-readiness receipt or final-version promotion receipt for this run. The Mac stayed online and hosted the VMs, SSH access and initial artifact transfer. No Mac-offline condition was exercised. The owner has now authorized the freshly installed Debian T480 as the independent local target consuming published packages. Its initial baseline is recorded separately; no installation or build occurred during that inspection. A separately recorded Mac shutdown/network-disconnection interval is still required.
 
 Continue through [release configuration](../../../hosted-releases.md#owner-setup-before-an-authorized-hosted-run) after local readiness passes. The encrypted production signing key has been created and its signature verified independently with Minisign. Both main-only environments are configured without a required reviewer, as requested by the owner. The key and password remain in `/Users/devit/.config/couch-release`; the owner accepted making the offline copy later. Run qualification and hosted readiness for A and B, retain both accepted sets before provider expiration, and authorize the enrolled-key/download site deployment. Final-version Preview-to-Stable promotion must retain the tested files and signatures. The existing instructions provide the exact dispatch, retry and promotion commands. The owner has authorized publication; qualification and readiness still must pass.
 
@@ -55,11 +59,33 @@ Names are `Couch 277 minimal preparation 2026-09-15` and `Couch 277 xfce prepara
 
 ## Remaining acceptance matrix
 
-The preparatory Xfce bootstrap and unchanged installer both exited zero.
-[Its receipts](xfce/) record 1,415 baseline packages and 1,422 afterward, with
+Both preparatory bootstraps and unchanged installers exited zero.
+[The Xfce receipts](xfce/) record 1,415 baseline packages and 1,422 afterward, with
 seven additions, no upgrades or removals, and identical recorded session-policy
 hashes. Its installed build retains the signed candidate's original identity.
 GUI launch, playback and idle memory are separate checks.
+
+The [minimal receipts](minimal/) record 321 baseline packages and 577 afterward,
+with 256 additions, no upgrades or removals, and no full desktop task installed.
+Both profiles passed the [packaged-helper checks](helper-checks.md), including
+standard FUSE mounts, signed helper hashes, resolved linkage and actual Deno,
+yt-dlp and ffprobe execution. Minimal's first helper-test script could not be
+read from the administrator's home directory by `couch-tv`; that test setup
+failure is retained separately. The unchanged test script ran from `/tmp`.
+No application or installed permission repair occurred.
+
+The unchanged minimal clone's first TV boot failed before Couch started.
+LightDM logged into `couch-tv`, then Xsession reported
+`/usr/lib/couch-appliance/session: Permission denied`. The setup archive and
+tracked source both give that command mode `0644`; the installer preserves the
+source mode. `initialize-audio`, `set-autostart` and `couch-session` have the same
+mode defect. No native Couch process was observed, so idle memory and playback
+remain unrun. The [first failure](minimal/boot/README.md) is retained before any
+separate diagnosis or fix. Four source executable modes are corrected to `0755`.
+The installer fixture now checks that `couch-tv` can execute every affected
+installed command. It [fails with the original modes](minimal/boot/installer-regression-red.txt)
+and [passes the full fixture after correction](minimal/boot/installer-regression-green.txt).
+Both preparation clones received orderly shutdowns and remain preserved.
 
 Keep the ordered checks in the [accepted contract](https://github.com/avoid-quest/couch/issues/266#issuecomment-5669079411). Each final receipt must name source/artifact hashes, key, Cloud IDs, original/final URLs, profile, installed/running identities, saved mode and durable request ID.
 

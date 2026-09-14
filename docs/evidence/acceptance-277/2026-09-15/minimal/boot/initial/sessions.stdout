@@ -1,0 +1,6 @@
+SESSION  UID USER     SEAT  LEADER CLASS   TTY IDLE SINCE
+      2 1000 probe    -     781    manager -   no   -
+      3 1000 probe    -     808    user    -   no   -
+      4  102 couch-tv seat0 833    user    -   no   -
+
+3 sessions listed.

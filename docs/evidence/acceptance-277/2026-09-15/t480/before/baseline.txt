@@ -1,0 +1,180 @@
+
+=== observation time UTC ===
+2026-09-14T23:27:46Z
+
+=== os ===
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie
+DEBIAN_VERSION_FULL=13.7
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+13.7
+Linux 6.12.107+deb13-amd64 x86_64 GNU/Linux
+
+=== access ===
+1000
+couch cdrom floppy sudo audio dip video plugdev users netdev bluetooth
+sudo_noninteractive=unavailable
+
+=== cpu ===
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           39 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  8
+On-line CPU(s) list:                     0-7
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz
+CPU family:                              6
+Model:                                   142
+Thread(s) per core:                      2
+Core(s) per socket:                      4
+Socket(s):                               1
+Stepping:                                10
+CPU(s) scaling MHz:                      46%
+CPU max MHz:                             3600.0000
+CPU min MHz:                             400.0000
+Virtualization:                          VT-x
+L1d cache:                               128 KiB (4 instances)
+L1i cache:                               128 KiB (4 instances)
+L2 cache:                                1 MiB (4 instances)
+L3 cache:                                6 MiB (1 instance)
+NUMA node(s):                            1
+
+=== pci graphics audio network ===
+00:02.0 VGA compatible controller [0300]: Intel Corporation UHD Graphics 620 [8086:5917] (rev 07)
+	Subsystem: Lenovo ThinkPad T480 (20L5) [17aa:225d]
+	Kernel driver in use: i915
+	Kernel modules: i915
+00:1f.3 Audio device [0403]: Intel Corporation Sunrise Point-LP HD Audio [8086:9d71] (rev 21)
+	Subsystem: Lenovo ThinkPad T480 [17aa:225d]
+	Kernel driver in use: snd_hda_intel
+	Kernel modules: snd_hda_intel, snd_soc_avs, snd_sof_pci_intel_skl
+00:1f.6 Ethernet controller [0200]: Intel Corporation Ethernet Connection (4) I219-LM [8086:15d7] (rev 21)
+	Subsystem: Lenovo Device [17aa:225d]
+	Kernel driver in use: e1000e
+	Kernel modules: e1000e
+03:00.0 Network controller [0280]: Intel Corporation Wireless 8265 / 8275 [8086:24fd] (rev 78)
+	Subsystem: Intel Corporation Dual Band Wireless-AC 8265 [Windstorm Peak] [8086:0010]
+	Kernel driver in use: iwlwifi
+	Kernel modules: iwlwifi
+
+=== memory ===
+               total        used        free      shared  buff/cache   available
+Mem:           7.6Gi       437Mi       7.1Gi       1.3Mi       366Mi       7.2Gi
+Swap:          7.9Gi          0B       7.9Gi
+
+=== disk ===
+NAME   TYPE   SIZE FSTYPE MOUNTPOINTS ROTA
+sda    disk 232.9G                       0
+|-sda1 part   976M vfat   /boot/efi      0
+|-sda2 part 224.1G ext4   /              0
+`-sda3 part   7.9G swap   [SWAP]         0
+sdc    disk     0B                       0
+/ ext4 rw,relatime,errors=remount-ro
+Filesystem     Type   Size  Used Avail Use% Mounted on
+/dev/sda2      ext4   220G  1.3G  208G   1% /
+/dev/sda2      ext4   220G  1.3G  208G   1% /
+tmpfs          tmpfs  3.9G     0  3.9G   0% /tmp
+
+=== boot and session ===
+graphical.target
+running
+boot_mode=UEFI
+
+=== services enabled ===
+anacron.service            enabled enabled
+apparmor.service           enabled enabled
+bluetooth.service          enabled enabled
+console-setup.service      enabled enabled
+cron.service               enabled enabled
+e2scrub_reap.service       enabled enabled
+getty@.service             enabled enabled
+grub-common.service        enabled enabled
+keyboard-setup.service     enabled enabled
+networking.service         enabled enabled
+ssh.service                enabled enabled
+sshd-keygen.service        enabled enabled
+systemd-pstore.service     enabled enabled
+systemd-timesyncd.service  enabled enabled
+wpa_supplicant.service     enabled enabled
+wtmpdb-update-boot.service enabled enabled
+
+=== services running ===
+  bluetooth.service         loaded active running Bluetooth service
+  cron.service              loaded active running Regular background program processing daemon
+  dbus.service              loaded active running D-Bus System Message Bus
+  getty@tty1.service        loaded active running Getty on tty1
+  ssh.service               loaded active running OpenBSD Secure Shell server
+  systemd-journald.service  loaded active running Journal Service
+  systemd-logind.service    loaded active running User Login Management
+  systemd-timesyncd.service loaded active running Network Time Synchronization
+  systemd-udevd.service     loaded active running Rule-based Manager for Device Events and Files
+  user@0.service            loaded active running User Manager for UID 0
+  user@1000.service         loaded active running User Manager for UID 1000
+  wpa_supplicant.service    loaded active running WPA supplicant
+
+=== services failed ===
+
+=== interfaces without addresses ===
+enp0s31f6 state=down
+lo state=unknown
+wlp3s0 state=up
+
+=== default-route interface only ===
+default_route_interface=wlp3s0
+
+=== graphical and package prerequisites ===
+X=absent
+Xorg=absent
+startx=absent
+xinit=absent
+xfce4-session=absent
+lightdm=absent
+xrandr=absent
+glxinfo=absent
+minisign=absent
+jq=absent
+curl=/usr/bin/curl
+wget=/usr/bin/wget
+ffprobe=absent
+ffmpeg=absent
+
+=== Couch installation paths ===
+absent /opt/couch
+absent /usr/local/bin/couch
+absent /usr/local/bin/couch-update
+absent /usr/local/bin/couch-recover
+absent /usr/local/bin/install-couch
+absent /etc/couch
+absent /var/lib/couch
+absent /home/couch/.local/share/quest.avoid.couch
+absent /home/couch/.config/quest.avoid.couch
+absent /home/couch/.local/bin/couch
+absent /home/couch/.local/bin/couch-recover
+absent /home/couch/.local/lib/couch
+absent /home/couch/.local/share/applications/couch.desktop
+absent /var/lib/couch-installer
+absent /var/lib/couch-install-locks
+absent /usr/lib/couch-appliance
+absent /usr/share/xsessions/couch.desktop
+absent /usr/share/lightdm/lightdm.conf.d/50-couch.conf
+absent /etc/X11/default-display-manager
+
+=== Couch unit files and processes ===
+
+=== FUSE ===
+character special file 666 root:root /dev/fuse
+
+=== apt package count ===
+351
+
+=== existing X11 sessions ===
+
+=== Couch runtime account ===
+couch-tv=absent

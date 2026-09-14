@@ -153,6 +153,10 @@ test "$before" = "$(sha256sum /etc/couch/appliance.env)"
 grep -q 'enable lightdm' "$FIXTURE_LOG"
 ! grep -q set-default "$FIXTURE_LOG"
 install_app --tv
+# Login, service and recovery entry points must remain executable after installation.
+for command in /usr/lib/couch-appliance/{session,initialize-audio,set-autostart} /usr/sbin/couch-session; do
+    runuser -u couch-tv -- test -x "$command" || { echo "TV command is not executable: $command" >&2; exit 1; }
+done
 test -f /var/lib/couch-installer/tv-setup.complete
 test ! -e /var/lib/couch-installer/tv-setup.pending
 grep -q 'set-default graphical.target' "$FIXTURE_LOG"

@@ -1,0 +1,12 @@
+Filesystem       1B-blocks       Used   Available Use% Mounted on
+udev            2007416832          0  2007416832   0% /dev
+tmpfs            410914816     602112   410312704   1% /run
+/dev/sda2      30878322688 2357010432 26926796800   9% /
+tmpfs           2054557696          0  2054557696   0% /dev/shm
+efivarfs            262044      21136      235788   9% /sys/firmware/efi/efivars
+tmpfs              5242880          0     5242880   0% /run/lock
+tmpfs              1048576          0     1048576   0% /run/credentials/systemd-journald.service
+tmpfs           2054561792          0  2054561792   0% /tmp
+/dev/sda1       1021370368    9469952  1011900416   1% /boot/efi
+tmpfs              1048576          0     1048576   0% /run/credentials/getty@tty1.service
+tmpfs            410910720       8192   410902528   1% /run/user/1000

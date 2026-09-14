@@ -1,0 +1,3 @@
+5b70751dbc786eea66fada8433863b530a42da7e6a2658bae9e45196602cc3bc  /var/lib/apt/lists/security.debian.org_debian-security_dists_trixie-security_InRelease
+0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675  /var/lib/apt/lists/deb.debian.org_debian_dists_trixie_InRelease
+409b526f5abd34a35d230e7b1f6b1c0a3621a67546cb62e4fd18360fa1351506  /var/lib/apt/lists/deb.debian.org_debian_dists_trixie-updates_InRelease
