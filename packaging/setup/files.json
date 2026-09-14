@@ -3,6 +3,7 @@
     "bash",
     "coreutils",
     "util-linux",
+    "bsdutils",
     "findutils",
     "grep",
     "sed",
