@@ -154,7 +154,7 @@ test("repair warns before exact-current reinstall and preserves its intent after
   expect(sent).toHaveLength(0);
   expect(document.body.textContent).toContain("Other remotes will disconnect");
   expect(document.body.textContent).toContain("Missing authenticated current archives cause a failure");
-  expect(document.body.textContent).toContain("System media dependencies are managed separately through SSH");
+  expect(document.body.textContent).toContain("The machine administrator maintains Debian host packages");
   expect(document.body.textContent).not.toContain("Also repair Ubuntu");
   expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
   await act(async () => {
@@ -194,7 +194,7 @@ test("rejection of a legacy runtime repair clears its retry without changing its
   request.mockImplementation((async (input, init) => {
     if (String(input).endsWith("/repair")) {
       sent.push(JSON.parse(String(init?.body)));
-      return Response.json({ accepted: false, error: "System media dependencies are managed separately through SSH." }, { status: 409 });
+      return Response.json({ accepted: false, error: "The machine administrator maintains Debian host packages." }, { status: 409 });
     }
     return String(input).includes("/api/tools") ? Response.json({}, { status: 503 }) : Response.json(report);
   }) as typeof fetch);
@@ -202,7 +202,7 @@ test("rejection of a legacy runtime repair clears its retry without changing its
   await act(async () => button("Retry same request").click());
   expect(sent).toEqual([{ repair: { expectedCurrentId: saved.candidateId, requestId: saved.requestId, confirmInterrupt: true, repairRuntime: true } }]);
   expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
-  expect(document.body.textContent).toContain("System media dependencies are managed separately through SSH");
+  expect(document.body.textContent).toContain("The machine administrator maintains Debian host packages");
   expect(button("Repair current release").disabled).toBe(false);
   expect(button("Install update").disabled).toBe(false);
 });

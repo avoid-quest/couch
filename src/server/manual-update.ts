@@ -57,7 +57,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== keys || typeof id !== "string" || !/^[a-f0-9]{64}$/.test(id) || repairing && typeof (body as Repair).repairRuntime !== "boolean" || typeof body.requestId !== "string" || !/^[a-f0-9]{32}$/.test(body.requestId) || typeof body.confirmInterrupt !== "boolean") throw new ControllerError("Choose the verified candidate and confirm whether playback may stop.");
       if (repairing && (body as Repair).repairRuntime !== false) {
         unaccepted = true;
-        throw new ControllerError("System media dependencies are managed separately through SSH. Refresh and choose Repair current release to reinstall Couch files.", 409);
+        throw new ControllerError("The machine administrator maintains Debian host packages. Refresh and choose Repair current release to reinstall Couch files.", 409);
       }
       authorize(identity);
       const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });

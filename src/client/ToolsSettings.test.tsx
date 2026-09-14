@@ -37,7 +37,7 @@ afterEach(async () => {
 
 test("shows release versions, package integrity, an effective override and separate runtime status", async () => {
   await render();
-  for (const value of ["Expected version", "Installed version", "2026.08.19", "2026.01.01", "Verified for this release", "Environment override", "Shipped package", "Runtime dependency: Available, version 6.1.1", "System package and security updates", "website or network failure", "10 seconds"]) expect(document.body.textContent).toContain(value);
+  for (const value of ["Expected version", "Installed version", "2026.08.19", "2026.01.01", "Verified for this release", "Environment override", "Shipped package", "Runtime dependency: Available, version 6.1.1", "ffprobe and application media libraries are bundled with Couch", "The machine administrator maintains Debian host packages", "website or network failure", "10 seconds"]) expect(document.body.textContent).toContain(value);
   expect(calls).toHaveLength(2);
   expect(calls.map(call => call.url)).toEqual(["http://localhost/api/tools/packages", "http://localhost/api/tools"]);
   expect(calls[0]!.method).toBeUndefined(); expect(calls[0]!.body).toBeUndefined();

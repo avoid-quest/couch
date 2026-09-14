@@ -51,7 +51,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
         <h4 className="font-medium">ffprobe</h4>
         <p>Runtime dependency: {report.ffprobe.status === "ready" ? `Available, version ${report.ffprobe.version}` : statuses[report.ffprobe.status]}</p>
         {report.ffprobe.error && <p className="text-muted-foreground">{report.ffprobe.error}</p>}
-        <p className="text-muted-foreground">Provided by system media packages. System package and security updates are managed separately from Couch releases.</p>
+        <p className="text-muted-foreground">ffprobe and application media libraries are bundled with Couch. The machine administrator maintains Debian host packages separately from Couch releases.</p>
       </div>
     </>}
     {children}

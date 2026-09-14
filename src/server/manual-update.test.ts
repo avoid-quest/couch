@@ -89,7 +89,7 @@ test("repair is an administrator's exact-current intent and never consults the n
   expect((await manual.repair(request({ ...repair, package: "other" }), admin)).status).toBe(400);
   const unsupported = await manual.repair(request({ ...repair, repairRuntime: true }), admin);
   expect(unsupported.status).toBe(409);
-  expect(await unsupported.json()).toMatchObject({ accepted: false, error: expect.stringContaining("System media dependencies are managed separately through SSH") });
+  expect(await unsupported.json()).toMatchObject({ accepted: false, error: expect.stringContaining("The machine administrator maintains Debian host packages") });
   expect(manual.busy()).toBe(false);
   expect(calls).toEqual([]);
   expect(await (await manual.repair(request({ ...repair, expectedCurrentId: payload.candidateId }), admin)).json()).toMatchObject({ accepted: false });

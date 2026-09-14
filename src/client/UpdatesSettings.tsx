@@ -161,7 +161,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         {confirming === "repair" ? <>
           <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <p className="text-muted-foreground">Repair reinstalls Couch files. System media dependencies are managed separately through SSH.</p>
+          <p className="text-muted-foreground">Repair reinstalls Couch files. The machine administrator maintains Debian host packages.</p>
           <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button>
           <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
         </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button>}
