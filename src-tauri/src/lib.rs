@@ -13,7 +13,7 @@ use std::sync::{
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::{
     process::{CommandChild, CommandEvent},
@@ -269,6 +269,12 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
             match event {
                 CommandEvent::Stdout(line) => {
                     match serde_json::from_slice::<SidecarMessage>(&line) {
+                        Ok(SidecarMessage::Addresses { urls }) => {
+                            host.connection.send_modify(|value| {
+                                if let Some(Ok(connection)) = value { connection.urls = urls.clone(); }
+                            });
+                            let _ = handle.emit_to("main", "connection-addresses", urls);
+                        }
                         Ok(SidecarMessage::Ready { connection }) => {
                             host.connection.send_replace(Some(Ok(connection)));
                             let _ = host.player.send(player::Request::Observe);

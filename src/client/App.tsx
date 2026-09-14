@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { usePageRoute } from "./routes";
 import { useUpdateActivity } from "./update-activity";
 import { loadedBuild } from "../shared/build";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { isNativeHost } from "./native-context";
 import { PlaybackDevice, LocalSharingPrompt } from "./PlaybackDevice";
@@ -179,6 +180,12 @@ export function App() {
   const currentCredentials = useRef(credentials);
   const commandAttempt = useRef(0);
   currentCredentials.current = credentials;
+
+  useEffect(() => {
+    if (!nativeHost) return;
+    const listener = listen<string[]>("connection-addresses", event => setHost(current => current ? { ...current, urls: event.payload } : current));
+    return () => { void listener.then(stop => stop()); };
+  }, []);
 
   useEffect(() => {
     document.body.classList.toggle("native-host", nativeHost);

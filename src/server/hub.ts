@@ -1,3 +1,4 @@
+import { createLanListener, lanPeer, loopbackPeer } from "./lan-listener";
 import { frontendPaths } from "../shared/page-paths";
 import { createStreamingCommunitySettings } from "./streamingcommunity-settings";
 import { createStartup } from "./startup";
@@ -51,6 +52,8 @@ import type { DisplayAction, DisplayState } from "../shared/display";
 
 type HubOptions = {
   hostname?: string;
+  managedLan?: boolean;
+  onAddresses?: (urls: string[]) => void;
   port?: number;
   databasePath: string;
   hostToken: string;
@@ -78,14 +81,16 @@ type SocketData = { trusted: boolean; controllerId: string | null; authorize: ()
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
-  const advertised = (options.advertisedUrls ?? []).map(value => {
+  const advertised = options.managedLan ? [] : (options.advertisedUrls ?? []).map(value => {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.pathname !== "/" || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Advertised LAN addresses must be HTTP or HTTPS origins without credentials or paths.");
     return url.origin;
   });
   const store = openStore(options.databasePath, options.remoteControlEnabled ?? true);
   const pairingCode = options.pairingCode ?? String(randomInt(100000, 1000000));
-  const hostname = options.hostname ?? "0.0.0.0";
+  const hostname = options.managedLan ? "127.0.0.1" : options.hostname ?? "0.0.0.0";
+  let lan: ReturnType<typeof createLanListener<Bun.Server<SocketData>>> | undefined;
+  let lanError: string | null = null;
   const addresses = new Set(["localhost", "127.0.0.1", "::1"]);
   const lanAddresses = new Set<string>();
   for (const entries of Object.values(networkInterfaces())) {
@@ -119,7 +124,11 @@ export function createHub(options: HubOptions) {
     radioProgramme?.observe(state);
     sound?.interrupt();
     if (state.player.error) diagnostics.log.add("Playback", state.player.error);
-    if (!closed) server.publish("session", JSON.stringify({ type: "state", state } satisfies ServerMessage));
+    if (!closed) {
+      const message = JSON.stringify({ type: "state", state } satisfies ServerMessage);
+      server.publish("session", message);
+      lan?.server?.publish("session", message);
+    }
   }, {
     admitted, systemAudio,
     ...(systemAudio ? { prepareAudio: () => soundRouting!.prepare() } : {}),
@@ -256,7 +265,9 @@ export function createHub(options: HubOptions) {
   let pairWindow = Date.now();
   let pairAttempts = 0;
 
+  const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.server?.requestIP(request)?.address ?? "";
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
+    if (options.managedLan && !loopbackPeer(peer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, peer(request)))) return false;
     const host = request.headers.get("host");
     if (!host || !allowedHosts.has(host.toLowerCase())) return false;
     const origin = request.headers.get("origin");
@@ -278,7 +289,7 @@ export function createHub(options: HubOptions) {
     return device ? { deviceId: device.id, name: device.name } : undefined;
   };
 
-  const server = Bun.serve({
+  const serveOptions: Bun.Serve.Options<SocketData> = {
     hostname,
     port: options.port ?? 3800,
     development: options.development ? { hmr: true, console: true } : false,
@@ -286,7 +297,7 @@ export function createHub(options: HubOptions) {
     routes: {
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), desktopRemoteUi: 1 })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1 })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
@@ -318,7 +329,7 @@ export function createHub(options: HubOptions) {
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
       if (request.method === "OPTIONS") return cors(request, new Response(null, { status: 204, headers: { "Access-Control-Allow-Methods": "GET, POST, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "600" } }));
       const token = websocket ? url.searchParams.get("token") ?? "" : request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-      const trusted = token === options.hostToken;
+      const trusted = token === options.hostToken && (!options.managedLan || loopbackPeer(peer(request)));
       if (!trusted && !store.remoteControlEnabled()) return cors(request, json({ error: "Remote control is off. Enable Allow remote control on the playback computer." }, 503));
       const identity = (): ControllerIdentity | null => {
         if (closed) return null;
@@ -338,6 +349,7 @@ export function createHub(options: HubOptions) {
           const enabled = await settingField(request, "enabled");
           if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remote control.");
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          await lan?.setEnabled(enabled);
           store.saveRemoteControlEnabled(enabled);
           if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
             socket.unsubscribe("session");
@@ -345,7 +357,7 @@ export function createHub(options: HubOptions) {
           }
           session.invalidate("controller");
           return cors(request, json({ enabled }));
-        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
+        } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
@@ -510,17 +522,33 @@ export function createHub(options: HubOptions) {
         socket.send(JSON.stringify(result));
       },
     },
-  });
+  };
+  const server: Bun.Server<SocketData> = Bun.serve(serveOptions);
 
   const port = server.port!;
-  const allowedHosts = new Set([...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
-  const allowedOrigins = new Set([...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const origin = urlFor(hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname, port);
+  const allowedHosts = new Set(options.managedLan ? [new URL(origin).host] : [...addresses].map(address => new URL(urlFor(address, port)).host).concat(advertised.map(url => new URL(url).host)));
+  const allowedOrigins = new Set(options.managedLan ? [origin] : [...addresses].map(address => new URL(urlFor(address, port)).origin).concat(advertised));
   const urls: string[] = advertised.length ? [...new Set(advertised)] : hostname === "0.0.0.0" || hostname === "::"
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
     : [origin];
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
+
+  if (options.managedLan) {
+    lan = createLanListener({
+      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS, advertised: options.advertisedUrls ?? [],
+      start: network => Bun.serve({ ...serveOptions, hostname: network.address, port }),
+      changed: (next, error) => {
+        lanError = error;
+        urls.splice(0, urls.length, ...next);
+        connectionUrls.splice(0, connectionUrls.length, ...next);
+        allowedHosts.clear(); allowedOrigins.clear();
+        for (const url of [origin, ...next]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
+        options.onAddresses?.(next);
+      },
+    });
+  }
 
   let closing: Promise<void> | undefined;
   let requiredCheckpoint = false;
@@ -546,7 +574,7 @@ export function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), server.stop(true)]);
+    const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
     store.close();
     if (progressError) throw progressError;

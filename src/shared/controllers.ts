@@ -1,6 +1,7 @@
 import type { PlayerState } from "./protocol";
 
-export type ConnectionDetails = { name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1 };
+export type ConnectionDetails = {
+  lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1 };
 
 export type Controller = {
   id: string;
