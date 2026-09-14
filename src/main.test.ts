@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { version } from "../package.json";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -79,7 +80,7 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
   expect((await enableSharing()).status).toBe(200);
   expect((await fetch(`${ready.origin}/api/build`)).status).toBe(401);
   const identity = await fetch(`${ready.origin}/api/build`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
-  expect(identity).toMatchObject({ version: "0.1.0", packaged: false });
+  expect(identity).toMatchObject({ version, packaged: false });
   // Split a message to cover pipe chunk boundaries rather than assuming one read per line.
   const line = `${JSON.stringify(observation)}\n`;
   child.stdin.write(line.slice(0, 12));
