@@ -1590,6 +1590,66 @@ test("local sharing disconnects remotes immediately, preserves playback and pair
   expect((await controllerApi(restarted.hub, admin, "/api/controllers/me")).status).toBe(200);
 });
 
+test("trial admission rejects local sharing before reading its body", async () => {
+  const { hub, databasePath, commands } = fixture(undefined, undefined, () => false, { remoteControlEnabled: false });
+  const request = new Request(`${hub.origin}/api/settings/sharing`, {
+    method: "POST", headers: { Host: new URL(hub.origin).host, Origin: "tauri://localhost", Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: true }),
+  });
+  expect((await hub.server.fetch(request)).status).toBe(503);
+  expect(request.bodyUsed).toBe(false);
+  expect(await (await controllerApi(hub, hostToken, "/api/settings/sharing")).json()).toEqual({ enabled: false });
+  expect((await controllerApi(hub, hostToken, "/api/build")).status).toBe(200);
+  const db = new Database(databasePath, { readonly: true });
+  try {
+    expect(db.query("SELECT enabled FROM installation_sharing").get()).toEqual({ enabled: 0 });
+    expect(db.query("SELECT * FROM devices").all()).toEqual([]);
+  } finally { db.close(); }
+  expect(commands).toEqual([]);
+});
+
+test.each(["maintenance", "restart", "shutdown"])("local sharing cannot save after %s while its request body is pending", async mode => {
+  let open = true;
+  const { hub, databasePath, commands } = fixture(undefined, undefined, () => open);
+  const host = new Peer(hub, hostToken), remote = new Peer(hub, await pair(hub));
+  await Promise.all([host.ready(), remote.ready()]);
+  const db = new Database(databasePath, { readonly: true });
+  const remembered = db.query("SELECT * FROM devices ORDER BY id").all();
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const request = new Request(`${hub.origin}/api/settings/sharing`, {
+    method: "POST", headers: { Host: new URL(hub.origin).host, Origin: "tauri://localhost", Authorization: `Bearer ${hostToken}`, "Content-Type": "application/json" },
+    body: new ReadableStream({ async pull(controller) {
+      entered.resolve();
+      await release.promise;
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({ enabled: false })));
+      controller.close();
+    } }, { highWaterMark: 0 }),
+  });
+  try {
+    const pending = hub.server.fetch(request);
+    await entered.promise;
+    if (mode === "maintenance") open = false;
+    else if (mode === "restart") hub.prepareRestart();
+    else await hub.close();
+    const state = JSON.stringify(hub.session.state), sent = [...commands];
+    release.resolve();
+    expect((await pending).status).toBe(503);
+    expect(db.query("SELECT enabled FROM installation_sharing").get()).toEqual({ enabled: 1 });
+    expect(db.query("SELECT * FROM devices ORDER BY id").all()).toEqual(remembered);
+    expect(JSON.stringify(hub.session.state)).toBe(state);
+    expect(commands).toEqual(sent);
+    if (mode !== "shutdown") {
+      expect(host.socket.readyState).toBe(WebSocket.OPEN);
+      expect(remote.socket.readyState).toBe(WebSocket.OPEN);
+      if (mode === "maintenance") {
+        open = true;
+        expect(await remote.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
+        await host.waitFor(message => message.type === "state" && message.state.player.volume === 32);
+      }
+    }
+  } finally { release.resolve(); db.close(); }
+});
+
 test("local management works before pairing and the next role depends on remembered remotes", async () => {
   const { hub } = fixture();
   expect((await controllerApi(hub, hostToken, "/api/settings", "POST", { name: "Personal computer" })).status).toBe(200);

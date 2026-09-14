@@ -334,9 +334,10 @@ export function createHub(options: HubOptions) {
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
         if (!trusted) return cors(request, json({ error: "Change remote control on the playback computer." }, 403));
         try {
+          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
           const enabled = await settingField(request, "enabled");
           if (typeof enabled !== "boolean") throw new ControllerError("Choose whether to allow remote control.");
-          if (!identity()) throw new ControllerError("The playback computer is unavailable.", 503);
+          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
           store.saveRemoteControlEnabled(enabled);
           if (!enabled) for (const socket of sockets) if (!socket.data.trusted) {
             socket.unsubscribe("session");
