@@ -121,7 +121,7 @@ function OnlineResults(props: Props) {
       const ok = await props.onCommand?.({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(provider !== "bandcamp" ? { quality: props.quality } : {}), playNow });
       if (ok && !signal.aborted) props.onEnqueued();
       return ok ?? false;
-    }, playNow ? `Starting ${item.title} on the TV.` : `${item.title} added to Up next.`);
+    }, playNow ? `Starting ${item.title} on the TV.` : `${item.title} added to the end of Up next. Playback is unchanged.`);
   }
   function save(item: ProviderItem, saved: boolean) {
     void action(async signal => {
@@ -145,7 +145,7 @@ function OnlineResults(props: Props) {
     <ul className="search-online-grid">{page?.items.slice(0, visible).map(item => {
       const saved = !!favorites?.some(entry => entry.id === item.id);
       return <li key={item.id} className="search-online-card"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="search-online-copy"><h3>{item.title}</h3><p>{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</p></div><div className="search-item-actions">
-        {item.kind === "media" ? <><Button data-search-item={item.id} aria-label={`Play ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play</Button><Button variant="secondary" aria-label={`Add ${item.title} to Up next`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Up next</Button></> : <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => open(item)}>Open</Button>}
+        {item.kind === "media" ? <><Button data-search-item={item.id} aria-label={`Play now: ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play now</Button><Button variant="secondary" aria-label={`Add next: ${item.title}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Add next</Button></> : <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => open(item)}>Open</Button>}
         {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => open(item, `${item.id}-broadcasts`)}>Past broadcasts</Button>}
         {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
         <Button variant="ghost" aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Saved" : "Save"}</Button>

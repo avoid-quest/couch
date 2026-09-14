@@ -32,6 +32,7 @@ type Props = {
   onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;
   onBrowse: (section: string) => void;
+  onManageSources?: () => void;
   searchState?: SearchRouteState;
   onSearchChange?: (state: SearchRouteState) => void;
 };
@@ -51,6 +52,13 @@ export function SearchPanel(props: Props) {
   const linkRequest = useRef<AbortController | null>(null);
   useEffect(() => { const controller = new AbortController(); linkRequest.current = controller; setLinkPending(false); return () => controller.abort(); }, [props.origin, props.token, props.connected, search.attempt]);
   const panel = useRef<HTMLElement>(null);
+  const focusSource = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (!props.active) { focusSource.current = null; return; }
+    if (!focusSource.current || focusSource.current !== filter) return;
+    focusSource.current = null;
+    panel.current?.querySelector<HTMLButtonElement>('.search-scopes [aria-pressed="true"]')?.focus({ preventScroll: true });
+  });
   const scroll = useRef({ top: 0, left: 0 });
   useLayoutEffect(() => {
     if (!props.active) return;
@@ -67,26 +75,27 @@ export function SearchPanel(props: Props) {
     if (!props.onCommand || !url || linkPending || !linkRequest.current) return;
     const signal = linkRequest.current.signal;
     setLinkPending(true); setLinkNotice("");
-    try { if (await props.onCommand({ type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { resetQuality(); setLinkNotice(playNow ? "Opening this link on the TV." : "Link added to Up next."); } }
+    try { if (await props.onCommand({ type: "enqueueWeb", entryId: createId(), url, quality, playNow }) && !signal.aborted) { resetQuality(); setLinkNotice(playNow ? "Opening this link on the TV." : "Link added to the end of Up next. Playback is unchanged."); } }
     catch (reason) { if (!signal.aborted) setLinkNotice(message(reason)); }
     finally { if (!signal.aborted) setLinkPending(false); }
   }
   return <section ref={panel} className="search-panel catalog-panel min-w-0 space-y-5" aria-label="Search media">
     <h1>Search</h1>
-    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setLinkNotice(""); const query = draft.trim(), source = /^https?:\/\//i.test(query) ? "All" : filter; setLocalFilter(source); setSearch(value => ({ query, attempt: value.attempt + 1 })); props.onSearchChange?.({ query, source }); }}>
+    <form role="search" className="search-box" onSubmit={event => { event.preventDefault(); setLinkNotice(""); const query = draft.trim(), source = /^https?:\/\//i.test(query) ? "All" : filter; focusSource.current = source; setLocalFilter(source); setSearch(value => ({ query, attempt: value.attempt + 1 })); props.onSearchChange?.({ query, source }); }}>
       <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search your sources</Label><Input id="media-search" type="search" maxLength={4096} value={draft} disabled={!props.connected} onChange={event => setDraft(event.target.value)} placeholder="Title, artist, station or link" /></div>
       <Button variant="ghost" type="submit" disabled={!props.connected}>Search</Button>
     </form>
+    <p className="search-capability">Play now starts on the TV. Add next puts an item at the end of Up next without interrupting playback.</p>
     <nav className="search-scopes" aria-label="Search sources">{scopes.map(scope => <Button key={scope} variant={filter === scope ? "secondary" : "ghost"} aria-pressed={filter === scope} onClick={() => setFilter(scope)}>{scope}</Button>)}</nav>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
-    {!search.query ? <div className="search-shortcuts">{[["Library", "Library"], ["Jellyfin", "Jellyfin"], ["Files", "TV folders"], ["Radio", "Radio"], ["Guide", "Live TV"]].map(([section, label]) => <Button key={section} variant="outline" onClick={() => props.onBrowse(section!)}>{label}</Button>)}</div> : <>
+    {!search.query ? <div className="space-y-3"><p className="search-capability">Enter a title to search YouTube and your other sources, or paste a supported media link.</p><div className="search-shortcuts">{[["Library", "Library"], ["Jellyfin", "Jellyfin"], ["Files", "TV folders"], ["Radio", "Radio"], ["Guide", "Live TV"]].map(([section, label]) => <Button key={section} variant="outline" onClick={() => props.onBrowse(section!)}>{label}</Button>)}</div></div> : <>
       {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} version={props.providerVersion ?? 0} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
         <div hidden={!visible("Radio")}><SearchRadioResults key={`radio:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} /><SearchRadioResults key={`directory:${search.query}:${search.attempt}`} {...props} active={props.active && visible("Radio")} query={search.query} version={props.radioVersion ?? 0} directory /></div>
-        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
+        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} onChooseSource={source => { focusSource.current = source; setFilter(source); }} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
         {filter === "Bandcamp" && <p className="search-capability">Paste a Bandcamp album or track link.</p>}
       </>}
-      {url && !linkedProvider && <Card className="search-start"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play link</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button><QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} /></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
+      {url && !linkedProvider && <Card className="search-start"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play now</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Add next</Button><QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} /></div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
       {url && linkedProvider && !visible(providerNames[linkedProvider]) && <p>Choose {providerNames[linkedProvider]} or All to open this link.</p>}
     </>}
   </section>;
@@ -100,7 +109,7 @@ function providerForLink(value: string): ProviderId | undefined {
 
 }
 
-function SearchSource({ source, query, attempt, ...props }: Props & { source: Source; query: string; attempt: number }) {
+function SearchSource({ source, query, attempt, ...props }: Props & { source: Source; query: string; attempt: number; onChooseSource: (source: string) => void }) {
   const [offset, setOffset] = useState(0);
   const [retry, setRetry] = useState(0);
   const [page, setPage] = useState<Page | null>(null);
@@ -160,28 +169,28 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
 
   async function enqueue(item: Result, options?: Options) {
     setPending(true); setActionError(null); setNotice("");
-    try { if (await props.onEnqueue(source, item.id, options)) setNotice(options?.playNow ? `Starting ${item.title} on the TV.` : `Added ${item.title} to the queue.`); }
+    try { if (await props.onEnqueue(source, item.id, options)) setNotice(options?.playNow ? `Starting ${item.title} on the TV.` : `Added ${item.title} to the end of Up next. Playback is unchanged.`); }
     catch (reason) { setActionError(message(reason)); }
     finally { setPending(false); }
   }
   const actions = (item: Result) => <div className="flex flex-wrap gap-2">
-    <Button aria-label={`${item.position ? "Resume" : "Play"} ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}>{item.position ? "Resume" : "Play"}</Button>
+    <Button aria-label={`${item.position ? "Resume now" : "Play now"}: ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}>{item.position ? "Resume now" : "Play now"}</Button>
     {!!item.position && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true, fromStart: true })}>From start</Button>}
     <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} />
-    <Button variant="secondary" aria-label={`Add ${item.title} to queue`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>Queue</Button>
+    <Button variant="secondary" aria-label={`Add next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>Add next</Button>
   </div>;
   return <section className="space-y-3" aria-label={`${source} search results`} aria-busy={loading}>
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xl font-semibold">{source === "Library" ? "TV folders" : source}</h3><Button variant="outline" onClick={() => props.onBrowse(source === "Library" ? "Files" : source)}>Browse {source === "Library" ? "TV folders" : source}</Button></div>
     <p className="text-sm text-muted-foreground" role="status">{loading ? `Searching ${source}…` : page ? `${page.total} result${page.total === 1 ? "" : "s"}` : ""}</p>
     {error && <Alert variant="destructive"><AlertDescription><p>{error}</p><Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Retry {source}</Button></AlertDescription></Alert>}
-    {page?.warning && <div className="space-y-2"><p className="text-sm text-muted-foreground" role="status">{page.warning}</p><Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Refresh {source}</Button></div>}
+    {page?.warning && <div className="space-y-2"><p className="text-sm text-muted-foreground" role="status">{page.warning}</p>{props.onManageSources && <Button variant="outline" onClick={props.onManageSources}>Manage sources</Button>}<Button variant="outline" onClick={() => props.onChooseSource("YouTube")}>Search YouTube</Button><Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Refresh {source}</Button></div>}
     {!loading && page?.total === 0 && !page.warning && <p className="text-sm text-muted-foreground">No matches in {source}. Try another title or artist.</p>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
     {actionError && <p role="alert">{actionError}</p>}
     <ul className="search-results">{page?.items.map(item => <li key={item.id} className="search-result-row">
       <AuthArtwork origin={props.origin} token={props.token} id={item.artworkId} video={item.video} className="search-result-art" />
       <Button variant="ghost" className="search-result-title" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}><strong>{item.title}</strong><small>{item.detail}{item.watched && " · Watched"}{!item.available && " · File unavailable"}{item.position > 0 && ` · Continue from ${progressTime(item.position)}`}</small></Button>
-      <Button variant="outline" aria-label={`Add ${item.title} to queue`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" /><span className="search-optional">Up next</span></Button>
+      <Button variant="outline" aria-label={`Add next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" /><span>Add next</span></Button>
     </li>)}</ul>
     {page && page.total > pageSize && <nav aria-label={`${source} search pages`} className="flex items-center justify-between gap-2"><Button variant="outline" disabled={!props.connected || loading || !offset} onClick={() => setOffset(value => Math.max(0, value - pageSize))}>Previous</Button><span className="text-sm">{offset + 1}–{Math.min(offset + pageSize, page.total)} of {page.total}</span><Button variant="outline" disabled={!props.connected || loading || offset + pageSize >= page.total} onClick={() => setOffset(value => value + pageSize)}>Next</Button></nav>}
     <Dialog open={props.active && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}>

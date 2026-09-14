@@ -65,7 +65,7 @@ test("Stop preserves the durable queue cursor and disconnected controls cannot s
   expect(button("Resume")).toBeUndefined();
   expect(document.querySelector(".session-current-art")).toBeNull();
   expect(button("Remote").disabled).toBe(false);
-  expect(document.querySelectorAll(".session-idle-actions button")).toHaveLength(1);
+  expect(document.querySelectorAll(".session-idle-actions button")).toHaveLength(3);
   await render(state, false);
   for (const label of ["Pause", "Next in queue", "Stop playback", "Remove next from Up next"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
   await act(async () => button("Details for next").click());
@@ -118,7 +118,7 @@ test("removed playback controls restore focus to a useful action without taking 
   button("Stop playback").focus();
   await act(async () => button("Stop playback").click());
   await render(idle);
-  expect(document.activeElement).toBe(button("Remote"));
+  expect(document.activeElement).toBe(button("Find something to play"));
   expect(actions).toEqual([{ type: "stop" }]);
 
   await render();
@@ -268,4 +268,14 @@ test("Home queue plays directly and moves focus into transport when the chosen r
   expect(document.activeElement).toBe(button("Stop playback"));
   await render(state, false);
   expect(button("Play next").disabled).toBe(true);
+});
+
+for (const queue of [[], state.queue]) test(`idle Home exposes discovery with ${queue.length} queued items and no history`, async () => {
+  await render({ ...state, queue, currentEntryId: null, queueCursorEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  const discovery = button("Find something to play");
+  expect(discovery.closest(".session-current")).not.toBeNull();
+  await act(async () => discovery.click());
+  await act(async () => button("Browse library").click());
+  expect(browsed).toEqual(["Search", "Library"]);
+  expect(actions).toEqual([]);
 });
