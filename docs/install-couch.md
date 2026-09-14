@@ -7,11 +7,11 @@ or manually installed Couch libraries.
 
 ## Verify the download
 
-Obtain `couch-updater.pub` from the authenticated Couch HTTPS download site.
+Download the release files from [Couch downloads](https://couch.avoid.quest/download).
+Obtain `couch-updater.pub` from `https://couch.avoid.quest/couch-updater.pub`.
 Use that enrolled key for all three release assets. A checksum downloaded next to
-an executable does not authenticate its publisher. Hosted key distribution and
-public download links are supplied by the release ticket; do not substitute a
-key supplied by an untrusted mirror.
+an executable does not authenticate its publisher. Do not substitute a key supplied by an untrusted mirror. The site exposes links
+only after all six public assets and the installer/updater endpoints pass verification.
 
 Before installing bootstrap tools, check the supported target:
 
@@ -95,8 +95,8 @@ Keep Debian current using its ordinary administrator tools.
 
 Couch discovers and refreshes its private IPv4 LAN address every ten seconds.
 Sharing off leaves only the loopback listener; sharing on binds the selected LAN
-address and checks peers against that interface's subnet. Remote mode stops the
-local backend. If multiple eligible networks exist, choose one by launching with
+address and checks peers against that interface's subnet. Remote mode stops local playback and sharing. Its private local maintenance
+process keeps this installation's updater available. If multiple eligible networks exist, choose one by launching with
 `COUCH_LAN_INTERFACE=<interface>`. If that interface owns multiple private IPv4
 addresses, also set `COUCH_LAN_ADDRESS=<local-IP>` to select one. Add these variables
 to `/etc/couch/appliance.env` for TV setup, then restart Couch. The selected address
@@ -122,13 +122,42 @@ Persistent data lives outside app bytes at
 `/etc/couch/appliance.env`. Setup does not copy an ordinary user's data into the TV
 account. Rerunning setup with a different AppImage is refused; subsequent signed
 app upgrades belong to Couch's updater, with no root package or session changes.
-The hosted-release ticket owns the new line's update enrollment and final update
-integration. Existing POC installations need no migration.
+Existing POC installations need no migration.
+
+## Install signed updates
+
+Settings > Updates controls the current installation. In the native app's remote
+mode, use **Update this app** in its own top bar. These controls work even when
+the selected remote computer cannot be reached. The remote computer's Settings
+updates that remote installation; each retains its own channel and timing.
+
+Choose Stable or Preview separately from Manual or Auto when idle. A fresh
+installation defaults to Stable and Manual; choose Preview explicitly to follow
+prereleases. Checks use CrabNebula at startup, every 15 minutes and on request.
+The publishing Mac need not be online. Download and verify, then choose Install
+and restart. Desktop Couch relaunches through Tauri; the TV session uses its
+existing systemd supervisor. Couch preserves the saved playback mode and target
+and does not resume playback automatically.
+
+Auto when idle waits for ten continuous minutes without playback, paused/loading
+media, radio retries, input, recordings or scans/imports. Remote control and
+reconnection also count as activity. A late activity check can defer replacement.
+Manual interruption of playback requires confirmation; recording or data work
+must finish. Controllers cannot install updates. Local users and paired
+Administrators may do so.
+
+Before interruption Couch verifies saved bytes, Debian prerequisites, available
+space and data compatibility. It then closes admission, stops writers and backs
+up the previous verified app and current data under the application directory's
+`backups/<request-id>/`. Browser-profile backup is best effort.
+The app reports success only after the restarted build and local health match.
+A failed candidate is not automatically retried. Keep its result and use recovery
+or a compatible newer release.
 
 ## Recover a retained app
 
 Quit Couch first on an ordinary desktop. Select the existing updater's retained
-backup directory containing `Couch.AppImage`, `build.json` and `SHA256SUMS`:
+backup directory containing `Couch.AppImage`, `Couch.AppImage.sig`, `build.json` and `SHA256SUMS`:
 
 ```sh
 ~/.local/bin/couch-recover /absolute/retained-backup
@@ -136,7 +165,8 @@ backup directory containing `Couch.AppImage`, `build.json` and `SHA256SUMS`:
 sudo couch-recover /absolute/retained-backup
 ```
 
-Recovery verifies the retained checksum and matching build identity. It refuses
+Recovery verifies the retained signature against the installed public key, checksum
+and matching build identity. It refuses
 incompatible data formats, saves the failed installation's current data, and
 replaces only app bytes. It never restores an older database. Retain local backups;
 older hosted releases can expire. A data-format conflict needs a forward fix or
