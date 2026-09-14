@@ -12,7 +12,7 @@ RUN test -n "$DEBIAN_SNAPSHOT" \
     && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s trixie main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s trixie-security main\n' "$DEBIAN_SNAPSHOT" "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
     && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-       build-essential ca-certificates curl git pkg-config unzip file \
+       build-essential ca-certificates curl git pkg-config unzip zip file \
        libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev \
        ffmpeg libfuse2t64 fuse3 librsvg2-dev patchelf jq acl procps minisign \
        libgdk-pixbuf2.0-bin libgtk-3-bin gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
