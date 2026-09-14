@@ -64,7 +64,7 @@ if $tv; then
 fi
 mapfile -t packages < <(jq -r '.common[]' "$setup/host-packages.json")
 if $tv; then mapfile -t extra < <(jq -r '.audio[], .tv[]' "$setup/host-packages.json"); packages+=("${extra[@]}")
-elif ! dpkg-query -W -f='${db:Status-Status}\n' pulseaudio pipewire-pulse 2>/dev/null | grep -qx installed; then
+elif [[ $(dpkg-query -W -f='${db:Status-Status}' pulseaudio 2>/dev/null || true) != installed && $(dpkg-query -W -f='${db:Status-Status}' pipewire-pulse 2>/dev/null || true) != installed ]]; then
     mapfile -t extra < <(jq -r '.audio[]' "$setup/host-packages.json"); packages+=("${extra[@]}")
 fi
 # Ordinary setup never stops/enables a display manager, changes login, or changes power policy.

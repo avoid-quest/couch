@@ -31,7 +31,8 @@ printf '#!/bin/sh\nprintf "systemctl %%s\\n" "$*" >> "$FIXTURE_LOG"\n' > "$root/
 cat > "$root/bin/dpkg-query" <<'QUERY'
 #!/bin/sh
 case "$*" in
- *pulseaudio*) echo installed;;
+ *pulseaudio*) printf installed;;
+ *pipewire-pulse*) exit 1;;
  *) if [ "${!#}" = "$FIXTURE_MISSING" ]; then exit 1; fi; printf installed;;
 esac
 QUERY
@@ -103,4 +104,16 @@ before=$(sha256sum /etc/couch/appliance.env)
 install_app --tv
 test "$before" = "$(sha256sum /etc/couch/appliance.env)"
 ! grep -q 'enable lightdm\|set-default' "$FIXTURE_LOG"
+# The same recovery command works without root and retains newer data.
+runuser -u desktop -- mkdir -p /home/desktop/retained
+cp /home/desktop/.local/lib/couch/{Couch.AppImage,build.json} /home/desktop/retained/
+(cd /home/desktop/retained && sha256sum Couch.AppImage > SHA256SUMS)
+chown -R desktop:desktop /home/desktop/retained
+runuser -u desktop -- /home/desktop/.local/bin/couch-recover /home/desktop/retained
+test "$(cat /home/desktop/.local/share/quest.avoid.couch/sentinel)" = retained
+jq '.dataFormat = 2' /home/desktop/retained/build.json > "$root/incompatible"
+cp "$root/incompatible" /home/desktop/retained/build.json
+if runuser -u desktop -- /home/desktop/.local/bin/couch-recover /home/desktop/retained > "$root/recovery-failure" 2>&1; then exit 1; fi
+grep -q 'Incompatible data format' "$root/recovery-failure"
+echo 'PASS: desktop recovery preserves current data and rejects an incompatible retained app'
 echo 'PASS: signatures, targets, missing packages/FUSE, desktop preservation, TV setup, repeat setup and separate user data'
