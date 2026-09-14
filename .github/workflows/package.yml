@@ -1,197 +1,295 @@
 name: Package
 
+# Repository Actions is paused. An owner must separately enable an authorized run.
 on:
   workflow_dispatch:
     inputs:
-      notes:
-        description: Release notes for this build
-        required: true
-        type: string
+      channel:
+        type: choice
+        options: [preview, stable]
+        default: preview
+        description: Stable requires the qualified final-version Preview artifact
       build-run:
-        description: Existing Package run to requalify without rebuilding or releasing (0 builds fresh)
         type: number
         default: 0
+        description: Reuse this Package run's retained artifact, 0 builds once
       build-attempt:
-        description: Build attempt within that run
         type: number
         default: 1
-      general-restart:
-        description: Qualify General restart and failure recovery (requires a build containing General restart)
+        description: Attempt that produced the retained artifact
+      artifact-kind:
+        type: choice
+        options: [hosted-release, hosted-ready]
+        default: hosted-release
+        description: Use hosted-ready for Stable promotion
+      release-id:
+        type: string
+        description: Existing draft ID for a retry, or published ID for readiness-only
+      readiness-only:
         type: boolean
         default: false
-      general-startup:
-        description: Qualify General startup controls on the installed final build
+        description: Recheck CDN readiness without drafting, building or publishing
+      publish:
         type: boolean
         default: false
-      recovery-faults:
-        description: Qualify disposable installed recovery interruptions, storage and feed failures
-        type: boolean
-        default: false
-      update-artifact:
-        description: Qualified main AppImage artifact ID for signed A to B and repair (requires build-run for A)
-        type: number
-        default: 0
-  pull_request:
-    types: [labeled]
+        description: Request publication after qualification and protected-environment approval
+      notes:
+        type: string
+        required: true
+        description: Release notes
 
 permissions:
   contents: read
 
 concurrency:
-  group: package-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name }}
-  cancel-in-progress: true
+  group: couch-hosted-release
+  cancel-in-progress: false
+
+env:
+  COUCH_UPDATER_PUBLIC_KEY: ${{ vars.COUCH_UPDATER_PUBLIC_KEY }}
 
 jobs:
-  build:
-    if: ${{ inputs.build-run == 0 && inputs.update-artifact == 0 && (github.event_name != 'pull_request' || github.event.label.name == 'qualify-package') }}
+  draft:
+    if: ${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
+    environment: couch-release
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     outputs:
-      release-id: ${{ github.run_id }}.${{ github.run_attempt }}
-    env:
-      PATCHELF: /usr/bin/patchelf
-      COUCH_RELEASE_ID: ${{ github.run_id }}.${{ github.run_attempt }}
-      COUCH_RELEASE_NOTES: ${{ inputs.notes }}
+      release-id: ${{ steps.draft.outputs.release-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.2
-      - name: Install build libraries from the reviewed Ubuntu snapshot
+      - name: Validate retained run provenance
+        if: inputs.build-run > 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build-run }}
+          BUILD_ATTEMPT: ${{ inputs.build-attempt }}
         run: |
-          snapshot=$(bun -e 'console.log((await Bun.file("packaging/inputs.json").json()).ubuntuSnapshot)')
-          sudo apt-get update --snapshot "$snapshot"
-          sudo apt-get install -y --no-install-recommends --snapshot "$snapshot" libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev ffmpeg unzip libfuse2t64 librsvg2-dev patchelf
-          pkg-config --variable=libdir librsvg-2.0
-          rustup show active-toolchain
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+          mkdir -p .artifacts
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/run.json
+          jq -e '.path == ".github/workflows/package.yml" and .event == "workflow_dispatch" and .head_branch == "main"' .artifacts/run.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: inputs.build-run > 0
         with:
-          workspaces: src-tauri
-          cache-bin: false
-          # Keep compiled dependencies when a later runtime qualification fails.
-          cache-on-failure: true
-          key: ubuntu-24.04-release-${{ hashFiles('packaging/inputs.json') }}
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event.label.name == 'qualify-package' }}
-      - run: bun install --frozen-lockfile
-      - run: bun run package:prepare
-      - name: Build the native TV, Debian package and AppImage
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+          name: ${{ inputs.artifact-kind }}-${{ inputs.build-run }}.${{ inputs.build-attempt }}
+          run-id: ${{ inputs.build-run }}
+          github-token: ${{ github.token }}
+          path: .artifacts/hosted-release
+      - name: Check the candidate inputs
+        env:
+          NOTES: ${{ inputs.notes }}
+          BUILD_RUN: ${{ inputs.build-run }}
+          CHANNEL: ${{ inputs.channel }}
+          READINESS_ONLY: ${{ inputs.readiness-only }}
+        run: |
+          mkdir -p .artifacts/hosted-release
+          printf '%s\n' "$NOTES" > .artifacts/hosted-release/notes.md
+          if [ "$BUILD_RUN" != 0 ]; then
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+            bun scripts/hosted-release.ts verify .artifacts/hosted-release
+            test "$(jq -r .revision .artifacts/hosted-release/manifest.json)" = "$(jq -r .head_sha .artifacts/run.json)"
+          else
+            test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
+          fi
+      - name: Install supported Cloud CLI
+        if: ${{ !inputs.readiness-only }}
+        uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
         with:
-          tauriScript: bun scripts/desktop.ts
-          args: --verbose --bundles deb,appimage --config .artifacts/tauri-release.conf.json -- --locked
-      - name: Verify final AppImage helper bytes
-        run: bun scripts/package-verify-helpers.ts
-      - name: Preserve the exact artifact and matching source
-        if: success() || failure() && hashFiles('src-tauri/build-info.json') != ''
+          command: version
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: .artifacts
+      - name: Draft the effective Tauri version or retained promotion
+        id: draft
+        if: ${{ !inputs.readiness-only }}
+        env:
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          CN_BIN: ${{ github.workspace }}/.artifacts/cn
+          BUILD_RUN: ${{ inputs.build-run }}
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_ID: ${{ inputs.release-id }}
         run: |
-          mkdir -p .artifacts/package-release
-          find src-tauri/target/release/bundle -maxdepth 2 -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec cp {} .artifacts/package-release/ \;
-          cp src-tauri/build-info.json src-tauri/resources/build-inputs.json .artifacts/package-release/
-          git archive --format=tar.gz --output=.artifacts/package-release/couch-source.tar.gz HEAD
-          cd .artifacts/package-release
-          find . -maxdepth 1 -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
-      - name: Build the qualification driver once
+          operation=draft
+          if [ "$BUILD_RUN" = 0 ]; then operation=draft-source; fi
+          bun scripts/hosted-release.ts "$operation" .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
+
+  candidate:
+    needs: draft
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: couch-release
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: inputs.build-run > 0
+        with:
+          name: ${{ inputs.artifact-kind }}-${{ inputs.build-run }}.${{ inputs.build-attempt }}
+          run-id: ${{ inputs.build-run }}
+          github-token: ${{ github.token }}
+          path: .artifacts/hosted-release
+      - name: Prepare the pinned Debian builder
+        if: inputs.build-run == 0
         run: |
-          cargo install tauri-driver --version 2.0.6 --locked
-          cp "$HOME/.cargo/bin/tauri-driver" .artifacts/package-release/
+          docker build --platform linux/amd64 -f packaging/Dockerfile.mac \
+            --build-arg "DEBIAN_IMAGE=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
+            --build-arg "DEBIAN_SNAPSHOT=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" \
+            --build-arg "BUN_VERSION=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" \
+            --build-arg "RUST_VERSION=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" \
+            -t couch-release-builder packaging
+          docker create --name couch-build --init --cpus 4 --memory 10g couch-release-builder
+          docker start couch-build
+          git bundle create /tmp/source.bundle HEAD
+          docker cp /tmp/source.bundle couch-build:/source.bundle
+          docker exec couch-build git clone /source.bundle /work
+          docker exec -w /work couch-build git checkout --detach "$GITHUB_SHA"
+          # Keep caches on runner paths for the supported cache action, never in public assets.
+          mkdir -p .artifacts/cache/target .artifacts/cache/registry .artifacts/cache/git .artifacts/cache/bun
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: inputs.build-run == 0
+        with:
+          path: .artifacts/cache
+          key: debian-13-release-${{ runner.arch }}-${{ hashFiles('packaging/inputs.json', 'rust-toolchain.toml', 'src-tauri/Cargo.lock', 'bun.lock') }}
+      - name: Restore compiler and dependency caches
+        if: inputs.build-run == 0
+        run: |
+          docker exec couch-build mkdir -p /work/src-tauri/target /root/.cargo/registry /root/.cargo/git /root/.bun/install/cache
+          docker cp .artifacts/cache/target/. couch-build:/work/src-tauri/target
+          docker cp .artifacts/cache/registry/. couch-build:/root/.cargo/registry
+          docker cp .artifacts/cache/git/. couch-build:/root/.cargo/git
+          docker cp .artifacts/cache/bun/. couch-build:/root/.bun/install/cache
+      - name: Build and sign the complete AppImage and public archives
+        if: inputs.build-run == 0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD couch-build bash scripts/hosted-build.sh
+      - name: Qualify the exact signed bytes
+        if: inputs.build-run == 0
+        run: |
+          docker exec -w /work couch-build bash scripts/hosted-qualify.sh
+          docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
+          docker exec -w /work couch-build bun -e 'const p=".artifacts/hosted-release/qualified.json"; const q=await Bun.file(p).json(); q.checks.push("installer"); await Bun.write(p,JSON.stringify(q,null,2))'
+      - name: Retain build bytes, receipts and caches
+        if: ${{ always() && inputs.build-run == 0 }}
+        run: |
+          mkdir -p .artifacts/hosted-release
+          docker cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/
+          docker cp couch-build:/work/.artifacts/appimage-inventory.json .artifacts/hosted-release/inventory.json
+          docker cp couch-build:/work/src-tauri/target/. .artifacts/cache/target/
+          docker cp couch-build:/root/.cargo/registry/. .artifacts/cache/registry/
+          docker cp couch-build:/root/.cargo/git/. .artifacts/cache/git/
+          docker cp couch-build:/root/.bun/install/cache/. .artifacts/cache/bun/
+      - name: Stop the builder
+        if: ${{ always() && inputs.build-run == 0 }}
+        run: docker stop couch-build
+      - name: Verify retained candidate
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+          bun scripts/hosted-release.ts verify .artifacts/hosted-release
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
         with:
-          name: package-inputs-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/package-release/
+          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release/
           compression-level: 0
           if-no-files-found: error
           retention-days: 7
 
-  qualify:
-    needs: build
-    if: ${{ !cancelled() && (needs.build.result == 'success' || inputs.build-run > 0 || inputs.update-artifact > 0) }}
-    permissions:
-      contents: read
-      actions: read
+  upload:
+    needs: [draft, candidate]
+    if: ${{ !inputs.readiness-only }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        format: ${{ fromJSON((inputs.build-run > 0 || inputs.update-artifact > 0) && '["AppImage"]' || '["deb", "AppImage"]') }}
-    env:
-      COUCH_RELEASE_ID: ${{ inputs.build-run > 0 && format('{0}.{1}', inputs.build-run, inputs.build-attempt) || needs.build.outputs.release-id }}
-      COUCH_RELEASE_NOTES: ${{ inputs.notes }}
+    environment: couch-release
+    timeout-minutes: 15
     steps:
-      - name: Validate signed qualification inputs
-        if: inputs.update-artifact > 0
-        env:
-          BUILD_RUN: ${{ inputs.build-run }}
-        run: test "$BUILD_RUN" -gt 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.2
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: package-inputs-${{ env.COUCH_RELEASE_ID }}
-          run-id: ${{ inputs.build-run > 0 && inputs.build-run || github.run_id }}
-          github-token: ${{ github.token }}
-          path: .artifacts/package-release
-      - name: Prepare qualification
-        run: |
-          if ! command -v ffmpeg; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends ffmpeg
-          fi
-          cp .artifacts/package-release/build-info.json src-tauri/build-info.json
-          chmod +x .artifacts/package-release/tauri-driver
-          echo "$PWD/.artifacts/package-release" >> "$GITHUB_PATH"
-          bun install --frozen-lockfile
-      - name: Qualify the built package on clean Ubuntu
-        run: bun tests/package/qualify.ts .artifacts/package-release/*.${{ matrix.format }}
-      - name: Qualify installed AppImage restart and SSH recovery
-        if: matrix.format == 'AppImage'
+          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release
+      - uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
+        with:
+          command: version
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: .artifacts
+      - name: Upload only the qualified allowlist and inspect Cloud
         env:
-          GH_TOKEN: ${{ github.token }}
-          UPDATE_ARTIFACT: ${{ inputs.update-artifact }}
-          COUCH_QUALIFY_GENERAL_RESTART: ${{ inputs.general-restart && '1' || '0' }}
-          COUCH_QUALIFY_GENERAL_STARTUP: ${{ inputs.general-startup && '1' || '0' }}
-          COUCH_QUALIFY_RECOVERY_FAULTS: ${{ inputs.recovery-faults && '1' || '0' }}
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          CN_BIN: ${{ github.workspace }}/.artifacts/cn
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_ID: ${{ needs.draft.outputs.release-id }}
         run: |
-          appimage=$(realpath .artifacts/package-release/*.AppImage)
-          evidence="$PWD/.artifacts/appimage-qualification/installed"
-          if [[ -n "$UPDATE_ARTIFACT" && "$UPDATE_ARTIFACT" != 0 ]]; then
-            bun scripts/test-installed-update.ts "$appimage" "$UPDATE_ARTIFACT" "$evidence"
-          else
-            bash scripts/test-appliance-systemd.sh --appimage "$appimage" "$evidence"
-          fi
-      - name: Assemble the qualified Debian release
-        if: ${{ inputs.build-run == 0 && matrix.format == 'deb' }}
-        run: bun scripts/package-release.ts
-      - name: Assemble the qualified AppImage
-        if: ${{ inputs.build-run == 0 && matrix.format == 'AppImage' }}
-        run: |
-          mkdir -p .artifacts/qualified-release
-          cp .artifacts/package-release/*.AppImage .artifacts/package-release/couch-source.tar.gz src-tauri/build-info.json .artifacts/qualified-release/
-          cp -r .artifacts/appimage-qualification .artifacts/qualified-release/
-          cd .artifacts/qualified-release
-          sha256sum *.AppImage *.json *.tar.gz > SHA256SUMS
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: ${{ inputs.build-run == 0 }}
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+          bun scripts/hosted-release.ts upload .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
+
+  publish:
+    needs: [draft, candidate, upload]
+    if: ${{ inputs.publish && !inputs.readiness-only }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: couch-publication
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          name: couch-${{ matrix.format == 'deb' && 'release' || 'appimage' }}-${{ needs.build.outputs.release-id }}
-          path: .artifacts/qualified-release/
-          overwrite: true
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release
+      - uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
+        with:
+          command: version
+          api-key: ${{ secrets.CN_API_KEY }}
+          path: .artifacts
+      - name: Publish the complete qualified release
+        env:
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          CN_BIN: ${{ github.workspace }}/.artifacts/cn
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_ID: ${{ needs.draft.outputs.release-id }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+          bun scripts/hosted-release.ts publish .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
+
+  readiness:
+    needs: [draft, candidate, publish]
+    if: ${{ always() && needs.candidate.result == 'success' && (needs.publish.result == 'success' || inputs.readiness-only) }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release
+      - name: Verify every public file and the installer/updater endpoints
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+          bun scripts/hosted-release.ts readiness .artifacts/hosted-release "$CHANNEL"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: hosted-ready-${{ github.run_id }}.${{ github.run_attempt }}
+          path: .artifacts/hosted-release/
           compression-level: 0
-          if-no-files-found: error
-          retention-days: 30
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: always()
-        with:
-          name: qualification-${{ matrix.format }}-${{ github.run_id }}.${{ github.run_attempt }}
-          path: |
-            .artifacts/package-qualification/
-            .artifacts/appimage-qualification/
-          if-no-files-found: warn
           retention-days: 7

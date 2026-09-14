@@ -7,7 +7,8 @@
       "resources/tools/": "tools/",
       "resources/tools.json": "tools.json",
       "resources/build-inputs.json": "build-inputs.json",
-      "resources/build-packages.tsv": "build-packages.tsv"
+      "resources/build-packages.tsv": "build-packages.tsv",
+      "resources/release.json": "release.json"
     },
     "linux": {
       "appimage": {
@@ -39,6 +40,7 @@
         },
         "bundleMediaFramework": true
       }
-    }
+    },
+    "createUpdaterArtifacts": true
   }
 }
