@@ -27,22 +27,48 @@ function Artwork({ station, programme, expanded = false }: { station: RadioStati
     : <span className={`${expanded ? "aspect-square" : "aspect-video"} grid w-full place-items-center rounded-lg bg-muted text-primary`} aria-hidden="true"><Radio className="size-12" /></span>;
 }
 
-export function AvoidRadioHome({ origin, token, connected, canPlay, version, onEnqueue, onBrowse, currentStationId, active = true }: AvoidRadioHomeProps) {
+export function AvoidRadioHome(props: AvoidRadioHomeProps) {
+  return <AvoidRadioDiscovery key={`${props.origin}\0${props.token}`} {...props} />;
+}
+
+function AvoidRadioDiscovery({ origin, token, connected, canPlay, version, onEnqueue, onBrowse, currentStationId, active = true }: AvoidRadioHomeProps) {
   const headingId = useId();
   const [catalog, setCatalog] = useState<AvoidRadioCatalog | null>(null);
   const [programmes, setProgrammes] = useState<Record<string, RadioProgrammeDetails>>({});
   const [favorites, setFavorites] = useState<RadioStation[]>([]);
-  const [detail, setDetail] = useState<RadioStation | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [attempt, setAttempt] = useState(0);
   const trigger = useRef<HTMLButtonElement | null>(null);
-  const identity = `${origin}\0${token}`;
-  const currentIdentity = useRef(identity);
-  currentIdentity.current = identity;
+  const restoreFocus = useRef(false);
+  const catalogRequest = useRef<AbortController | null>(null);
+  const lifetime = useRef<AbortController | null>(null);
+  const detail = catalog?.stations.find(station => station.id === detailId);
+  const hasStations = !!catalog?.stations.length;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    return () => controller.abort();
+  }, []);
+
+  function focusTrigger() {
+    if (trigger.current?.isConnected && !trigger.current.closest("[hidden], [inert]")
+      && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) trigger.current.focus({ preventScroll: true });
+  }
+
+  useEffect(() => {
+    if (!active) {
+      if (detailId) { restoreFocus.current = true; setDetailId(null); }
+      return;
+    }
+    if (!restoreFocus.current || loading) return;
+    const frame = requestAnimationFrame(() => { focusTrigger(); restoreFocus.current = false; });
+    return () => cancelAnimationFrame(frame);
+  }, [active, detailId, loading]);
 
   const request = useCallback(async (path: string, init: RequestInit = {}) => {
     const response = await fetch(`${origin}/api/radio/${path}`, {
@@ -56,21 +82,27 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
     return response;
   }, [origin, token]);
 
-  useEffect(() => {
-    setCatalog(null); setProgrammes({}); setFavorites([]); setDetail(null); setError(""); setActionError(""); setNotice(""); setBusy(false);
-  }, [identity]);
-
-  useEffect(() => {
-    if (!connected || !active) return;
+  const loadCatalog = useCallback((refresh = false) => {
+    catalogRequest.current?.abort();
     const controller = new AbortController();
+    catalogRequest.current = controller;
     setLoading(true);
-    void request(`avoid${attempt ? "?refresh=true" : ""}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+    void request(`avoid${refresh ? "?refresh=true" : ""}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
       .then(response => response.json() as Promise<AvoidRadioCatalog>)
-      .then(body => { if (!controller.signal.aborted) { setCatalog(body); setError(body.playlist.error ?? ""); } })
+      .then(body => {
+        if (controller.signal.aborted) return;
+        setCatalog(body); setError(body.playlist.error ?? "");
+        setDetailId(current => body.stations.some(station => station.id === current) ? current : null);
+      })
       .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load avoid radio."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [request, connected, active, attempt]);
+  }, [request]);
+
+  useEffect(() => {
+    if (!connected || !active) { setLoading(false); return; }
+    loadCatalog();
+    return () => catalogRequest.current?.abort();
+  }, [loadCatalog, connected, active, version]);
 
   useEffect(() => {
     if (!connected || !active) return;
@@ -83,7 +115,7 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
   }, [request, connected, active, version]);
 
   useEffect(() => {
-    if (!connected || !active || !catalog?.stations.length) return;
+    if (!connected || !active || !hasStations) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function refresh() {
@@ -96,7 +128,7 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
     }
     void refresh();
     return () => { controller.abort(); if (timer) clearTimeout(timer); };
-  }, [request, connected, active, catalog]);
+  }, [request, connected, active, hasStations]);
 
   useEffect(() => {
     if (!connected || !active || !Object.keys(programmes).length) return;
@@ -112,21 +144,21 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
   }, [notice]);
 
   async function action(station: RadioStation, kind: "play" | "queue" | "favorite") {
-    const destination = identity;
+    const signal = lifetime.current!.signal;
     const saved = favorites.some(value => value.id === station.id);
     setBusy(true); setActionError(""); setNotice("");
     try {
       if (kind === "favorite") {
-        await request(saved ? `favorites/${station.id}` : "favorites", { method: saved ? "DELETE" : "POST", body: saved ? undefined : JSON.stringify({ station }) });
-        if (currentIdentity.current !== destination) return;
+        await request(saved ? `favorites/${station.id}` : "favorites", { method: saved ? "DELETE" : "POST", body: saved ? undefined : JSON.stringify({ station }), signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
+        if (signal.aborted) return;
         setFavorites(previous => saved ? previous.filter(value => value.id !== station.id) : [...previous, station]);
         setNotice(`${station.name} ${saved ? "removed from" : "saved to"} favorites.`);
-      } else if (await onEnqueue(station, kind === "play") && currentIdentity.current === destination) {
+      } else if (await onEnqueue(station, kind === "play") && !signal.aborted) {
         setNotice(kind === "play" ? `Starting ${station.name}.` : `${station.name} added to queue.`);
       }
     } catch (reason) {
-      if (currentIdentity.current === destination) setActionError(reason instanceof Error ? reason.message : "Could not complete the radio request.");
-    } finally { if (currentIdentity.current === destination) setBusy(false); }
+      if (!signal.aborted) setActionError(reason instanceof Error ? reason.message : "Could not complete the radio request.");
+    } finally { if (!signal.aborted) setBusy(false); }
   }
 
   const actions = (station: RadioStation) => {
@@ -147,14 +179,14 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id={headingId} className="text-xl font-medium">avoid radio</h2>{onBrowse && <Button variant="ghost" onClick={onBrowse}>All radio</Button>}</div>
     {loading && !catalog && <p role="status" className="text-sm text-muted-foreground">Loading stations…</p>}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to a playback computer to load radio.</p>}
-    {error && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => setAttempt(value => value + 1)}>Retry avoid radio</Button></AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => loadCatalog(true)}>Retry avoid radio</Button></AlertDescription></Alert>}
     {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
     {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
     {catalog && !loading && !catalog.stations.length && !error && <p className="text-sm text-muted-foreground">No stations are available from avoid radio right now.</p>}
     <ul className="radio-grid">{catalog?.stations.map(station => {
       const current = programme(station);
       return <li key={station.id} className="min-w-0"><Card className="catalog-card h-full justify-between gap-3 p-3">
-        <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-3 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetail(station); }}>
+        <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-3 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(station.id); }}>
           <Artwork key={current?.artworkUrl || station.logoUrl || station.id} station={station} programme={current} />
           <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{station.name}<Badge variant="secondary">{connected && currentStationId === station.id ? "Playing" : "Live"}</Badge></span>
           <strong className="line-clamp-2 text-base font-medium">{current?.title || station.name}</strong>
@@ -163,7 +195,7 @@ export function AvoidRadioHome({ origin, token, connected, canPlay, version, onE
         {actions(station)}
       </Card></li>;
     })}</ul>
-    <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus(); }}>
+    <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (active) focusTrigger(); }}>
       <DialogHeader><DialogTitle>{detail?.name}</DialogTitle><DialogDescription>Live radio · avoid radio</DialogDescription></DialogHeader>
       {detail && <><Artwork key={detailProgramme?.artworkUrl || detail.logoUrl || detail.id} station={detail} programme={detailProgramme} expanded />
         {detailProgramme ? <div className="space-y-2"><h3 className="text-lg font-medium">{detailProgramme.title}</h3>{detailProgramme.description && <p className="text-sm text-muted-foreground">{detailProgramme.description}</p>}{detailProgramme.programmeUrl && <a className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" href={detailProgramme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a>}</div> : <p className="text-sm text-muted-foreground">Programme information is unavailable. You can still play this station.</p>}
