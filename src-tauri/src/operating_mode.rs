@@ -139,6 +139,14 @@ fn addresses(url: &Url) -> Result<Vec<SocketAddr>, String> {
     Ok(addresses)
 }
 
+fn connection_client() -> reqwest::ClientBuilder {
+    // Remote mode can make its first request before the updater initializes TLS.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+}
+
 async fn preflight(url: &Url) -> Result<(), String> {
     let resolve_url = url.clone();
     let addresses = tokio::time::timeout(
@@ -148,9 +156,7 @@ async fn preflight(url: &Url) -> Result<(), String> {
     .await
     .map_err(|_| "Finding the playback computer timed out.")?
     .map_err(error)??;
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
+    let client = connection_client()
         .timeout(Duration::from_secs(5))
         .resolve_to_addrs(url.host_str().ok_or("Missing host")?, &addresses)
         .build()
@@ -234,9 +240,7 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
             .borrow()
             .clone()
             .ok_or("Wait for this computer to finish starting.")??;
-        let response = reqwest::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
+        let response = connection_client()
             .timeout(Duration::from_secs(3))
             .build()
             .map_err(error)?
@@ -535,6 +539,22 @@ mod tests {
 
     #[tokio::test]
     async fn entry_check_rejects_unsupported_ui_redirects_and_disabled_sharing() {
+        const ISOLATED: &str = "COUCH_TEST_MODE_TLS_ISOLATED";
+        if std::env::var_os(ISOLATED).is_none() {
+            // Updater tests install a process-wide provider and can hide missing mode initialization.
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "operating_mode::tests::entry_check_rejects_unsupported_ui_redirects_and_disabled_sharing", "--nocapture"])
+                .env(ISOLATED, "1")
+                .output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        assert!(rustls::crypto::CryptoProvider::get_default().is_none());
         async fn response(status: &str, body: &str) -> Result<(), String> {
             use std::io::{Read, Write};
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
