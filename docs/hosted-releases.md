@@ -19,6 +19,10 @@ Ubuntu does not build the package directly. Both hosted and temporary Mac builds
 use `scripts/hosted-build.sh`, Tauri CLI 2.11.4 and the existing Debian packaging
 and explicit distribution-material allowlists. Swatinem/rust-cache retains Cargo
 dependencies and the Bun download cache even after qualification failure.
+Docker's pinned Buildx actions retain the Debian builder layers through GitHub's
+Actions cache backend and load the image locally. Cache export failure does not
+fail a release. The first run populates this cache; the [local validation](evidence/acceptance-277/2026-09-15/builder-cache.md)
+does not establish a hosted cache hit or timing improvement.
 
 CrabNebula's supported action is pinned to
 `1a8803698ba41de6b23e42abc5dcc3721308233c`. It downloads the current supported Cloud
