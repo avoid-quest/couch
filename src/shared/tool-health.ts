@@ -7,4 +7,4 @@ export type ManagedToolHealth = {
 };
 export type ToolHealth = { checkedAt: string; tools: ManagedToolHealth[]; ffprobe: ToolObservation; cacheSeconds: number };
 
-export type UbuntuPackageStatus = { available: number | null; security: number | null; broken: number | null; indexUpdatedAt: number | null; checkedAt: string; error: string | null };
+export type AptPackageStatus = { available: number | null; security: number | null; broken: number | null; indexUpdatedAt: number | null; checkedAt: string; error: string | null };

@@ -4,7 +4,7 @@ import { chmod, link, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ToolHealth, UbuntuPackageStatus } from "../shared/tool-health";
+import type { ToolHealth, AptPackageStatus } from "../shared/tool-health";
 import { runDiagnosticCommand } from "./diagnostics-system";
 import { createToolHealth } from "./tool-health";
 
@@ -204,27 +204,29 @@ test("repair verification ignores the health cache and effective overrides, and 
   await smokeFailure.close();
 });
 
-test("Ubuntu status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
+test("System package status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
-  const health = createToolHealth({ ...f.options, ubuntuStatus: async () => {
+  const health = createToolHealth({ ...f.options, packageStatus: async () => {
     calls++;
     return { available: 4, security: 2, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null };
   } });
   try {
-    const url = "http://localhost/api/tools/ubuntu";
+    const url = "http://localhost/api/tools/packages";
     expect((await health.handle(new Request(url), () => null)).status).toBe(403);
     expect((await health.handle(new Request(url + "?package=couch"), () => administrator)).status).toBe(400);
     expect((await health.handle(new Request(url, { method: "POST" }), () => administrator)).status).toBe(405);
     expect(calls).toBe(0);
     expect(await (await health.handle(new Request(url), () => administrator)).json()).toMatchObject({ available: 4, security: 2, broken: 0, indexUpdatedAt: null });
     await health.handle(new Request(url), () => administrator); expect(calls).toBe(1);
+    expect(await (await health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator)).json()).toMatchObject({ available: 4, security: 2 });
+    expect(calls).toBe(1);
   } finally { await health.close(); }
 });
 
-test("shutdown during Ubuntu inspection reports unavailable rather than revoked access", async () => {
-  const f = await fixture(), gate = Promise.withResolvers<UbuntuPackageStatus>(), started = Promise.withResolvers<void>();
-  const health = createToolHealth({ ...f.options, ubuntuStatus: () => { started.resolve(); return gate.promise; } });
-  const response = health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator);
+test("shutdown during system package inspection reports unavailable rather than revoked access", async () => {
+  const f = await fixture(), gate = Promise.withResolvers<AptPackageStatus>(), started = Promise.withResolvers<void>();
+  const health = createToolHealth({ ...f.options, packageStatus: () => { started.resolve(); return gate.promise; } });
+  const response = health.handle(new Request("http://localhost/api/tools/packages"), () => administrator);
   await started.promise;
   const closing = health.close();
   gate.resolve({ available: 0, security: 0, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null });

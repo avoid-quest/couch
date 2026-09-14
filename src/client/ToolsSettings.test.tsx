@@ -37,9 +37,9 @@ afterEach(async () => {
 
 test("shows release versions, package integrity, an effective override and separate runtime status", async () => {
   await render();
-  for (const value of ["Expected version", "Installed version", "2026.08.19", "2026.01.01", "Verified for this release", "Environment override", "Shipped package", "Runtime dependency: Available, version 6.1.1", "Ubuntu package and security updates", "website or network failure", "10 seconds"]) expect(document.body.textContent).toContain(value);
+  for (const value of ["Expected version", "Installed version", "2026.08.19", "2026.01.01", "Verified for this release", "Environment override", "Shipped package", "Runtime dependency: Available, version 6.1.1", "System package and security updates", "website or network failure", "10 seconds"]) expect(document.body.textContent).toContain(value);
   expect(calls).toHaveLength(2);
-  expect(calls.map(call => call.url)).toEqual(["http://localhost/api/tools/ubuntu", "http://localhost/api/tools"]);
+  expect(calls.map(call => call.url)).toEqual(["http://localhost/api/tools/packages", "http://localhost/api/tools"]);
   expect(calls[0]!.method).toBeUndefined(); expect(calls[0]!.body).toBeUndefined();
   expect([...document.querySelectorAll("button")].map(node => node.textContent)).toEqual(["Check tools"]);
   expect(button().disabled).toBe(false);
@@ -88,26 +88,26 @@ test("changing credentials clears old observations before the new check finishes
 });
 
 
-test("Ubuntu cached security/package status is distinct from release updates and never offers an upgrade", async () => {
-  request.mockImplementation((async input => Response.json(String(input).endsWith("/ubuntu") ? { available: 4, security: 2, broken: 1, indexUpdatedAt: null, checkedAt: "2026-09-07", error: null } : report)) as typeof fetch);
+test("System cached security/package status is distinct from release updates and never offers an upgrade", async () => {
+  request.mockImplementation((async input => Response.json(String(input).endsWith("/packages") ? { available: 4, security: 2, broken: 1, indexUpdatedAt: null, checkedAt: "2026-09-07", error: null } : report)) as typeof fetch);
   await render();
-  expect(document.body.textContent).toContain("4 actionable Ubuntu upgrades");
-  expect(document.body.textContent).toContain("2 from the security pocket");
+  expect(document.body.textContent).toContain("4 actionable distribution upgrades");
+  expect(document.body.textContent).toContain("2 from security repositories");
   expect(document.body.textContent).toContain("broken dependencies: 1");
   expect(document.body.textContent).toContain("index refresh: Unknown");
   expect([...document.querySelectorAll("button")].some(button => /upgrade|install/i.test(button.textContent || ""))).toBe(false);
 });
 
-test("a completed repair clears prior tool and Ubuntu observations while its fresh check is pending", async () => {
-  request.mockImplementation((async input => Response.json(String(input).endsWith("/ubuntu") ? { available: 4, security: 2, broken: 0, indexUpdatedAt: null } : report)) as typeof fetch);
+test("a completed repair clears prior tool and package observations while its fresh check is pending", async () => {
+  request.mockImplementation((async input => Response.json(String(input).endsWith("/packages") ? { available: 4, security: 2, broken: 0, indexUpdatedAt: null } : report)) as typeof fetch);
   await render(true, "admin", "old");
   expect(document.body.textContent).toContain("2026.08.19");
-  expect(document.body.textContent).toContain("4 actionable Ubuntu upgrades");
+  expect(document.body.textContent).toContain("4 actionable distribution upgrades");
   const gate = Promise.withResolvers<Response>();
   request.mockImplementation((async (_input, _init) => gate.promise.then(response => response.clone())) as typeof fetch);
   await render(true, "admin", "repaired");
   expect(document.body.textContent).not.toContain("2026.08.19");
-  expect(document.body.textContent).not.toContain("4 actionable Ubuntu upgrades");
+  expect(document.body.textContent).not.toContain("4 actionable distribution upgrades");
   expect(document.body.textContent).toContain("Checking local media tools");
   await act(async () => gate.resolve(Response.json(report)));
 });

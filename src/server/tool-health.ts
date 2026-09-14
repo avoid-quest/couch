@@ -1,17 +1,17 @@
-import { readUbuntuPackageStatus } from "./ubuntu-package-status";
+import { readAptPackageStatus } from "./apt-package-status";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ManagedToolHealth, ToolHealth, ToolObservation, UbuntuPackageStatus } from "../shared/tool-health";
+import type { ManagedToolHealth, ToolHealth, ToolObservation, AptPackageStatus } from "../shared/tool-health";
 import { probeMediaHelper, runDiagnosticCommand } from "./diagnostics-system";
 
 const cacheSeconds = 10;
 const checkMilliseconds = 10_000;
 const maximumBytes = 256 * 1024 * 1024;
 const managedTools = [{ name: "yt-dlp", file: "yt-dlp", variable: "COUCH_YT_DLP" }, { name: "Deno", file: "deno", variable: "COUCH_DENO" }] as const;
-type Options = { packaged: boolean; helpers: unknown; env?: NodeJS.ProcessEnv; directory?: string; command?: typeof runDiagnosticCommand; ubuntuStatus?: typeof readUbuntuPackageStatus };
+type Options = { packaged: boolean; helpers: unknown; env?: NodeJS.ProcessEnv; directory?: string; command?: typeof runDiagnosticCommand; packageStatus?: typeof readAptPackageStatus };
 const observation = (status: ToolObservation["status"], error: string | null, version: string | null = null): ToolObservation => ({ status, version, error });
 const unknown = () => observation("unknown", "The local check did not finish. Try again after the TV responds.");
 
@@ -57,13 +57,13 @@ export function createToolHealth(options: Options) {
   let cached: ToolHealth | null = null;
   let pending: Promise<ToolHealth> | null = null;
 
-  let systemCached: UbuntuPackageStatus | null = null, systemPending: Promise<UbuntuPackageStatus> | null = null;
+  let systemCached: AptPackageStatus | null = null, systemPending: Promise<AptPackageStatus> | null = null;
   const systemStatus = async () => {
     if (systemCached && Date.now() - Date.parse(systemCached.checkedAt) < 30_000) return systemCached;
-    return systemPending ??= (async (): Promise<UbuntuPackageStatus> => {
-      const value: UbuntuPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "Ubuntu package status is unavailable for this installation." };
+    return systemPending ??= (async (): Promise<AptPackageStatus> => {
+      const value: AptPackageStatus = { available: null, security: null, broken: null, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: "System package status is unavailable for this installation." };
       if (!options.packaged) return value;
-      return (options.ubuntuStatus ?? readUbuntuPackageStatus)();
+      return (options.packageStatus ?? readAptPackageStatus)();
     })().then(result => { systemCached = result; return result; }).finally(() => { systemPending = null; });
   };
 
@@ -169,10 +169,11 @@ export function createToolHealth(options: Options) {
       if (!permitted()) return json({ error: "An administrator is required to check media tools." }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const url = new URL(request.url);
-      if (!["/api/tools", "/api/tools/ubuntu"].includes(url.pathname)) return json({ error: "Not found." }, 404);
+      if (!["/api/tools", "/api/tools/packages", "/api/tools/ubuntu"].includes(url.pathname)) return json({ error: "Not found." }, 404);
       if (url.search) return json({ error: "Tool checks do not accept parameters." }, 400);
       if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
-      if (url.pathname === "/api/tools/ubuntu") {
+      // Keep the old path readable for controllers open during an app update.
+      if (url.pathname === "/api/tools/packages" || url.pathname === "/api/tools/ubuntu") {
         const result = await systemStatus();
         if (shutdown.signal.aborted) return json({ error: "Couch is shutting down." }, 503);
         return !permitted() ? json({ error: "Administrator access is no longer available." }, 403) : json(result);
