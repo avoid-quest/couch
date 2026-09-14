@@ -63,18 +63,18 @@ const helperCommands = {
 
 export async function probeMediaHelper(name: keyof typeof helperCommands, executable: string, env: NodeJS.ProcessEnv, command = runDiagnosticCommand): Promise<string> {
   const helper = helperCommands[name];
-  const output = await command(executable, helper.args, { PATH: env.PATH ?? "/usr/bin:/bin", LANG: "C", LC_ALL: "C" });
+  const output = await command(executable, helper.args, { PATH: env.PATH ?? "/usr/bin:/bin", ...(env.LD_LIBRARY_PATH ? { LD_LIBRARY_PATH: env.LD_LIBRARY_PATH } : {}), LANG: "C", LC_ALL: "C" });
   const version = helper.pattern.exec(output.split("\n")[0] ?? "")?.[1];
   if (!version || version.length > 100) throw new Error("The version output was not recognized.");
   return version;
 }
 
 export async function helperFacts(env: NodeJS.ProcessEnv, command = runDiagnosticCommand): Promise<DiagnosticHelper[]> {
-  const safeEnv = { PATH: env.PATH ?? "/usr/bin:/bin", LANG: "C", LC_ALL: "C" };
+  const safeEnv = { PATH: env.PATH ?? "/usr/bin:/bin", ...(env.LD_LIBRARY_PATH ? { LD_LIBRARY_PATH: env.LD_LIBRARY_PATH } : {}), LANG: "C", LC_ALL: "C" };
   return Promise.all([
     { name: "yt-dlp" as const, variable: "COUCH_YT_DLP" },
     { name: "Deno" as const, variable: "COUCH_DENO" },
-    { name: "ffprobe" as const, variable: "" },
+    { name: "ffprobe" as const, variable: "COUCH_FFPROBE" },
   ].map(async helper => {
     const executable = helper.variable && env[helper.variable] || Bun.which(helper.name.toLowerCase(), { PATH: safeEnv.PATH });
     const source = helper.variable && env[helper.variable] ? `${helper.variable} effective environment` : "Executable search path";

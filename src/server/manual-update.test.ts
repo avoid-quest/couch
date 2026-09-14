@@ -82,11 +82,15 @@ test("automatic requests recheck new input after worker lookup and retain the pr
 test("repair is an administrator's exact-current intent and never consults the newer staged candidate", async () => {
   const calls: unknown[] = [], current = { candidateId: "d".repeat(64), version: "1", revision: "previous" };
   let idle = true;
-  const repair = { expectedCurrentId: current.candidateId, requestId: payload.requestId, confirmInterrupt: false, repairRuntime: true };
+  const repair = { expectedCurrentId: current.candidateId, requestId: payload.requestId, confirmInterrupt: false, repairRuntime: false };
   const request = (body: unknown = repair) => new Request("http://localhost/api/updates/repair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ repair: body }) });
   const manual = createManualUpdate({ request: async value => { calls.push(value); return { ok: true, repairCurrent: true, current, transaction: value.op === "status" ? null : { ...transaction, intent: "repair-current" } }; } }, () => true, () => { throw new Error("Repair cannot select staged releases"); }, () => idle);
   expect((await manual.repair(request(), () => null)).status).toBe(401);
   expect((await manual.repair(request({ ...repair, package: "other" }), admin)).status).toBe(400);
+  const unsupported = await manual.repair(request({ ...repair, repairRuntime: true }), admin);
+  expect(unsupported.status).toBe(409);
+  expect(await unsupported.json()).toMatchObject({ accepted: false, error: expect.stringContaining("The machine administrator maintains Debian host packages") });
+  expect(manual.busy()).toBe(false);
   expect(calls).toEqual([]);
   expect(await (await manual.repair(request({ ...repair, expectedCurrentId: payload.candidateId }), admin)).json()).toMatchObject({ accepted: false });
   idle = false; expect((await manual.repair(request(), admin)).status).toBe(409);

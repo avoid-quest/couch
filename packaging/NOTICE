@@ -1,15 +1,13 @@
 Couch is distributed privately by avoid-quest. This package does not grant a
 new license to Couch's application source. Third-party components retain their
-own licenses in this directory. Debian installations obtain Ubuntu libraries independently. AppImages also
-redistribute Ubuntu libraries; their copyright notices are retained in the
-ubuntu subdirectory. build-packages.tsv records the Ubuntu build package
-versions. Installed Ubuntu notices remain under /usr/share/doc/<package>/copyright.
+own licenses in this directory. This AppImage redistributes Debian 13 application
+libraries. Their copyright notices are retained in the debian subdirectory;
+build-packages.tsv records the resolved build package versions.
 
-The exact Couch source, including modified libmpv2, tauri-plugin-video and
-tauri-runtime-wry, is supplied alongside each private CI package as
-couch-source.tar.gz. Build instructions and locked dependencies are in that
-archive. Recipients can rebuild the native host and compiled coordinator with
-modified libraries. Keep the source artifact available to package recipients.
+The distribution-material archive contains dependency notices, licenses and
+approved dependency material. Couch application source remains private. It is
+not included in that archive. The archive does not claim a compliance assessment
+or include a new multimedia build or relinking pipeline.
 
 yt-dlp's standalone executable includes Python and other third-party code.
 Its combined executable is GPLv3+; see yt-dlp-NOTICES.txt for full notices and

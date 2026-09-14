@@ -233,13 +233,20 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
             "COUCH_PORT",
             std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
         );
-    for (variable, name) in [("COUCH_YT_DLP", "yt-dlp"), ("COUCH_DENO", "deno")] {
+    for (variable, name) in [("COUCH_YT_DLP", "yt-dlp"), ("COUCH_DENO", "deno"), ("COUCH_FFPROBE", "ffprobe")] {
         let bundled = app
             .path()
             .resource_dir()
             .map_err(|error| error.to_string())?
             .join("tools")
             .join(name);
+        if !cfg!(debug_assertions) {
+            if !bundled.is_file() {
+                return Err(format!("This Couch bundle is missing {name}. Reinstall a verified complete AppImage."));
+            }
+            sidecar = sidecar.env(variable, bundled);
+            continue;
+        }
         let path = if bundled.is_file() {
             bundled
         } else {

@@ -22,6 +22,9 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
 ```
 
+The following appliance commands exercise the retained Ubuntu POC. For the
+current Debian package and the upper installer layer, use the
+[Mac package and installer checks](packaging.md#isolated-mac-build).
 Run `sudo "$(command -v bun)" scripts/test-publish-release.ts` and
 `sudo bash scripts/test-appliance.sh` only in disposable Ubuntu environments.
 They install packages and change system files. For real systemd/APT lifecycle
@@ -34,10 +37,13 @@ teardown failure is tracked in [#247](https://github.com/avoid-quest/couch/issue
 see the [dated baseline](qualification/current-status-2026-09-14.md#local-validation).
 A passing assertion count with unhandled errors and exit 1 is a failed run.
 
-The workflow descriptions below document the configured path for when capacity
-returns. Use Actions only for PR checks, builds and releases. The temporary
-[Mac delivery path](tauri-releases.md) builds in Ubuntu Docker; the T480 only
-installs and runs Couch. No hosted run is required for this documentation change.
+The workflow descriptions below document the retained, paused Ubuntu definitions.
+The Package workflow needs the Debian release implementation in
+[#276](https://github.com/avoid-quest/couch/issues/276) before it can deliver the
+current package; restored capacity alone is insufficient. Use Actions only for
+PR checks, builds and releases. The temporary
+[Mac build path](tauri-releases.md) uses Debian 13 containers; the T480 only
+installs and runs Couch.
 
 [Check](../.github/workflows/check.yml) is configured as a manually dispatched
 Ubuntu check. Pushes and PR edits do not start it.
@@ -56,10 +62,12 @@ and application source edits do not create extra copies of all dependencies.
 Check saves caches only on main. Package also saves on explicitly labeled PR
 qualification. Cache misses build normally.
 
-[Package](../.github/workflows/package.yml) is explicit release qualification,
-started by manual dispatch or the `qualify-package` PR label. The official Tauri
-action builds Debian and AppImage together. A two-format matrix then qualifies
-those exact binaries in separate clean Ubuntu containers. Failed qualification
+[Package](../.github/workflows/package.yml) retains the POC's explicit release
+qualification, configured for manual dispatch or the `qualify-package` PR label.
+Its official Tauri action builds a `.deb` and AppImage together on Ubuntu. A
+two-format matrix qualifies those exact binaries in separate clean Ubuntu
+containers. These jobs do not implement the Debian 13 AppImage contract.
+In that historical flow, failed qualification
 jobs can be retried without rebuilding. For changed fixtures, dispatch with
 `build-run` and `build-attempt` to test saved bytes using the current fixtures;
 this mode uploads evidence only. Binary identity and fixture revision remain

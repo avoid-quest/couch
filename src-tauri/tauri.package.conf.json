@@ -1,6 +1,8 @@
 {
   "bundle": {
-    "targets": ["deb", "appimage"],
+    "targets": [
+      "appimage"
+    ],
     "resources": {
       "resources/tools/": "tools/",
       "resources/tools.json": "tools.json",
@@ -9,14 +11,33 @@
     },
     "linux": {
       "appimage": {
-        "files": { "/usr/share/doc/couch": "resources/notices/" }
-      },
-      "deb": {
-        "depends": ["gpgv", "dpkg", "libmpv2", "libgl1", "va-driver-all", "ffmpeg", "ca-certificates", "fonts-dejavu-core", "libxdo3"],
         "files": {
           "/usr/share/doc/couch": "resources/notices/",
-          "/usr/share/doc/couch/build-info.json": "build-info.json"
-        }
+          "/usr/lib/libmpv.so.2": "/usr/lib/x86_64-linux-gnu/libmpv.so.2",
+          "/usr/lib/libnss3.so": "/usr/lib/x86_64-linux-gnu/libnss3.so",
+          "/usr/lib/libsoftokn3.so": "/usr/lib/x86_64-linux-gnu/libsoftokn3.so",
+          "/usr/lib/libfreeblpriv3.so": "/usr/lib/x86_64-linux-gnu/libfreeblpriv3.so",
+          "/usr/lib/alsa-lib": "/usr/lib/x86_64-linux-gnu/alsa-lib/",
+          "/usr/lib/libgcc_s.so.1": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+          "/usr/lib/libz.so.1": "/usr/lib/x86_64-linux-gnu/libz.so.1",
+          "/usr/lib/libasound.so.2": "/usr/lib/x86_64-linux-gnu/libasound.so.2",
+          "/usr/lib/libjack.so.0": "/usr/lib/x86_64-linux-gnu/libjack.so.0",
+          "/usr/lib/libX11.so.6": "/usr/lib/x86_64-linux-gnu/libX11.so.6",
+          "/usr/lib/libfribidi.so.0": "/usr/lib/x86_64-linux-gnu/libfribidi.so.0",
+          "/usr/lib/libfontconfig.so.1": "/usr/lib/x86_64-linux-gnu/libfontconfig.so.1",
+          "/usr/lib/libfreetype.so.6": "/usr/lib/x86_64-linux-gnu/libfreetype.so.6",
+          "/usr/lib/libxcb.so.1": "/usr/lib/x86_64-linux-gnu/libxcb.so.1",
+          "/usr/lib/libharfbuzz.so.0": "/usr/lib/x86_64-linux-gnu/libharfbuzz.so.0",
+          "/usr/lib/libexpat.so.1": "/usr/lib/x86_64-linux-gnu/libexpat.so.1",
+          "/usr/lib/libgpg-error.so.0": "/usr/lib/x86_64-linux-gnu/libgpg-error.so.0",
+          "/usr/lib/libstdc++.so.6": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6",
+          "/usr/lib/libX11-xcb.so.1": "/usr/lib/x86_64-linux-gnu/libX11-xcb.so.1",
+          "/usr/lib/libxcb-dri3.so.0": "/usr/lib/x86_64-linux-gnu/libxcb-dri3.so.0",
+          "/usr/lib/libcom_err.so.2": "/usr/lib/x86_64-linux-gnu/libcom_err.so.2",
+          "/usr/lib/libgmp.so.10": "/usr/lib/x86_64-linux-gnu/libgmp.so.10",
+          "/usr/lib/libusb-1.0.so.0": "/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0"
+        },
+        "bundleMediaFramework": true
       }
     }
   }

@@ -16,7 +16,6 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const [pending, setPending] = useState(false);
   const [retry, setRetry] = useState(() => readUpdateRequest(credentials.origin));
   const [confirming, setConfirming] = useState<false | "install" | "repair">(false);
-  const [repairRuntime, setRepairRuntime] = useState(false);
   const [interrupt, setInterrupt] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const mutation = useRef<AbortController | null>(null);
@@ -68,7 +67,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const install = async () => {
     try {
       const current = state?.installation?.current;
-      const saved = retry ?? (confirming === "repair" && current ? saveUpdateRequest(credentials.origin, { id: current.candidateId, version: current.version, revision: current.revision }, interrupt, repairRuntime) : state?.candidate ? saveUpdateRequest(credentials.origin, state.candidate, interrupt) : null);
+      const saved = retry ?? (confirming === "repair" && current ? saveUpdateRequest(credentials.origin, { id: current.candidateId, version: current.version, revision: current.revision }, interrupt, "repair-current") : state?.candidate ? saveUpdateRequest(credentials.origin, state.candidate, interrupt) : null);
       if (!saved) return;
       setRetry(saved); setConfirming(false);
       const { candidateId, requestId, confirmInterrupt } = saved;
@@ -162,8 +161,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         {confirming === "repair" ? <>
           <p>Repair {state.installation.current.version} and restart the TV. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={repairRuntime} onChange={event => setRepairRuntime(event.target.checked)} /> Also repair Ubuntu media dependencies</Label>
-          <p className="text-muted-foreground">Runtime repair uses Ubuntu's ffmpeg package at its installed version, or its Ubuntu candidate if absent. The exact archive must be available. Other runtime failures remain visible for system administration.</p>
+          <p className="text-muted-foreground">Repair reinstalls Couch files. The machine administrator maintains Debian host packages.</p>
           <Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button>
           <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
         </> : <Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button>}

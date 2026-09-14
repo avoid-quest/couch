@@ -4,7 +4,7 @@ import { chmod, link, mkdtemp, mkdir, open, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
-import type { ToolHealth, UbuntuPackageStatus } from "../shared/tool-health";
+import type { ToolHealth, AptPackageStatus } from "../shared/tool-health";
 import { runDiagnosticCommand } from "./diagnostics-system";
 import { createToolHealth } from "./tool-health";
 
@@ -16,12 +16,12 @@ async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "couch-tool-health-")); roots.push(directory);
   const bin = join(directory, "bin"); await mkdir(bin);
   const helpers: Record<string, { version: string; sha256: string }> = {};
-  for (const [name, version, output] of [["yt-dlp", "2026.08.19", "2026.08.19"], ["deno", "2.9.6", "deno 2.9.6\nv8 1.2.3"]]) {
+  for (const [name, version, output] of [["yt-dlp", "2026.08.19", "2026.08.19"], ["deno", "2.9.6", "deno 2.9.6\nv8 1.2.3"], ["ffprobe", "7.1.5-0+deb13u1", "ffprobe version 7.1.5-0+deb13u1"]]) {
     const content = `#!/bin/sh\nprintf '%s\\n' '${output}'\n`;
     await writeFile(join(directory, name!), content, { mode: 0o755 });
     helpers[name!] = { version: version!, sha256: createHash("sha256").update(content).digest("hex") };
   }
-  await writeFile(join(bin, "ffprobe"), "#!/bin/sh\necho 'ffprobe version 6.1.1'\n", { mode: 0o755 });
+  await writeFile(join(bin, "ffprobe"), "#!/bin/sh\necho 'ffprobe version 7.1.5-0+deb13u1'\n", { mode: 0o755 });
   const options = { packaged: true, helpers, directory, env: { PATH: bin, COUCH_YT_DLP: join(directory, "yt-dlp"), COUCH_DENO: join(directory, "deno"), COUCH_HOST_TOKEN: "private-host", SECRET: "private-value" } };
   return { options, directory, bin, report: async (overrides: Partial<Parameters<typeof createToolHealth>[0]> = {}) => await (await createToolHealth({ ...options, ...overrides }).handle(request(), () => administrator)).json() as ToolHealth };
 }
@@ -37,11 +37,11 @@ test("verifies release bytes before fixed local version commands, with no inheri
   } });
   expect(calls).toHaveLength(3);
   expect(report.tools.map(tool => [tool.expectedVersion, tool.installed.version, tool.installed.status, tool.effective.source])).toEqual([["2026.08.19", "2026.08.19", "ready", "package"], ["2.9.6", "2.9.6", "ready", "package"]]);
-  expect(report.ffprobe).toEqual({ status: "ready", version: "6.1.1", error: null });
+  expect(report.ffprobe).toEqual({ status: "ready", version: "7.1.5-0+deb13u1", error: null });
   for (const secret of [f.directory, "private-host", "private-value"]) expect(JSON.stringify(report)).not.toContain(secret);
 });
 
-test("missing and corrupted package files remain visible with a working effective override", async () => {
+test("packaged builds reject missing helpers despite a working environment override", async () => {
   const f = await fixture(), override = join(f.bin, "yt-dlp");
   await writeFile(override, "#!/bin/sh\necho 2026.01.01\n", { mode: 0o755 });
   await rm(join(f.directory, "yt-dlp"));
@@ -49,7 +49,7 @@ test("missing and corrupted package files remain visible with a working effectiv
   const calls: string[] = [];
   const report = await f.report({ env: { ...f.options.env, COUCH_YT_DLP: override }, command: async (path, args, env) => { calls.push(path); return runDiagnosticCommand(path, args, env); } });
   expect(report.tools[0]!.installed.status).toBe("missing");
-  expect(report.tools[0]!.effective).toEqual({ source: "environment", status: "ready", version: "2026.01.01", error: null });
+  expect(report.tools[0]!.effective.status).toBe("missing");
   expect(report.tools[1]!.installed.status).toBe("corrupt");
   expect(report.tools[1]!.effective.status).toBe("corrupt");
   expect(calls).not.toContain(join(f.directory, "deno"));
@@ -64,10 +64,10 @@ test("PATH fallback and aliases cannot hide or execute damaged package tools", a
   const calls: string[] = [];
   const report = await f.report({ env: { PATH: f.bin }, command: async (path, args, env) => { calls.push(path); return runDiagnosticCommand(path, args, env); } });
   expect(report.tools[0]!.installed.status).toBe("ready");
-  expect(report.tools[0]!.effective.source).toBe("search-path");
-  expect(report.tools[0]!.effective.status).toBe("error");
+  expect(report.tools[0]!.effective.source).toBe("package");
+  expect(report.tools[0]!.effective.status).toBe("ready");
   expect(report.tools[1]!.effective.status).toBe("corrupt");
-  expect(calls).toEqual([join(f.directory, "yt-dlp"), join(f.bin, "ffprobe")]);
+  expect(calls).toEqual([join(f.directory, "yt-dlp"), join(f.directory, "ffprobe")]);
 });
 
 test("hard links to corrupt package tools are blocked for overrides, cross-tool aliases and ffprobe", async () => {
@@ -78,22 +78,20 @@ test("hard links to corrupt package tools are blocked for overrides, cross-tool 
   await rm(join(f.bin, "ffprobe")); await link(join(f.directory, "deno"), join(f.bin, "ffprobe"));
   const calls: string[] = [];
   const report = await f.report({ env: { PATH: f.bin, COUCH_DENO: join(f.bin, "deno") }, command: async (path, args, env) => { calls.push(path); return runDiagnosticCommand(path, args, env); } });
-  expect(report.tools[0]!.effective.status).toBe("error");
+  expect(report.tools[0]!.effective.status).toBe("ready");
   expect(report.tools[1]!.effective.status).toBe("corrupt");
   expect(report.tools[1]!.effective.source).toBe("package");
-  expect(report.ffprobe.status).toBe("error");
-  expect(calls).toEqual([join(f.directory, "yt-dlp")]);
+  expect(report.ffprobe.status).toBe("ready");
+  expect(calls).toEqual([join(f.directory, "yt-dlp"), join(f.directory, "ffprobe")]);
 });
 
-test("bare environment overrides resolve through PATH and retain override provenance", async () => {
+test("packaged helpers ignore bare environment overrides and PATH", async () => {
   const f = await fixture();
-  await writeFile(join(f.bin, "custom-extractor"), "#!/bin/sh\necho 2026.01.01\n", { mode: 0o755 });
-  const report = await f.report({ env: { ...f.options.env, COUCH_YT_DLP: "custom-extractor" } });
-  expect(report.tools[0]!.installed.status).toBe("ready");
-  expect(report.tools[0]!.effective).toEqual({ source: "environment", status: "ready", version: "2026.01.01", error: null });
-  const missing = await f.report({ env: { ...f.options.env, COUCH_YT_DLP: "absent-extractor" } });
-  expect(missing.tools[0]!.effective.source).toBe("environment");
-  expect(missing.tools[0]!.effective.status).toBe("missing");
+  const report = await f.report({ env: { PATH: f.bin, COUCH_YT_DLP: "absent-extractor", COUCH_FFPROBE: "/missing/ffprobe" } });
+  expect(report.tools.every(tool => tool.effective.status === "ready" && tool.effective.source === "package")).toBe(true);
+  expect(report.ffprobe.status).toBe("ready");
+  await rm(join(f.directory, "ffprobe"));
+  expect((await f.report()).ffprobe.status).toBe("missing");
 });
 
 test("symlink replacement, oversized archives and unreadable version results do not become success", async () => {
@@ -113,7 +111,7 @@ test("symlink replacement, oversized archives and unreadable version results do 
 test("version mismatch and absent executable permission differ from a missing runtime dependency", async () => {
   const f = await fixture();
   f.options.helpers.deno!.version = "2.9.5";
-  await chmod(join(f.directory, "yt-dlp"), 0o644); await rm(join(f.bin, "ffprobe"));
+  await chmod(join(f.directory, "yt-dlp"), 0o644); await rm(join(f.directory, "ffprobe"));
   const report = await f.report();
   expect(report.tools[0]!.installed.status).toBe("error");
   expect(report.tools[1]!.installed).toEqual({ status: "corrupt", version: "2.9.6", error: "The verified tool reports a different version from this release." });
@@ -126,7 +124,7 @@ test("unpackaged or absent release metadata never invents verified package healt
     const report = await f.report(options);
     expect(report.tools.map(tool => tool.installed.status)).toEqual(["unknown", "unknown"]);
     expect(report.tools.map(tool => tool.effective.status)).toEqual(["unknown", "unknown"]);
-    expect(report.ffprobe.status).toBe("ready");
+    expect(report.ffprobe.status).toBe("packaged" in options ? "ready" : "unknown");
     expect(JSON.stringify(report)).not.toContain("private");
   }
 });
@@ -186,14 +184,14 @@ test("repair verification ignores the health cache and effective overrides, and 
     if (args.includes("--version")) return path.endsWith("yt-dlp") ? "2026.08.19" : "deno 2.9.6";
     if (args.includes("--get-url")) return args.at(-1)!;
     if (args[0] === "eval") return "42";
-    if (args[0] === "-version") return "ffprobe version 6.1.1";
+    if (args[0] === "-version") return "ffprobe version 7.1.5-0+deb13u1";
     expect(env).toEqual({ PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" });
     return "pcm_s16le";
   } });
   try {
     await health.verify(true);
     expect(calls.map(call => call.path)).not.toContain("/custom/unchanged-deno");
-    expect(calls.some(call => call.path === "/usr/bin/ffprobe" && call.args.includes("-show_entries"))).toBe(true);
+    expect(calls.some(call => call.path === join(f.directory, "ffprobe") && call.args.includes("-show_entries"))).toBe(true);
     await health.handle(request(), () => administrator);
     await writeFile(join(f.directory, "deno"), "corrupt after cached health");
     calls.length = 0;
@@ -201,32 +199,34 @@ test("repair verification ignores the health cache and effective overrides, and 
     expect(calls.some(call => call.path === join(f.directory, "deno"))).toBe(false);
   } finally { await health.close(); }
   const valid = await fixture();
-  const smokeFailure = createToolHealth({ ...valid.options, command: async (path, args) => args.includes("--version") ? path.endsWith("yt-dlp") ? "2026.08.19" : "deno 2.9.6" : args.includes("--get-url") ? args.at(-1)! : "wrong" });
+  const smokeFailure = createToolHealth({ ...valid.options, command: async (path, args) => args.includes("--version") ? path.endsWith("yt-dlp") ? "2026.08.19" : "deno 2.9.6" : args.includes("--get-url") ? args.at(-1)! : args.includes("-version") ? "ffprobe version 7.1.5-0+deb13u1" : "wrong" });
   await expect(smokeFailure.verify(false)).rejects.toThrow("runtime smoke");
   await smokeFailure.close();
 });
 
-test("Ubuntu status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
+test("System package status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
-  const health = createToolHealth({ ...f.options, ubuntuStatus: async () => {
+  const health = createToolHealth({ ...f.options, packageStatus: async () => {
     calls++;
     return { available: 4, security: 2, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null };
   } });
   try {
-    const url = "http://localhost/api/tools/ubuntu";
+    const url = "http://localhost/api/tools/packages";
     expect((await health.handle(new Request(url), () => null)).status).toBe(403);
     expect((await health.handle(new Request(url + "?package=couch"), () => administrator)).status).toBe(400);
     expect((await health.handle(new Request(url, { method: "POST" }), () => administrator)).status).toBe(405);
     expect(calls).toBe(0);
     expect(await (await health.handle(new Request(url), () => administrator)).json()).toMatchObject({ available: 4, security: 2, broken: 0, indexUpdatedAt: null });
     await health.handle(new Request(url), () => administrator); expect(calls).toBe(1);
+    expect(await (await health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator)).json()).toMatchObject({ available: 4, security: 2 });
+    expect(calls).toBe(1);
   } finally { await health.close(); }
 });
 
-test("shutdown during Ubuntu inspection reports unavailable rather than revoked access", async () => {
-  const f = await fixture(), gate = Promise.withResolvers<UbuntuPackageStatus>(), started = Promise.withResolvers<void>();
-  const health = createToolHealth({ ...f.options, ubuntuStatus: () => { started.resolve(); return gate.promise; } });
-  const response = health.handle(new Request("http://localhost/api/tools/ubuntu"), () => administrator);
+test("shutdown during system package inspection reports unavailable rather than revoked access", async () => {
+  const f = await fixture(), gate = Promise.withResolvers<AptPackageStatus>(), started = Promise.withResolvers<void>();
+  const health = createToolHealth({ ...f.options, packageStatus: () => { started.resolve(); return gate.promise; } });
+  const response = health.handle(new Request("http://localhost/api/tools/packages"), () => administrator);
   await started.promise;
   const closing = health.close();
   gate.resolve({ available: 0, security: 0, broken: 0, indexUpdatedAt: null, checkedAt: new Date().toISOString(), error: null });

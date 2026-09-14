@@ -1,3 +1,4 @@
+import { buildInfo } from "./build-info";
 import { streamingCommunityPlugin } from "./streamingcommunity";
 
 export type YtDlpOptions = { signal?: AbortSignal; timeoutMs?: number; executable?: string; plugin?: "streamingcommunity" };
@@ -72,8 +73,8 @@ async function extract(command: string, args: string[], signal: AbortSignal): Pr
 
 export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
-  const command = executable ?? process.env.COUCH_YT_DLP ?? Bun.which("yt-dlp");
-  if (!command) throw new Error("Install yt-dlp on the player to open webpage links.");
+  const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : Bun.which("yt-dlp"));
+  if (!command) throw new Error("The bundled extractor is unavailable. Reinstall a verified Couch AppImage.");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {

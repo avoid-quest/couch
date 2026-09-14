@@ -46,15 +46,15 @@ test("interrupted request stays exclusive until native completion and shutdown r
   native.close(); await expect(next).rejects.toThrow("connection closed");
 });
 
-test("installation uses opaque identities and preserves idle and separate runtime repair intent", async () => {
+test("installation uses opaque identities and preserves idle and Couch-only repair intent", async () => {
   const sent: { id: string; action: AppImageUpdateAction }[] = [];
   const native = createNativeAppImageUpdates((id, action) => sent.push({ id, action }));
   const requestId = "c".repeat(32);
   const installing = native.request({ op: "install", candidateId: candidate.summary.id, requestId, confirmInterrupt: false, whenIdle: true });
   expect(sent[0]!.action).toEqual({ type: "install", candidateId: candidate.summary.id, requestId, confirmInterrupt: false, whenIdle: true, repair: false, repairRuntime: false });
   native.receive({ requestId: sent[0]!.id, ok: true, transaction: null }); await installing;
-  const repairing = native.request({ op: "repair-current", expectedCurrentId: candidate.summary.id, requestId, confirmInterrupt: true, repairRuntime: true });
-  expect(sent[1]!.action).toMatchObject({ type: "install", repair: true, repairRuntime: true, whenIdle: false });
+  const repairing = native.request({ op: "repair-current", expectedCurrentId: candidate.summary.id, requestId, confirmInterrupt: true, repairRuntime: false });
+  expect(sent[1]!.action).toMatchObject({ type: "install", repair: true, repairRuntime: false, whenIdle: false });
   native.receive({ requestId: sent[1]!.id, ok: true, transaction: null }); await repairing;
   const status = native.request({ op: "status", requestId });
   expect(sent[2]!.action).toEqual({ type: "status", requestId });
