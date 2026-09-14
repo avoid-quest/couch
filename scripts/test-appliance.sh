@@ -53,6 +53,12 @@ if FAIL_APT=1 bash install-couch "$fixture/Couch.AppImage" "$package"; then exit
 cmp "$fixture/policy" /usr/sbin/policy-rc.d
 cmp "$fixture/config" /etc/couch/appliance.env
 bash install-couch "$fixture/Couch.AppImage" "$package" --release-key "$fixture/couch.pub" --release-key-sha256 "$keyhash" --release-feed 'https://example.test/tauri/'
+lid_policy=/usr/lib/systemd/logind.conf.d/50-couch.conf
+grep -qx 'HandleLidSwitchExternalPower=ignore' "$lid_policy"
+grep -qx 'HandleLidSwitch=suspend' "$lid_policy"
+grep -qx 'HandleLidSwitchDocked=ignore' "$lid_policy"
+grep -qx 'IdleAction=ignore' "$lid_policy"
+! grep -Eq '^Handle(Power|Suspend|Hibernate|Reboot)Key' "$lid_policy"
 cmp "$fixture/config" /etc/couch/appliance.env
 cmp "$fixture/policy" /usr/sbin/policy-rc.d
 jq -e '.endpoint == "https://example.test/tauri/" and .pubkey == "trusted-public-key"' /etc/couch/appimage-update.json >/dev/null
@@ -104,7 +110,28 @@ couch-session autostart disable
 grep -qx 'autologin-user=' "$startup"
 [[ $(stat -c '%U:%a' "$startup") = root:644 ]]
 cp "$startup" "$fixture/startup"
+# Upgrade the old AC-suspend vendor policy without changing local power choices.
+sed -i 's/HandleLidSwitchExternalPower=ignore/HandleLidSwitchExternalPower=suspend/' "$lid_policy"
+mkdir -p /etc/systemd/logind.conf.d
+printf '[Login]\nHandleLidSwitchExternalPower=suspend\nHandlePowerKey=ignore\n' > /etc/systemd/logind.conf.d/90-local-power.conf
+cp /etc/systemd/logind.conf.d/90-local-power.conf "$fixture/local-power"
 bash install-couch "$fixture/Couch.AppImage" "$package"
+grep -qx 'HandleLidSwitchExternalPower=ignore' "$lid_policy"
+cmp "$fixture/local-power" /etc/systemd/logind.conf.d/90-local-power.conf
+cmp "$fixture/newer-data" /var/lib/couch-test-data/keep.txt
+cmp "$fixture/config" /etc/couch/appliance.env
+# Let systemd resolve vendor/administrator precedence, including a vendor mask.
+power_setting() { systemd-analyze cat-config systemd/logind.conf | awk -F= -v key="$1" '$1 == key { value=$2 } END { print value }'; }
+[[ $(power_setting HandleLidSwitchExternalPower) = suspend ]]
+[[ $(power_setting HandlePowerKey) = ignore ]]
+rm /etc/systemd/logind.conf.d/90-local-power.conf
+ln -s /dev/null /etc/systemd/logind.conf.d/50-couch.conf
+bash install-couch "$fixture/Couch.AppImage" "$package"
+[[ $(readlink /etc/systemd/logind.conf.d/50-couch.conf) = /dev/null ]]
+[[ -z $(power_setting HandleLidSwitchExternalPower) ]]
+rm /etc/systemd/logind.conf.d/50-couch.conf
+[[ $(power_setting HandleLidSwitchExternalPower) = ignore ]]
+[[ $(power_setting HandleLidSwitch) = suspend ]]
 cmp "$startup" "$fixture/startup"
 if /usr/lib/couch-appliance/set-autostart arbitrary; then exit 1; fi
 if /usr/lib/couch-appliance/set-autostart enable extra; then exit 1; fi
@@ -126,4 +153,4 @@ if /usr/lib/couch-appliance/set-autostart enable; then exit 1; fi
 chmod o-w /etc/lightdm/lightdm.conf.d
 couch-session autostart enable
 grep -qx 'autologin-user=couch-tv' "$startup"
-echo 'PASS: AppImage migration, Tauri trust/hash, companion closure, policy/profile/data preservation, compatible recovery, retained newer writes, corrupt/incompatible rejection'
+echo 'PASS: AppImage migration, Tauri trust/hash, companion closure, AC/battery lid policy, administrator power overrides/masks, policy/profile/data preservation, compatible recovery, retained newer writes, corrupt/incompatible rejection'
