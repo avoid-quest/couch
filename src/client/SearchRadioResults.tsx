@@ -65,7 +65,7 @@ function RadioResults(props: Props) {
     finally { if (!signal.aborted) setBusy(false); }
   }
   function play(station: RadioStation, playNow: boolean) {
-    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false, playNow ? `Starting ${station.name} on the TV.` : `${station.name} added to Up next.`);
+    void action(async () => await props.onCommand?.(station.sourceId ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow } : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow }) ?? false, playNow ? `Starting ${station.name} on the TV.` : `${station.name} added to the end of Up next. Playback is unchanged.`);
   }
   function save(station: RadioStation, saved: boolean) {
     void action(async signal => {
@@ -83,7 +83,7 @@ function RadioResults(props: Props) {
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
     <ul className="search-results">{results.slice(0, visible).map(station => {
       const saved = !!favorites?.some(item => item.id === station.id);
-      return <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><div className="search-radio-copy"><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></div><div className="search-item-actions"><Button aria-label={`Play ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play</Button><Button variant="secondary" aria-label={`Add ${station.name} to Up next`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Up next</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div></li>;
+      return <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><div className="search-radio-copy"><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></div><div className="search-item-actions"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add next: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add next</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div></li>;
     })}</ul>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;

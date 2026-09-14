@@ -57,7 +57,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
       if (event.target.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) focusedControl.current = null;
     }}>
       <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" onRemote={() => onBrowse("Remote")} />
-      {!current && <div className="session-idle-actions"><Button variant="ghost" className="session-remote-button" onClick={() => onBrowse("Remote")}><Icon name="remote" />Remote</Button></div>}
+      {!current && <div className="session-idle-actions"><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button><Button variant="outline" onClick={() => onBrowse("Library")}>Browse library<ChevronRight aria-hidden="true" /></Button><Button variant="ghost" className="session-remote-button" onClick={() => onBrowse("Remote")}><Icon name="remote" />Remote</Button></div>}
     </div>
     <div className="session-following">
       <section className="session-next" aria-labelledby="session-next-title">

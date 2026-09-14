@@ -14,7 +14,6 @@
 @media (max-width: 650px) {
   .search-panel .search-box { padding: 4px 12px; gap: 8px; }
   .search-panel .search-box input { font-size: 14px; }
-  .search-optional { display: none; }
 }
 .search-panel > h1 { font-size: 28px; font-weight: 600; }
 .search-scopes { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -61,13 +61,13 @@ test("browse home uses one history for continued and finished playback and prese
   expect(played).toHaveLength(1);
   await act(async () => button("Play Halfway home from start").click());
   expect(played).toEqual([[unfinished, { fromStart: false }], [unfinished, { fromStart: true }]]);
-  for (const source of ["Library", "Search", "Radio", "Live TV", "Jellyfin", "TV folders"]) await act(async () => button(source).click());
+  for (const source of ["Library", "Find something to play", "Radio", "Live TV", "Jellyfin", "TV folders"]) await act(async () => button(source).click());
   expect(browsed).toEqual(["Library", "Search", "Radio", "Guide", "Jellyfin", "Files"]);
 });
 test("hidden home does not fetch and unavailable playback does not prevent browsing", async () => {
   await renderHome(true, false); expect(requests).toEqual([]);
   await renderHome(true, true, false); expect(button("Resume Halfway home").disabled).toBe(true);
-  expect(button("Search").disabled).toBe(false);
+  expect(button("Find something to play").disabled).toBe(false);
   await renderHome(false); expect(button("Resume Halfway home").disabled).toBe(true);
 });
 test("home history failure has an independent retry", async () => {

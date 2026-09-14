@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Film, Play, Plus, RotateCcw } from "lucide-react";
+import { ChevronRight, Film, Play, Plus, RotateCcw, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import type { Credentials } from "./session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
 
-const sources = [{ section: "Library", label: "Library" }, { section: "Search", label: "Search" }, { section: "Radio", label: "Radio" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "TV folders" }];
+const sources = [{ section: "Library", label: "Library" }, { section: "Radio", label: "Radio" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "TV folders" }];
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
   position: item.progress?.position ?? 0, duration: item.progress?.duration ?? item.duration,
@@ -106,9 +106,9 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
 
   return <section className="browse-home" aria-label="Browse and resume">
     <div className="browse-greeting">
-      <div><h1>{hero ? "Continue watching" : "Browse"}</h1></div>
+      <div><h1>{hero ? "Continue watching" : "What would you like to play?"}</h1></div>
     </div>
-    <nav className="browse-sources" aria-label="Browse media"><div>{sources.map(({ section, label }) => <Button key={section} variant="outline" onClick={() => onBrowse(section)}>{label}<ChevronRight aria-hidden="true" /></Button>)}</div></nav>
+    <nav className="browse-sources" aria-label="Browse media"><div><Button onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something to play</Button>{sources.map(({ section, label }) => <Button key={section} variant="outline" onClick={() => onBrowse(section)}>{label}<ChevronRight aria-hidden="true" /></Button>)}</div></nav>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p role="status" className="browse-notice">{notice}</p>}
     {loading && connected && <p role="status" className="browse-quiet">Loading your media…</p>}
