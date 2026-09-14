@@ -16,7 +16,7 @@ export type UpdateTransaction = {
   restoredRevision?: string | null;
 };
 export type ReleaseChannel = "stable" | "preview";
-export type UpdateCandidate = { id: string; releaseId: string; version: string; revision: string; notes: string; bytes: number; publishedAt: number; expiresAt: number };
+export type UpdateCandidate = { id: string; releaseId: string; version: string; revision: string; notes: string; bytes: number; publishedAt: number; expiresAt?: number };
 export type UpdateState = {
   channel: ReleaseChannel;
   policy: "manual" | "idle";
@@ -34,4 +34,4 @@ export type UpdateState = {
 
 export type UpdateRequest = { op: "status"; requestId?: string } | { op: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean; whenIdle?: true } | { op: "repair-current"; expectedCurrentId: string; requestId: string; confirmInterrupt: boolean; repairRuntime: false };
 export type AppImageUpdateAction = { type: "restart"; confirmInterrupt: boolean } | { type: "status"; requestId?: string } | { type: "install"; candidateId: string; requestId: string; confirmInterrupt: boolean; whenIdle: boolean; repair: boolean; repairRuntime: false } | { type: "complete"; error: string | null } | { type: "check"; channel: ReleaseChannel } | { type: "checkRepair" } | { type: "stage"; candidateId: string };
-export type AppImageUpdateReply = { requestId: string; ok?: boolean; accepted?: boolean; transaction?: UpdateTransaction | null; current?: { candidateId: string; version: string; revision: string }; repairCurrent?: boolean; candidate?: { summary: UpdateCandidate; staged: boolean } | null; staged?: boolean; progress?: { received: number; total: number }; error?: string };
+export type AppImageUpdateReply = { requestId: string; ok?: boolean; accepted?: boolean; transaction?: UpdateTransaction | null; current?: { candidateId: string; version: string; revision: string }; repairCurrent?: boolean; installationAvailable?: boolean; summary?: UpdateCandidate; candidate?: { summary: UpdateCandidate; staged: boolean } | null; staged?: boolean; progress?: { received: number; total: number }; error?: string };

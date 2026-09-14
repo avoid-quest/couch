@@ -13,6 +13,7 @@ import { createNativeDiagnostics } from "./server/diagnostics-native";
 import { createHub, type Hub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 import { buildInfo } from "./server/build-info";
+import { runMaintenanceMode } from "./server/maintenance-mode";
 
 if (process.argv.includes("--version")) {
   console.log(JSON.stringify(buildInfo));
@@ -25,6 +26,7 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
+if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1");
 
 function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -148,7 +150,7 @@ if (native) {
             }
             // Let the accepted HTTP response leave before closing its listener.
             await Bun.sleep(250);
-            const result = await checkpointAppImage({ ...message, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
+            const result = await checkpointAppImage({ ...message, work: hub.updateWork, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
             send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
           })();
         }

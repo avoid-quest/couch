@@ -1120,7 +1120,7 @@ test("trial permits private native asset acknowledgment and administrator status
   let open = true, acknowledgments = 0;
   const { hub, databasePath } = fixture(undefined, undefined, () => open, {
     frontendReady: build => { acknowledgments++; return (build as { revision?: string })?.revision === "current"; },
-    updater: { request: async () => ({ ok: true, transaction: null }) },
+    updater: { request: async () => ({ ok: true, transaction: null, installationAvailable: true }) },
   });
   const owner = await pair(hub), guest = await pair(hub);
   await claimAdministrator(hub, owner);
@@ -1192,15 +1192,15 @@ test("either remote's input resets idle time, while authenticated status polling
   const first = await pair(hub), second = await pair(hub);
   const one = new Peer(hub, first), two = new Peer(hub, second);
   await Promise.all([one.ready(), two.ready()]);
-  now = 300_000; expect(hub.idleReason()).toBeNull();
+  now = 600_000; expect(hub.idleReason()).toBeNull();
   expect((await controllerApi(hub, first, "/api/controllers/me")).status).toBe(200);
   expect(hub.idleReason()).toBeNull();
   expect((await controllerApi(hub, second, "/api/activity", "POST", { activity: true })).status).toBe(204);
   expect(hub.idleReason()).not.toBeNull();
-  now += 300_000; expect(hub.idleReason()).toBeNull();
+  now += 600_000; expect(hub.idleReason()).toBeNull();
   expect(await one.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
   expect(hub.idleReason()).not.toBeNull();
-  now += 300_000; expect(hub.idleReason()).toBeNull();
+  now += 600_000; expect(hub.idleReason()).toBeNull();
   expect(await two.command({ type: "volume", volume: 33 })).toMatchObject({ ok: true });
   expect(hub.idleReason()).not.toBeNull();
 });
@@ -1213,15 +1213,17 @@ test("active and uncertain recordings defer idle updates, while confirmed future
   const job = { id: "recording", status: "pending", start: Date.now() + 3_600_000, end: Date.now() + 7_200_000, title: "Future recording", channelName: "Fixture", programId: "program", channelId: "channel", cause: null, revision: 1, cancelRequested: false };
   const save = () => db.query("INSERT OR REPLACE INTO recording_jobs VALUES (?, ?)").run(job.id, JSON.stringify(job));
   try {
-    save(); now = 300_000; expect(hub.idleReason()).toBeNull();
+    save(); now = 600_000; expect(hub.idleReason()).toBeNull();
     for (const status of ["running", "checking", "pending"]) {
       job.status = status; job.start = Date.now() - 1; save();
       expect(hub.idleReason()).toContain("recordings");
-      now += 300_000; expect(hub.idleReason()).toContain("recordings");
+      expect(hub.updateWork()).toContain("recordings");
+      now += 600_000; expect(hub.idleReason()).toContain("recordings");
     }
     job.status = "completed"; save();
-    expect(hub.idleReason()).toContain("five continuous");
-    now += 300_000; expect(hub.idleReason()).toBeNull();
+    expect(hub.updateWork()).toBeNull();
+    expect(hub.idleReason()).toContain("ten continuous");
+    now += 600_000; expect(hub.idleReason()).toBeNull();
   } finally { db.close(); }
 });
 

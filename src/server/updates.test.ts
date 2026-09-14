@@ -171,3 +171,14 @@ test("fresh native verification restores ready staging, corruption clears ready 
   await restarted.handle(request("/check", { check: true }), admin);
   expect(await settled(restarted)).toMatchObject({ status: "ready", currentCheck: true });
 });
+
+
+test("a failed manual candidate is never automatically retried", async () => {
+  const f = await automaticSetup();
+  f.records.set("d".repeat(32), { candidateId: candidate.summary.id, requestId: "d".repeat(32), updateId: "e".repeat(32), version: candidate.summary.version, revision: candidate.summary.revision, createdAt: 1, updatedAt: 1, phase: "operator-required", error: "Failed startup" });
+  await f.updates.handle(request("/policy", { policy: "idle" }), admin);
+  await f.updates.handle(request("/check", { check: true }), admin); await settled(f.updates);
+  f.idle(null); await f.updates.automatic();
+  expect(f.installations).toHaveLength(0);
+  expect(f.updates.state.waiting).toContain("required recovery");
+});

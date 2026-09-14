@@ -1,5 +1,6 @@
 export async function checkpointAppImage(options: {
   whenIdle: boolean;
+  work?: () => string | null;
   confirmInterrupt: boolean;
   idle: () => string | null;
   player: () => string;
@@ -8,7 +9,7 @@ export async function checkpointAppImage(options: {
 }) {
   let closed = false;
   try {
-    const waiting = options.whenIdle ? options.idle() : null;
+    const waiting = options.work?.() ?? (options.whenIdle ? options.idle() : null);
     if (waiting) throw new Error(waiting);
     if (!options.confirmInterrupt && !["idle", "ended", "error"].includes(options.player())) throw new Error("Confirm interruption of current playback before installing.");
     options.closeAdmission();

@@ -177,7 +177,7 @@ rm /etc/systemd/logind.conf.d/50-couch.conf
 test "$(power_setting HandleLidSwitchExternalPower)" = ignore
 # The same recovery command works without root and retains newer data.
 runuser -u desktop -- mkdir -p /home/desktop/retained
-cp /home/desktop/.local/lib/couch/{Couch.AppImage,build.json} /home/desktop/retained/
+cp /home/desktop/.local/lib/couch/{Couch.AppImage,Couch.AppImage.sig,build.json} /home/desktop/retained/
 (cd /home/desktop/retained && sha256sum Couch.AppImage > SHA256SUMS)
 chown -R desktop:desktop /home/desktop/retained
 # Root setup and unprivileged recovery contend on the same persistent inode.

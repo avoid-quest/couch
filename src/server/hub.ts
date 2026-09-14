@@ -233,10 +233,11 @@ export function createHub(options: HubOptions) {
   sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
-  const idleReason = () => {
+  const updateWork = () => {
     const recording = recordings.snapshot().jobs.some(job => job.status === "running" || job.status === "checking" || job.status === "pending" && job.start <= Date.now());
-    return idle.reason(library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
+    return idle.workReason() ?? (library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
   };
+  const idleReason = () => idle.reason(updateWork());
   const idleAdmission = () => manual?.needsRefresh() ? "Check the AppImage installation through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
   const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.appimageFeed, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
@@ -583,7 +584,7 @@ export function createHub(options: HubOptions) {
   })();
 
   return {
-    server, session, pairingCode, urls, origin, idleReason, idleAdmission, verifyTools: toolHealth.verify,
+    server, session, pairingCode, urls, origin, idleReason, idleAdmission, updateWork, verifyTools: toolHealth.verify,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("The TV is already preparing an update or restart.");

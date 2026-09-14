@@ -22,7 +22,9 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
   const feed: UpdateFeed<UpdateRelease> = {
     async check(channel, signal) { return (await request({ type: "check", channel }, signal)).candidate ?? null; },
     async stage(candidate, signal, progress) {
-      if (!(await request({ type: "stage", candidateId: candidate.summary.id }, signal, progress)).staged) throw new UpdateError("The native updater did not confirm a verified download.");
+      const reply = await request({ type: "stage", candidateId: candidate.summary.id }, signal, progress);
+      if (reply.summary) Object.assign(candidate.summary, reply.summary);
+      if (!reply.staged) throw new UpdateError("The native updater did not confirm a verified download.");
     },
   };
   return {

@@ -6,11 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useNavigation } from "./navigation";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { isNativeHost } from "./native-context";
 import type { Credentials } from "./session";
+import { loadedBuild } from "../shared/build";
+import { UpdatesSettings } from "./UpdatesSettings";
+import { useUpdateActivity } from "./update-activity";
 
 type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
@@ -81,7 +84,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     {choice.mode === "local" ? <Fragment key={localEpoch}>{children}</Fragment> : choice.mode === "remote" ? <main className="min-h-dvh bg-background">
       <header className="flex h-[88px] items-center justify-between gap-3 border-b px-4" aria-label="App playback device controls">
         <div className="min-w-0"><p className="truncate text-sm font-medium">Playing on {choice.address}</p><p className="text-xs text-muted-foreground" role="status">{pending ? "Connecting…" : error ? "Connection needs attention" : "Media plays on the other computer"}</p></div>
-        <div className="flex shrink-0 gap-2"><PlaybackDevice /><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
+        <div className="flex shrink-0 gap-2"><InstallationUpdates /><PlaybackDevice /><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
       </header>
       <div className="mx-auto max-w-xl space-y-4 p-6"><h1 className="text-xl font-semibold">Another Couch</h1>
         <p>Pair using the code shown on the playback computer. This app has the same permissions as a browser remote.</p>
@@ -90,6 +93,48 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       </div>
     </main> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">Where do you want to play?</h1><p className="text-muted-foreground">Play on this computer, or control another Couch on your network.</p><DeviceForm firstUse /></Card></main>}
   </Context.Provider>;
+}
+
+function InstallationUpdates() {
+  const device = usePlaybackDevice()!;
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useUpdateActivity(credentials, !!credentials);
+  useEffect(() => {
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const connect = async () => {
+      try {
+        const connection = await invoke<Credentials>("connection_info");
+        if (stop.signal.aborted) return;
+        if (!connection?.origin || !connection.token) throw new Error("This installation's updater is starting.");
+        const response = await fetch(`${connection.origin}/api/maintenance/frontend`, { method: "POST", headers: { Authorization: `Bearer ${connection.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ build: loadedBuild }), signal: AbortSignal.any([stop.signal, AbortSignal.timeout(10_000)]) });
+        if (!response.ok) throw new Error("This installation's running build could not be verified.");
+        setCredentials(connection); setError(null);
+      } catch (reason) { if (!stop.signal.aborted) { setError(message(reason)); timer = setTimeout(() => void connect(), 2_000); } }
+    };
+    void connect();
+    return () => { stop.abort(); clearTimeout(timer); };
+  }, []);
+  useEffect(() => {
+    if (!credentials || open) return;
+    const stop = new AbortController();
+    // Controlling another app or reconnecting is activity, even when its page is isolated.
+    const activity = () => { void fetch(`${credentials.origin}/api/activity`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}` }, signal: stop.signal }).catch(() => {}); };
+    activity();
+    const timer = setInterval(activity, 5_000);
+    return () => { stop.abort(); clearInterval(timer); };
+  }, [credentials, open]);
+  const change = (value: boolean) => { setOpen(value); if (value) device.show(); else device.dismiss(); };
+  return <Dialog open={open} onOpenChange={change}>
+    <DialogTrigger asChild><Button variant="outline">Update this app</Button></DialogTrigger>
+    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {credentials ? <UpdatesSettings credentials={credentials} connected showTools={false} /> : <p role="status">Connecting to this installation…</p>}
+    </DialogContent>
+  </Dialog>;
 }
 
 function ModeNavigation() {

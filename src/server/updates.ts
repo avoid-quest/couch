@@ -16,7 +16,7 @@ type Attempt = { candidateId: string; requestId: string };
 const finished = new Set(["succeeded", "failed", "restored", "operator-required"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed<UpdateRelease>, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
-  const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the packaged Ubuntu TV installation." };
+  const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the installed Debian AppImage." };
   let attempt: Attempt | null = null;
   try {
     const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
@@ -25,7 +25,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     if (saved.attempt && /^[a-f0-9]{64}$/.test(saved.attempt.candidateId) && /^[a-f0-9]{32}$/.test(saved.attempt.requestId)) attempt = saved.attempt;
     state.lastSuccessfulCheck = typeof saved.lastSuccessfulCheck === "number" ? saved.lastSuccessfulCheck : null;
     const c = saved.candidate;
-    if (c && /^[a-f0-9]{64}$/.test(c.id) && typeof c.notes === "string" && typeof c.version === "string" && typeof c.revision === "string" && typeof c.releaseId === "string" && [c.bytes, c.publishedAt, c.expiresAt].every(Number.isSafeInteger)) state.candidate = c;
+    if (c && /^[a-f0-9]{64}$/.test(c.id) && typeof c.notes === "string" && typeof c.version === "string" && typeof c.revision === "string" && typeof c.releaseId === "string" && [c.bytes, c.publishedAt].every(Number.isSafeInteger) && (c.expiresAt === undefined || Number.isSafeInteger(c.expiresAt))) state.candidate = c;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") { state.status = "failed"; state.error = "Saved update settings could not be read. Select your channel again to save it."; }
   }
@@ -60,6 +60,8 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         state.status = candidate ? (candidate.staged ?? (wasReady && previousId === candidate.summary.id)) ? "ready" : "available" : "idle";
       } else {
         await feed.stage(candidate!, signal, progress => { state.progress = progress; });
+        state.candidate = candidate!.summary;
+        await persist();
         state.status = "ready";
       }
     })().catch(error => {
@@ -73,7 +75,8 @@ export function createUpdates(directory: string, running: UpdateState["running"]
   const automatic = () => polling ??= (async () => {
     if (!automation || closed || !admitted()) return;
     try {
-      await automation.status();
+      const latest = await automation.status();
+      if ((!attempt || attempt.candidateId !== candidate?.summary.id) && latest && candidate && latest.candidateId === candidate.summary.id && !latest.idleDeferred && ["failed", "operator-required", "restored"].includes(latest.phase)) { state.waiting = "This release failed or required recovery. Use a newer release or review the result before a manual retry."; return; }
       if (state.policy !== "idle") { state.waiting = null; return; }
       if (busy()) { state.waiting = "Waiting for the current update operation."; return; }
       const id = candidate?.summary.id;
@@ -86,8 +89,8 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (previous?.idleDeferred) attempt = null;
       }
       if (state.policy !== "idle" || busy()) return;
-      if (state.status === "available" && state.currentCheck && candidate && candidate.summary.expiresAt > Date.now()) start("downloading");
-      if (state.status !== "ready" || !state.currentCheck || !id || candidate!.summary.expiresAt <= Date.now()) { state.waiting = "Waiting for a current verified download."; return; }
+      if (state.status === "available" && state.currentCheck && candidate && (candidate.summary.expiresAt === undefined || candidate.summary.expiresAt > Date.now())) start("downloading");
+      if (state.status !== "ready" || !state.currentCheck || !id || (candidate!.summary.expiresAt !== undefined && candidate!.summary.expiresAt <= Date.now())) { state.waiting = "Waiting for a current verified download."; return; }
       state.waiting = automation.idle();
       if (state.waiting) return;
       if (!attempt || attempt.candidateId !== id) {
@@ -113,7 +116,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     get state() { return structuredClone(state); },
     automatic,
     canRepair: () => !busy(),
-    candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && candidate.summary.expiresAt > Date.now(),
+    candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && (candidate.summary.expiresAt === undefined || candidate.summary.expiresAt > Date.now()),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
         if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
@@ -127,7 +130,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (path === "/api/updates" && request.method === "GET") return json(state);
         if (!["/api/updates/channel", "/api/updates/policy", "/api/updates/check", "/api/updates/stage"].includes(path)) return json({ error: "Not found." }, 404);
         if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
-        if (!feed) throw new ControllerError("Updates require the packaged Ubuntu TV installation.", 409);
+        if (!feed) throw new ControllerError("Updates require the installed Debian AppImage.", 409);
         const field = path.endsWith("/channel") ? "channel" : path.endsWith("/policy") ? "policy" : path.endsWith("/check") ? "check" : "candidateId";
         const value = await settingField(request, field);
         authorize();
@@ -137,7 +140,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
           if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Complete the signed AppImage appliance installation before enabling automatic installation.", 409);
           const previous = state.policy;
           changing = true; state.policy = value;
-          try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and five idle minutes." : null; }
+          try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and ten idle minutes." : null; }
           catch (error) { state.policy = previous; throw error; }
           finally { changing = false; saving = undefined; }
         } else if (field === "channel") {
@@ -155,7 +158,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
           if (value !== true) throw new ControllerError("Confirm Check now.");
           start("checking");
         } else {
-          if (!candidate || !state.currentCheck || value !== candidate.summary.id || candidate.summary.expiresAt <= Date.now()) throw new ControllerError("This candidate is no longer current. Use Check now before downloading.", 409);
+          if (!candidate || !state.currentCheck || value !== candidate.summary.id || (candidate.summary.expiresAt !== undefined && candidate.summary.expiresAt <= Date.now())) throw new ControllerError("This candidate is no longer current. Use Check now before downloading.", 409);
           start("downloading");
         }
         return json(state, 202);

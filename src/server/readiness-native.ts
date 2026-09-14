@@ -19,7 +19,7 @@ export function createNativeReadiness(send: (nonce: string) => void, timeout = 2
       pending = undefined;
       clearTimeout(current.timer);
       const value = build as MaintenanceBuild;
-      if (ok !== true || !value || typeof value.version !== "string" || !/^[a-f0-9]{40}$/.test(value.revision) || value.dataFormat !== 1) { current.reject(failure()); return; }
+      if (ok !== true || !value || typeof value.version !== "string" || !/^[a-f0-9]{40}$/.test(value.revision) || (!Number.isSafeInteger(value.dataFormat) || value.dataFormat < 1)) { current.reject(failure()); return; }
       current.resolve({ version: value.version, revision: value.revision, dataFormat: value.dataFormat });
     },
     close() { if (pending) { clearTimeout(pending.timer); pending.reject(failure()); pending = undefined; } },
