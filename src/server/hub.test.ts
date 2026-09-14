@@ -174,6 +174,28 @@ test("Bandcamp albums append once in order, play through the host resolver and p
   } finally { album.mockRestore(); resolve.mockRestore(); }
 });
 
+test.each(["album", "playlist"] as const)("provider %s Play now keeps its tracks together before the existing waiting queue", async kind => {
+  const page: ProviderPage = kind === "album" ? bandcampAlbum : { title: "Playlist", items: ["abcdefghijk", "zyxwvutsrqp"].map((id, index) => ({ id, title: `Episode ${index + 1}`, kind: "media", provider: "youtube", url: `https://www.youtube.com/watch?v=${id}` })) };
+  const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(page);
+  const playlist = spyOn(youtubeModule, "loadYouTubePlaylist").mockResolvedValue(page);
+  const resolve = spyOn(webMediaModule, "resolveWebMedia").mockResolvedValue({ source: "https://media.example/resolved" });
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    await remote.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "https://media.example/current" }, playNow: true });
+    await remote.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: "https://media.example/waiting" } });
+    const action: Action = kind === "album" ? { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true }
+      : { type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true };
+    expect(await remote.command(action)).toMatchObject({ ok: true });
+    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Current", ...page.items.map(item => item.title), "Waiting"]);
+    expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[1]!.id);
+    expect(await remote.command({ type: "next", playbackId: hub.session.state.player.playbackId! })).toMatchObject({ ok: true });
+    expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[2]!.id);
+    expect(await remote.command({ type: "next", playbackId: hub.session.state.player.playbackId! })).toMatchObject({ ok: true });
+    expect(hub.session.state.currentEntryId).toBe("waiting");
+  } finally { album.mockRestore(); playlist.mockRestore(); resolve.mockRestore(); }
+});
+
 test("Bandcamp album failure or insufficient capacity leaves the queue unchanged", async () => {
   const album = spyOn(bandcampModule, "loadBandcampAlbum").mockResolvedValue(bandcampAlbum);
   try {
@@ -584,7 +606,7 @@ for (const kind of ["library", "jellyfin"] as const) {
     release();
     expect(await pending).toMatchObject({ ok: true });
     expect(hub.session.state.currentEntryId).toBe("delayed-catalog");
-    expect(hub.session.state.queue.map(entry => entry.id)).toEqual(["newer-catalog", "web-queued", "delayed-catalog"]);
+    expect(hub.session.state.queue.map(entry => entry.id)).toEqual(["delayed-catalog", "newer-catalog", "web-queued"]);
     await waitForCommand(command => command.type === "load");
     expect(commands.filter(command => command.type === "load")).toHaveLength(1);
   });
@@ -758,7 +780,7 @@ test("paired controllers and reconnects share the queue boundary after Stop", as
   await second.command({ type: "stop" });
   await first.waitFor(message => message.type === "state" && message.state.currentEntryId === null && message.state.queueCursorEntryId === "two");
   expect(first.state.queue).toEqual(second.state.queue);
-  expect(first.state.queue.map(entry => entry.id)).toEqual(["one", "two", "three"]);
+  expect(first.state.queue.map(entry => entry.id)).toEqual(["two", "one", "three"]);
   const reconnected = new Peer(hub, await pair(hub));
   await reconnected.ready();
   expect(reconnected.state).toMatchObject({ currentEntryId: null, queueCursorEntryId: "two" });
@@ -1328,7 +1350,7 @@ test("paired controllers share For later across profile changes and restart with
   expect(second.hub.session.state.queue).toHaveLength(2); expect(second.commands).toEqual(restartedCommands);
   expect((await controllerApi(second.hub, another, `/api/for-later/${saved.id}/load`, "POST", { mode: "play" })).status).toBe(200);
   expect(second.hub.session.state.queue).toHaveLength(3);
-  expect(second.hub.session.state.currentEntryId).toBe(second.hub.session.state.queue[2]!.id);
+  expect(second.hub.session.state.currentEntryId).toBe(second.hub.session.state.queue[0]!.id);
   expect(second.commands.some(command => command.type === "load")).toBe(true);
   const current = second.hub.session.state;
   expect((await controllerApi(second.hub, token, `/api/for-later/${saved.id}`, "DELETE")).status).toBe(200);

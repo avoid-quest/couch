@@ -1,4 +1,4 @@
-import { isTauri } from "@tauri-apps/api/core";
+import { isNativeHost } from "./native-context";
 import { useEffect, useRef, useState, type PropsWithChildren } from "react";
 import { BrowserRouter, HashRouter, useLocation, useNavigate } from "react-router";
 import { pathForSection, sectionForPath } from "../shared/page-paths";
@@ -14,10 +14,10 @@ export function searchLocation(state: SearchRouteState) {
   const params = new URLSearchParams();
   if (state.query) params.set("q", state.query);
   if (state.source !== "All" && searchSources.includes(state.source)) params.set("source", state.source);
-  return `/search${params.size ? `?${params}` : ""}`;
+  return `/${params.size ? `?${params}` : ""}`;
 }
 
-export function CouchRouter({ children, native = isTauri() }: PropsWithChildren<{ native?: boolean }>) {
+export function CouchRouter({ children, native = isNativeHost() }: PropsWithChildren<{ native?: boolean }>) {
   const Router = native ? HashRouter : BrowserRouter;
   return <Router>{children}</Router>;
 }
@@ -30,21 +30,22 @@ export function usePageRoute() {
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "playback" : null);
   const [visited, setVisited] = useState(() => new Set([section]));
   const rememberedSearch = useRef("");
-  if (section === "Search") rememberedSearch.current = location.search;
+  if (section === "Home") rememberedSearch.current = location.search;
   useEffect(() => {
     setVisited(previous => previous.has(section) ? previous : new Set([...previous, section]));
     document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Home" ? "Couch" : `${section === "Queue" ? "Up next" : section} · Couch`;
     if (!sectionForPath(location.pathname)) void navigate("/", { replace: true });
+    else if (["/search", "/browse"].includes(location.pathname.replace(/\/$/, ""))) void navigate(`/${location.search}`, { replace: true });
     else if (location.pathname.replace(/\/$/, "") === "/settings/remotes") void navigate("/settings/connection", { replace: true });
     else if (location.pathname.replace(/\/$/, "") === "/settings") void navigate("/settings/playback", { replace: true });
   }, [section, settingsSection, location.pathname, navigate]);
-  const sectionUrl = (name: string) => pathForSection(name) + (name === "Search" ? rememberedSearch.current : "");
+  const sectionUrl = (name: string) => pathForSection(name) + (["Home", "Search", "Browse"].includes(name) ? rememberedSearch.current : "");
   return {
     section, visited, sectionUrl, settingsSection,
     changeSettingsSection: (page: SettingsPage | null) => { const to = settingsPagePath(page); if (to !== location.pathname) void navigate(to); },
     changePage: (name: string) => { const to = sectionUrl(name); if (to !== location.pathname + location.search) void navigate(to); },
     back: () => { if (typeof window.history.state?.idx === "number" && window.history.state.idx > 0) void navigate(-1); else void navigate("/"); },
     searchState: readSearchState(rememberedSearch.current),
-    changeSearch: (state: SearchRouteState) => { const to = searchLocation(state); if (to !== location.pathname + location.search) void navigate(to); },
+    changeSearch: (state: SearchRouteState) => { const to = searchLocation(state); if (to !== location.pathname + location.search) void navigate(to, { replace: true }); },
   };
 }

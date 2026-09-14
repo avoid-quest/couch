@@ -37,7 +37,7 @@ afterEach(async () => {
 });
 test("compact footer sends the current transport commands and opens the session", async () => {
   await render();
-  await act(async () => button("Open current playback: current").click());
+  await act(async () => button("Open Now playing: current").click());
   for (const label of ["Pause", "Next in queue", "Stop playback"]) await act(async () => button(label).click());
   await act(async () => button("Remote").click());
   expect(browsed).toEqual(["Home", "Remote"]);
@@ -54,13 +54,44 @@ test("loading allows Stop, offline disables commands, and the final entry omits 
   await render({ ...state, queue: [state.queue[1]!] });
   expect(button("Next in queue")).toBeUndefined();
 });
-test("live playback can pause and stop without seek controls, and idle hides the footer", async () => {
-  await render({ ...state, queue: [{ ...state.queue[1]!, live: true, kind: "radio" }], player: { ...state.player, status: "paused", seekable: false } });
-  await act(async () => button("Resume").click());
-  expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: false }]);
+test("live streams expose Stop and Next without false pause or seek controls", async () => {
+  await render({ ...state, queue: [{ ...state.queue[1]!, live: true, kind: "radio" }, state.queue[2]!], player: { ...state.player, seekable: false } });
+  expect(button("Pause")).toBeUndefined();
+  expect(button("Resume")).toBeUndefined();
+  await act(async () => button("Next in queue").click());
+  await act(async () => button("Stop playback").click());
+  expect(actions).toEqual([{ type: "next", playbackId: "playback" }, { type: "stop" }]);
   expect(document.querySelector('[aria-label^="Seek"]')).toBeNull();
+});
+
+test("seekable live playback preserves observed pause and seek capabilities", async () => {
+  await render({ ...state, queue: [{ ...state.queue[1]!, source: "iptv:channel", live: true }], player: { ...state.player, status: "paused", seekable: true } });
+  await act(async () => button("Resume").click());
+  await act(async () => button("Seek backward 10 seconds").click());
+  expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: false }, { type: "seek", playbackId: "playback", position: 2 }]);
+  expect(document.querySelector('[role="slider"][aria-label="Playback position"]')).not.toBeNull();
+});
+
+test("idle and ended playback hide the footer", async () => {
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
   expect(document.querySelector("footer")).toBeNull();
+  for (const status of ["idle", "ended"] as const) {
+    await render({ ...state, player: { ...state.player, status } });
+    expect(document.querySelector("footer")).toBeNull();
+  }
+});
+
+test("bar uses current provider programme artwork and identifies its playback computer", async () => {
+  const radio: SessionState = { ...state, installationName: "Living room", queue: [{ ...state.queue[1]!, source: "radio:one", kind: "radio", live: true }], player: { ...state.player, seekable: false }, radioProgramme: { playbackId: "playback", stationId: "one", provider: "radio.avoid.quest", title: "Late afternoon", artworkUrl: "https://art.example/programme.jpg", sampledAt: 1000, expiresAt: 901000 } };
+  await render(radio);
+  expect(button("Open Now playing: current").textContent).toContain("Live · Living room");
+  expect(button("Open Now playing: current").textContent).toContain("Late afternoon");
+  expect(document.querySelector(".session-bar-art img")?.getAttribute("src")).toBe("https://art.example/programme.jpg");
+  await render({ ...radio, radioProgramme: { ...radio.radioProgramme!, playbackId: "previous" } });
+  expect(document.querySelector("footer")?.textContent).not.toContain("Late afternoon");
+  await render(radio, false);
+  expect(document.querySelector("footer")?.textContent).toContain("Reconnecting · Living room");
+  expect(document.querySelector("footer")?.textContent).not.toContain("Late afternoon");
 });
 
 test("Next disappearing restores an available transport and loading falls back to Stop", async () => {
@@ -193,4 +224,12 @@ test("footer focus recovery leaves portaled playback settings in control during 
   await render(restored, true, true, command);
   await act(async () => new Promise(done => setTimeout(done, 25)));
   expect(document.activeElement === quality).toBe(true);
+});
+
+
+test("failed playback retains a visible route to playback recovery", async () => {
+  await render({ ...state, player: { ...state.player, status: "error", error: "The radio could not reconnect." } });
+  expect(document.querySelector("footer")?.textContent).toContain("Playback error");
+  await act(async () => button("Open Now playing: current").click());
+  expect(browsed).toEqual(["Home"]);
 });

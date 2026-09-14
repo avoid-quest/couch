@@ -475,13 +475,13 @@ export function createHub(options: HubOptions) {
             const { items } = library.albumTracks(action.albumId);
             if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
             const entries = session.loadQueue(items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })), "append");
-            if (action.playNow && entries[0]) session.command({ type: "play", entryId: entries[0].id, fromStart: true }, authorize, playedBy);
+            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
           } else if (action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist") {
             const page = await (action.type === "enqueueProviderPlaylist" ? loadYouTubePlaylist : loadBandcampAlbum)(action.url, shutdown.signal);
             if (closed) return;
             authorize();
             const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(action.type === "enqueueProviderPlaylist" && action.quality ? { quality: action.quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
-            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy);
+            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
           } else if (action.type === "enqueueRadio") {
             const station = radio.getPlayable(action.stationId);
             session.command({ type: "enqueue", entry: { id: action.entryId, title: station.title, source: `radio:${action.stationId}`, kind: "radio", live: true, ...station.metadata } });

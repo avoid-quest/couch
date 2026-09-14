@@ -106,7 +106,7 @@ test("closing restores focus to the native shortcut and reopening refreshes the 
 
 async function renderPhone(token?: string) {
   window.history.replaceState(null, "", "/#pair=123456");
-  if (token) localStorage.setItem("couch.remote-token", token);
+  if (token) { localStorage.setItem("couch.remote-token", token); localStorage.setItem("couch.remote-installation-id", "living-room"); }
   sessionMock = spyOn(session, "useSession").mockImplementation(credentials => ({
     state: credentials ? { activeProfile: { id: "household", name: "Household", createdAt: 1 }, queue: [], currentEntryId: null, administratorClaimed: true, setupStep: "complete", player: { playbackId: null, status: "idle", position: 0, duration: 0, volume: 30, seekable: false, error: null } } : null,
     status: credentials ? "connected" : "pairing-required", details: null, identity: credentials ? { authority: "controller", controller: { id: "phone", name: "Guest phone", role: "controller", createdAt: 1, lastSeenAt: 1 }, claimAvailable: false } : null,
@@ -131,12 +131,15 @@ test("the QR opens the actual phone form with its code, then device submission r
   request.mockImplementation((async (url, init) => {
     if (String(url).endsWith("/api/pair")) {
       expect(JSON.parse(String(init?.body))).toEqual({ code: "123456", name: "Guest phone" });
-      return Response.json({ token: "new-controller" });
+      return Response.json({ token: "new-controller", installationId: "living-room" });
     }
-    return Response.json({ items: [] });
+    if (String(url).endsWith("/api/radio/avoid")) return Response.json({ playlist: { error: null }, stations: [] });
+    return Response.json({ items: [], favorites: [] });
   }) as typeof fetch);
   await submit();
   expect(localStorage.getItem("couch.remote-token")).toBe("new-controller");
+  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
+  expect(sessionMock?.mock.calls.at(-1)?.[0]).toEqual({ origin: "http://localhost", token: "new-controller", installationId: "living-room" });
   expect(document.querySelector(".pair-form")).toBeNull();
   expect(document.querySelector('[data-page="Home"]')).not.toBeNull();
   expect(document.querySelector(".controller-name")?.textContent).toBe("Guest phone");
@@ -146,7 +149,7 @@ test("stale codes and failed connections keep the name, editable code and Connec
   await renderPhone(); await input("#remote-name", "Guest phone");
   request.mockResolvedValue(Response.json({ error: "The pairing code is incorrect." }, { status: 401 }));
   await submit();
-  expect(document.body.textContent).toContain("Scan the QR again or enter the code currently shown on the TV");
+  expect(document.body.textContent).toContain("Scan the QR again or enter the code currently shown on the playback computer");
   expect(document.querySelector<HTMLInputElement>("#remote-name")?.value).toBe("Guest phone");
   expect(button("Connect").disabled).toBe(false);
   await input("#pairing-code", "654321");
@@ -159,9 +162,10 @@ test("stale codes and failed connections keep the name, editable code and Connec
 });
 
 test("scanning on an already paired browser preserves its stored pairing", async () => {
-  request.mockResolvedValue(Response.json({ items: [] }));
+  request.mockImplementation((async url => String(url).endsWith("/api/radio/avoid") ? Response.json({ playlist: { error: null }, stations: [] }) : Response.json({ items: [], favorites: [] })) as typeof fetch);
   await renderPhone("existing-controller");
   expect(document.querySelector(".pair-form")).toBeNull();
   expect(localStorage.getItem("couch.remote-token")).toBe("existing-controller");
+  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
   expect(request.mock.calls.some((call: Parameters<typeof fetch>) => String(call[0]).endsWith("/api/pair"))).toBe(false);
 });

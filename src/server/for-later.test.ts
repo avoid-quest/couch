@@ -149,7 +149,7 @@ test("watching profile changes preserve For later, queue and playback, then expl
   expect(session.state.currentEntryId).toBeNull(); expect(sent.length).toBe(count);
   expect((await request(f.service, "POST", `/${saved.id}/load`, { mode: "play" })).status).toBe(200);
   expect(session.state.queue).toHaveLength(3); expect(session.state.queue[0]!.id).toBe("current");
-  expect(session.state.currentEntryId).toBe(session.state.queue[2]!.id);
+  expect(session.state.currentEntryId).toBe(session.state.queue[1]!.id);
   expect(await list(f.service)).toEqual([saved]);
 });
 

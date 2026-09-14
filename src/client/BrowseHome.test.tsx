@@ -75,61 +75,135 @@ test("home history failure has an independent retry", async () => {
   failed = false; await act(async () => button("Try again").click());
   expect(document.body.textContent).toContain("Halfway home"); expect(requests).toHaveLength(4);
 });
-test("a paired remote starts with its current TV session and can browse and search without changing playback", async () => {
+async function renderApp(value = state, administrator = false) {
   localStorage.setItem("couch.remote-token", "paired");
-  const command = async (...args: unknown[]) => { played.push(args); };
-  sessionMock = spyOn(session, "useSession").mockReturnValue({ state, status: "connected", details: null, identity: { authority: "controller", controller: { id: "desk", name: "Desk remote", role: "controller", createdAt: 1, lastSeenAt: 1 }, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command, reconnect: () => {} });
+  localStorage.setItem("couch.remote-installation-id", "living-room");
+  request.mockImplementation((async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    requests.push(String(input));
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
+    if (path === "/api/radio/avoid") return Response.json({ playlist: { id: "avoid", error: null }, stations: [] });
+    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.taxi" });
+    if (path === "/api/for-later") return Response.json({ items: [{ id: "saved", title: "Saved evening film" }] });
+    return Response.json({ profile, items: [], favorites: [], playlists: [], sources: [], stations: [], total: 0, offset: 0, limit: 24, configured: false });
+  }) as typeof fetch);
+  const role = administrator ? "administrator" as const : "controller" as const;
+  sessionMock = spyOn(session, "useSession").mockReturnValue({ state: value, status: "connected", details: null, identity: { authority: role, controller: { id: "desk", name: "Desk remote", role, createdAt: 1, lastSeenAt: 1 }, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command: async (...args: unknown[]) => { played.push(args); }, reconnect: () => {} });
   const { App } = await import("./App");
   const { CouchRouter } = await import("./routes");
   await act(async () => root.render(<CouchRouter native={false}><App /></CouchRouter>));
+}
+const frame = () => act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+async function searchHome(query: string) {
+  await act(async () => {
+    const search = document.querySelector<HTMLInputElement>("#media-search")!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, query);
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => document.querySelector('form[role="search"]')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+}
+
+test("a paired remote starts on consolidated Home and keeps playback unchanged while browsing", async () => {
+  await renderApp();
   expect(document.querySelector('[data-source="Home"]')?.getAttribute("aria-current")).toBe("page");
-  expect(document.querySelector(".session-home .media-title")?.textContent).toBe("Evening radio");
-  expect(document.querySelector(".mode-switch, .source-nav")).toBeNull();
+  expect(document.querySelector('[data-page="Home"] h1')?.textContent).toBe("Find something to play");
+  expect(document.querySelector("#media-search")).not.toBeNull();
+  expect(document.querySelector(".session-bar strong")?.textContent).toBe("Evening radio");
+  expect(document.querySelector(".now-playing, .mode-switch, .source-nav")).toBeNull();
   const header = document.querySelector(".app-header")!;
   expect(header.textContent).toContain("Desk remote");
   expect(header.textContent).not.toContain("MBP");
   expect(header.querySelector('[aria-label^="Your name"], [aria-label^="Watching profile"]')).toBeNull();
   expect(header.querySelector(".header-status")?.lastElementChild?.tagName).toBe("TIME");
   const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Search", "Library", "Saved", "Up next", "Settings"]);
-  await act(async () => button("Find something").click());
-  expect(document.querySelector('[data-source="Search"]')?.getAttribute("aria-current")).toBe("page");
-  expect(document.activeElement).toBe(document.querySelector('[data-source="Search"]'));
-  request.mockResolvedValue(Response.json({ items: [{ id: "saved", title: "Saved evening film" }] }));
+  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Home", "Saved", "Up next", "Settings"]);
+  const query = "https://media.example/evening";
+  await searchHome(query);
+  expect(window.location.pathname).toBe("/");
+  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
+  expect(document.querySelector('[data-source="Home"]')?.getAttribute("aria-current")).toBe("page");
   await act(async () => navigation.querySelector<HTMLElement>('[data-source="Saved"]')!.click());
-  expect(document.querySelector('[data-source="Saved"]')?.getAttribute("aria-current")).toBe("page");
   expect(document.querySelector('[aria-label="Saved for later"]')?.textContent).toContain("Saved evening film");
   await act(async () => navigation.querySelector<HTMLElement>('[data-source="Settings"]')!.click());
   expect(document.querySelector('.settings-page:not([hidden])')).not.toBeNull();
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await act(async () => navigation.querySelector<HTMLElement>('[data-source="Home"]')!.click());
   expect(document.querySelector('[data-page="Home"]')?.hasAttribute('hidden')).toBe(false);
-  expect(window.location.pathname).toBe("/");
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
   await act(async () => { window.history.back(); await Bun.sleep(20); });
   expect(window.location.pathname).toBe("/settings/playback");
-  expect(document.querySelector('[data-page="Settings"]')?.hasAttribute("hidden")).toBe(false);
   await act(async () => { window.history.forward(); await Bun.sleep(20); });
   expect(window.location.pathname).toBe("/");
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
   expect(localStorage.getItem("couch.remote-token")).toBe("paired");
+  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
   expect(state.player.playbackId).toBe("playback");
-  expect(state.queue).toHaveLength(1); expect(played).toEqual([]);
-  const { UiDriver } = await import("../../tests/linux/ui");
-  const ui = new UiDriver(async () => { throw new Error("Unexpected native request"); }, () => "dom");
-  ui.element = async selector => document.querySelector(selector) as unknown as string;
-  ui.execute = async (script, args = []) => {
-    const result = new Function("document", "args", `return (function () { ${script} }).apply(null, args)`)(document, args);
-    return Array.isArray(result) ? result.map(element => ({ "element-6066-11e4-a52e-4f735466cecf": element })) : result;
-  };
-  ui.clickElement = async element => { await act(async () => (element as unknown as HTMLElement).click()); };
-  ui.waitFor = async (_description, predicate) => { expect(await predicate()).toBe(true); };
-  await ui.section("Search");
-  expect(window.location.pathname).toBe("/search");
-  await ui.button("Settings");
-  expect(window.location.pathname).toBe("/settings/playback");
-  request.mockImplementation((async input => Response.json(String(input).endsWith("/sources") ? { sources: [] } : String(input).endsWith("/favorites") ? { favorites: [] } : { items: [], total: 0, offset: 0, limit: 24 })) as typeof fetch);
-  await ui.section("Files");
-  expect(window.location.pathname).toBe("/browse/files");
-  expect(document.querySelector('[data-page="Files"]:not([hidden]) h2')?.textContent).toBe("TV folders");
+  expect(state.queue).toHaveLength(1);
+  expect(played).toEqual([]);
+});
+
+test("Now playing opens and returns to the preserved Home search and playback trigger", async () => {
+  await renderApp();
+  const query = "https://media.example/evening";
+  await searchHome(query);
+  const search = document.querySelector<HTMLInputElement>("#media-search")!;
+  const trigger = button("Open Now playing: Evening radio");
+  await act(async () => { trigger.focus(); trigger.click(); });
+  await frame();
+  expect(document.querySelector(".session-bar")).toBeNull();
+  expect(document.querySelector(".now-playing .media-title")?.textContent).toBe("Evening radio");
+  expect(document.activeElement === button("Back to browsing")).toBe(true);
+  expect(search.isConnected).toBe(true);
+  expect(search.closest("[hidden]")).not.toBeNull();
+  await act(async () => button("Back to browsing").click());
+  await frame();
+  expect(document.querySelector(".now-playing")).toBeNull();
+  expect(document.querySelector<HTMLInputElement>("#media-search") === search).toBe(true);
+  expect(search.value).toBe(query);
+  expect(search.closest("[hidden]")).toBeNull();
+  expect(document.activeElement === button("Open Now playing: Evening radio")).toBe(true);
+  expect(played).toEqual([]);
+});
+
+test("Stop in Now playing then Back restores Home focus after the playback bar is gone", async () => {
+  await renderApp();
+  await act(async () => { button("Open Now playing: Evening radio").focus(); button("Open Now playing: Evening radio").click(); });
+  await act(async () => button("Stop playback").click());
+  await renderApp({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
+  expect(document.querySelector(".now-playing h1")?.textContent).toBe("Nothing playing");
+  await act(async () => button("Back to browsing").click());
+  await frame();
+  expect(document.querySelector(".session-bar, .now-playing")).toBeNull();
+  expect(document.activeElement === document.querySelector('.primary-nav [data-source="Home"]')).toBe(true);
+  expect(played).toEqual([[{ type: "stop" }]]);
+});
+
+test("a terminal radio failure keeps Now playing and its retry reachable", async () => {
+  const failed = { ...state, player: { ...state.player, status: "error" as const, error: "Radio unavailable" }, radioRetry: { attempt: 3, maximum: 3, retryAt: null } };
+  await renderApp(failed);
+  expect(button("Open Now playing: Evening radio").textContent).toContain("Playback error");
+  await act(async () => button("Open Now playing: Evening radio").click());
+  expect(document.querySelector(".now-playing")?.textContent).toContain("Radio unavailable");
+  await act(async () => button("Try again").click());
+  expect(played).toEqual([[{ type: "play", entryId: "current" }]]);
+});
+
+test("source setup opens directly from a pasted link and restores its search and trigger", async () => {
+  await renderApp(state, true);
+  const query = "https://streamingcommunityz.taxi/watch/evening";
+  await searchHome(query);
+  const trigger = button("StreamingCommunity settings");
+  await act(async () => { trigger.focus(); trigger.click(); });
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("Add source");
+  expect(dialog.querySelector<HTMLInputElement>("#streamingcommunity-origin")?.value).toBe("https://streamingcommunityz.taxi");
+  expect(dialog.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("StreamingCommunity");
+  await act(async () => button("Close", dialog).click());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
+  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
+  expect(document.activeElement === trigger).toBe(true);
   expect(played).toEqual([]);
 });
 
@@ -179,6 +253,6 @@ test("an empty TV home offers catalog browsing without a local-file placeholder"
   expect(document.querySelector(".browse-empty, .browse-hero")).toBeNull();
   expect(document.querySelector('[aria-label="Browse sources"]')?.hasAttribute("hidden")).toBe(false);
   await act(async () => button("Local library").click());
-  expect(browsed).toEqual(["Library"]);
+  expect(browsed).toEqual(["Files"]);
   expect(played).toEqual([]);
 });
