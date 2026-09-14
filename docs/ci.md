@@ -28,13 +28,19 @@ They install packages and change system files. For real systemd/APT lifecycle
 checks, `bash scripts/test-appliance-systemd.sh` creates its own privileged Docker
 fixture on an amd64 Linux host.
 
-[Check](../.github/workflows/check.yml) is an optional, manually dispatched full
-Ubuntu check. Pushes and PR edits do not start it. Request it explicitly when a
-hosted Linux run is useful:
+GitHub Actions is paused at repository level, verified on 14 September 2026.
+Use local checks during the capacity pause. The known current-main Happy DOM
+teardown failure is tracked in [#247](https://github.com/avoid-quest/couch/issues/247);
+see the [dated baseline](qualification/current-status-2026-09-14.md#local-validation).
+A passing assertion count with unhandled errors and exit 1 is a failed run.
 
-```sh
-gh workflow run check.yml --repo avoid-quest/couch --ref <branch-or-tag>
-```
+The workflow descriptions below document the configured path for when capacity
+returns. Use Actions only for PR checks, builds and releases. The temporary
+[Mac delivery path](tauri-releases.md) builds in Ubuntu Docker; the T480 only
+installs and runs Couch. No hosted run is required for this documentation change.
+
+[Check](../.github/workflows/check.yml) is configured as a manually dispatched
+Ubuntu check. Pushes and PR edits do not start it.
 
 Check always runs typechecking, the isolated-clock Bun suite, the frontend/sidecar
 build, locked Cargo tests, signed-release tests and appliance recovery tests.

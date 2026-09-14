@@ -57,23 +57,29 @@ options.
 
 ## Put it on your TV
 
-Native playback currently requires Linux. Install Bun 1.4.x, Rust stable, and the
-[Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/). On Ubuntu
-24.04:
+The supported appliance is Ubuntu 24.04 Server on x86_64 hardware. An SSH
+administrator installs an authenticated `Couch.AppImage` and `couch-appliance`
+Debian package with the [installer](docs/install-couch.md). Obtain the release,
+manifest and public-key fingerprint from the trusted publisher. Current private
+delivery uses the signed LAN feed; the publishing Mac must be reachable for
+checks and downloads. The TV only installs and runs Couch.
 
-```sh
-sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file unzip libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libmpv-dev libgl1-mesa-dev ffmpeg
-bun install --frozen-lockfile
-bun run setup:media
-bun run desktop
-```
+The [release guide](docs/tauri-releases.md) covers the temporary Mac build and
+publication path while GitHub Actions is paused. For source development, use the
+[Linux development instructions](docs/usage.md#run-from-source-for-development)
+or Docker preview above.
 
-Add a media folder, connect Jellyfin, or choose **Online** or **Radio**. Open the
-LAN address shown on the TV from a phone or laptop and enter the pairing code.
+Open the LAN address shown in **Pair a remote** on your phone and enter the
+six-digit code. **Settings > Connections** on the TV or an administrator remote
+also has a pairing QR. Use **Search** to find a title or paste a supported link;
+**Library** opens the provider catalogs, Radio, Live TV, Jellyfin and TV folders.
+An administrator manages folders and Jellyfin in **Settings > Sources**.
 
-The default port is `4100`. Settings, pairings, and the queue survive restarts;
-playback waits for you to press Play. The [usage guide](docs/usage.md) covers
-subtitles, profiles, saved playlists, playback settings, and media helpers.
+The coordinator's default port is `4100`; a configured named address can use
+port 80. Use the address shown by your TV consistently. Settings, pairings and
+the queue survive restarts; playback waits for you to press Play. Follow the
+[basic phone journey](docs/usage.md#connect-a-phone-and-find-media) for setup,
+search, playing now and adding next.
 
 ## Marketing site
 
@@ -89,7 +95,7 @@ SQLite storage, and Tauri with libmpv for native playback.
 
 ```sh
 bun run dev       # Browser UI and server, without native playback
-bun run check     # TypeScript and Bun tests
+bun run typecheck # TypeScript; see docs/ci.md for isolated test commands
 bun run build     # Frontend assets and native Bun sidecar
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux
@@ -108,25 +114,35 @@ Environment overrides use the `COUCH_` prefix, including `COUCH_PORT`,
 application data directory under the `quest.avoid.couch` identity. Browser-only
 development uses `.data/`.
 
-This checkout’s existing preview data was copied into `couch-preview-data`,
-including the queue, pairings, profiles and catalogs. The original preview volume
-is retained. Browser remotes carry an existing local pairing into the Couch name.
-Fresh installations use `quest.avoid.couch` for desktop data.
-
 ## Where things stand
 
-Couch is under active development. Local playback, shared controls, music
-libraries, radio, online catalogs, subtitles, and resume support are implemented.
-The Linux integration suite exercises the native app and browser remotes in
-Docker. Physical TV hardware still needs qualification for HDMI audio, GPU
-decoding, HDR, refresh switching, CEC, and suspend/resume.
+The [14 September 2026 status record](docs/qualification/current-status-2026-09-14.md)
+compares remote main with installed application build `34172088349.1` and Ubuntu
+companion `34172088347.1`. It separates source, package and physical evidence.
 
-Gapless music, ReplayGain, richer video metadata and TV guides/DVR remain open.
-Account login and DRM video are unsupported; Jellyfin currently uses direct play.
-Speaker multiroom remains optional future work. The [appliance map](https://github.com/avoid-quest/couch/issues/1)
-covers installation, Settings and updates; the linked [media map](https://github.com/avoid-quest/couch/issues/25)
-tracks remaining playback and library work. Implementation is paused after the
-administrator/Settings increment pending the next agreed work cycle.
+Implemented software includes signed installation and updates, shared search and
+history, controller administration, phone source setup, profiles, local/NAS and
+Jellyfin playback, subtitles, CUE albums, ReplayGain, measured lossless music
+continuity, NFO metadata and corrections, collections, IPTV guides, scheduling
+and completed recordings. Provider and format limits still apply. Software
+captures do not qualify every physical display, speaker or media source.
+
+Remaining acceptance belongs to [YouTube rendering #150](https://github.com/avoid-quest/couch/issues/150),
+[display #13](https://github.com/avoid-quest/couch/issues/13),
+[sound #14](https://github.com/avoid-quest/couch/issues/14),
+[interface size #12](https://github.com/avoid-quest/couch/issues/12),
+[real TV folders #17](https://github.com/avoid-quest/couch/issues/17) and
+[first-run setup #23](https://github.com/avoid-quest/couch/issues/23).
+The status record also links the open lid, guest discovery, pairing and diagnostics
+work. These fixes are not part of the verified installed baseline.
+
+Growing timeshift is [deferred #67](https://github.com/avoid-quest/couch/issues/67).
+CEC was closed as not planned. Native Mac/Windows playback, a full Rust port,
+DRM/account-login video, Jellyfin transcoding, crossfade and multiroom are not
+delivered. Live TMDB matching needs authorized access; HDR and refresh switching
+have no completed hardware qualification. The
+[appliance map](https://github.com/avoid-quest/couch/issues/1) and
+[media map](https://github.com/avoid-quest/couch/issues/25) retain the broader scope.
 
 - [Usage and development details](docs/usage.md)
 - [Linux test guide](tests/linux/README.md)

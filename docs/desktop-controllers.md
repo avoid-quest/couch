@@ -11,8 +11,9 @@ controller computer.
    and copy one of its addresses into your browser, including the port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
    and enter the TV's six-digit pairing code.
-3. Browse media, add to Up next and control the TV's playback. Closing your
-   browser leaves playback running on the TV.
+3. Open **Search** for a title or link, or **Library** for provider catalogs and
+   configured sources. **Play** starts now; **Up next** adds without starting.
+   Closing your browser leaves playback running on the TV.
 
 Use the address shown by your TV, not `couch.avoid.quest`, which is the project
 website. A loopback address such as `127.0.0.1` reaches your own computer. For
@@ -46,11 +47,11 @@ Reopen the same address in the same browser profile or installed web app to
 reuse its pairing. Private browsing, another profile, cleared website data or
 a changed address can require pairing again.
 
-**Settings > Connection** shows the TV address, connection status and this
+**Settings > Connections** shows the TV address, connection status and this
 remote's authority. Use **Reconnect** after the TV or network returns. Use
 **Pair again** when you need a new pairing. That action forgets this browser's
 credential; an administrator can revoke an old remote on the TV through
-**Connection > Paired remotes**. Neither action deletes the TV's media or queue.
+**Connections > Paired remotes**. Neither action deletes the TV's media or queue.
 
 For a configured HTTPS address, the computer must trust the deployment's
 certificate. Follow the administrator's [named-origin setup](lan-origin.md)
@@ -60,6 +61,7 @@ and use its advertised address consistently.
 
 The owner selected this controller scope on
 [8 September 2026](https://github.com/avoid-quest/couch/issues/171#issuecomment-5581948822).
-Native Mac/Windows playback and a separate server are later increments.
+Mac browser-controller acceptance was delivered. Windows verification remains
+unrecorded; native Mac/Windows playback and a separate server were not delivered.
 See [desktop controller qualification](qualification/desktop-controllers-171.md)
 for the tested platforms and outstanding acceptance.

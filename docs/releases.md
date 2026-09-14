@@ -1,5 +1,11 @@
 # Private releases and the LAN feed
 
+This is the historical Debian application/APT delivery path. Current application
+delivery uses the [signed AppImage feed](tauri-releases.md) and
+[AppImage installer with Ubuntu companion](install-couch.md). Keep this record
+for old package identities and recovery evidence. Its hosted-build instructions
+are inactive during the repository's GitHub Actions capacity pause.
+
 `main` is the Preview integration branch in `.github/workflows/package.yml`. Package runs qualify the native `.deb` on clean Ubuntu before uploading `couch-release-RUN.ATTEMPT`. Pull-request artifacts remain qualification evidence and cannot enter the feed. Packaging is explicit: dispatch on `main` with release notes. Main pushes do not build packages.
 
 Each release contains `couch` and `couch-appliance` at `PRODUCT+build.RUN.ATTEMPT`. The run and attempt are positive decimal integers, so later attempts and runs sort forward under Debian version comparison. The application product version must also never decrease. Source revision remains separate from the Debian version. A changed package or manifest cannot replace an existing release identity. Stable promotion does not rebuild, rename, or repack either package.

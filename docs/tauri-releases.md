@@ -32,10 +32,12 @@ can use its enrolled HTTP address; moving hosting does not change the format.
 
 For a new local build, set `COUCH_RELEASE_ID` to an unused positive
 `BUILD.ATTEMPT` above the published release and below newer hosted build IDs.
-For this delivery, `34172088325.1` follows the retained `34172088324.1` and sorts
-below the already observed hosted run `34206078781`. Verify that the selected
-identity is unused before building. Do not use a wall-clock timestamp that would
-prevent future hosted releases from advancing the channel. Changed bytes need a
+The historical build `34172088325.1` followed `34172088324.1`; do not reuse it.
+The [14 September readback](qualification/current-status-2026-09-14.md) reports
+installed build `34172088349.1`. Recheck the feed and retained identities before
+choosing a new number; a dated installed readback is not an allocation. Do not
+use a wall-clock timestamp that would prevent future hosted releases from
+advancing the channel. Changed bytes need a
 new identity; requalification, signing and promotion keep it. Preserve the source
 revision, inputs, hashes and qualification evidence with every local build.
 
