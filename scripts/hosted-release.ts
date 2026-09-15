@@ -130,12 +130,19 @@ export async function restorePublic(directory: string, manifest: Manifest, fetch
 
 // Each package format keeps its own version history. The public updater endpoint serves the
 // newest published release per update platform and channel, or rejects the platform when empty.
-export async function assertIncreasing(version: string, channel: Channel, updatePlatform: string, fetcher: typeof fetch = fetch) {
+export async function assertIncreasing(version: string, channel: Channel, updatePlatform: string, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
   releaseVersion(version);
   if (channel === "stable") assert.ok(!version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
   const url = new URL(`${cdn}/update/${application}/${updatePlatform}/0.0.0`);
   if (channel === "preview") url.searchParams.set("channel", "preview");
-  const response = await fetcher(url, { signal: AbortSignal.timeout(60_000) });
+  let response = await fetcher(url, { signal: AbortSignal.timeout(60_000) });
+  for (let retries = 0; (response.status === 400 || response.status === 404) && retries < 3; retries++) {
+    // A just-published release takes minutes to reach every feed region; recheck before trusting "empty".
+    await response.body?.cancel();
+    console.warn(`Feed ${updatePlatform} not visible yet; rechecking in 20s (${retries + 1}/3).`);
+    await sleep(20_000);
+    response = await fetcher(url, { signal: AbortSignal.timeout(60_000) });
+  }
   if (response.status === 400 || response.status === 404) {
     await response.body?.cancel();
     return;
@@ -149,13 +156,13 @@ export async function assertIncreasing(version: string, channel: Channel, update
 export async function downloadPublic(url: string, expected?: FileIdentity, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
   assert.equal(new URL(url).protocol, "https:", "Public downloads require HTTPS.");
   let response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
-  for (let retries = 0; response.status === 429 && retries < 2; retries++) {
+  for (let retries = 0; (response.status === 429 || response.status === 404) && retries < 2; retries++) {
     const retry = response.headers.get("retry-after");
     const milliseconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
-    const wait = Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
+    const wait = response.status === 404 ? 20_000 : Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
     await response.body?.cancel();
     assert.ok(Number.isFinite(wait) && wait <= 120_000, `CDN Retry-After exceeds the readiness wait limit: ${url}. Retry verification later.`);
-    console.warn(`CDN rate limited ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
+    console.warn(`CDN ${response.status === 404 ? "has not propagated" : "rate limited"} ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
     await sleep(wait);
     response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
   }
