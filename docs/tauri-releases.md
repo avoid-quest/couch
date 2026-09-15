@@ -1,52 +1,33 @@
-# Mac packaging and release status
+# Mac build fallback
 
-The current Debian 13 amd64/X11 path builds one AppImage on the Mac. GitHub
-Actions remains paused. The T480 only installs and runs Couch.
-[Package build and installer checks](packaging.md#isolated-mac-build) are local
-implementation checks for [#275](https://github.com/avoid-quest/couch/issues/275).
-The hosted release implementation belongs to
-[#276](https://github.com/avoid-quest/couch/issues/276), and pristine Debian and
-Mac-offline update acceptance belongs to
-[#277](https://github.com/avoid-quest/couch/issues/277).
+Use [hosted releases](hosted-releases.md) for the current release procedure.
+GitHub Actions is enabled and builds the native Debian package in the pinned
+Debian 13 container. If hosted capacity is unavailable, run that same container
+on the Mac. The T480 only installs and runs Couch.
 
-## Build and qualify on the Mac
+## Build and qualify
 
-Use the [Debian Mac recipe](packaging.md#isolated-mac-build). It reads the source
-pins, builds with the existing `package:build` script on a Linux filesystem and
-retains the AppImage, helper/library inventory, build inputs and logs privately.
-Host Docker runs the containers. The builder does not need a Docker client,
-Docker socket, host networking or `tauri-driver` for these checks.
+The [isolated Mac recipe](packaging.md#isolated-mac-build) supplies the pinned
+builder and source checkout. Run `bash scripts/hosted-build.sh deb` inside the
+builder with the enrolled release credentials, followed by the qualification
+steps from the release guide. `scripts/hosted-desktop.sh` runs on the Docker host
+and qualifies the exact package in a fresh Debian container.
 
-The package layer in [PR #278](https://github.com/avoid-quest/couch/pull/278)
-provides the AppImage. The upper
-[PR #279](https://github.com/avoid-quest/couch/pull/279) supplies setup/archive
-assembly, Debian installation and recovery instructions, and the disposable
-installer fixture. Continue with the
-[setup and installer commands](packaging.md#setup-archives-and-installer-check)
-only when that layer is included in the checkout. It assembles allowlisted setup
-and dependency-material archives, with no runtime companion `.deb` or repository
-source export in the distribution.
+Retain the package, signed receipts and qualification evidence privately.
+Disposable test keys qualify fixtures only. Production publication requires the
+enrolled signing key, public readiness verification and installed native-update
+acceptance. Never include signing credentials in source or published assets.
 
-The installer fixture verifies signatures using a disposable key and fixture
-AppImage. It doubles APT, services and successful FUSE access. A passing fixture
-or package inventory does not qualify a booted Debian desktop, native playback
-or physical TV hardware. The
-[retained #275 record](https://github.com/avoid-quest/couch/blob/61e610c73777d74d284fbfaaa2596b0cd5b7edf6/docs/evidence/debian-package-275/README.md)
-identifies the actual candidate bytes, source revisions and limits of its checks.
+## Distribution
 
-## Debian publication
+CrabNebula serves the package and signed updater metadata. The Mac is only a
+build fallback; it does not host the download or update feed. Fresh candidates
+enter Preview using a final SemVer such as `0.1.1`. Promote those exact bytes to
+Stable after acceptance, without rebuilding or signing again.
 
-The current recipe stops at private candidate artifacts. The new release line,
-starting at `0.1.0-preview.1`, needs the enrolled signing key, authenticated public
-downloads, signed update metadata and hosted A-to-B integration from #276.
-The existing Ubuntu Package workflow remains paused and needs that Debian
-migration before it can deliver this package. Restored Actions capacity alone
-does not make its old build and qualification jobs compatible.
-
-The [official Tauri updater](https://v2.tauri.app/plugin/updater/) requires signed
-artifacts. Keep private keys outside source control and public files. Isolated
-#275 checks use disposable test keys. A local test
-signature does not enroll a production release or complete #277 acceptance.
+The public download page links one `.deb`. Tauri signatures live in the hosted
+update metadata, and dependency notices are inside the package. Users do not
+need the setup archive, Minisign or jq for native installation.
 
 ## Historical Ubuntu qualification and publication
 
