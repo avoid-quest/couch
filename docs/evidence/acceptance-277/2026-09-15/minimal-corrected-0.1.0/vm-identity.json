@@ -1,0 +1,11 @@
+{
+  "id": "1A01E320-8A02-4C8C-850F-48C539F6FCF1",
+  "name": "Couch 277 corrected 0.1.0 minimal TV 2026-09-15",
+  "pristineSource": "21D3726B-624A-484F-A87E-39CDE695F095",
+  "sshPort": 22263,
+  "cloneExit": 0,
+  "cloneWarnings": [
+    "OSStatus -10004; supported CLI list verified created clone"
+  ],
+  "portVerifiedFreeBeforeStart": true
+}

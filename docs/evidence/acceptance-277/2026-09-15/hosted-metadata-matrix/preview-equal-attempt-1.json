@@ -1,0 +1,13 @@
+{
+  "attempt": 1,
+  "startedAt": "2026-09-15T01:34:00.067Z",
+  "finishedAt": "2026-09-15T01:34:00.103Z",
+  "url": "https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-appimage/0.1.0?channel=preview",
+  "status": 204,
+  "headers": {
+    "date": "Tue, 15 Sep 2026 01:34:00 GMT"
+  },
+  "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bodyBytes": 0,
+  "body": ""
+}

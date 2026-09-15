@@ -1,0 +1,83 @@
+observed_at=2026-09-15T00:35:33Z
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+NAME="Debian GNU/Linux"
+VERSION_ID="13"
+VERSION="13 (trixie)"
+VERSION_CODENAME=trixie
+DEBIAN_VERSION_FULL=13.7
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+Linux 6.12.107+deb13-amd64 x86_64 GNU/Linux
+               total        used        free      shared  buff/cache   available
+Mem:           3.8Gi       538Mi       3.1Gi        13Mi       537Mi       3.3Gi
+Swap:          1.7Gi          0B       1.7Gi
+Filesystem     Type  Size  Used Avail Use% Mounted on
+/dev/sda2      ext4   29G  3.8G   24G  14% /
+/dev/sda2      ext4   29G  3.8G   24G  14% /
+graphical.target
+running
+accounts-daemon.service            enabled enabled
+anacron.service                    enabled enabled
+apparmor.service                   enabled enabled
+avahi-daemon.service               enabled enabled
+console-setup.service              enabled enabled
+cron.service                       enabled enabled
+cups-browsed.service               enabled enabled
+cups.service                       enabled enabled
+e2scrub_reap.service               enabled enabled
+getty@.service                     enabled enabled
+grub-common.service                enabled enabled
+keyboard-setup.service             enabled enabled
+lightdm.service                    enabled enabled
+lm-sensors.service                 enabled enabled
+ModemManager.service               enabled enabled
+networking.service                 enabled enabled
+NetworkManager-dispatcher.service  enabled enabled
+NetworkManager-wait-online.service enabled enabled
+NetworkManager.service             enabled enabled
+ssh.service                        enabled enabled
+sshd-keygen.service                enabled enabled
+systemd-pstore.service             enabled enabled
+systemd-timesyncd.service          enabled enabled
+udisks2.service                    enabled enabled
+wpa_supplicant.service             enabled enabled
+wtmpdb-update-boot.service         enabled enabled
+  accounts-daemon.service   loaded active running Accounts Service
+  avahi-daemon.service      loaded active running Avahi mDNS/DNS-SD Stack
+  cron.service              loaded active running Regular background program processing daemon
+  cups-browsed.service      loaded active running Make remote CUPS printers available locally
+  cups.service              loaded active running CUPS Scheduler
+  dbus.service              loaded active running D-Bus System Message Bus
+  getty@tty1.service        loaded active running Getty on tty1
+  lightdm.service           loaded active running Light Display Manager
+  ModemManager.service      loaded active running Modem Manager
+  NetworkManager.service    loaded active running Network Manager
+  polkit.service            loaded active running Authorization Manager
+  qemu-guest-agent.service  loaded active running QEMU Guest Agent
+  rtkit-daemon.service      loaded active running RealtimeKit Scheduling Policy Service
+  ssh.service               loaded active running OpenBSD Secure Shell server
+  systemd-journald.service  loaded active running Journal Service
+  systemd-logind.service    loaded active running User Login Management
+  systemd-timesyncd.service loaded active running Network Time Synchronization
+  systemd-udevd.service     loaded active running Rule-based Manager for Device Events and Files
+  udisks2.service           loaded active running Disk Manager
+  user@1000.service         loaded active running User Manager for UID 1000
+  user@106.service          loaded active running User Manager for UID 106
+  wpa_supplicant.service    loaded active running WPA supplicant
+absent /etc/couch
+absent /var/lib/couch
+absent /var/lib/couch-installer
+absent /var/lib/couch-install-locks
+regular file 644 root:root /etc/X11/default-display-manager
+absent /usr/share/xsessions/couch.desktop
+couch-tv=absent
+enp0s1 state=up
+lo state=unknown
+default_route_interface=enp0s1
+lightdm
+Xorg
+lightdm
+lightdm-gtk-gre
+lightdm

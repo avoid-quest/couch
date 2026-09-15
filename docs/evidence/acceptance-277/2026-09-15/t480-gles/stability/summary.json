@@ -1,0 +1,17 @@
+{
+  "sampleStart": "2026-09-15T01:08:26+00:00",
+  "sampleEnd": "2026-09-15T01:09:26+00:00",
+  "sampleSeconds": 60.0,
+  "mainPidBefore": "12208",
+  "mainPidAfter": "12208",
+  "restartsBefore": 0,
+  "restartsAfter": 0,
+  "cpuTimeDeltaNSec": 54291000,
+  "averagePercentOfOneCpu": 0.090485,
+  "serviceMemoryBytesBefore": 570839040,
+  "serviceMemoryBytesAfter": 570839040,
+  "appImageSHA256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7",
+  "matchesPublishedProductionA": true,
+  "guiAcceptance": "unrun",
+  "playbackPerformanceTest": false
+}

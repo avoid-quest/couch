@@ -1,0 +1,7 @@
+finished_at=2026-09-15T00:41:12Z
+exit_status=0
+last_stage=installation-complete
+packages_after_exit=0
+state_after_exit=0
+gui_playback_update_acceptance=unrun
+mac_offline_condition=requires_parent_observation

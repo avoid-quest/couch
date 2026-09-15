@@ -1,0 +1,15 @@
+{
+  "scope": "Sanitized B qualification evidence only; no application binaries or source archives",
+  "scannedFiles": 39,
+  "secretValueMatches": 0,
+  "privateIdentifierMatches": 0,
+  "credentialPatternMatches": 0,
+  "originalToRetainedHashesValid": true,
+  "manifestQualificationIdentityMatch": true,
+  "beforeAfterAssetHashesIdentical": true,
+  "secretSourcesChecked": [
+    "production signing key",
+    "production signing password"
+  ],
+  "method": "Exact signing values checked in memory without printing them; user home paths, private IPv4 addresses and common private-key/GitHub-token/Bearer-token patterns checked. Provider credential scanning of the public archives is reported separately in public-archive-checks.json."
+}

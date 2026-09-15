@@ -1,0 +1,8 @@
+Sep 15 02:51:56 couch systemd[1]: Starting lightdm.service - Light Display Manager...
+Sep 15 02:51:56 couch lightdm[9177]: Error getting user list from org.freedesktop.Accounts: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.Accounts was not provided by any .service files
+Sep 15 02:51:56 couch lightdm[9177]: Could not enumerate user data directory /var/lib/lightdm/data: Error opening directory '/var/lib/lightdm/data': No such file or directory
+Sep 15 02:51:56 couch systemd[1]: Started lightdm.service - Light Display Manager.
+Sep 15 02:51:57 couch lightdm[9201]: pam_succeed_if(lightdm-autologin:auth): requirement "shell notin /sbin/nologin:/usr/sbin/nologin:/bin/false:/usr/bin/false" was met by user "couch-tv"
+Sep 15 02:51:57 couch lightdm[9201]: Error getting user list from org.freedesktop.Accounts: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.Accounts was not provided by any .service files
+Sep 15 02:51:57 couch lightdm[9201]: pam_unix(lightdm-autologin:session): session opened for user couch-tv(uid=102) by couch-tv(uid=0)
+Sep 15 02:51:58 couch lightdm[9201]: Failed to write utmpx: No such file or directory

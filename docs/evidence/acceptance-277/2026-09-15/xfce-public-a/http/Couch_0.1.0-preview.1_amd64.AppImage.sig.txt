@@ -1,0 +1,5 @@
+started_at=2026-09-15T00:36:13Z
+requested_url=https://cdn.crabnebula.app/download/avoid-quest/couch/latest/Couch_0.1.0-preview.1_amd64.AppImage.sig?channel=preview
+final_url=https://cdn.crabnebula.app/asset/01M2H73SRH08F609TKJY5WJ10Y?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22Couch_0.1.0-preview.1_amd64.AppImage.sig%22%7D
+http_status=200
+finished_at=2026-09-15T00:36:14Z

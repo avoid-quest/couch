@@ -1,0 +1,6 @@
+{
+  "requestedAt": "2026-09-15T01:38:43.962604+00:00",
+  "method": "guest systemctl poweroff",
+  "exit": 0,
+  "reason": "acceptance receipts complete; preserve installed state and free resources"
+}

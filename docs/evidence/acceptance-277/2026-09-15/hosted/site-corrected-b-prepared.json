@@ -1,0 +1,20 @@
+{
+  "prepared": {
+    "stable": null,
+    "preview": {
+      "version": "0.1.0",
+      "checkedAt": "2026-09-15T01:32:18.191Z"
+    }
+  },
+  "source": "61739ad7ce782da5482067f16a5727306cd65d6a",
+  "releaseStateSha256": "fa46fe51105d9b2164980a5be85fb321b0d27574715536d9bc15604c4226c5d6",
+  "keySha256": "b92a35eb32de5dee41477ffdddaba5eae058fcac9e4ee9b7eade405d6a87afa0",
+  "scope": "Existing hosted-site tool completed its independent public recheck and prepared the site state. Deployment is verified separately.",
+  "build": {
+    "command": "bun run build",
+    "workingDirectory": "apps/web",
+    "exit": 0,
+    "originalLogSha256": "8c05b2a2d6f6086cb15b5f09b91c9aeda0407daa608f1f5062ff620ea706de9a",
+    "retainedLogSha256": "74dc013ec0a01dd2c5fdad3220ddf74919e64eaeb962e8e09bf5d97bfd38e6f1"
+  }
+}

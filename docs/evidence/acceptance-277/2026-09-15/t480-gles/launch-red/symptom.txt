@@ -1,0 +1,6 @@
+Sep 15 02:54:23 couch couch-tv[10295]: Couldn't open libGLESv2.so.2: libGLESv2.so.2: cannot open shared object file: No such file or directory
+Sep 15 02:54:23 couch systemd[9209]: couch-tv.service: Main process exited, code=killed, status=6/ABRT
+Sep 15 02:54:23 couch systemd[9209]: couch-tv.service: Failed with result 'signal'.
+Sep 15 02:54:29 couch couch-tv[10375]: Couldn't open libGLESv2.so.2: libGLESv2.so.2: cannot open shared object file: No such file or directory
+Sep 15 02:54:29 couch systemd[9209]: couch-tv.service: Main process exited, code=killed, status=6/ABRT
+Sep 15 02:54:29 couch systemd[9209]: couch-tv.service: Failed with result 'signal'.

@@ -1,0 +1,61 @@
+{
+  "scope": "signed production B candidate metadata extraction on existing diagnostic clone; no installed GUI acceptance",
+  "startedAt": "2026-09-15T00:29:45Z",
+  "checks": {
+    "packages-before": {
+      "command": [
+        "dpkg-query",
+        "-W",
+        "-f=${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Status}\n"
+      ],
+      "exit": 0,
+      "seconds": 0.139
+    },
+    "minisign": {
+      "command": [
+        "minisign",
+        "-Vm",
+        "/var/tmp/couch-production-b-metadata-20260915-0029/Couch_0.1.0_amd64.AppImage",
+        "-x",
+        "/var/tmp/couch-production-b-metadata-20260915-0029/decoded-signature.minisig",
+        "-p",
+        "/var/tmp/couch-production-b-metadata-20260915-0029/decoded-public-key.pub"
+      ],
+      "exit": 0,
+      "seconds": 4.331
+    },
+    "standard-runtime-extract": {
+      "command": [
+        "/var/tmp/couch-production-b-metadata-20260915-0029/Couch_0.1.0_amd64.AppImage",
+        "--appimage-extract",
+        "usr/lib/Couch/release.json"
+      ],
+      "exit": 0,
+      "seconds": 0.087
+    },
+    "packages-after": {
+      "command": [
+        "dpkg-query",
+        "-W",
+        "-f=${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Status}\n"
+      ],
+      "exit": 0,
+      "seconds": 0.135
+    }
+  },
+  "installedBefore": "58ed2f8d8907e19b28dd147c60d70469df6b3a10515b79a5f1435f88f897ed25",
+  "candidateSha256": "0148ccd715d94061cd7593156ce6823cbcfa3e4b9137b10963d497a7ebee0df5",
+  "extractedSha256": "3d72d55e742f3c0999648d415a56b09151ba9c95196999a3253043f1473e6a5b",
+  "exactExpectedBytes": true,
+  "extractedIdentity": {
+    "version": "0.1.0",
+    "revision": "bb03a3a54f5ca2a1664cd6235c61cf39e4fa5a7e",
+    "target": "x86_64-unknown-linux-gnu",
+    "packaged": true
+  },
+  "installedAfter": "58ed2f8d8907e19b28dd147c60d70469df6b3a10515b79a5f1435f88f897ed25",
+  "installedUnchanged": true,
+  "packagesUnchanged": true,
+  "finishedAt": "2026-09-15T00:30:05Z",
+  "passed": true
+}

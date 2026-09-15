@@ -1,0 +1,12 @@
+{
+  "id": "01M2H8T79E8KBGNXZ26640SMK6",
+  "status": "Draft",
+  "appId": "01M2G2MKDN2M3W88Q9P4H94NP3",
+  "version": "0.1.0",
+  "notes": "Couch 0.1.0, qualified as the final-version candidate for signed A-to-B update acceptance. This candidate uses the same application behavior as 0.1.0-preview.1 with the final version recorded consistently in native and backend metadata.\n",
+  "createdAt": "2026-09-15T00:52:32.174Z",
+  "pubDate": null,
+  "purgedAt": null,
+  "assets": [],
+  "channel": "preview"
+}

@@ -1,0 +1,10 @@
+● couch-tv.service - Couch TV native host and coordinator
+     Loaded: loaded (/usr/lib/systemd/user/couch-tv.service; static)
+     Active: activating (auto-restart) (Result: signal) since Tue 2026-09-15 02:52:22 CEST; 4s ago
+ Invocation: 21644b467eff491fa402c0185dbf25ab
+    Process: 9483 ExecStartPre=/usr/bin/pactl info (code=exited, status=0/SUCCESS)
+    Process: 9485 ExecStartPre=/usr/lib/couch-appliance/initialize-audio (code=exited, status=0/SUCCESS)
+    Process: 9495 ExecStart=/var/lib/couch/application/Couch.AppImage (code=killed, signal=ABRT)
+   Main PID: 9495 (code=killed, signal=ABRT)
+   Mem peak: 230.6M
+        CPU: 972ms

@@ -1,0 +1,208 @@
+2026-09-15T01:38:12Z
+MainPID=8355
+Result=success
+NRestarts=0
+MemoryCurrent=559075328
+CPUUsageNSec=28138563000
+ActiveState=active
+SubState=running
+ActiveEnterTimestamp=Tue 2026-09-15 01:35:05 UTC
+Mute: no
+    PID    PPID USER     COMMAND           RSS %CPU
+      1       0 root     systemd         15144  2.8
+      2       0 root     kthreadd            0  0.0
+      3       2 root     pool_workqueue_     0  0.0
+      4       2 root     kworker/R-kvfre     0  0.0
+      5       2 root     kworker/R-rcu_g     0  0.0
+      6       2 root     kworker/R-sync_     0  0.0
+      7       2 root     kworker/R-slub_     0  0.0
+      8       2 root     kworker/R-netns     0  0.0
+     10       2 root     kworker/0:1-eve     0  0.3
+     11       2 root     kworker/0:0H-ev     0  0.0
+     13       2 root     kworker/R-mm_pe     0  0.0
+     14       2 root     rcu_tasks_kthre     0  0.0
+     15       2 root     rcu_tasks_rude_     0  0.0
+     16       2 root     rcu_tasks_trace     0  0.0
+     17       2 root     ksoftirqd/0         0  0.1
+     18       2 root     rcu_preempt         0  0.3
+     19       2 root     rcu_exp_par_gp_     0  0.0
+     20       2 root     rcu_exp_gp_kthr     0  0.0
+     21       2 root     migration/0         0  0.0
+     22       2 root     idle_inject/0       0  0.0
+     23       2 root     cpuhp/0             0  0.0
+     25       2 root     kdevtmpfs           0  0.0
+     26       2 root     kworker/R-inet_     0  0.0
+     27       2 root     kauditd             0  0.0
+     28       2 root     khungtaskd          0  0.0
+     30       2 root     oom_reaper          0  0.0
+     32       2 root     kworker/R-write     0  0.0
+     33       2 root     kcompactd0          0  0.0
+     34       2 root     ksmd                0  0.0
+     35       2 root     khugepaged          0  0.0
+     36       2 root     kworker/R-kinte     0  0.0
+     37       2 root     kworker/R-kbloc     0  0.0
+     38       2 root     kworker/R-blkcg     0  0.0
+     39       2 root     irq/9-acpi          0  0.0
+     40       2 root     kworker/R-tpm_d     0  0.0
+     41       2 root     kworker/R-edac-     0  0.0
+     42       2 root     kworker/R-devfr     0  0.0
+     43       2 root     kworker/R-quota     0  0.0
+     44       2 root     kworker/0:1H-kb     0  0.0
+     45       2 root     kswapd0             0  0.0
+     53       2 root     kworker/R-kthro     0  0.0
+     57       2 root     kworker/R-acpi_     0  0.0
+     58       2 root     kworker/R-mld       0  0.0
+     59       2 root     kworker/R-ipv6_     0  0.0
+     64       2 root     kworker/R-kstrp     0  0.0
+     66       2 root     kworker/u5:0        0  0.0
+    180       2 root     watchdogd           0  0.0
+    182       2 root     kworker/R-ata_s     0  0.0
+    184       2 root     scsi_eh_0           0  0.0
+    185       2 root     kworker/R-scsi_     0  0.0
+    186       2 root     scsi_eh_1           0  0.0
+    187       2 root     kworker/R-scsi_     0  0.0
+    188       2 root     scsi_eh_2           0  0.0
+    189       2 root     kworker/R-scsi_     0  0.0
+    190       2 root     scsi_eh_3           0  0.0
+    191       2 root     kworker/R-scsi_     0  0.0
+    192       2 root     scsi_eh_4           0  0.0
+    193       2 root     kworker/R-scsi_     0  0.0
+    194       2 root     scsi_eh_5           0  0.0
+    195       2 root     kworker/R-scsi_     0  0.0
+    197       2 root     kworker/u4:7-ex     0  0.0
+    200       2 root     kworker/u4:10-e     0  0.0
+    201       2 root     kworker/u4:11-e     0  0.0
+    234       2 root     jbd2/sda2-8         0  0.2
+    235       2 root     kworker/R-ext4-     0  0.0
+    247       2 root     hwrng               0  0.0
+    287       1 root     systemd-journal 18196  0.2
+    304       1 systemd+ systemd-timesyn  8076  0.0
+    330       1 root     systemd-udevd    9816  0.1
+    334       2 root     psimon              0  0.0
+    463       2 root     kworker/R-crypt     0  0.0
+    641       1 root     cron             2856  0.0
+    642       1 message+ dbus-daemon      5348  0.3
+    658       1 root     qemu-ga          4240  0.0
+    662       1 dhcpcd   dhcpcd           4368  0.0
+    663     662 root     dhcpcd           2688  0.0
+    666     662 dhcpcd   dhcpcd           2232  0.0
+    667     662 dhcpcd   dhcpcd           2168  0.0
+    669       1 root     systemd-logind   9128  0.1
+    700       2 root     kworker/R-cfg80     0  0.0
+    715       1 root     agetty           2624  0.0
+    717       1 root     sshd             7848  0.0
+    721     663 dhcpcd   dhcpcd           2320  0.0
+    722     663 dhcpcd   dhcpcd           2448  0.0
+    728     663 dhcpcd   dhcpcd           2448  0.0
+    746     663 dhcpcd   dhcpcd           2448  0.0
+    838       2 root     kworker/0:0-cgr     0  0.0
+   4299       2 root     kworker/u4:0-wr     0  0.0
+   8034       2 root     psimon              0  0.0
+   8102       1 root     lightdm          7840  0.1
+   8109    8102 root     Xorg            119980 1.5
+   8140    8102 root     lightdm         10456  0.0
+   8155       2 root     kworker/0:2-eve     0  0.0
+   8156       1 couch-tv systemd         13136  2.2
+   8158    8156 couch-tv (sd-pam)         3872  0.0
+   8179    8156 couch-tv dbus-daemon      4804  0.0
+   8180    8156 couch-tv pipewire        11576  0.2
+   8181    8140 couch-tv session          3820  0.7
+   8183    8156 couch-tv pipewire         5456  0.0
+   8187    8156 couch-tv wireplumber     15876  0.4
+   8191    8156 couch-tv pipewire-pulse   9164  0.2
+   8213    8181 couch-tv ssh-agent        1720  0.0
+   8238    8181 couch-tv openbox         18752  0.3
+   8355    8156 couch-tv couch           243408 3.1
+   8363    8156 couch-tv Couch.AppImage  23816  3.2
+   8431    8355 couch-tv WebKitNetworkPr 75616  0.4
+   8452    8355 couch-tv WebKitWebProces 361568 7.9
+   8607       2 root     kworker/u4:1-wr     0  0.0
+   8692       2 root     kworker/0:3-cgr     0  0.0
+   8693       2 root     kworker/0:4         0  0.0
+   9431       1 probe    systemd         12580 13.9
+   9439    9431 probe    (sd-pam)         3880  0.0
+   9449    9431 probe    dbus-daemon      4688  2.5
+   9452    9431 probe    pipewire        11176  4.9
+   9455    9431 probe    pipewire         5328  2.8
+   9456    9431 probe    wireplumber     13956 10.6
+   9458    9431 probe    pipewire-pulse   8604  3.6
+   9461    9431 probe    mpris-proxy      3648  1.7
+   9483     717 root     sshd-session    11764  7.1
+   9495    9483 probe    sshd-session     7496  0.7
+   9496    9495 root     sudo             7868  6.8
+   9508    8181 couch-tv sleep            2148  0.0
+   9509    9496 root     bash             3184  2.8
+   9516    9509 root     ps               4224  350
+Sep 15 01:34:48 couch-minimal systemd[8156]: Queued start job for default target default.target.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Created slice app.slice - User Application Slice.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Created slice session.slice - User Core Session Slice.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target paths.target - Paths.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target timers.target - Timers.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting dbus.socket - D-Bus User Message Bus Socket...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on pipewire-pulse.socket - PipeWire PulseAudio.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on pipewire.socket - PipeWire Multimedia System Sockets.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting ssh-agent.socket - OpenSSH Agent socket...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on dbus.socket - D-Bus User Message Bus Socket.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on ssh-agent.socket - OpenSSH Agent socket.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target sockets.target - Sockets.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target basic.target - Basic System.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting dbus.service - D-Bus User Message Bus...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started pipewire.service - PipeWire Multimedia Service.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started filter-chain.service - PipeWire filter chain daemon.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started wireplumber.service - Multimedia Service Session Manager.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started pipewire-pulse.service - PipeWire PulseAudio.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started dbus.service - D-Bus User Message Bus.
+Sep 15 01:34:49 couch-minimal systemd[8156]: mpris-proxy.service - Bluetooth mpris proxy skipped, unmet condition check ConditionUser=!@system
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target default.target - Main User Target.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Startup finished in 2.237s.
+Sep 15 01:34:49 couch-minimal dbus-daemon[8179]: [session uid=102 pid=8179 pidfd=5] Successfully activated service 'org.freedesktop.systemd1'
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: wp-internal-comp-loader: Loading profile 'main'
+Sep 15 01:34:52 couch-minimal systemd[8156]: Starting couch-tv.service - Couch TV native host and coordinator...
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: default: Failed to get percentage from UPower: org.freedesktop.DBus.Error.NameHasNoOwner
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: spa.bluez5: BlueZ system service is not available
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: wp-device: SPA handle 'api.libcamera.enum.manager' could not be loaded; is it installed?
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: s-monitors-libcamera: PipeWire's libcamera SPA plugin is missing or broken. Some camera types may not be supported.
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server String: /run/user/102/pulse/native
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Library Protocol Version: 35
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Protocol Version: 35
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Is Local: yes
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Client Index: 57
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Tile Size: 65472
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: User Name: couch-tv
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Host Name: couch-minimal
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Name: PulseAudio (on PipeWire 1.4.2)
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Version: 15.0.0
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Sample Specification: float32le 2ch 48000Hz
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Channel Map: front-left,front-right
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Sink: auto_null
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Source: auto_null.monitor
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Cookie: <REDACTED>
+Sep 15 01:35:05 couch-minimal couch-tv[8254]: No available HDMI stereo profile; keeping the default audio route.
+Sep 15 01:35:05 couch-minimal systemd[8156]: Started couch-tv.service - Couch TV native host and coordinator.
+Sep 15 01:35:12 couch-minimal couch[8355]: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: DRI2: failed to create screen

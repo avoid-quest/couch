@@ -1,0 +1,26 @@
+{
+  "finishedAt": "2026-09-15T01:15:01Z",
+  "helperHashes": {
+    "yt-dlp": "5881691508856455f9aad985733f6de12d0d4c666a5ff20199d4ce6e175bca67",
+    "deno": "37263b25df0ed4369c04e313043cab523b7fb8fa5cbc4c2c8a5d0b7c2584dffd",
+    "ffprobe": "fc7898a8b5b0e9ad314294456007ee101dbe0bd607317ad29d22e3d6182ba4b9"
+  },
+  "allHelperHashesMatchProductionA": true,
+  "denoVersion": "2.9.6",
+  "ytDlpVersion": "2026.08.19",
+  "ffprobe": {
+    "codec": "pcm_s16le",
+    "seconds": 1,
+    "sampleRateHz": 8000,
+    "channels": 1,
+    "stderrEmpty": true
+  },
+  "hostGraphicsMappedByPids": [
+    12208,
+    12269
+  ],
+  "firstCollectorAttempt": "root could not traverse runtime-user FUSE mount; stopped before helper execution",
+  "repairedHost": true,
+  "audioPlayed": false,
+  "guiAcceptance": "unrun"
+}

@@ -1,0 +1,107 @@
+[
+  {
+    "name": "start-container",
+    "startedAt": "2026-09-15T00:22:44.822Z",
+    "finishedAt": "2026-09-15T00:22:45.060Z",
+    "seconds": 0.23784658299999997,
+    "exit": 0
+  },
+  {
+    "name": "copy-source",
+    "startedAt": "2026-09-15T00:22:45.060Z",
+    "finishedAt": "2026-09-15T00:22:45.115Z",
+    "seconds": 0.054188625000000004,
+    "exit": 0
+  },
+  {
+    "name": "prepare-source",
+    "startedAt": "2026-09-15T00:22:45.115Z",
+    "finishedAt": "2026-09-15T00:22:51.574Z",
+    "seconds": 6.458863958,
+    "exit": 0
+  },
+  {
+    "name": "production-build",
+    "startedAt": "2026-09-15T00:22:51.575Z",
+    "finishedAt": "2026-09-15T00:27:44.396Z",
+    "seconds": 292.80858279200004,
+    "exit": 0
+  },
+  {
+    "name": "before-matrix-hashes",
+    "startedAt": "2026-09-15T00:27:44.397Z",
+    "finishedAt": "2026-09-15T00:27:44.911Z",
+    "seconds": 0.5140050419999752,
+    "exit": 0
+  },
+  {
+    "name": "typecheck",
+    "startedAt": "2026-09-15T00:27:44.911Z",
+    "finishedAt": "2026-09-15T00:27:46.399Z",
+    "seconds": 1.4877320410000394,
+    "exit": 0
+  },
+  {
+    "name": "amd64-inventory-tests",
+    "startedAt": "2026-09-15T00:27:46.399Z",
+    "finishedAt": "2026-09-15T00:27:51.732Z",
+    "seconds": 5.333591958999983,
+    "exit": 0
+  },
+  {
+    "name": "native-rust-tests",
+    "startedAt": "2026-09-15T00:27:51.733Z",
+    "finishedAt": "2026-09-15T00:29:19.225Z",
+    "seconds": 87.49131954200001,
+    "exit": 0
+  },
+  {
+    "name": "installer-fixture",
+    "startedAt": "2026-09-15T00:29:19.225Z",
+    "finishedAt": "2026-09-15T00:29:43.267Z",
+    "seconds": 24.041930042000022,
+    "exit": 0
+  },
+  {
+    "name": "verify-candidate",
+    "startedAt": "2026-09-15T00:29:43.267Z",
+    "finishedAt": "2026-09-15T00:29:45.599Z",
+    "seconds": 2.3321102079999982,
+    "exit": 0
+  },
+  {
+    "name": "copy-unqualified-output",
+    "startedAt": "2026-09-15T00:29:45.599Z",
+    "finishedAt": "2026-09-15T00:29:46.796Z",
+    "seconds": 1.196775583999988,
+    "exit": 0
+  },
+  {
+    "name": "copy-expected-release",
+    "startedAt": "2026-09-15T00:29:46.796Z",
+    "finishedAt": "2026-09-15T00:29:46.811Z",
+    "seconds": 0.014796665999980177,
+    "exit": 0
+  },
+  {
+    "name": "copy-build-inputs.json",
+    "startedAt": "2026-09-15T00:29:46.811Z",
+    "finishedAt": "2026-09-15T00:29:46.827Z",
+    "seconds": 0.01532541700004367,
+    "exit": 0
+  },
+  {
+    "name": "copy-build-packages.tsv",
+    "startedAt": "2026-09-15T00:29:46.827Z",
+    "finishedAt": "2026-09-15T00:29:46.842Z",
+    "seconds": 0.014872082999965642,
+    "exit": 0
+  },
+  {
+    "name": "after-matrix-hashes",
+    "startedAt": "2026-09-15T00:29:46.842Z",
+    "finishedAt": "2026-09-15T00:29:47.357Z",
+    "seconds": 0.5148115410000319,
+    "exit": 0
+  }
+]

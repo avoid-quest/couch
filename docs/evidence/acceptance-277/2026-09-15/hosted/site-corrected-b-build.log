@@ -1,0 +1,26 @@
+$ bun --bun astro build
+03:33:32 [types] Generated 16ms
+03:33:32 [build] output: "static"
+03:33:32 [build] mode: "static"
+03:33:32 [build] directory: /Users/OPERATOR/.codex/worktrees/ccb6/modern-kodi/apps/web/dist/
+03:33:32 [build] Collecting build info...
+03:33:32 [build] ✓ Completed in 25ms.
+03:33:32 [build] Building static entrypoints...
+03:33:32 [vite] ✓ built in 165ms
+03:33:32 [vite] ✓ built in 13ms
+03:33:32 [build] Rearranging server assets...
+
+ generating static routes 
+03:33:32   ├─ /download/index.html (+6ms) 
+03:33:32   ├─ /index.html (+4ms) 
+03:33:32 ✓ Completed in 24ms.
+
+ generating optimized images 
+03:33:32   ▶ /_astro/couch.C1TdwsM7_ZFbMQ8.webp (reused cache entry) (+0ms) (1/3)
+03:33:32   ▶ /_astro/couch.C1TdwsM7_1jSJUG.webp (reused cache entry) (+0ms) (2/3)
+03:33:32   ▶ /_astro/couch.C1TdwsM7_Z2jpKwd.webp (reused cache entry) (+0ms) (3/3)
+03:33:32 ✓ Completed in 1ms.
+
+03:33:32 [build] ✓ Completed in 213ms.
+03:33:32 [build] 2 page(s) built in 242ms
+03:33:32 [build] Complete!

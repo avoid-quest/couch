@@ -1,0 +1,6 @@
+46  102 couch-tv seat0 9201 user          -     no -
+47  102 couch-tv -     9209 manager-early -     no -
+ 5 1000 couch    -     1089 manager       -     no -
+ 7 1000 couch    -     1223 user          -     no -
+ 8    0 root     -     1240 manager-early -     no -
+c1    0 root     -     1234 user-early    pts/1 no -

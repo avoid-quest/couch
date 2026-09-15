@@ -1,0 +1,15 @@
+{
+  "revision": "bb03a3a54f5ca2a1664cd6235c61cf39e4fa5a7e",
+  "version": "0.1.0",
+  "buildSeconds": 292.809,
+  "nativeCompilation": "1m14s",
+  "manifestSHA256": "fb518513856b936fee92084122a91ddfe921a3c946d6d8c0e5c7f841de7a0f02",
+  "originalQualifiedSHA256": "28a8baa6c67d79eda6cd0b198ec5832cfc3e544bf2a80f9f1b36662fb83954b0",
+  "publicKeySHA256": "b92a35eb32de5dee41477ffdddaba5eae058fcac9e4ee9b7eade405d6a87afa0",
+  "sourceClean": true,
+  "sourceProvenance": "native-bun-provenance.log and source.bundle.sha256",
+  "cacheImage": "sha256:479ae6614f9a2adc5208574f273bd45e7a9fdcfd12f372dbeda0eac0adb31ff0",
+  "publicationPerformed": false,
+  "publicReadinessEstablished": false,
+  "AtoBAcceptanceEstablished": false
+}

@@ -1,0 +1,4 @@
+observed_at=2026-09-15T00:54:30Z
+active_state=activating
+main_pid=0
+exit=1

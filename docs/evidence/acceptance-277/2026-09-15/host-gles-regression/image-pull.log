@@ -1,0 +1,4 @@
+13-slim: Pulling from library/debian
+Digest: sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132
+Status: Image is up to date for debian:13-slim
+docker.io/library/debian:13-slim

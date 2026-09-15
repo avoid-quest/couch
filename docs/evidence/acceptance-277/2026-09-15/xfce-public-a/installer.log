@@ -1,0 +1,136 @@
+Signature and comment signature verified
+Trusted comment: timestamp:1789430874	file:Couch_0.1.0-preview.1_amd64.AppImage
+Hit:1 http://deb.debian.org/debian trixie InRelease
+Hit:2 http://deb.debian.org/debian trixie-updates InRelease
+Hit:3 http://security.debian.org/debian-security trixie-security InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+bash is already the newest version (5.2.37-2+b10).
+coreutils is already the newest version (9.7-3).
+util-linux is already the newest version (2.41.5-0+deb13u1).
+bsdutils is already the newest version (1:2.41.5-0+deb13u1).
+findutils is already the newest version (4.10.0-3).
+grep is already the newest version (3.11-4).
+sed is already the newest version (4.9-2+deb13u1).
+libc-bin is already the newest version (2.41-12+deb13u4).
+dpkg is already the newest version (1.22.22).
+apt is already the newest version (3.0.3).
+passwd is already the newest version (1:4.17.4-2).
+systemd is already the newest version (257.13-1~deb13u1).
+dbus-bin is already the newest version (1.16.2-2).
+dbus-bin set to manually installed.
+tar is already the newest version (1.35+dfsg-3.1).
+gzip is already the newest version (1.13-1+deb13u1).
+ca-certificates is already the newest version (20250419).
+fonts-dejavu-core is already the newest version (2.37-8).
+fonts-dejavu-core set to manually installed.
+fuse3 is already the newest version (3.17.2-3).
+fuse3 set to manually installed.
+libgl1 is already the newest version (1.7.0-1+b2).
+libgl1 set to manually installed.
+libegl1 is already the newest version (1.7.0-1+b2).
+libegl1 set to manually installed.
+libgl1-mesa-dri is already the newest version (25.0.7-2+deb13u1).
+libgl1-mesa-dri set to manually installed.
+va-driver-all is already the newest version (2.22.0-3).
+va-driver-all set to manually installed.
+dbus-user-session is already the newest version (1.16.2-2).
+dbus-user-session set to manually installed.
+libpam-systemd is already the newest version (257.13-1~deb13u1).
+polkitd is already the newest version (126-2).
+polkitd set to manually installed.
+bubblewrap is already the newest version (0.12.0-1~deb13u1).
+bubblewrap set to manually installed.
+xdg-dbus-proxy is already the newest version (0.1.6-1+deb13u2).
+xdg-dbus-proxy set to manually installed.
+x11-xserver-utils is already the newest version (7.7+11).
+x11-xserver-utils set to manually installed.
+pulseaudio-utils is already the newest version (17.0+dfsg1-2+b1).
+pulseaudio-utils set to manually installed.
+jq is already the newest version (1.7.1-6+deb13u3).
+minisign is already the newest version (0.12-1).
+procps is already the newest version (2:4.0.4-9).
+The following additional packages will be installed:
+  libsigsegv2
+Suggested packages:
+  gawk-doc
+The following NEW packages will be installed:
+  gawk libfuse2t64 libsigsegv2
+0 upgraded, 3 newly installed, 0 to remove and 0 not upgraded.
+Need to get 829 kB of archives.
+After this operation, 3409 kB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian trixie/main amd64 libsigsegv2 amd64 2.14-1+b2 [34.4 kB]
+Get:2 http://deb.debian.org/debian trixie/main amd64 gawk amd64 1:5.2.1-2+b1 [674 kB]
+Get:3 http://deb.debian.org/debian trixie/main amd64 libfuse2t64 amd64 2.9.9-9 [121 kB]
+Fetched 829 kB in 0s (2632 kB/s)
+Selecting previously unselected package libsigsegv2:amd64.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 104522 files and directories currently installed.)
+Preparing to unpack .../libsigsegv2_2.14-1+b2_amd64.deb ...
+Unpacking libsigsegv2:amd64 (2.14-1+b2) ...
+Setting up libsigsegv2:amd64 (2.14-1+b2) ...
+Selecting previously unselected package gawk.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 104532 files and directories currently installed.)
+Preparing to unpack .../gawk_1%3a5.2.1-2+b1_amd64.deb ...
+Unpacking gawk (1:5.2.1-2+b1) ...
+Selecting previously unselected package libfuse2t64:amd64.
+Preparing to unpack .../libfuse2t64_2.9.9-9_amd64.deb ...
+Adding 'diversion of /lib/x86_64-linux-gnu/libfuse.so.2 to /lib/x86_64-linux-gnu/libfuse.so.2.usr-is-merged by libfuse2t64'
+Adding 'diversion of /lib/x86_64-linux-gnu/libfuse.so.2.9.9 to /lib/x86_64-linux-gnu/libfuse.so.2.9.9.usr-is-merged by libfuse2t64'
+Adding 'diversion of /lib/x86_64-linux-gnu/libulockmgr.so.1 to /lib/x86_64-linux-gnu/libulockmgr.so.1.usr-is-merged by libfuse2t64'
+Adding 'diversion of /lib/x86_64-linux-gnu/libulockmgr.so.1.0.1 to /lib/x86_64-linux-gnu/libulockmgr.so.1.0.1.usr-is-merged by libfuse2t64'
+Unpacking libfuse2t64:amd64 (2.9.9-9) ...
+Setting up gawk (1:5.2.1-2+b1) ...
+Setting up libfuse2t64:amd64 (2.9.9-9) ...
+Removing 'diversion of /lib/x86_64-linux-gnu/libfuse.so.2 to /lib/x86_64-linux-gnu/libfuse.so.2.usr-is-merged by libfuse2t64'
+Removing 'diversion of /lib/x86_64-linux-gnu/libfuse.so.2.9.9 to /lib/x86_64-linux-gnu/libfuse.so.2.9.9.usr-is-merged by libfuse2t64'
+Removing 'diversion of /lib/x86_64-linux-gnu/libulockmgr.so.1 to /lib/x86_64-linux-gnu/libulockmgr.so.1.usr-is-merged by libfuse2t64'
+Removing 'diversion of /lib/x86_64-linux-gnu/libulockmgr.so.1.0.1 to /lib/x86_64-linux-gnu/libulockmgr.so.1.0.1.usr-is-merged by libfuse2t64'
+Processing triggers for man-db (2.13.1-1) ...
+Processing triggers for libc-bin (2.41-12+deb13u4) ...
+Installed Couch for probe. Launch Couch from the desktop application menu in an X11 session.
+App data stays separate from the AppImage. Debian maintenance remains with the machine administrator.
+Address: enable Allow remote control in Couch, then use the displayed LAN IP and port 4100. No firewall or router rule was changed.
