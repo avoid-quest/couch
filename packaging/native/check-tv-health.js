@@ -5,7 +5,7 @@ const [pid, expectedFile, data] = process.argv.slice(2);
 if (!/^[1-9][0-9]*$/.test(pid ?? "")) throw new Error("The TV service has no native process.");
 const expected = JSON.parse(await readFile(expectedFile, "utf8"));
 if ((await stat(`/proc/${pid}`)).uid !== (await stat("/proc/self")).uid || await readlink(`/proc/${pid}/exe`) !== "/usr/bin/couch") throw new Error("The service is not running the installed native Couch.");
-const children = (await readFile(`/proc/${pid}/task/${pid}/children`, "utf8")).trim().split(/\s+/);
+const children = (await Promise.all((await readdir(`/proc/${pid}/task`)).map(thread => readFile(`/proc/${pid}/task/${thread}/children`, "utf8").catch(() => "")))).join(" ").trim().split(/\s+/);
 const child = (await Promise.all(children.filter(Boolean).map(async candidate => {
   try { return await readlink(`/proc/${candidate}/exe`) === "/usr/bin/couch-server" ? candidate : null; } catch { return null; }
 }))).find(Boolean);
