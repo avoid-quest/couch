@@ -1,0 +1,10 @@
+bun test v1.4.2 (744846f84)
+
+src/server/web-media.test.ts:
+(pass) reports invalid output and an unavailable executable [3.73ms]
+
+ 1 pass
+ 23 filtered out
+ 0 fail
+ 2 expect() calls
+Ran 1 test across 1 file. [57.00ms]

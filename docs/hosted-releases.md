@@ -65,7 +65,10 @@ qualification receipts, databases and signing material stay private. The workflo
 uses explicit `cn release upload --file` calls because automatic Tauri directory
 scanning cannot enforce the approved six-file set across these setup archives.
 No asset is announced until all six downloads, the installer selector, Tauri
-metadata and metadata-selected AppImage match the qualified identities.
+metadata and metadata-selected AppImage match the qualified identities. Public
+readiness retries a rate-limited URL at most twice, honoring Retry-After delays up
+to two minutes. Longer delays or continued failures require a later verification
+run; they never trigger another publication or rebuild.
 
 Stable is the unnamed channel, with no `--channel` flag. Preview is `preview`.
 The feeds are:

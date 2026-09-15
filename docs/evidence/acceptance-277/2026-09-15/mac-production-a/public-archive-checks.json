@@ -1,0 +1,27 @@
+{
+  "version": "0.1.0-preview.1",
+  "revision": "3f91c0564bbbeea04eef421977f2e67b17c8fb14",
+  "publicFiles": [
+    "Couch_0.1.0-preview.1_amd64.AppImage",
+    "Couch_0.1.0-preview.1_amd64.AppImage.sig",
+    "couch-distribution-material-0.1.0-preview.1.tar.gz",
+    "couch-distribution-material-0.1.0-preview.1.tar.gz.sig",
+    "couch-setup-0.1.0-preview.1.tar.gz",
+    "couch-setup-0.1.0-preview.1.tar.gz.sig"
+  ],
+  "archiveChecks": [
+    {
+      "archive": "couch-distribution-material-0.1.0-preview.1.tar.gz",
+      "entries": 2530,
+      "secretMatches": 0,
+      "unsafePaths": []
+    },
+    {
+      "archive": "couch-setup-0.1.0-preview.1.tar.gz",
+      "entries": 36,
+      "secretMatches": 0,
+      "unsafePaths": []
+    }
+  ],
+  "scope": "Archive contents scanned for production signing key/password and provider credential; AppImage content uses retained build inventory and explicit packaging allowlist."
+}

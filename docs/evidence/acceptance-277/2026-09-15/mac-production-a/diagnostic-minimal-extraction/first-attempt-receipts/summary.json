@@ -1,0 +1,45 @@
+{
+  "scope": "signed production candidate metadata extraction on existing diagnostic clone; no installed GUI acceptance",
+  "startedAt": "2026-09-15T00:18:15Z",
+  "checks": {
+    "packages-before": {
+      "command": [
+        "dpkg-query",
+        "-W",
+        "-f=${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Status}\n"
+      ],
+      "exit": 0,
+      "seconds": 0.132
+    },
+    "minisign": {
+      "command": [
+        "minisign",
+        "-Vm",
+        "/var/tmp/couch-production-a-metadata-20260915-0017/Couch_0.1.0-preview.1_amd64.AppImage",
+        "-x",
+        "/var/tmp/couch-production-a-metadata-20260915-0017/Couch_0.1.0-preview.1_amd64.AppImage.sig",
+        "-p",
+        "/var/tmp/couch-production-a-metadata-20260915-0017/couch-updater.pub"
+      ],
+      "exit": 2,
+      "seconds": 0.016
+    },
+    "packages-after": {
+      "command": [
+        "dpkg-query",
+        "-W",
+        "-f=${binary:Package}\t${Version}\t${Architecture}\t${db:Status-Status}\n"
+      ],
+      "exit": 0,
+      "seconds": 0.082
+    }
+  },
+  "installedBefore": "58ed2f8d8907e19b28dd147c60d70469df6b3a10515b79a5f1435f88f897ed25",
+  "candidateSha256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7",
+  "firstFailure": "minisign failed",
+  "installedAfter": "58ed2f8d8907e19b28dd147c60d70469df6b3a10515b79a5f1435f88f897ed25",
+  "installedUnchanged": true,
+  "packagesUnchanged": true,
+  "finishedAt": "2026-09-15T00:18:30Z",
+  "passed": false
+}

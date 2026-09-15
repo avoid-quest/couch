@@ -1,0 +1,96 @@
+{
+  "version": "0.1.0-preview.1",
+  "revision": "3f91c0564bbbeea04eef421977f2e67b17c8fb14",
+  "files": {
+    "Couch_0.1.0-preview.1_amd64.AppImage": {
+      "bytes": 289114616,
+      "sha256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTRoNHlhRDBvRGhVcXdyTlFyeDJEaHA1WjVjVDUvd1ltUlh6RmZ5bEpCRXVlK3A5Tk9aaEJab3QrZEZnem9UNDA3emNwbEJkb0t0OGdOOHc1QU1iTVFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDMwODc0CWZpbGU6Q291Y2hfMC4xLjAtcHJldmlldy4xX2FtZDY0LkFwcEltYWdlCjJWbTlJWnVXMmlTb2JkcnFNTFBJaGl3TFhFWTJvNnlNNURKS3czeFhJMUo1Zlg0bUkzYTJ1MzBYZmxaY2M3ZWdzSURQNDJYVDUvZGY4R1A3bmFtb0RRPT0K"
+    },
+    "Couch_0.1.0-preview.1_amd64.AppImage.sig": {
+      "bytes": 428,
+      "sha256": "2aa279fbb53ce04e0ff49ee1faf9f08ff975be3e18f7b9590e30c602bd9a2734"
+    },
+    "couch-setup-0.1.0-preview.1.tar.gz": {
+      "bytes": 16612,
+      "sha256": "6196601ce918a171234686b41d8fb92cfd4e92c33a86e4165b090593ab9ca38a",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNXpNckhPM3d2YWYySUtMRFNsUHowcHdrK1RBdjFCbjJjUnc0ZjBrckE0QUtWNjMvVU9OZG83bHIzTW84eitaOVZ4STNRWU8vbjV4NHJycFpFL1lxL3dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDMwOTA2CWZpbGU6Y291Y2gtc2V0dXAtMC4xLjAtcHJldmlldy4xLnRhci5negpBci9RRWJrYVZBc1NDTUFwWWtnSkdlZC95NitIeEZPYk5UVFliazJoOHZ2MlRwUGgvYmx5VFREZy9UN1QwOUJrVjdxeGtkVnZTTlNlTC9xOVlpTmhDZz09Cg=="
+    },
+    "couch-setup-0.1.0-preview.1.tar.gz.sig": {
+      "bytes": 428,
+      "sha256": "4c26f263dbc5adf300c0a6b9b72f786d7cedd4e03e8d16a688fabb16f78c0098"
+    },
+    "couch-distribution-material-0.1.0-preview.1.tar.gz": {
+      "bytes": 3159850,
+      "sha256": "e10daed4e775cd61cf63e76ca4bf10ba63ad74cd4e13d062cecade387d82d102",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTdQek9DN05vdHY0Q0trdVA5MlFmVlRrbVg1NFlPQjZPR29qVWZ2OFNkL2VOU1Fkem5UWER6Y3VIdTdIcWNzb1RhUGZ4ZDk4d1pRamprTG5EdHRzTkFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDMwOTA2CWZpbGU6Y291Y2gtZGlzdHJpYnV0aW9uLW1hdGVyaWFsLTAuMS4wLXByZXZpZXcuMS50YXIuZ3oKaXU2UFZiY2ZNZDA4NExjNUxwVnowUDVGNzBkR045MjJKNlM4c1lXQWdGTXFoOFplMUhjcmF4MElJVUxwRGhXVDd6ZUJMWFQwdUd0bWZaQVMvNURpQmc9PQo="
+    },
+    "couch-distribution-material-0.1.0-preview.1.tar.gz.sig": {
+      "bytes": 448,
+      "sha256": "60d5bb93b287b5b2240486612e4e75b3cd48b5d08bf1db46c4f02d0d9e773c75"
+    }
+  },
+  "checks": [
+    "signatures",
+    "typecheck",
+    "bun",
+    "native",
+    "signed-manifest-extraction",
+    "installer"
+  ],
+  "qualificationMatrix": {
+    "kind": "local-linux-source-and-signed-byte-matrix",
+    "source": "3f91c0564bbbeea04eef421977f2e67b17c8fb14",
+    "bun": "1.4.2+744846f84",
+    "nativeArm64": {
+      "suitePassed": 1249,
+      "clockPassed": 3
+    },
+    "amd64": {
+      "inventoryPassed": 12,
+      "rustPassed": 39,
+      "rustIgnored": 1
+    },
+    "unionSuitePassed": 1261,
+    "optionalSkippedTests": [
+      "actual Twitch public catalog returns live streams, offline channels, categories and search pagination",
+      "actual offline Sabaku channel lists recent past broadcasts",
+      "actual yt-dlp passes DASH height limits to native playback with audio before video",
+      "actual yt-dlp respects quality caps when selecting HLS variants",
+      "actual yt-dlp selects audio-only HTML sources at every quality",
+      "public RaiPlay catalog, search, episode selection and replay"
+    ],
+    "evidence": [
+      {
+        "file": "native-bun-full.log",
+        "sha256": "61b0192e4d1c66479cb42f2cf2eed2b1694d1287372b84e2580629e863046a62"
+      },
+      {
+        "file": "native-bun-clock.log",
+        "sha256": "0a66a01955b3874d9e67cdb9df04d59b993643631af2613b5a9d0898b9b2bf46"
+      },
+      {
+        "file": "amd64-inventory-tests.log",
+        "sha256": "81012bec0176ddc88738ee42eba7b07a7242e85802ee2a9b667a8639a84fcd83"
+      },
+      {
+        "file": "native-rust-tests.log",
+        "sha256": "a44399eb541ed49a9397db7a9dc9f4d9350043bfa4d8f0c60876b1f6deb4fda2"
+      },
+      {
+        "file": "typecheck-clean-env.log",
+        "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+      },
+      {
+        "file": "installer-fixture.log",
+        "sha256": "cd7acc186d29f4e95938255b46f9c6705821e2517c3c84883ea046da52baf6ec"
+      }
+    ],
+    "signedManifestExtraction": {
+      "result": "diagnostic-minimal-extraction/decoded-signature-attempt/driver.stdout",
+      "sha256": "a4c3481d0b71c068d8ed6519f2086a7cebec847e19bd98920d184e5e1baa2296",
+      "candidateSha256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7"
+    },
+    "unchangedOriginalScriptPass": false
+  }
+}

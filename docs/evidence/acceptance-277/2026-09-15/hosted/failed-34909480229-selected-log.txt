@@ -1,0 +1,25 @@
+candidate	Prepare the pinned Debian builder	2026-09-14T23:42:19.9977387Z #8 writing image sha256:d8d17880d0696f97bd75e5955541c6421bad0cbd3158b455e95b6cc2bab7b627 done
+candidate	Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:42:33.3800629Z Cache Size: ~580 MB (608587277 B)
+candidate	Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:42:36.9183605Z Restored from cache key "v0-rust-debian-13-release-619f5e1104ef05385eec8c5da33bc1866db11c30403bba4928bb81dce86006ff-candidate-Linux-x64-dab3709f-d56697df" full match: true.
+candidate	Qualify the exact signed bytes	2026-09-14T23:48:21.4616659Z Verified 0.1.0-preview.1 from 3f91c0564bbbeea04eef421977f2e67b17c8fb14
+candidate	Qualify the exact signed bytes	2026-09-14T23:49:09.8882479Z  3 pass
+candidate	Qualify the exact signed bytes	2026-09-14T23:49:09.8882664Z  0 fail
+candidate	Qualify the exact signed bytes	2026-09-14T23:50:35.2019835Z  1261 pass
+candidate	Qualify the exact signed bytes	2026-09-14T23:50:35.2020001Z  6 skip
+candidate	Qualify the exact signed bytes	2026-09-14T23:50:35.2020173Z  0 fail
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:39.2652773Z test result: ok. 37 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:39.2667516Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:39.2682628Z test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:39.5326275Z test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:42.6316425Z PASS: desktop recovery preserves current data and rejects an incompatible retained app
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:42.6317200Z PASS: desktop and TV setup/recovery contention, interrupted TV boot setup and administrator power policy
+candidate	Qualify the exact signed bytes	2026-09-14T23:51:42.6317949Z PASS: signatures, targets, missing packages/FUSE, desktop preservation, TV setup, repeat setup and separate user data
+candidate	Verify retained candidate	2026-09-14T23:52:06.3921474Z Verified 0.1.0-preview.1 from 3f91c0564bbbeea04eef421977f2e67b17c8fb14
+candidate	Run actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f	2026-09-14T23:52:06.5242148Z With the provided path, there will be 9 files uploaded
+candidate	Run actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f	2026-09-14T23:52:06.7319801Z ##[error]Failed to CreateArtifact: Artifact storage quota has been hit. Unable to upload any new artifacts. Usage is recalculated every 6-12 hours.
+candidate	Post Run Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c	2026-09-14T23:52:06.9546727Z Cache up-to-date.
+candidate	Complete runner	2026-09-14T23:52:10.0619809Z [docker-manifest] Image manifest: 1 image(s), 2403484175 bytes working set, 0 bytes evicted, 0 bytes reclaimable (deferred)
+candidate	Complete runner	2026-09-14T23:52:10.9059725Z {"status":"ok"}Docker container hash mismatch - committing
+candidate	Complete runner	2026-09-14T23:52:10.0445135Z Docker cleanup complete: 1 container(s), 0 network(s), 0 volume(s), 1 image(s) removed
+candidate	Complete runner	2026-09-14T23:52:10.1138529Z couch-release-builder   latest    2.4GB
+candidate	Complete runner	2026-09-14T23:52:10.9356512Z No active SSH sessions detected. Proceeding with shutdown immediately.

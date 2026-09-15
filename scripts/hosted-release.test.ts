@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,5 +70,40 @@ describe("hosted versions and promotion", () => {
     for (const response of [new Response(null, { status: 404 }), new Response("bad"), Response.json({ version: "0.0.1", signature, url: "https://example.com/app" })]) {
       await expect(verifyPublic(manifest, "preview", (async () => response.clone()) as unknown as typeof fetch)).rejects.toThrow();
     }
+  });
+  test("a rate-limited metadata-selected asset waits and retries only that download", async () => {
+    const manifest = fixture(), calls: string[] = [], waits: number[] = [];
+    let limitedBodyCancelled = false;
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = String(input); calls.push(url);
+      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch.AppImage" });
+      if (url === "https://assets.example/Couch.AppImage" && calls.filter(value => value === url).length === 1) {
+        return new Response(new ReadableStream({ cancel() { limitedBodyCancelled = true; } }), { status: 429, headers: { "Retry-After": "51" } });
+      }
+      return new Response(url.includes(".sig") ? signature : archive);
+    }) as typeof fetch;
+    expect((await verifyPublic(manifest, "preview", fetcher, async wait => { waits.push(wait); })).checks).toHaveLength(9);
+    expect(waits).toEqual([51_000]);
+    expect(calls).toHaveLength(10);
+    expect(calls.slice(-2)).toEqual(["https://assets.example/Couch.AppImage", "https://assets.example/Couch.AppImage"]);
+    expect(limitedBodyCancelled).toBe(true);
+  });
+  test("rate-limit waits support HTTP dates and fallbacks, stop after two retries, and reject excessive waits", async () => {
+    const clock = spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-15T00:00:00Z"));
+    try {
+      for (const [header, wait] of [["Tue, 15 Sep 2026 00:00:51 GMT", 51_000], ["invalid", 60_000], [null, 60_000], ["0", 0], ["121", null]] as const) {
+        let calls = 0; const waits: number[] = [];
+        const fetcher = (async () => { calls++; return new Response(null, { status: 429, headers: header === null ? {} : { "Retry-After": header } }); }) as unknown as typeof fetch;
+        await expect(verifyPublic(fixture(), "preview", fetcher, async milliseconds => { waits.push(milliseconds); })).rejects.toThrow();
+        expect(calls).toBe(wait === null ? 1 : 3);
+        expect(waits).toEqual(wait === null ? [] : [wait, wait]);
+      }
+    } finally { clock.mockRestore(); }
+  });
+  test("a successful retry still rejects changed asset bytes", async () => {
+    let calls = 0;
+    const fetcher = (async () => ++calls === 1 ? new Response(null, { status: 429, headers: { "Retry-After": "51" } }) : new Response(new Uint8Array(archive.length))) as unknown as typeof fetch;
+    await expect(verifyPublic(fixture(), "preview", fetcher, async () => {})).rejects.toThrow("Public download bytes differ");
+    expect(calls).toBe(2);
   });
 });

@@ -1,0 +1,23 @@
+bun test v1.4.2 (744846f84)
+
+src/server/web-media.test.ts:
+224 | });
+225 | 
+226 | test("reports invalid output and an unavailable executable", async () => {
+227 |   const { resolve } = await fixture("console.log('not json');");
+228 |   await expect(resolve(page)).rejects.toThrow("invalid media information");
+229 |   await expect(createWebMediaResolver({ executable: "/missing-couch-test/yt-dlp" })(page)).rejects.toThrow("installation");
+                                                                                                         ^
+error: expect(received).toThrow(expected)
+
+Expected substring: "installation"
+Received message: "yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported."
+
+      at <anonymous> (/work/src/server/web-media.test.ts:229:100)
+(fail) reports invalid output and an unavailable executable [171.12ms]
+
+ 0 pass
+ 23 filtered out
+ 1 fail
+ 2 expect() calls
+Ran 1 test across 1 file. [386.00ms]

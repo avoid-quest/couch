@@ -1,0 +1,11 @@
+{
+  "operation": "public readiness after successful publication",
+  "releaseId": "01M2H35H2S2RVCAD9MAFFEQHEX",
+  "version": "0.1.0-preview.1",
+  "stage": "metadata-selected AppImage GET",
+  "httpStatus": 429,
+  "observedRetryAfterSeconds": 51,
+  "retryAfterObservedAt": "2026-09-15T00:23:38Z",
+  "result": "failed; no readiness receipt written",
+  "publicationRepeated": false
+}
