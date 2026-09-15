@@ -1,0 +1,27 @@
+HTTP/2 302 
+date: Tue, 15 Sep 2026 00:40:07 GMT
+content-length: 0
+location: https://cdn.crabnebula.app/asset/01M2H746BAGAWJQYRV66DZCFE8?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22couch-distribution-material-0.1.0-preview.1.tar.gz.sig%22%7D
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=MqMdvz6gdteRMAPDCEz5bmrWQoTK0OL8xbpdAHgroRp%2FlfNpB7wC0v2RzFqxj4e%2BYRp4J9ssgdtpBn%2FI6H04OoE0wWE4zoUBFJiNcQGN%2B5IV5%2Bt%2FOAY%2ByRjZ%2Bgz4iMe%2FJ9rMpA%3D%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a3b39406ad02e1f2-FCO
+
+HTTP/2 200 
+date: Tue, 15 Sep 2026 00:40:07 GMT
+content-length: 448
+content-range: bytes 0-447/448
+cf-ray: a3b39406fd63e1f2-FCO
+cf-cache-status: HIT
+accept-ranges: bytes
+access-control-allow-origin: https://web.crabnebula.cloud/
+age: 1002
+cache-control: max-age=15552000
+content-disposition: attachment; filename="couch-distribution-material-0.1.0-preview.1.tar.gz.sig"
+etag: "0886ab82f18425ff5c0e7a28de90770a-1"
+server: cloudflare
+cloud-org-id: 01M2G2M8KZNSMWEZ336J2PRG67
+no-vary-search: params
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=%2BuICMgYPYZSn7DRcxO%2Bcnj5OMqEobJqfZzM3nxkQHavO7GZEyXrjMgrSUKv0%2BFSnKZbYHl6ky9hknt%2FpqMnGKIG1wyD2gywqh5Fb0FBKVrDWwm1ToLaU5BaT4n2NXdQ9iivBTg%3D%3D"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+

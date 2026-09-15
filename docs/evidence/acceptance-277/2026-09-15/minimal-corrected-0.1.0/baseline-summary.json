@@ -1,0 +1,29 @@
+{
+  "vmId": "1A01E320-8A02-4C8C-850F-48C539F6FCF1",
+  "scope": "pristine minimal Debian clone before corrected public installer",
+  "osRelease": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.7\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+  "packageCount": 321,
+  "dpkgAuditEmpty": true,
+  "failedUnits": "  UNIT LOAD ACTIVE SUB DESCRIPTION\n\n0 loaded units listed.\n",
+  "defaultTarget": "graphical.target",
+  "couchAbsence": [
+    "absent /etc/couch",
+    "absent /var/lib/couch",
+    "absent /var/lib/couch-installer",
+    "absent /var/lib/couch-install-locks",
+    "absent /etc/X11/default-display-manager",
+    "absent /usr/share/xsessions/couch.desktop",
+    "absent /home/probe/.local/lib/couch",
+    "couch-tv=absent"
+  ],
+  "toolsPresent": [],
+  "devices": [
+    "character special file 666 root:root /dev/fuse",
+    "directory 755 root:root /dev/dri/by-path",
+    "character special file 660 root:video /dev/dri/card0",
+    "character special file 660 root:render /dev/dri/renderD128",
+    "character special file 660 root:audio /dev/snd/seq",
+    "character special file 660 root:audio /dev/snd/timer"
+  ],
+  "noAptInstallBuildGuiActions": true
+}

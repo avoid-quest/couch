@@ -1,0 +1,13 @@
+{
+  "couchRevision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+  "couchPath": "src-tauri/src/appimage_update.rs",
+  "couchLine": 172,
+  "crate": "tauri-plugin-updater",
+  "version": "2.11.0",
+  "crateLockChecksum": "b28d8cabdeb0564f03ae261963de4bc3d98321cd3d213e76a81b7d344e5df606",
+  "crateSourcePath": "src/updater.rs",
+  "crateSourceSha256": "e95d7d44c3e9bfbaaf269702c0abf406b59cfbf6d5524cdc40c72d8224037243",
+  "defaultComparatorLine": 578,
+  "comparison": "release.version > self.current_version",
+  "scope": "Read-only source inspection; installed-client rejection not exercised."
+}

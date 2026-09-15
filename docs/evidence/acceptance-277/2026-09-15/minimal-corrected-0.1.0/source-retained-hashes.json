@@ -1,0 +1,919 @@
+[
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/apt-release-hashes.txt",
+    "retained": "baseline/apt-release-hashes.txt",
+    "sourceSha256": "10aa3151c1267d2f1a4943a89ed155606eb2e2c57f68f2b87db60ced190a5eaf",
+    "retainedSha256": "10aa3151c1267d2f1a4943a89ed155606eb2e2c57f68f2b87db60ced190a5eaf",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/apt-sources.txt",
+    "retained": "baseline/apt-sources.txt",
+    "sourceSha256": "bb361b0f8466c0de1a8d5bab1ff41aaf27ec12577dca482ce9985d6e11049412",
+    "retainedSha256": "bb361b0f8466c0de1a8d5bab1ff41aaf27ec12577dca482ce9985d6e11049412",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/architecture.txt",
+    "retained": "baseline/architecture.txt",
+    "sourceSha256": "d54d20eadbec9c9cc5ac6e0e371abc96d64a0d724d1cf45297fab6098026a69d",
+    "retainedSha256": "d54d20eadbec9c9cc5ac6e0e371abc96d64a0d724d1cf45297fab6098026a69d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/auth-policy.sha256",
+    "retained": "baseline/auth-policy.sha256",
+    "sourceSha256": "48bd67924637a8730dfcf0785aec83cfb1676a7978687f8474252c561f940eac",
+    "retainedSha256": "48bd67924637a8730dfcf0785aec83cfb1676a7978687f8474252c561f940eac",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/auth-policy.txt",
+    "retained": "baseline/auth-policy.txt",
+    "sourceSha256": "a8dbb78a892bd24b89fb89c67049195a72a7b637ce8f370e7617d008e3951396",
+    "retainedSha256": "a8dbb78a892bd24b89fb89c67049195a72a7b637ce8f370e7617d008e3951396",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/boot-warnings.txt",
+    "retained": "baseline/boot-warnings.txt",
+    "sourceSha256": "a2460f111d0787ff7a4a45c97b3a2218c8ebb9c77eaf526dc3ae8eabbb442c65",
+    "retainedSha256": "a2460f111d0787ff7a4a45c97b3a2218c8ebb9c77eaf526dc3ae8eabbb442c65",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/command-paths.txt",
+    "retained": "baseline/command-paths.txt",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/couch-absence.txt",
+    "retained": "baseline/couch-absence.txt",
+    "sourceSha256": "1f60bac0b8e4999b28749a465217f9318537eaa9aa2ad1ad671a64a96a4210dd",
+    "retainedSha256": "1f60bac0b8e4999b28749a465217f9318537eaa9aa2ad1ad671a64a96a4210dd",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/cpu.txt",
+    "retained": "baseline/cpu.txt",
+    "sourceSha256": "0dc9d7cfac9caeb8e5028d16c005e3f0b2da64b98290bf9c004c32492103dcd0",
+    "retainedSha256": "0dc9d7cfac9caeb8e5028d16c005e3f0b2da64b98290bf9c004c32492103dcd0",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/default-target.txt",
+    "retained": "baseline/default-target.txt",
+    "sourceSha256": "c330c5a2d159122c4c989219ccc31ec8b86a6267873006e8cac31a7c5120b3e8",
+    "retainedSha256": "c330c5a2d159122c4c989219ccc31ec8b86a6267873006e8cac31a7c5120b3e8",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/devices.txt",
+    "retained": "baseline/devices.txt",
+    "sourceSha256": "6776d99d311df10bfedaba986cc2a897b000f39be5bcce2f119dd1aee254cc62",
+    "retainedSha256": "6776d99d311df10bfedaba986cc2a897b000f39be5bcce2f119dd1aee254cc62",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/failed-units.txt",
+    "retained": "baseline/failed-units.txt",
+    "sourceSha256": "74c224d35a870be7504df7c485d29506f38ae00da7b800c9cc7e40c93b15e700",
+    "retainedSha256": "74c224d35a870be7504df7c485d29506f38ae00da7b800c9cc7e40c93b15e700",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/filesystems.txt",
+    "retained": "baseline/filesystems.txt",
+    "sourceSha256": "ff514051312ca0f0960536194ff6a5ed7f7e5f7dcc1a6c18063bda0cd1e48289",
+    "retainedSha256": "ff514051312ca0f0960536194ff6a5ed7f7e5f7dcc1a6c18063bda0cd1e48289",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/kernel.txt",
+    "retained": "baseline/kernel.txt",
+    "sourceSha256": "0ce37b53996c9d6b667167f620e6d3325b9eee956d53984e53c09ff9484a542d",
+    "retainedSha256": "0ce37b53996c9d6b667167f620e6d3325b9eee956d53984e53c09ff9484a542d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/manual-packages.txt",
+    "retained": "baseline/manual-packages.txt",
+    "sourceSha256": "daa30b5a562127d13ecf19ce9f6833a60524e4264d6f84388a4557da3d97c90e",
+    "retainedSha256": "daa30b5a562127d13ecf19ce9f6833a60524e4264d6f84388a4557da3d97c90e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/memory.txt",
+    "retained": "baseline/memory.txt",
+    "sourceSha256": "373ca723d2d911c6f606f4999bb9b1b6739c34b7a920f705246a4773cdbceced",
+    "retainedSha256": "373ca723d2d911c6f606f4999bb9b1b6739c34b7a920f705246a4773cdbceced",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/os-release.txt",
+    "retained": "baseline/os-release.txt",
+    "sourceSha256": "e249e69c32d81350fdd6b05ac5575255f14e380ba14b8454acea14e49f088bfa",
+    "retainedSha256": "e249e69c32d81350fdd6b05ac5575255f14e380ba14b8454acea14e49f088bfa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/package-audit.txt",
+    "retained": "baseline/package-audit.txt",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/packages.tsv",
+    "retained": "baseline/packages.tsv",
+    "sourceSha256": "940e2e4d31cbea0190e01a719615ee92002e397568d6b7454be0dc0a87880a0f",
+    "retainedSha256": "940e2e4d31cbea0190e01a719615ee92002e397568d6b7454be0dc0a87880a0f",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/pci.txt",
+    "retained": "baseline/pci.txt",
+    "sourceSha256": "0f947845693ae96311b2ad72906c1e8ea88639042796b99820ff7f19090a4b67",
+    "retainedSha256": "0f947845693ae96311b2ad72906c1e8ea88639042796b99820ff7f19090a4b67",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/processes.txt",
+    "retained": "baseline/processes.txt",
+    "sourceSha256": "da76dc453f70b721915bb6cf4975eb77f612130036b6302545345a7681ed8c8a",
+    "retainedSha256": "da76dc453f70b721915bb6cf4975eb77f612130036b6302545345a7681ed8c8a",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/security.txt",
+    "retained": "baseline/security.txt",
+    "sourceSha256": "dbec8fa28e89a6c1aa1f1db638ab82fb42694ce47748804930dff7e41d866882",
+    "retainedSha256": "dbec8fa28e89a6c1aa1f1db638ab82fb42694ce47748804930dff7e41d866882",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/session-policy.tsv",
+    "retained": "baseline/session-policy.tsv",
+    "sourceSha256": "e55e2f2c32ad532014a2e1d33e054d45ec1862b49e631f0bf59794964a34e508",
+    "retainedSha256": "e55e2f2c32ad532014a2e1d33e054d45ec1862b49e631f0bf59794964a34e508",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/sessions.txt",
+    "retained": "baseline/sessions.txt",
+    "sourceSha256": "2de2bc663407a70a80e15bd4afa0c783c17a52e46372e1b036cb10af9b621cb9",
+    "retainedSha256": "2de2bc663407a70a80e15bd4afa0c783c17a52e46372e1b036cb10af9b621cb9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/time.txt",
+    "retained": "baseline/time.txt",
+    "sourceSha256": "c05a07c0fc692ec56580fb0f507d9298efd71af78b1f817af16a0888546ced55",
+    "retainedSha256": "c05a07c0fc692ec56580fb0f507d9298efd71af78b1f817af16a0888546ced55",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline/unit-files.txt",
+    "retained": "baseline/unit-files.txt",
+    "sourceSha256": "90a6923de2042c95ca8065a8858c060b6e9f938f54209adf08d99143b93cf195",
+    "retainedSha256": "90a6923de2042c95ca8065a8858c060b6e9f938f54209adf08d99143b93cf195",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/admin-auth-after.sha256",
+    "retained": "public-install/admin-auth-after.sha256",
+    "sourceSha256": "fb81f30c5125b36f8183b56ce13eb3ad6536f9f3a5fadc6bb15845a5155fccaf",
+    "retainedSha256": "fb81f30c5125b36f8183b56ce13eb3ad6536f9f3a5fadc6bb15845a5155fccaf",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/admin-auth-before.sha256",
+    "retained": "public-install/admin-auth-before.sha256",
+    "sourceSha256": "fb81f30c5125b36f8183b56ce13eb3ad6536f9f3a5fadc6bb15845a5155fccaf",
+    "retainedSha256": "fb81f30c5125b36f8183b56ce13eb3ad6536f9f3a5fadc6bb15845a5155fccaf",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/audio-mute.txt",
+    "retained": "public-install/audio-mute.txt",
+    "sourceSha256": "5bf2167a2627e66a53753a7b7aaeab97a151dcaec5686091ca0b358ed12f8f0e",
+    "retainedSha256": "5bf2167a2627e66a53753a7b7aaeab97a151dcaec5686091ca0b358ed12f8f0e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/audio-sinks.stderr",
+    "retained": "public-install/audio-sinks.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/audio-sinks.txt",
+    "retained": "public-install/audio-sinks.txt",
+    "sourceSha256": "4012d27ce1dcb5a2f61cd02d4b24186d903aa2559c75210dd90bec70fe7a4877",
+    "retainedSha256": "4012d27ce1dcb5a2f61cd02d4b24186d903aa2559c75210dd90bec70fe7a4877",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/auth-policy-after.sha256",
+    "retained": "public-install/auth-policy-after.sha256",
+    "sourceSha256": "e23f90a292570057ca57dc26222ce95c2c90b80f46f6a1aa7f75e9a504a55780",
+    "retainedSha256": "e23f90a292570057ca57dc26222ce95c2c90b80f46f6a1aa7f75e9a504a55780",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/auth-policy-before.sha256",
+    "retained": "public-install/auth-policy-before.sha256",
+    "sourceSha256": "e23f90a292570057ca57dc26222ce95c2c90b80f46f6a1aa7f75e9a504a55780",
+    "retainedSha256": "e23f90a292570057ca57dc26222ce95c2c90b80f46f6a1aa7f75e9a504a55780",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/auth-policy-files.txt",
+    "retained": "public-install/auth-policy-files.txt",
+    "sourceSha256": "b9fbf2e84957f522870cf3b01c6958e219a2dbcbd437fcd6f917c6c8d437ed31",
+    "retainedSha256": "b9fbf2e84957f522870cf3b01c6958e219a2dbcbd437fcd6f917c6c8d437ed31",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/bootstrap-apt-update.log",
+    "retained": "public-install/bootstrap-apt-update.log",
+    "sourceSha256": "23d94296c53a17b65102af7b5245cca9c2bf8eb22bd49331aeacee2c1d56bc0a",
+    "retainedSha256": "23d94296c53a17b65102af7b5245cca9c2bf8eb22bd49331aeacee2c1d56bc0a",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/bootstrap-install.log",
+    "retained": "public-install/bootstrap-install.log",
+    "sourceSha256": "adc450e9b70a4894e610da4ff7eb909952ab9bfd5f9c0255eee105d76867ac2b",
+    "retainedSha256": "adc450e9b70a4894e610da4ff7eb909952ab9bfd5f9c0255eee105d76867ac2b",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/collector.log",
+    "retained": "public-install/collector.log",
+    "sourceSha256": "101870e7b6d3e8d49b4833846da89c45d78dc28b480e4b987ed2cf319489e456",
+    "retainedSha256": "101870e7b6d3e8d49b4833846da89c45d78dc28b480e4b987ed2cf319489e456",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/expected-files.sha256",
+    "retained": "public-install/expected-files.sha256",
+    "sourceSha256": "69dbf205351f33a5ac81f3d62d4e6284d45854d249e0fe3ef271f33ab708a65e",
+    "retainedSha256": "69dbf205351f33a5ac81f3d62d4e6284d45854d249e0fe3ef271f33ab708a65e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/expected-manifest.json",
+    "retained": "public-install/expected-manifest.json",
+    "sourceSha256": "71092f2544deca180fd7279676de8ed617902871b9b517f1ee54f562522db6d0",
+    "retainedSha256": "71092f2544deca180fd7279676de8ed617902871b9b517f1ee54f562522db6d0",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/expected-manifest.sha256",
+    "retained": "public-install/expected-manifest.sha256",
+    "sourceSha256": "bd57c4a99fdc4eb7e336711cde213f020b02f1da4250be6136d389af9fde97df",
+    "retainedSha256": "bd57c4a99fdc4eb7e336711cde213f020b02f1da4250be6136d389af9fde97df",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/file-hashes.log",
+    "retained": "public-install/file-hashes.log",
+    "sourceSha256": "ccab50c90dab07dd104ac53e3eb4af200b047f4c8ee714bebd1aa4b2d5c9ec92",
+    "retainedSha256": "ccab50c90dab07dd104ac53e3eb4af200b047f4c8ee714bebd1aa4b2d5c9ec92",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/full-desktop-packages.txt",
+    "retained": "public-install/full-desktop-packages.txt",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.headers",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.headers",
+    "sourceSha256": "137b48de9f5b427fe10ede4aa6a9963a53d8e9957b9176ab8236cacc447defda",
+    "retainedSha256": "4f5564f71dd6bc5d2d1dd595fd3b1341326042b13dbb6fb52e7b3845df66b780",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.sig.headers",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.sig.headers",
+    "sourceSha256": "6a08568c510514d9fc376f8db2394bb850c85e963261cb197a5ef1356a980730",
+    "retainedSha256": "b227c4b5bbc377e77cbc75ac7b9cd425a0fc14ccfa322cd4ea08954ff90d92ad",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.sig.stdout",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.sig.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.sig.txt",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.sig.txt",
+    "sourceSha256": "b8bccfed63a59ff7fd1456791aeec2ca6062a5c521b86aa5cf3ee787756128fa",
+    "retainedSha256": "b8bccfed63a59ff7fd1456791aeec2ca6062a5c521b86aa5cf3ee787756128fa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.stdout",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/Couch_0.1.0_amd64.AppImage.txt",
+    "retained": "public-install/http/Couch_0.1.0_amd64.AppImage.txt",
+    "sourceSha256": "48110b54691129440631b28e735d9b13a2e3580b9eaad45448cab73a1e6c20ca",
+    "retainedSha256": "48110b54691129440631b28e735d9b13a2e3580b9eaad45448cab73a1e6c20ca",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.headers",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.headers",
+    "sourceSha256": "80f7ccb98c74fbb23822eb6375b96ba2f7d872eb3806ef2f7fee5b1d065fabe9",
+    "retainedSha256": "da5242711d739adfcef7847971569f57c03f4d8c36ae05641059f3f97a5b9e75",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.sig.headers",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.sig.headers",
+    "sourceSha256": "8c7063255ee7002fa450ec46b8ae6200a006073cd424061ce08678c2c87b141c",
+    "retainedSha256": "7a3a644d55216357cfc444b96ed0c6578f45237840c4a5c15a7fd29a4579101f",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.sig.stdout",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.sig.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.sig.txt",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.sig.txt",
+    "sourceSha256": "89cae0793403ec2f76027a22f055a8bfda61da45f6e84cfab7a1297d3e9404a2",
+    "retainedSha256": "89cae0793403ec2f76027a22f055a8bfda61da45f6e84cfab7a1297d3e9404a2",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.stdout",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-distribution-material-0.1.0.tar.gz.txt",
+    "retained": "public-install/http/couch-distribution-material-0.1.0.tar.gz.txt",
+    "sourceSha256": "4f0c23068278dc750163b1eb7a344eac2e195b0e56fb8f83910798c3b74f1844",
+    "retainedSha256": "4f0c23068278dc750163b1eb7a344eac2e195b0e56fb8f83910798c3b74f1844",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.headers",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.headers",
+    "sourceSha256": "0c38e94d945449a5aadaf8d0c1110784401727d6bb7ab6047dbe6365c80d6794",
+    "retainedSha256": "d1e709b80f3e62c73e175f60ee341dfdfcce7e2f29ea5fad14f4ee2d7315ff97",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.sig.headers",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.sig.headers",
+    "sourceSha256": "0cfb05cbb3602c9ce9454f163dbc24c38898df5629c12a8f84492aefdfd99a4f",
+    "retainedSha256": "72babaff033a32e2dc4785e730593603970cf58d1ea607028d5bc4da8654cdfd",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.sig.stdout",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.sig.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.sig.txt",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.sig.txt",
+    "sourceSha256": "90dd9164528d7805a01f78460835716a044a3248a7d7c330d550c8a7bb3d7f5a",
+    "retainedSha256": "90dd9164528d7805a01f78460835716a044a3248a7d7c330d550c8a7bb3d7f5a",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.stdout",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-setup-0.1.0.tar.gz.txt",
+    "retained": "public-install/http/couch-setup-0.1.0.tar.gz.txt",
+    "sourceSha256": "ab94cbe8484e5addfa2948e6e95dd471115d6a33acc110d61540d35276440b35",
+    "retainedSha256": "ab94cbe8484e5addfa2948e6e95dd471115d6a33acc110d61540d35276440b35",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-updater.pub.headers",
+    "retained": "public-install/http/couch-updater.pub.headers",
+    "sourceSha256": "58fa5bab15b3e2942e595f99366a9ee2112b555d9eda9a3fa9c4fb22d7c2dd35",
+    "retainedSha256": "137ca62024f59d48fde8fb883fc28594629912168ab2633d1aee41350dd8e42c",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-updater.pub.stdout",
+    "retained": "public-install/http/couch-updater.pub.stdout",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/http/couch-updater.pub.txt",
+    "retained": "public-install/http/couch-updater.pub.txt",
+    "sourceSha256": "02f84d032c112451474f34e58757f950c0cea93e2339867225200fd141648c1f",
+    "retainedSha256": "02f84d032c112451474f34e58757f950c0cea93e2339867225200fd141648c1f",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installed-appimage.sha256",
+    "retained": "public-install/installed-appimage.sha256",
+    "sourceSha256": "fbd2e8b177f86cdb20bfbf98932716753d813a4b214e3d5593ffe2b4e6422081",
+    "retainedSha256": "fbd2e8b177f86cdb20bfbf98932716753d813a4b214e3d5593ffe2b4e6422081",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installed-build.json",
+    "retained": "public-install/installed-build.json",
+    "sourceSha256": "05cc5ee936027fd682b9439606786ad7199e519899c45b53de4dfd85d4d4513d",
+    "retainedSha256": "05cc5ee936027fd682b9439606786ad7199e519899c45b53de4dfd85d4d4513d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installed-entrypoint-modes.txt",
+    "retained": "public-install/installed-entrypoint-modes.txt",
+    "sourceSha256": "3e7c3eafc54c9b06937099a3ef861d67443fce976969cecca87ba741d8a0957a",
+    "retainedSha256": "3e7c3eafc54c9b06937099a3ef861d67443fce976969cecca87ba741d8a0957a",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installed-identity.log",
+    "retained": "public-install/installed-identity.log",
+    "sourceSha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74",
+    "retainedSha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installer-status.txt",
+    "retained": "public-install/installer-status.txt",
+    "sourceSha256": "3527759e8e3493f4092ab2eb2bf646c0b2ed51a4e7732b50b7d38a2fac5fb797",
+    "retainedSha256": "3527759e8e3493f4092ab2eb2bf646c0b2ed51a4e7732b50b7d38a2fac5fb797",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/installer.log",
+    "retained": "public-install/installer.log",
+    "sourceSha256": "013c690b5dd91585c97aadb8078e738daf7e1f6302c084348e5966719bd43215",
+    "retainedSha256": "013c690b5dd91585c97aadb8078e738daf7e1f6302c084348e5966719bd43215",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/lightdm-journal.txt",
+    "retained": "public-install/lightdm-journal.txt",
+    "sourceSha256": "daa5734c538a5bfafda9af158a59c367f522ee2f29500eba8cb6b57e222932cf",
+    "retainedSha256": "daa5734c538a5bfafda9af158a59c367f522ee2f29500eba8cb6b57e222932cf",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/lightdm-status.txt",
+    "retained": "public-install/lightdm-status.txt",
+    "sourceSha256": "507dc6d48efa04de597a353b0894c0130ef3a015679a38ccd9bfaaef6371f152",
+    "retainedSha256": "507dc6d48efa04de597a353b0894c0130ef3a015679a38ccd9bfaaef6371f152",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/manifest-validation.log",
+    "retained": "public-install/manifest-validation.log",
+    "sourceSha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74",
+    "retainedSha256": "a17fcf0a2f50e2d495e4f90ce263410edc183add6c62699a2facbccf60410f74",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/manual-packages-after.txt",
+    "retained": "public-install/manual-packages-after.txt",
+    "sourceSha256": "0b2f1b244624bedc598baee7d1c31cdaa50d36dceae3260900efb1c503f5678e",
+    "retainedSha256": "0b2f1b244624bedc598baee7d1c31cdaa50d36dceae3260900efb1c503f5678e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/manual-packages-before.txt",
+    "retained": "public-install/manual-packages-before.txt",
+    "sourceSha256": "daa30b5a562127d13ecf19ce9f6833a60524e4264d6f84388a4557da3d97c90e",
+    "retainedSha256": "daa30b5a562127d13ecf19ce9f6833a60524e4264d6f84388a4557da3d97c90e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/packages-after.tsv",
+    "retained": "public-install/packages-after.tsv",
+    "sourceSha256": "eba3893e412b21c1c2c25b002a01a2fcc026c70fbaa5c9bf75d22b5056a1c20f",
+    "retainedSha256": "eba3893e412b21c1c2c25b002a01a2fcc026c70fbaa5c9bf75d22b5056a1c20f",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/packages-before.tsv",
+    "retained": "public-install/packages-before.tsv",
+    "sourceSha256": "940e2e4d31cbea0190e01a719615ee92002e397568d6b7454be0dc0a87880a0f",
+    "retainedSha256": "940e2e4d31cbea0190e01a719615ee92002e397568d6b7454be0dc0a87880a0f",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/packages.delta",
+    "retained": "public-install/packages.delta",
+    "sourceSha256": "415c1283c9d5a61fc6e467f590edc39be2b7322e09e31f49cb299fefa5e31d1d",
+    "retainedSha256": "415c1283c9d5a61fc6e467f590edc39be2b7322e09e31f49cb299fefa5e31d1d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/processes-after.txt",
+    "retained": "public-install/processes-after.txt",
+    "sourceSha256": "02b64cba7b81792de0c698da00ed60b540e3b545636ae33969c7114fd9c29ab3",
+    "retainedSha256": "02b64cba7b81792de0c698da00ed60b540e3b545636ae33969c7114fd9c29ab3",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/public-key.sha256",
+    "retained": "public-install/public-key.sha256",
+    "sourceSha256": "ea1729775ce8192000a7b51cd87232d095dac52e35eb0199a07222f2e26b6b1f",
+    "retainedSha256": "ea1729775ce8192000a7b51cd87232d095dac52e35eb0199a07222f2e26b6b1f",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/result.txt",
+    "retained": "public-install/result.txt",
+    "sourceSha256": "7c3398182acd3ff1c8ad169e63893fbdacd459588fe45e0a4dfaaafe9fd008d3",
+    "retainedSha256": "7c3398182acd3ff1c8ad169e63893fbdacd459588fe45e0a4dfaaafe9fd008d3",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/run.txt",
+    "retained": "public-install/run.txt",
+    "sourceSha256": "f68e138165dfa62f6548fcd5c1fc40dadff774143e5f86c043f46b9daf40a27b",
+    "retainedSha256": "f68e138165dfa62f6548fcd5c1fc40dadff774143e5f86c043f46b9daf40a27b",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-account-status.txt",
+    "retained": "public-install/runtime-account-status.txt",
+    "sourceSha256": "410abbc68b678a89ab42717506efddbd396f2a5ecb5edeca1f7b2582547f95b1",
+    "retainedSha256": "410abbc68b678a89ab42717506efddbd396f2a5ecb5edeca1f7b2582547f95b1",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-account.txt",
+    "retained": "public-install/runtime-account.txt",
+    "sourceSha256": "db7b286347a0fa0f5b0e5738d1b2cbf3831bce4fd7adaf08629fb91d7099430c",
+    "retainedSha256": "db7b286347a0fa0f5b0e5738d1b2cbf3831bce4fd7adaf08629fb91d7099430c",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-journal.txt",
+    "retained": "public-install/runtime-journal.txt",
+    "sourceSha256": "744a31711ccb56b648b1f1e9b7f9efa80f94556c3a027d90f440f31ce3b1b254",
+    "retainedSha256": "defe1520cae9fac7d2af25d7f9fa1ff5dd9e944dbd0c063633bb5a80071e064a",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-status-followup.txt",
+    "retained": "public-install/runtime-status-followup.txt",
+    "sourceSha256": "75f96cbc69c2ab98aa518956a68994b2de0ea81d2e1cac9cc7e6c00cd726f0f9",
+    "retainedSha256": "75f96cbc69c2ab98aa518956a68994b2de0ea81d2e1cac9cc7e6c00cd726f0f9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-status.stderr",
+    "retained": "public-install/runtime-status.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/runtime-status.txt",
+    "retained": "public-install/runtime-status.txt",
+    "sourceSha256": "75f96cbc69c2ab98aa518956a68994b2de0ea81d2e1cac9cc7e6c00cd726f0f9",
+    "retainedSha256": "75f96cbc69c2ab98aa518956a68994b2de0ea81d2e1cac9cc7e6c00cd726f0f9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/session-start.txt",
+    "retained": "public-install/session-start.txt",
+    "sourceSha256": "b7a00d0f8acef9b9aff031f7d6a19f1a2575d1bc4bfdc39147bcf1aeda02b8b9",
+    "retainedSha256": "b7a00d0f8acef9b9aff031f7d6a19f1a2575d1bc4bfdc39147bcf1aeda02b8b9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/sessions-after.txt",
+    "retained": "public-install/sessions-after.txt",
+    "sourceSha256": "829f5a83b3f2631ac429f171bfe04eee123212b203ab3bbf6803f1fc15308f31",
+    "retainedSha256": "829f5a83b3f2631ac429f171bfe04eee123212b203ab3bbf6803f1fc15308f31",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/setup-archive-contents.txt",
+    "retained": "public-install/setup-archive-contents.txt",
+    "sourceSha256": "30d71e9bd01b2de04cd08e674783ea83844bf6101ffe1dfcec84188ac8442a27",
+    "retainedSha256": "30d71e9bd01b2de04cd08e674783ea83844bf6101ffe1dfcec84188ac8442a27",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/signature-verification.log",
+    "retained": "public-install/signature-verification.log",
+    "sourceSha256": "7ac9b3d7b9955da8b23df297de8a311411fc3dd797c93a6123d61e546844a6cd",
+    "retainedSha256": "7ac9b3d7b9955da8b23df297de8a311411fc3dd797c93a6123d61e546844a6cd",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/stages.tsv",
+    "retained": "public-install/stages.tsv",
+    "sourceSha256": "938ac220d4731b989e002dfef8a722d9e49221b564e3fae2a5975fa89f44f103",
+    "retainedSha256": "938ac220d4731b989e002dfef8a722d9e49221b564e3fae2a5975fa89f44f103",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/state-after.txt",
+    "retained": "public-install/state-after.txt",
+    "sourceSha256": "e5baa421994a77cde2e6364ee127d3342d217214ad0887aa00988da1dafcb1d3",
+    "retainedSha256": "e5baa421994a77cde2e6364ee127d3342d217214ad0887aa00988da1dafcb1d3",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-receipts/state-before.txt",
+    "retained": "public-install/state-before.txt",
+    "sourceSha256": "2ca1b89ccf92ec4629a0efa6b26154b7d8af6456b5ed3f488055c98736d710ae",
+    "retainedSha256": "2ca1b89ccf92ec4629a0efa6b26154b7d8af6456b5ed3f488055c98736d710ae",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno-linkage.exit",
+    "retained": "helpers/deno-linkage.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno-linkage.stderr",
+    "retained": "helpers/deno-linkage.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno-linkage.stdout",
+    "retained": "helpers/deno-linkage.stdout",
+    "sourceSha256": "129b3057fbce767ce82d00c63f9275da76e06ce9e1d2f0f3dbf374ab87acd3b2",
+    "retainedSha256": "129b3057fbce767ce82d00c63f9275da76e06ce9e1d2f0f3dbf374ab87acd3b2",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno.exit",
+    "retained": "helpers/deno.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno.stderr",
+    "retained": "helpers/deno.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/deno.stdout",
+    "retained": "helpers/deno.stdout",
+    "sourceSha256": "084c799cd551dd1d8d5c5f9a5d593b2e931f5e36122ee5c793c1d08a19839cc0",
+    "retainedSha256": "084c799cd551dd1d8d5c5f9a5d593b2e931f5e36122ee5c793c1d08a19839cc0",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe-linkage.exit",
+    "retained": "helpers/ffprobe-linkage.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe-linkage.stderr",
+    "retained": "helpers/ffprobe-linkage.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe-linkage.stdout",
+    "retained": "helpers/ffprobe-linkage.stdout",
+    "sourceSha256": "497502832131af9abbf45caae9dd6ca834ed569c72fc677b7cb4e9701673bbc5",
+    "retainedSha256": "497502832131af9abbf45caae9dd6ca834ed569c72fc677b7cb4e9701673bbc5",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe.exit",
+    "retained": "helpers/ffprobe.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe.stderr",
+    "retained": "helpers/ffprobe.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/ffprobe.stdout",
+    "retained": "helpers/ffprobe.stdout",
+    "sourceSha256": "6dfedab39c9a24e784377493f066cfe6fa5b66d5533f0b9ca1cbdb1451231ed8",
+    "retainedSha256": "6dfedab39c9a24e784377493f066cfe6fa5b66d5533f0b9ca1cbdb1451231ed8",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/mount.pid",
+    "retained": "helpers/mount.pid",
+    "sourceSha256": "bff039ee06ba03e7857e091a05d9b0a648c85c8fd3425ff340cb9ee43fe22712",
+    "retainedSha256": "bff039ee06ba03e7857e091a05d9b0a648c85c8fd3425ff340cb9ee43fe22712",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/mount.stderr",
+    "retained": "helpers/mount.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/mount.stdout",
+    "retained": "helpers/mount.stdout",
+    "sourceSha256": "9d38104379aceed64f0b345df5d8d31709462a3bd3766a165f8751f7b546e88d",
+    "retainedSha256": "9d38104379aceed64f0b345df5d8d31709462a3bd3766a165f8751f7b546e88d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/sample.wav",
+    "retained": "helpers/sample.wav",
+    "sourceSha256": "56d4af65701c26df20bd4021eda95b6e830348ce3a746086079fe89285548dc9",
+    "retainedSha256": "56d4af65701c26df20bd4021eda95b6e830348ce3a746086079fe89285548dc9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/summary.json",
+    "retained": "helpers/summary.json",
+    "sourceSha256": "8ce0dcbd7e0e4763a8ec598c0950a3d7ecadfb127280fbda858a87c3d9f1f2c3",
+    "retainedSha256": "8ce0dcbd7e0e4763a8ec598c0950a3d7ecadfb127280fbda858a87c3d9f1f2c3",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp-linkage.exit",
+    "retained": "helpers/yt-dlp-linkage.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp-linkage.stderr",
+    "retained": "helpers/yt-dlp-linkage.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp-linkage.stdout",
+    "retained": "helpers/yt-dlp-linkage.stdout",
+    "sourceSha256": "4ff4f4ddafb5e6fcd8618f33a5b7b714fec47d419d463206f8b98cfb4422034a",
+    "retainedSha256": "4ff4f4ddafb5e6fcd8618f33a5b7b714fec47d419d463206f8b98cfb4422034a",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp.exit",
+    "retained": "helpers/yt-dlp.exit",
+    "sourceSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "retainedSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp.stderr",
+    "retained": "helpers/yt-dlp.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helpers/yt-dlp.stdout",
+    "retained": "helpers/yt-dlp.stdout",
+    "sourceSha256": "f07ac55817ac71d51cd0ba16c901e0f152d5a076a94eefafe4454e65176a71f3",
+    "retainedSha256": "f07ac55817ac71d51cd0ba16c901e0f152d5a076a94eefafe4454e65176a71f3",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/vm-identity.json",
+    "retained": "vm-identity.json",
+    "sourceSha256": "cc12b8da0df8c11b0d4c91475175d97e38ea444aaa3a4e0ac450a9ae69531f97",
+    "retainedSha256": "cc12b8da0df8c11b0d4c91475175d97e38ea444aaa3a4e0ac450a9ae69531f97",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/baseline-summary.json",
+    "retained": "baseline-summary.json",
+    "sourceSha256": "2767c4b515826e4356fb7441d26d50d351a83157d5a9a30a1924626d60f8fa50",
+    "retainedSha256": "2767c4b515826e4356fb7441d26d50d351a83157d5a9a30a1924626d60f8fa50",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/public-install-dispatch.json",
+    "retained": "public-install-dispatch.json",
+    "sourceSha256": "c25a9cfda57135a77aebee2dc3ecd5cc838443cead437ef83b5b850b29ea057d",
+    "retainedSha256": "c25a9cfda57135a77aebee2dc3ecd5cc838443cead437ef83b5b850b29ea057d",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/final-shutdown.json",
+    "retained": "final-shutdown.json",
+    "sourceSha256": "5112d35797118aa8e7f0b01dd7e372a0876a9f38d8d03679b8ea0c8d8f401e01",
+    "retainedSha256": "5112d35797118aa8e7f0b01dd7e372a0876a9f38d8d03679b8ea0c8d8f401e01",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/final-vm-state.txt",
+    "retained": "final-vm-state.txt",
+    "sourceSha256": "be091656fc33e7650405a4f53c03f55625c92eb06f8d7bf475e54a27c76116f9",
+    "retainedSha256": "be091656fc33e7650405a4f53c03f55625c92eb06f8d7bf475e54a27c76116f9",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/session-followup.txt",
+    "retained": "first-session/session-followup.txt",
+    "sourceSha256": "16d4cc5d27fa2fa5f3f2577007f1ed0a339ae97eeb65c253c363d4b502c959ed",
+    "retainedSha256": "da59208362c0167e4b6fc4ff15ecc1607b68567617b09ce762033548660e2505",
+    "redacted": true
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/mute-confirmation.stdout",
+    "retained": "first-session/mute-confirmation.stdout",
+    "sourceSha256": "8edc2226bc670939de639f45012306979b458000b667f4f68405d7a2974138a8",
+    "retainedSha256": "8edc2226bc670939de639f45012306979b458000b667f4f68405d7a2974138a8",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/mute-confirmation.stderr",
+    "retained": "first-session/mute-confirmation.stderr",
+    "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retainedSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/mute-confirmation.exit",
+    "retained": "first-session/mute-confirmation.exit",
+    "sourceSha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "retainedSha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/mount-cleanup.json",
+    "retained": "helpers/mount-cleanup.json",
+    "sourceSha256": "ad7d21b52785ea1b7b62ff1dd361c216560d70805203e6756de459f005b226e2",
+    "retainedSha256": "ad7d21b52785ea1b7b62ff1dd361c216560d70805203e6756de459f005b226e2",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/collect-baseline.sh",
+    "retained": "collectors/collect-baseline.sh",
+    "sourceSha256": "4d121c8716d47749e19ef15a5bbcf284f05c720b3c69d2a9f98628b6b0bd8689",
+    "retainedSha256": "4d121c8716d47749e19ef15a5bbcf284f05c720b3c69d2a9f98628b6b0bd8689",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/install-public-once.sh",
+    "retained": "collectors/install-public-once.sh",
+    "sourceSha256": "a935221a3d5913a5a5f744e2054a5fa974ce53bc202851eb34450e277a8e880e",
+    "retainedSha256": "a935221a3d5913a5a5f744e2054a5fa974ce53bc202851eb34450e277a8e880e",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/helper-probe.py",
+    "retained": "collectors/helper-probe.py",
+    "sourceSha256": "1927ff056a0295a108ff385857932e972df1e76c1bf930aa35f0405783fa6a77",
+    "retainedSha256": "1927ff056a0295a108ff385857932e972df1e76c1bf930aa35f0405783fa6a77",
+    "redacted": false
+  },
+  {
+    "source": ".artifacts/acceptance-277/minimal-corrected-0.1.0/retain-evidence.py",
+    "retained": "collectors/retain-evidence.py",
+    "sourceSha256": "66fa1f223e188da40f2dc001b865e1615355a40f33b720aa4176f0dac5b75024",
+    "retainedSha256": "66fa1f223e188da40f2dc001b865e1615355a40f33b720aa4176f0dac5b75024",
+    "redacted": false
+  }
+]

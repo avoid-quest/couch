@@ -1,0 +1,18 @@
+Sep 15 03:00:05 couch systemd[9209]: Starting couch-tv.service - Couch TV native host and coordinator...
+Sep 15 03:00:05 couch couch-tv[12204]: Server String: /run/user/102/pulse/native
+Sep 15 03:00:05 couch couch-tv[12204]: Library Protocol Version: 35
+Sep 15 03:00:05 couch couch-tv[12204]: Server Protocol Version: 35
+Sep 15 03:00:05 couch couch-tv[12204]: Is Local: yes
+Sep 15 03:00:05 couch couch-tv[12204]: Client Index: 91
+Sep 15 03:00:05 couch couch-tv[12204]: Tile Size: 65472
+Sep 15 03:00:05 couch couch-tv[12204]: User Name: couch-tv
+Sep 15 03:00:05 couch couch-tv[12204]: Host Name: couch
+Sep 15 03:00:05 couch couch-tv[12204]: Server Name: PulseAudio (on PipeWire 1.4.2)
+Sep 15 03:00:05 couch couch-tv[12204]: Server Version: 15.0.0
+Sep 15 03:00:05 couch couch-tv[12204]: Default Sample Specification: float32le 2ch 48000Hz
+Sep 15 03:00:05 couch couch-tv[12204]: Default Channel Map: front-left,front-right
+Sep 15 03:00:05 couch couch-tv[12204]: Default Sink: alsa_output.pci-0000_00_1f.3.analog-stereo
+Sep 15 03:00:05 couch couch-tv[12204]: Default Source: alsa_input.pci-0000_00_1f.3.analog-stereo
+Sep 15 03:00:05 couch couch-tv[12204]: Cookie: e289:5bc7
+Sep 15 03:00:05 couch systemd[9209]: Started couch-tv.service - Couch TV native host and coordinator.
+Sep 15 03:00:06 couch couch[12208]: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files

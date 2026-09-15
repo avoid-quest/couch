@@ -1,0 +1,8 @@
+absent /etc/couch
+absent /var/lib/couch
+absent /var/lib/couch-installer
+absent /var/lib/couch-install-locks
+absent /etc/X11/default-display-manager
+absent /usr/share/xsessions/couch.desktop
+absent /home/probe/.local/lib/couch
+couch-tv=absent

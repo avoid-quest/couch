@@ -1,0 +1,73 @@
+Sep 15 01:34:48 couch-minimal systemd[8156]: Queued start job for default target default.target.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Created slice app.slice - User Application Slice.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Created slice session.slice - User Core Session Slice.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target paths.target - Paths.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target timers.target - Timers.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting dbus.socket - D-Bus User Message Bus Socket...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on pipewire-pulse.socket - PipeWire PulseAudio.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on pipewire.socket - PipeWire Multimedia System Sockets.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting ssh-agent.socket - OpenSSH Agent socket...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on dbus.socket - D-Bus User Message Bus Socket.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Listening on ssh-agent.socket - OpenSSH Agent socket.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target sockets.target - Sockets.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target basic.target - Basic System.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Starting dbus.service - D-Bus User Message Bus...
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started pipewire.service - PipeWire Multimedia Service.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started filter-chain.service - PipeWire filter chain daemon.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started wireplumber.service - Multimedia Service Session Manager.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started pipewire-pulse.service - PipeWire PulseAudio.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Started dbus.service - D-Bus User Message Bus.
+Sep 15 01:34:49 couch-minimal systemd[8156]: mpris-proxy.service - Bluetooth mpris proxy skipped, unmet condition check ConditionUser=!@system
+Sep 15 01:34:49 couch-minimal systemd[8156]: Reached target default.target - Main User Target.
+Sep 15 01:34:49 couch-minimal systemd[8156]: Startup finished in 2.237s.
+Sep 15 01:34:49 couch-minimal dbus-daemon[8179]: [session uid=102 pid=8179 pidfd=5] Successfully activated service 'org.freedesktop.systemd1'
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire[8180]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal pipewire-pulse[8191]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us MaxRealtimePriority, using 1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us MinNiceLevel, using 0
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: mod.rt: RTKit does not give us RTTimeUSecMax, using -1
+Sep 15 01:34:50 couch-minimal wireplumber[8187]: wp-internal-comp-loader: Loading profile 'main'
+Sep 15 01:34:52 couch-minimal systemd[8156]: Starting couch-tv.service - Couch TV native host and coordinator...
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: default: Failed to get percentage from UPower: org.freedesktop.DBus.Error.NameHasNoOwner
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: spa.bluez5: BlueZ system service is not available
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: wp-device: SPA handle 'api.libcamera.enum.manager' could not be loaded; is it installed?
+Sep 15 01:34:52 couch-minimal wireplumber[8187]: s-monitors-libcamera: PipeWire's libcamera SPA plugin is missing or broken. Some camera types may not be supported.
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server String: /run/user/102/pulse/native
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Library Protocol Version: 35
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Protocol Version: 35
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Is Local: yes
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Client Index: 57
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Tile Size: 65472
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: User Name: couch-tv
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Host Name: couch-minimal
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Name: PulseAudio (on PipeWire 1.4.2)
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Server Version: 15.0.0
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Sample Specification: float32le 2ch 48000Hz
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Channel Map: front-left,front-right
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Sink: auto_null
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Default Source: auto_null.monitor
+Sep 15 01:34:53 couch-minimal couch-tv[8246]: Cookie: <REDACTED>
+Sep 15 01:35:05 couch-minimal couch-tv[8254]: No available HDMI stereo profile; keeping the default audio route.
+Sep 15 01:35:05 couch-minimal systemd[8156]: Started couch-tv.service - Couch TV native host and coordinator.
+Sep 15 01:35:12 couch-minimal couch[8355]: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:14 couch-minimal couch-tv[8355]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: DRI2: failed to create screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 01:35:19 couch-minimal couch-tv[8452]: libEGL warning: DRI2: failed to create screen

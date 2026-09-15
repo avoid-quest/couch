@@ -1,0 +1,130 @@
+{
+  "files": [
+    {
+      "path": "installer-fixture-result.json",
+      "originalSha256": "891e60cd3a1a265986706bea9530344f47ced0ab7806fcfa52f3771584f0fae3",
+      "retainedSha256": "891e60cd3a1a265986706bea9530344f47ced0ab7806fcfa52f3771584f0fae3",
+      "sanitized": false
+    },
+    {
+      "path": "red-result.json",
+      "originalSha256": "5f728b14d1d0c802a12b641c5a26ff2e69ccf7331a155b5644775f2ed43ccbd0",
+      "retainedSha256": "5f728b14d1d0c802a12b641c5a26ff2e69ccf7331a155b5644775f2ed43ccbd0",
+      "sanitized": false
+    },
+    {
+      "path": "host-packages-after.json",
+      "originalSha256": "2081e652b6afb0c0d85e144bb75f37ceb5570679d2fd9ebd16f1b1b379219437",
+      "retainedSha256": "2081e652b6afb0c0d85e144bb75f37ceb5570679d2fd9ebd16f1b1b379219437",
+      "sanitized": false
+    },
+    {
+      "path": "packages-after-red.tsv",
+      "originalSha256": "3a9df45c1a01291f41df11766850460d0cc1f6099068beae23bf1142793e362a",
+      "retainedSha256": "3a9df45c1a01291f41df11766850460d0cc1f6099068beae23bf1142793e362a",
+      "sanitized": false
+    },
+    {
+      "path": "image-pull.log",
+      "originalSha256": "2cd730bb017ac0d575edbd2f4f7021eaba4cf7c5dc8de90838809216ca76676b",
+      "retainedSha256": "2cd730bb017ac0d575edbd2f4f7021eaba4cf7c5dc8de90838809216ca76676b",
+      "sanitized": false
+    },
+    {
+      "path": "result.json",
+      "originalSha256": "4ae80ac07f9477930f0f8dbe09f4702a17012cee033b8e3c7d2c6d6dad6d6cea",
+      "retainedSha256": "4ae80ac07f9477930f0f8dbe09f4702a17012cee033b8e3c7d2c6d6dad6d6cea",
+      "sanitized": false
+    },
+    {
+      "path": "installer-fixture.log",
+      "originalSha256": "f59a9c48a937eb21ea1f3abeb415993fb1f835e25c5fea803d042436de9c7f48",
+      "retainedSha256": "f59a9c48a937eb21ea1f3abeb415993fb1f835e25c5fea803d042436de9c7f48",
+      "sanitized": false
+    },
+    {
+      "path": "red.log",
+      "originalSha256": "294de58a370ef84667f20c5d43d3a1edd44ff2c91617cedebcbce31b74b85a3f",
+      "retainedSha256": "294de58a370ef84667f20c5d43d3a1edd44ff2c91617cedebcbce31b74b85a3f",
+      "sanitized": false
+    },
+    {
+      "path": "amd64-image-manifest.json",
+      "originalSha256": "e1a2eeea435f9fc44237910bfcd833b72a9c70161d98487c6f8c14dc5b8f5ad8",
+      "retainedSha256": "e1a2eeea435f9fc44237910bfcd833b72a9c70161d98487c6f8c14dc5b8f5ad8",
+      "sanitized": false
+    },
+    {
+      "path": "runtime.txt",
+      "originalSha256": "7f1479576d8302fec65e0910f2a5d5c669109fe418031f5df52b75b12c2c2f67",
+      "retainedSha256": "7f1479576d8302fec65e0910f2a5d5c669109fe418031f5df52b75b12c2c2f67",
+      "sanitized": false
+    },
+    {
+      "path": "green.log",
+      "originalSha256": "c07c43be2b5b4003e1a111d875a6c93c68529fe27c92b24509ed22f793b50237",
+      "retainedSha256": "c07c43be2b5b4003e1a111d875a6c93c68529fe27c92b24509ed22f793b50237",
+      "sanitized": false
+    },
+    {
+      "path": "green-result.json",
+      "originalSha256": "42c109bf848dcb104a677dc1a2cf00d9c13c9dc79c24e24209d2ffc4070a26d6",
+      "retainedSha256": "42c109bf848dcb104a677dc1a2cf00d9c13c9dc79c24e24209d2ffc4070a26d6",
+      "sanitized": false
+    },
+    {
+      "path": "packages-after-green.tsv",
+      "originalSha256": "0fe324965b81d7c51bff5f4121649e3c3400f1d74ef0b313d227430e7fcc05a1",
+      "retainedSha256": "0fe324965b81d7c51bff5f4121649e3c3400f1d74ef0b313d227430e7fcc05a1",
+      "sanitized": false
+    },
+    {
+      "path": "packages-before.tsv",
+      "originalSha256": "d49a1359f1bf8bcf67773cdc05a87f584d97fe7049d49bd1041908d1beb64366",
+      "retainedSha256": "d49a1359f1bf8bcf67773cdc05a87f584d97fe7049d49bd1041908d1beb64366",
+      "sanitized": false
+    },
+    {
+      "path": "container-image.txt",
+      "originalSha256": "e5058e543b492746f081cdf1faf1d4a761a93a85aff3f4ed711674b2e2f4b753",
+      "retainedSha256": "e5058e543b492746f081cdf1faf1d4a761a93a85aff3f4ed711674b2e2f4b753",
+      "sanitized": false
+    },
+    {
+      "path": "original-notes.md",
+      "originalSha256": "6c05c6f84276cf66434a81d941aaf5ddce618281ba7507328094cc9fd3a96256",
+      "retainedSha256": "6c05c6f84276cf66434a81d941aaf5ddce618281ba7507328094cc9fd3a96256",
+      "sanitized": false
+    },
+    {
+      "path": "host-graphics.sh",
+      "originalSha256": "46181b86e402c296890fe85ee1096d95632f3a4e6d2bca0db7f35de5c0bea9d1",
+      "retainedSha256": "46181b86e402c296890fe85ee1096d95632f3a4e6d2bca0db7f35de5c0bea9d1",
+      "sanitized": false
+    },
+    {
+      "path": "image.txt",
+      "originalSha256": "10411db974f497b1914d2cb5a979c68c1437abe0f80bcb4944a354dcf556eb36",
+      "retainedSha256": "10411db974f497b1914d2cb5a979c68c1437abe0f80bcb4944a354dcf556eb36",
+      "sanitized": false
+    },
+    {
+      "path": "stop.log",
+      "originalSha256": "c2d4953304392798292dcc0a34b90157196d732ec8861c428b809cd5c932f60b",
+      "retainedSha256": "c2d4953304392798292dcc0a34b90157196d732ec8861c428b809cd5c932f60b",
+      "sanitized": false
+    },
+    {
+      "path": "container-id.txt",
+      "originalSha256": "ec647bfb51c68460529ed8f0e3ec3637dd6bb5c4a789ba5edf9e69b3bb07ff28",
+      "retainedSha256": "ec647bfb51c68460529ed8f0e3ec3637dd6bb5c4a789ba5edf9e69b3bb07ff28",
+      "sanitized": false
+    },
+    {
+      "path": "host-packages-before.json",
+      "originalSha256": "71b43573feb5b2729494dc61ee80864dc70a8799b202ed31ef844c0a94e77510",
+      "retainedSha256": "71b43573feb5b2729494dc61ee80864dc70a8799b202ed31ef844c0a94e77510",
+      "sanitized": false
+    }
+  ]
+}

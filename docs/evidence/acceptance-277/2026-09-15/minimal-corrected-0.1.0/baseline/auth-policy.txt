@@ -1,0 +1,8 @@
+uid=1000(probe) gid=1000(probe) groups=1000(probe),24(cdrom),25(floppy),27(sudo),29(audio),30(dip),44(video),46(plugdev),100(users),101(netdev)
+sudo:x:27:probe
+usepam yes
+permitrootlogin without-password
+pubkeyauthentication yes
+passwordauthentication yes
+kbdinteractiveauthentication no
+authenticationmethods any

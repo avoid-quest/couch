@@ -1,5 +1,7 @@
 # Fresh Debian acceptance preparation
 
+For the current public releases, physical installation results, GLES fix and remaining checks, read [Release and device verification](AFK-VERIFICATION.md). The initial preparation record below is retained with its original scope and outcomes.
+
 Work for [Pass fresh Debian installation and Mac-offline signed-update acceptance](https://github.com/avoid-quest/couch/issues/277), on 15 September 2026 in Europe/Rome. UTC receipts are dated 14 September.
 
 Release acceptance remains blocked. [Deliver hosted Stable/Preview releases and Tauri updates](https://github.com/avoid-quest/couch/issues/276) remains its open native dependency. This record adds isolated preparation results to the [previous qualification evidence](../../hosted-release-276/2026-09-15/README.md). It does not replace those results or their limits.

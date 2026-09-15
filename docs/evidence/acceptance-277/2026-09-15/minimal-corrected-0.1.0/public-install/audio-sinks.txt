@@ -1,0 +1,1 @@
+35	auto_null	PipeWire	float32le 2ch 48000Hz	SUSPENDED

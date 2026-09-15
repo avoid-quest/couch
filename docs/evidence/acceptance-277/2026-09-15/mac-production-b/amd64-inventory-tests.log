@@ -1,0 +1,20 @@
+bun test v1.4.2 (744846f84)
+
+scripts/package-inventory.test.ts:
+(pass) AppImage ELF inventory > inventories a valid dynamic ELF [311.74ms]
+(pass) AppImage ELF inventory > inventories a valid static ELF [294.10ms]
+(pass) AppImage ELF inventory > inventories a valid static-pie ELF [318.20ms]
+(pass) AppImage ELF inventory > inventories a valid shared ELF [305.10ms]
+(pass) AppImage ELF inventory > rejects ELF magic without a valid header [383.65ms]
+(pass) AppImage ELF inventory > rejects a truncated static executable [382.56ms]
+(pass) AppImage ELF inventory > rejects an incompatible ELF machine [420.65ms]
+(pass) AppImage ELF inventory > rejects an ldd failure for a dynamic executable [394.31ms]
+(pass) AppImage ELF inventory > rejects unexpected ldd failures even for a static executable [367.30ms]
+(pass) AppImage ELF inventory > rejects successful ldd calls without dependency information [370.84ms]
+(pass) AppImage ELF inventory > rejects a failed static inspection [409.09ms]
+(pass) AppImage ELF inventory > rejects unresolved dependencies [414.72ms]
+
+ 12 pass
+ 0 fail
+ 37 expect() calls
+Ran 12 tests across 1 file. [5.28s]

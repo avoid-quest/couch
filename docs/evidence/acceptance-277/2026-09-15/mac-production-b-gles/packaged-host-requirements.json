@@ -1,0 +1,9 @@
+{
+  "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+  "version": "0.1.0",
+  "setupArchiveSHA256": "0773af9fce0efce8433ff27396a15e4b6996663d244f5e32be7b491779efa5df",
+  "hostPackagesSHA256": "2081e652b6afb0c0d85e144bb75f37ceb5570679d2fd9ebd16f1b1b379219437",
+  "exactCommittedHostPackages": true,
+  "libgles2Declared": true,
+  "permanentEnrolledPublicKey": true
+}

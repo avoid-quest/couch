@@ -1,0 +1,1573 @@
+bun test v1.4.2 (744846f84)
+
+scripts/download-release.test.ts:
+Verified artifact 123, release 42.2, source aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+(pass) exact authenticated artifact and successful retry reuse original build [11.57ms]
+(pass) reject untrusted run origin, failure and impossible build attempt before download [3.83ms]
+(pass) reject forged manifest identity and package bytes [6.04ms]
+(pass) reject expired or digest-tampered GitHub archive [1.57ms]
+(pass) shared verifier explicitly accepts AppImage prefix without weakening source policy [0.76ms]
+
+scripts/hosted-release.test.ts:
+(pass) hosted versions and promotion > Preview uses numeric suffixes and final versions can be promoted unchanged [0.11ms]
+(pass) hosted versions and promotion > a newer Preview waits for Stable, equal versions do not reinstall, and skips order normally [1.36ms]
+(pass) hosted versions and promotion > Cloud must have the complete approved asset set, platform and original signatures [1.21ms]
+(pass) hosted versions and promotion > retained bytes and signatures are verified before reuse [5.06ms]
+(pass) hosted versions and promotion > public readiness checks all downloads plus installer and Tauri metadata-selected bytes [0.80ms]
+
+scripts/subtitle-fixtures.test.ts:
+(pass) text.mkv retains the accepted subtitle corpus bytes [0.19ms]
+(pass) bitmap.mkv retains the accepted subtitle corpus bytes [0.12ms]
+(pass) replacement.mkv retains the accepted subtitle corpus bytes [0.13ms]
+(pass) CouchCorpusSans.ttf retains the accepted subtitle source bytes [0.17ms]
+(pass) FONT-LICENSE.txt retains the accepted subtitle source bytes [0.13ms]
+(pass) forced.ass retains the accepted subtitle source bytes [0.13ms]
+(pass) plain.srt retains the accepted subtitle source bytes [0.14ms]
+(pass) styled.ass retains the accepted subtitle source bytes [0.10ms]
+
+scripts/package-inventory.test.ts:
+(skip) AppImage ELF inventory > (unnamed)
+(skip) AppImage ELF inventory > inventories a valid dynamic ELF
+(skip) AppImage ELF inventory > inventories a valid static ELF
+(skip) AppImage ELF inventory > inventories a valid static-pie ELF
+(skip) AppImage ELF inventory > inventories a valid shared ELF
+(skip) AppImage ELF inventory > rejects ELF magic without a valid header
+(skip) AppImage ELF inventory > rejects a truncated static executable
+(skip) AppImage ELF inventory > rejects an incompatible ELF machine
+(skip) AppImage ELF inventory > rejects an ldd failure for a dynamic executable
+(skip) AppImage ELF inventory > rejects unexpected ldd failures even for a static executable
+(skip) AppImage ELF inventory > rejects successful ldd calls without dependency information
+(skip) AppImage ELF inventory > rejects a failed static inspection
+(skip) AppImage ELF inventory > rejects unresolved dependencies
+(skip) AppImage ELF inventory > (unnamed)
+
+scripts/display-session.test.ts:
+(pass) the actual appliance session retains the panel and does not change primary output [8.68ms]
+(pass) the running appliance session handles disabled TV after an internal-only boot [6039.24ms]
+(pass) the running appliance session handles TV without 1080p after an internal-only boot [6043.19ms]
+(pass) the running appliance session handles already enabled TV after an internal-only boot [6042.74ms]
+
+scripts/publish-appimage.test.ts:
+(pass) official signing, promotion and renewal preserve bytes; rollback and tampering fail [684.59ms]
+(pass) local publisher and installed-update CLIs need no GitHub download [1218.59ms]
+
+scripts/release-version.test.ts:
+(pass) local and retained CI build identities keep distinct versions [0.11ms]
+
+src/main.test.ts:
+(pass) the sidecar accepts native observations, protects its data, and exits on stdin close [136.31ms]
+(pass) the sidecar accepts native observations, protects its data, and exits on shutdown message [121.99ms]
+(pass) the sidecar accepts native observations, protects its data, and exits on AppImage admission [148.06ms]
+
+tests/diagnostics-build.test.ts:
+(pass) compiled diagnostic exports retain packaged version, commit and target metadata [21.99ms]
+
+tests/preview-media.test.ts:
+(pass) preview supplied-media mount is a selectable child of the protected media container [0.57ms]
+(pass) preview migration preserves source IDs, relative catalog paths, identities, queue and history and runs once [16.60ms]
+(pass) fresh preview records the layout before new Sources are added [5.20ms]
+(pass) marker-absent host paths are ambiguous and leave all source rows and the marker untouched [7.27ms]
+(pass) an old legitimate /media/host source is never silently reinterpreted as the new layout [3.92ms]
+(pass) an old legitimate /media/host/Albums source is never silently reinterpreted as the new layout [3.56ms]
+
+tests/setup-media.test.ts:
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+Downloading deno 2.9.6 for linux/arm64...
+Installed yt-dlp 2026.08.19 and Deno 2.9.6 in /tmp/couch-media-test-u2b7Vd
+(pass) installs verified executable releases and removes staging files [4.30ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+Downloading deno 2.9.6 for linux/arm64...
+(pass) a bad second download preserves both installed tools [1.62ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+(pass) a changed upstream manifest cannot replace a reviewed package input [1.25ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+(pass) requires a checksum for the exact release filename [1.12ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+Downloading deno 2.9.6 for linux/arm64...
+(pass) archive extraction failures preserve both installed tools [2.23ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+(pass) rejects a verified binary that cannot report the pinned version [1.35ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+(pass) failed HTTP requests clean staging without replacing tools [0.95ms]
+Downloading yt-dlp 2026.08.19 for linux/arm64...
+(pass) oversized checksum responses fail before installing tools [1.52ms]
+(pass) selects standalone releases on all supported desktop architectures [0.09ms]
+(pass) uses Tauri app data paths and ignores relative XDG_DATA_HOME [0.04ms]
+
+tests/frontend-build-identity.test.ts:
+(pass) browser build identity defaults to unpackaged in source mode [1.62ms]
+(pass) browser build identity retains embedded release metadata [1.47ms]
+
+tests/replaygain-audio.test.ts:
+(pass) gain measurements identify offset audio and distinguish saturation from mixer gain [17.72ms]
+(pass) gain measurements reject silent, unrelated and short captures [13.42ms]
+
+src/server/appimage-checkpoint.test.ts:
+(pass) idle changes and unconfirmed paused playback never close data admission [0.19ms]
+(pass) confirmed interruption closes admission before required producer checkpoint [0.04ms]
+(pass) disk failure and incomplete writer acknowledgement prohibit replacement and require restart [0.07ms]
+(pass) manual interruption cannot stop Active recording [0.03ms]
+(pass) manual interruption cannot stop Library scan
+(pass) manual interruption cannot stop Import request
+
+src/server/bluetooth.test.ts:
+(pass) Bluetooth inventory and mutations require current administration, with a server-owned actor [0.61ms]
+(pass) revocation during request-body reading prevents mutation and revocation after dispatch cancels the owner [0.10ms]
+(pass) cancellation crosses the native pipe even while an inventory request is pending [0.25ms]
+(pass) A2DP output-only profiles retain exact Bluetooth address; hands-free profiles cannot be selected [0.17ms]
+(pass) only the selected output remembers its Bluetooth reconnect identity [1.16ms]
+
+src/server/library-cue.test.ts:
+(pass) cue tracks have ordered durations and private source bounds; rescan resolves current metadata with stable IDs [56.78ms]
+(pass) malformed or missing cue sheets retain unavailable track identities and bounded source errors [45.09ms]
+(pass) cue library queue, saved playlist and relative progress survive restart without autoplay [76.15ms]
+(pass) cue filesystem failures do not expose host paths in source payloads [37.47ms]
+(pass) revocation during the final cue stat prevents catalog publication [32.83ms]
+(pass) cue playback rejects an ancestor replaced after cue validation and before path handoff [94.84ms]
+
+src/server/display-settings.test.ts:
+(pass) the host and paired administrators can read or move native screens [0.34ms]
+(pass) display routes expose only read, preview, confirm and cancel operations [0.18ms]
+(pass) revoked access is checked again after reading the request body [0.10ms]
+(pass) missing native host and native errors stay truthful [0.05ms]
+(pass) private display replies require matching request IDs and reject overlap [0.12ms]
+
+src/server/video-metadata.test.ts:
+(pass) NFO parser validates one bounded XML item and decodes text without importing extra fields [8.20ms]
+(pass) image input bounds reject malformed, oversized, excessive dimensions, SVG and animation [0.84ms]
+(pass) movie and multi-season scans import the documented fields, sort episodes, and retain offline artwork [129.59ms]
+(pass) sidecar edits and removal preserve IDs and embedded tag precedence without re-probing media [40.07ms]
+(pass) legacy video metadata (probed=0) survives absent ffprobe until successful probing [93.77ms]
+(pass) legacy video metadata (probed=1) survives absent ffprobe until successful probing [119.64ms]
+(pass) legacy video metadata (probed=0) survives failing ffprobe until successful probing [131.95ms]
+(pass) legacy video metadata (probed=1) survives failing ffprobe until successful probing [156.25ms]
+(pass) current show metadata survives deleted episodes, search and whole-source offline restart [46.30ms]
+(pass) mixed episode show titles follow precedence when S01E01 saves last [51.32ms]
+(pass) mixed episode show titles follow precedence when S01E02 saves last [54.46ms]
+(pass) conflicting episode show titles follow precedence when S01E01 saves last [53.73ms]
+(pass) conflicting episode show titles follow precedence when S01E02 saves last [49.95ms]
+(pass) malformed and escaped sidecars stay isolated from playable entries and filename fallback [32.48ms]
+(pass) movie.nfo is only used in a single-video directory; unknown episode order remains reachable [39.17ms]
+(pass) private bounded original NFO cache preserves unknown XML bytes and show identity across title edits [38.48ms]
+
+src/server/playback-attribution.test.ts:
+(pass) manual play attribution is separate from queue ownership and is saved only after playback is observed [1.41ms]
+(pass) late, canceled and failed resolutions never claim another device started media [1.35ms]
+(pass) automatic advancement is unattributed, while a manually requested Next names its device [1.31ms]
+(pass) attribution migration leaves old history rows unnamed and keeps new snapshots across reopen [29.77ms]
+(pass) removing a newer legacy history never assigns its device to the surviving older record [1.06ms]
+
+src/server/replaygain.test.ts:
+(pass) ReplayGain validation accepts exact modes and strips client-supplied native data [0.36ms]
+(pass) current ReplayGain waits for native observation and explicit saving owns only the profile default [1.14ms]
+(pass) saved gain is captured at Play and unresolved, replaced, stopped and nonmusic controls cannot apply [1.35ms]
+(pass) old preferences keep exact values and profile gain survives restart without autoplay or role changes [32.95ms]
+
+src/server/iptv.test.ts:
+(pass) M3U exact source-scoped mapping keeps channel IDs through URL/name/order changes and XMLTV decodes numeric entities [1.22ms]
+(pass) XMLTV mapping preserves decoded exact IDs and distinct whitespace in channel and program references [0.48ms]
+(pass) XMLTV offsets, midnight and DST repeated hours normalize to absolute UTC times [0.10ms]
+(pass) bounded parsers reject incomplete lists, ambiguous IDs, unsafe URLs, XML declarations, nesting, count and field overflows [8.77ms]
+(pass) real HTTP import, guide/now-next, raster logo cache and offline restart expose no feed or stream URLs [20.19ms]
+(pass) live-edge HTTP probe handles omitted media sequence [2.48ms]
+(pass) live-edge HTTP probe handles explicit sequence and discontinuity [1.98ms]
+(pass) live-edge HTTP probe handles CRLF media playlist [2.05ms]
+(pass) live-edge HTTP probe handles empty marker-only playlist [2.25ms]
+(pass) live-edge HTTP probe handles missing segment URI [1.87ms]
+(pass) live-edge HTTP probe handles missing segment duration [1.85ms]
+(pass) live-edge HTTP probe handles invalid duration [1.90ms]
+(pass) live-edge HTTP probe handles duration above target [1.87ms]
+(pass) live-edge HTTP probe handles invalid target duration [1.91ms]
+(pass) live-edge HTTP probe handles duplicate target duration [1.90ms]
+(pass) live-edge HTTP probe handles invalid media sequence [1.63ms]
+(pass) live-edge HTTP probe handles media sequence after segments [1.65ms]
+(pass) live-edge HTTP probe handles finite playlist [1.57ms]
+(pass) live-edge HTTP probe handles VOD without end marker [1.85ms]
+(pass) live-edge HTTP probe handles master playlist [1.45ms]
+(pass) live-edge HTTP probe handles mixed master and media tags [1.98ms]
+(pass) live-edge HTTP probe handles provider start offset [1.64ms]
+(pass) live-edge HTTP probe handles unsafe segment URI [1.88ms]
+(pass) refresh/replace commit channels and programs together before invalidation; failed replacement keeps current private definition [11.97ms]
+(pass) committed replacement, refresh and removal still invalidate and succeed when native stop throws [17.26ms]
+(pass) source administration rechecks identity after feed awaits and rejects unpaired/ordinary callers [3.04ms]
+(pass) removal and newer replacement cancel old streaming refresh before it can recreate cached rows [2.93ms]
+(pass) real HTTP rejects byte-limited feeds including streaming bodies and never publishes upstream error text [2.16ms]
+(pass) two actual HTTP/WS controllers share opaque queue identity, rapid switch cancellation and stopped restart [120.78ms]
+(pass) Go live rechecks the current channel and manifest, cancels pending probes and keeps ordinary loads unchanged [216.82ms]
+(pass) revoking a controller during its Go live probe prevents the late native load [23.53ms]
+(pass) live resolution rejects replacement even when used without the hub cancellation callback [3.72ms]
+(pass) only a fresh valid direct EVENT playlist selects the private first-segment policy [3.59ms]
+(pass) ordinary continuous non-HLS media is handed to native without a probe that waits for EOF [2.90ms]
+(pass) EVENT source resolution rejects cancellation, replacement and removal before a native load [9.82ms]
+(pass) revoking a Guide Play caller during its EVENT probe prevents the late native load [23.22ms]
+
+src/server/playlists.test.ts:
+(pass) saves named household playlists, lists summaries, and restores them after restart [6.08ms]
+(pass) captures original source references privately with auto quality and strips unsupported queue fields [7.09ms]
+(pass) captures original source references privately with best quality and strips unsupported queue fields [5.30ms]
+(pass) captures original source references privately with 720p quality and strips unsupported queue fields [8.12ms]
+(pass) saving and loading a radio queue preserves its reconnect policy across restart [5.74ms]
+(pass) edits duplicate source occurrences by entry identity and preserves order [0.71ms]
+(pass) rejects stale edits, deletes and loads without any mutation or callback [0.61ms]
+(pass) serializes concurrent controller revisions and allows only one conflicting write [0.22ms]
+(pass) saves a replacement queue and loads fresh copies in each supported mode [0.39ms]
+(pass) normalizes and validates names with Unicode case-insensitive uniqueness [0.46ms]
+(pass) no-op edits retain the revision and do not broadcast [0.27ms]
+(pass) validates JSON commands, revisions, and positions without accepting client entries [0.48ms]
+(pass) bounds playlists, captured queues and appended queue sizes [1.88ms]
+(pass) permits an edited empty playlist but rejects empty saves and loads [0.33ms]
+(pass) does not persist invalid queue identities or unsupported original sources [0.22ms]
+(pass) broadcasts only after commit and rolls back failed durable writes without exposing storage details [8.02ms]
+(pass) reports failed queue loads without altering the saved playlist or leaking host errors [0.36ms]
+(pass) returns allowed methods and missing endpoint errors [0.29ms]
+
+src/server/update-idle.test.ts:
+(pass) ten continuous stopped minutes, without input or active work, are required [0.12ms]
+(pass) playing never counts as stopped, even without controller input [0.02ms]
+(pass) paused never counts as stopped, even without controller input
+(pass) loading never counts as stopped, even without controller input
+(pass) unavailable never counts as stopped, even without controller input
+(pass) radio reconnect and background work completion restart the interval [0.02ms]
+
+src/server/profiles.test.ts:
+(pass) rename preserves stable IDs, preferences, resume, watched marks and all history across reopen [43.99ms]
+(pass) create and rename share name validation, including case-insensitive duplicate rejection [31.07ms]
+(pass) removing the selected viewer keeps a renamed shared fallback and every other viewer's data [35.74ms]
+(pass) stale rename/removal and repeated removal fail without changing profile data [28.54ms]
+(pass) a failed final delete rolls back the selected profile, preferences and history without broadcasting [30.50ms]
+(pass) rename publishes after commit during playback, while removal and selection retain all active guards [35.06ms]
+(pass) only a committed removal discards a failed checkpoint, preventing later stop/close resurrection [38.39ms]
+(pass) forgetting a different profile retains the current viewer's checkpoint [31.60ms]
+(pass) legacy databases keep labels and data unconfirmed until explicit naming on the same ID [32.94ms]
+(pass) person naming validates, refuses stale writes and publishes without changing playback [29.71ms]
+(pass) person naming refuses an inactive history without mutation or broadcast [30.57ms]
+(pass) shared history selects the latest record per item without merging legacy rows or changing identities [37.59ms]
+
+src/server/metadata.test.ts:
+(pass) manual corrections and artwork survive rescan, offline restart and export/reimport without changing source files [45.53ms]
+(pass) concurrent edits and an aborted SQL write leave title, artwork, search and revision atomic [30.09ms]
+(pass) episode order changes sorting and exports the corrected order [37.34ms]
+(pass) provider credentials are write-only and guest or revoked callers cannot change metadata [26.76ms]
+(pass) bad artwork, malformed changes and missing provider access leave corrections unchanged [25.92ms]
+(pass) TMDB contract uses fixed origins, bearer auth, explicit movie/episode details and rejects failed artwork [1.04ms]
+(pass) match preview applies only after confirmation, fences stale edits and survives a failed subsequent lookup [30.66ms]
+(pass) failed NFO imports retain unknown XML, episode classification and manual order through restart/export [46.71ms]
+(pass) clearing a chosen match suppresses an imported TMDB ID in export and reimport [46.47ms]
+(pass) a failed episode NFO never promotes its manual series title into a sibling's imported metadata [37.92ms]
+(pass) standalone artwork corrections need no placeholder changes object [26.21ms]
+(pass) an episode's imported show-poster fallback exports back to the show folder [41.59ms]
+(pass) each failed NFO retains its own snapshot while the other sidecar can update [45.81ms]
+
+src/server/streamingcommunity.test.ts:
+(pass) materializes only the pinned extractor source behind a private directory [1.37ms]
+
+src/server/preferences.test.ts:
+(pass) profile language, subtitle mode and speed persist separately from device delay and volume without restart autoplay [36.45ms]
+(pass) preferences migration preserves an existing queue, volume, profile, progress and paired controller [33.97ms]
+(pass) preference broadcasts follow committed writes and observations never overwrite preferences [1.04ms]
+(pass) stale preference controls neither persist nor publish and storage failure sends no controls [0.69ms]
+(pass) a resolving item keeps its starting profile defaults and canceled resolutions cannot load [0.80ms]
+(pass) explicit defaults save observed choices without changing this item or unrelated saved fields [0.72ms]
+(pass) independent saved-field commands preserve each remote's other changes [0.52ms]
+(pass) temporary controls need no preference write and expire when the item changes [0.67ms]
+(pass) defaults reject stale profiles and unlabelled tracks while profile guards retain controller authority [0.88ms]
+(pass) opening an existing preferences database preserves every profile's exact saved values [29.39ms]
+(pass) adding an external subtitle requires current loaded playback and awaits native track observation [1.40ms]
+
+src/server/queue-load.test.ts:
+(pass) bulk append commits once, keeps duplicate occurrences and current playback [0.87ms]
+(pass) replace retires slow resolution, leaves the new queue stopped and play starts its first occurrence [0.77ms]
+(pass) queue limits and storage failures leave the old queue and player intact [0.65ms]
+(pass) failed replace preserves progress observation until a later stop [1.10ms]
+(pass) failed play preserves progress observation until a later stop [1.04ms]
+(pass) replace marks a near-end item watched only after the queue commits [0.74ms]
+(pass) play marks a near-end item watched only after the queue commits [0.89ms]
+(pass) a completion-write failure after queue commit stops the removed item and retains its pending progress [0.91ms]
+
+src/server/apt-package-status.test.ts:
+(pass) counts Debian upgrades and Debian-Security once per package, excluding new and third-party packages [0.12ms]
+(pass) counts actionable Ubuntu upgrades and security, excluding new dependencies and other origins [0.01ms]
+(pass) healthy indexes with no upgrades report zero [0.57ms]
+(pass) failed dependency check never reports invented healthy or upgrade counts [0.15ms]
+(pass) failed upgrade simulation preserves a successful dependency check [0.22ms]
+
+src/server/radio-retry.test.ts:
+(pass) radio EOF retries the station's current source three times, retires failed generations and then stays failed [1.46ms]
+(pass) synchronous and asynchronous resolver failures share the same bounded retry budget [0.79ms]
+(pass) revocation during radio backoff publishes cancellation and leaves another remote able to play [0.83ms]
+(pass) legacy favorite classification commits without leaking resolved credentials and survives restart [32.37ms]
+(pass) only thirty seconds of observed advancing playback reset the budget; pauses, stalls and short reconnects do not [1.26ms]
+(pass) wall time alone cannot reset a stalled connection's budget [0.63ms]
+(pass) playlist Play retains radio resolution retries after committing the new queue [0.67ms]
+(pass) stop cancels pending reconnects [0.57ms]
+(pass) replacement cancels pending reconnects [0.51ms]
+(pass) next cancels pending reconnects [0.53ms]
+(pass) remove cancels pending reconnects [0.73ms]
+(pass) queue replace cancels pending reconnects [0.66ms]
+(pass) queue play cancels pending reconnects [0.95ms]
+(pass) shutdown cancels pending reconnects [0.70ms]
+(pass) player loss cancels pending reconnects [0.53ms]
+(pass) profile cancels pending reconnects [0.56ms]
+(pass) reserve cancels pending reconnects [0.63ms]
+(pass) a newer play reservation preserves healthy radio and cannot be overtaken by its subsequent failure [0.61ms]
+(pass) stop aborts a retry resolver and ignores its late completion [0.66ms]
+(pass) reserve aborts a retry resolver and ignores its late completion [0.47ms]
+(pass) replacement aborts a retry resolver and ignores its late completion [0.51ms]
+(pass) shutdown aborts a retry resolver and ignores its late completion [0.50ms]
+(pass) player loss aborts a retry resolver and ignores its late completion [0.50ms]
+(pass) a native connection failure cancels a scheduled retry and publishes unavailability [0.66ms]
+(pass) non-radio media keeps EOF queue advancement and does not retry failures [0.91ms]
+(pass) a radio retry that first resolves successfully retains the requesting device [0.58ms]
+
+src/server/media-folders.test.ts:
+(pass) browse stays inside permitted real folders and never lists files or symlinks [3.38ms]
+(pass) folder pages retain bounded results and expose the next page [89.64ms]
+(pass) missing folders and empty replacement directories fail until the original returns [1.89ms]
+(pass) permission failures remain actionable and recover after access is restored [7.42ms]
+(pass) filesystem UUID survives changed Linux mount IDs and device names [2.69ms]
+(pass) mounted shares recover with new mount IDs but a different export is rejected [1.66ms]
+(pass) nested mounts require separate sources, including mounts added after registration [2.21ms]
+(pass) Linux mountpoint escapes resolve to the chosen path [1.33ms]
+(pass) same-path overmount uses the visible filesystem even when directory inodes collide [3.59ms]
+(pass) hidden descendants of an overmounted parent neither win selection nor block a scan [1.92ms]
+(pass) mount topology must also agree with the directory's current device [0.89ms]
+(pass) a changed source mount cannot fall back to an ancestor matching an earlier stat [0.94ms]
+(pass) CIFS client inode changes recover only for the same mounted export and path [2.00ms]
+
+src/server/tool-health.test.ts:
+(pass) verifies release bytes before fixed local version commands, with no inherited credentials or source requests [8.34ms]
+(pass) packaged builds reject missing helpers despite a working environment override [3.89ms]
+(pass) PATH fallback and aliases cannot hide or execute damaged package tools [3.10ms]
+(pass) hard links to corrupt package tools are blocked for overrides, cross-tool aliases and ffprobe [5.13ms]
+(pass) packaged helpers ignore bare environment overrides and PATH [8.88ms]
+(pass) symlink replacement, oversized archives and unreadable version results do not become success [7.22ms]
+(pass) version mismatch and absent executable permission differ from a missing runtime dependency [2.46ms]
+(pass) unpackaged or absent release metadata never invents verified package health [2.46ms]
+(pass) only administrators can trigger fixed checks and no request can choose paths or commands [1.24ms]
+(pass) concurrent checks share work and cached reads do not repeat helper execution [4.11ms]
+(pass) administrator revocation and shutdown take effect while local probes are pending [2.90ms]
+(pass) a timed-out check stays the only unfinished job even after cache expiry [10005.89ms]
+(pass) repair verification ignores the health cache and effective overrides, and requires bounded package smoke [12.31ms]
+(pass) System package status is a bounded fixed read, remains separate and never accepts package selectors [1.44ms]
+(pass) shutdown during system package inspection reports unavailable rather than revoked access [1.17ms]
+(pass) package inventory gets its fixed larger budget while version probes keep their short deadline [3328.32ms]
+
+src/server/catalog.test.ts:
+(pass) catalog keeps source mutation in Settings while remotes browse indexed media without paths [7.61ms]
+(pass) folder errors cannot disclose filesystem paths to remotes [1.87ms]
+(pass) rejects malformed requests before changing a provider and hides upstream credentials [2.48ms]
+(pass) radio favorites remain usable when the directory fails [2.08ms]
+(pass) rejects invalid pagination and reports supported methods without running mutations [1.43ms]
+(pass) video catalog routes paginate ordered episodes with progress and cached artwork without host paths [6.58ms]
+(pass) watching profiles and progress APIs validate edits and expose path-free catalog/history views [5.02ms]
+(pass) profile edits validate HTTP bodies consistently and leave the Jellyfin account alone [2.13ms]
+(pass) history replay validates current playback settings and keeps durable source URLs private [2.01ms]
+(pass) person naming requires an explicit valid request and retains generic label API compatibility [1.47ms]
+(pass) changing active history while a person-name body loads rejects the stale name [1.43ms]
+(pass) every remote can play and edit shared history retained under a different legacy record [1.70ms]
+(pass) provider history filters before the limit, deduplicates shared plays and keeps source URLs private [2.29ms]
+
+src/server/folder-settings.test.ts:
+(pass) unpaired and ordinary controllers cannot read protected paths or mutate folders [1.20ms]
+(pass) administrator can browse, test, start a scan, verify a legacy source and remove it [1.18ms]
+(pass) duplicate, invalid and unconfirmed definitions preserve existing state [0.99ms]
+(pass) authorization is checked again after asynchronous filesystem inspection [1.10ms]
+(pass) authorization is checked again after receiving a delayed body [0.68ms]
+(pass) late library authorization errors retain their HTTP status [0.62ms]
+
+src/server/queue-position.test.ts:
+(pass) legacy entries stay upcoming; Stop and restart retain position without autoplay or deleting data [212.21ms]
+(pass) restart during playback retains the last selection and replay moves the boundary backward [27.85ms]
+(pass) reorder follows the cursor identity and deleting current keeps the previous boundary and stops [28.06ms]
+(pass) moving a stopped cursor preserves its identity while append, replace and play have distinct boundaries [34.02ms]
+(pass) a failed explicit cursor write leaves the current item and its progress tracker active [27.45ms]
+(pass) failed progress completion rolls back the cursor and continues observing the old item [24.81ms]
+(pass) a failed transaction commit restores the old tracker and its last persisted snapshot [31.87ms]
+
+src/server/web-recovery.test.ts:
+(pass) one private recovery preserves observed position, settings, queue metadata and paused choice [1.44ms]
+(pass) stop cancels a late recovery success [0.84ms]
+(pass) stop cancels a late recovery failure [0.91ms]
+(pass) play cancels a late recovery success [0.73ms]
+(pass) play cancels a late recovery failure [0.66ms]
+(pass) next cancels a late recovery success [0.60ms]
+(pass) next cancels a late recovery failure [0.59ms]
+(pass) enqueue cancels a late recovery success [0.56ms]
+(pass) enqueue cancels a late recovery failure [0.54ms]
+(pass) move cancels a late recovery success [0.57ms]
+(pass) move cancels a late recovery failure [0.54ms]
+(pass) remove cancels a late recovery success [0.54ms]
+(pass) remove cancels a late recovery failure [0.67ms]
+(pass) loadQueue cancels a late recovery success [0.73ms]
+(pass) loadQueue cancels a late recovery failure [0.66ms]
+(pass) reserve cancels a late recovery success [0.57ms]
+(pass) reserve cancels a late recovery failure [0.58ms]
+(pass) close cancels a late recovery success [0.55ms]
+(pass) close cancels a late recovery failure [0.56ms]
+(pass) quiesce cancels a late recovery success [0.56ms]
+(pass) quiesce cancels a late recovery failure [0.54ms]
+(pass) disconnect cancels a late recovery success [0.53ms]
+(pass) disconnect cancels a late recovery failure [0.55ms]
+(pass) audioLoss cancels a late recovery success [0.61ms]
+(pass) audioLoss cancels a late recovery failure [0.51ms]
+(pass) new pause intent before or during recovery controls the replacement load [1.08ms]
+(pass) a rejected queue write or stale command does not cancel recovery [0.60ms]
+(pass) unconfirmed expiry remains terminal without a replacement load [0.55ms]
+(pass) recovery controls reflect both pause choices while the replacement native load settles [0.57ms]
+(pass) a premature native EOF confirms expiry before retrying, while normal EOF advances the queue [1.16ms]
+(pass) queue changes and playback reservations stop a replacement while its native load settles [1.08ms]
+(pass) history survives expiry recovery when the replacement is observed [0.63ms]
+(pass) history survives expiry recovery when the replacement is loading [0.54ms]
+(pass) history survives expiry recovery when the replacement is failed [0.49ms]
+
+src/server/collections.test.ts:
+(pass) manual films and saved music survive scans and offline restart with ordered missing previews [38.74ms]
+(pass) edits compare revisions across controllers and broadcast only committed state [26.08ms]
+(pass) filters bound fields, preserve literal matching and require the current visible order [27.58ms]
+(pass) removed folders retain manual identities while new unknown members and revoked writes fail [26.02ms]
+(pass) preview bounds large catalog results to 500 and shutdown rejects a body still arriving [27.81ms]
+(pass) a complete 500-film definition with maximum Unicode titles can be renamed and reordered [62.22ms]
+
+src/server/lan-listener.test.ts:
+(pass) selects a private LAN, excludes virtual/public interfaces and requires an explicit ambiguous choice [0.21ms]
+(pass) an explicit local address resolves same-interface ambiguity and preserves its subnet [0.14ms]
+(pass) socket admission requires the selected subnet, independently of Host or Origin [0.07ms]
+(pass) custom names must resolve only to this installation and preserve its direct HTTP port [0.37ms]
+(pass) failed or mixed DNS answers omit only invalid aliases and preserve the recovery IP [0.06ms]
+(pass) a DNS timeout leaves the direct IP available [5010.43ms]
+(pass) sharing binds one address, closes on disable/network change and refreshes advertised addresses [0.54ms]
+(pass) a missing selected address closes LAN access and recovers only when that address returns [0.22ms]
+(pass) DNS failure and recovery refresh aliases without stopping a valid IP listener [0.18ms]
+(pass) the selected IP starts before DNS finishes and disabling cannot be undone by a late answer [0.13ms]
+(pass) closing during a network change cannot start a replacement listener [0.11ms]
+(pass) port conflicts reject enabling and cannot silently enable sharing on a later refresh [0.11ms]
+
+src/server/library.test.ts:
+(pass) scan indexes nested media, skips symlinks and nonmedia, and preserves IDs after rescanning and restart [50.08ms]
+(pass) missing files and disconnected roots retain the catalog and recover on rescan [33.49ms]
+(pass) queue lookup rechecks files and rejects symlinks introduced after scanning [26.89ms]
+(pass) a directory replaced with a link outside its source cannot be queued [27.06ms]
+(pass) probe metadata is searchable and unchanged files do not launch new probes [37.79ms]
+(pass) scans coalesce per folder and queue across folders [28.35ms]
+(pass) probe work stays bounded and failed metadata leaves files available [174.41ms]
+(pass) closing the library terminates active probes and records an interrupted scan [34.76ms]
+(pass) music-metadata reads duration from a PCM WAV fixture without ffprobe [23.04ms]
+(pass) tagged albums preserve compilation credits, numeric disc ordering, artwork and restart [28.99ms]
+(pass) old successful audio probes are reparsed without file changes and failed migration retains known tags [37.62ms]
+(pass) rescanning changed music replaces artist credits and releases unreferenced artwork [26.04ms]
+(pass) missing disc and track numbers sort last with a stable title tie break [25.15ms]
+(pass) album tracks reject oversized albums explicitly and retain unavailable entries [27.37ms]
+(pass) maintained parser reads real tagged MP3 FLAC and M4A with the same ordered album [161.39ms]
+(pass) search ranks exact titles before weighted title matches and artist matches across folders [29.47ms]
+
+src/server/updates.test.ts:
+(pass) defaults stable/manual, accepts only admin commands and bounded fields [0.96ms]
+(pass) channel persists separately, checks asynchronously, stages only its exact candidate [14.80ms]
+(pass) offline check keeps last known release and timestamp without claiming fresh success [14.89ms]
+(pass) unpackaged installation reports unavailable and never accepts a fake download [0.49ms]
+(pass) trial startup does not run background update producers until admission opens [26.91ms]
+(pass) auto policy persists independently of either channel and stages without interrupting busy playback [24.01ms]
+(pass) automatic attempts retain identity after lost reply and never repeat a failed candidate [21.41ms]
+(pass) automatic attempts retain identity after lost reply and never repeat a operator-required candidate [23.17ms]
+(pass) automatic attempts retain identity after lost reply and never repeat a restored candidate [22.75ms]
+(pass) an idle refusal can retry after a fresh idle interval, while offline checks never install [24.00ms]
+(pass) fresh native verification restores ready staging, corruption clears ready without losing preferences [22.02ms]
+(pass) a failed manual candidate is never automatically retried [8.43ms]
+
+src/server/music-metadata.test.ts:
+(pass) music identities normalize names and retain individual compilation artists [0.16ms]
+(pass) artwork accepts only bounded raster bytes and ignores declared image MIME for SVG [0.07ms]
+(pass) oversized audio metadata inputs are rejected before opening the path [0.04ms]
+
+src/server/jellyfin.test.ts:
+(pass) Jellyfin source > preparing an album successor retains the current reporter until native adoption [11.68ms]
+(pass) Jellyfin source > canceling a prepared source never starts or stops the current reporter [4.46ms]
+(pass) Jellyfin source > stores only host credentials and returns a bounded public catalog without server paths or tokens [8.16ms]
+(pass) Jellyfin source > negotiates static direct play with private headers and reports a single host playback lifecycle [3.77ms]
+(pass) Jellyfin source > loads external text subtitles through the server API with header authentication and original timestamps [3.39ms]
+(pass) Jellyfin source > omits external-domain subtitle delivery without forwarding credentials or publishing its address [3.24ms]
+(pass) Jellyfin source > uses the canonical subtitle API for missing delivery URLs and keeps private paths out of labels [2.33ms]
+(pass) Jellyfin source > reports unsupported direct SUP and unidentified image sidecars while preserving direct video playback [2.37ms]
+(pass) Jellyfin source > delivers only identified PGS Matroska sidecars through the supported API and discloses its timing limit [2.15ms]
+(pass) Jellyfin source > invalidates a pending resolution before it can start a replaced playback session [2.11ms]
+(pass) Jellyfin source > queries the account's continue-watching list with bounded pagination and user data [1.85ms]
+(pass) Jellyfin source > play from start overrides upstream resume and reports only the observed native position [2.71ms]
+(pass) Jellyfin source > immediate replay waits for the preceding stop report and resumes its latest rewind [18.88ms]
+(pass) Jellyfin source > EOF sends one final report and reads back upstream watched state [3.33ms]
+(pass) Jellyfin source > reopening the host connection reads fresh upstream resume without starting playback [7.95ms]
+(pass) Jellyfin source > aborting playback negotiation cannot activate a reporter [2.61ms]
+(pass) Jellyfin source > failed progress writes warn without broadcasting a committed catalog change [2.61ms]
+(pass) Jellyfin source > invalid or completed upstream positions do not produce a native resume seek [2.86ms]
+(pass) Jellyfin source > does not claim direct-play support when Jellyfin requires conversion [2.63ms]
+(pass) Jellyfin source > rejects malformed source IDs and URLs, and hides upstream authentication details [2.24ms]
+(pass) Jellyfin source > disconnect removes saved credentials and wins over an in-flight connection [2.10ms]
+(pass) Jellyfin source > closing while authentication is pending cannot write or reopen a closed source [1.72ms]
+(pass) Jellyfin source > saved queue entries are scoped to the Jellyfin server and account [3.23ms]
+(pass) Jellyfin source > finishes logout before authenticating again and preserves an active reused token [3.18ms]
+(pass) Jellyfin source > replacing the server URL with an alias keeps its reused device token active [2.29ms]
+(pass) Jellyfin source > native player loss stops reporting at the last observed position even without a playback ID [2.48ms]
+(pass) Jellyfin source > a terminal error position reset preserves the last observed position [3.09ms]
+(pass) Jellyfin source > a terminal idle position reset preserves the last observed position [3.05ms]
+(pass) Jellyfin source > a terminal ended position reset preserves the last observed position [3.04ms]
+
+src/server/startup.test.ts:
+(pass) LightDM readback resolves defaults before ordered matching seat groups, including numeric source IDs [0.29ms]
+(pass) startup writes require current administrator authority, a boolean and exact request fields [0.37ms]
+(pass) OS rejection and effective override never claim success; successful write reads back OS state [0.12ms]
+(pass) concurrent startup mutations reject and failed writes release admission [0.11ms]
+(pass) Ubuntu LightDM indirect alias is valid; masked, disabled and nongraphical boot are unavailable [0.05ms]
+
+src/server/recordings.test.ts:
+(pass) administrator setup validates transport, rights and exact source/channel/tvg identity without publishing credentials [11.61ms]
+(pass) two controllers and a lost create response reconcile one durable job through title, end and start changes [14.75ms]
+(pass) invalid mapping is rejected before submission and incomplete listings never confirm cancellation [14.80ms]
+(pass) pending cancel needs verified healthy absence, survives lost response and never replays scheduling [13.58ms]
+(pass) reconciliation keeps the first conflict cause when the backend later reports only a missing file [12.47ms]
+(pass) completed playback uses only the read-only account and refuses writable or stale transports [15.74ms]
+(pass) durable intent commits before broadcast and an aborted controller response does not resubmit its job [14.22ms]
+(pass) recording queue restart stays stopped and native progress belongs to the active Couch profile [27.17ms]
+(pass) empty-library setup rejects playback without view-all or with manage-all rights and removes its disabled check [18.05ms]
+(pass) setup reconciles a lost disabled-create response and does not add permission jobs per programme [12.32ms]
+(pass) a never-confirmed disabled permission check survives restart without another create [8.32ms]
+(pass) setup remains blocked until disabled-entry cleanup is confirmed after restart [11.52ms]
+(pass) a setup saved before permission qualification cannot schedule until verified again [24.27ms]
+(pass) incomplete cleanup keeps the disabled verification intent and cannot commit setup [11.21ms]
+(pass) revocation at the last setup prerequisite prevents creating a permission-check intent [15.47ms]
+(pass) a programme that starts during backend verification is rejected before durable submission [12.73ms]
+(pass) failed-view is qualified independently for both accounts, with durable cleanup after permission repair [20.89ms]
+(pass) owner-scoped totals exclude unrelated recordings and treat regex characters in usernames literally [13.98ms]
+(pass) case-colliding owners fail closed before setup creates a permission entry [6.35ms]
+(pass) legacy future intents finish exact cleanup before a newly admitted failed check can qualify setup [22.07ms]
+(pass) invalid backend clock and a changed disabled probe cannot qualify setup or delete an unverified entry [8.52ms]
+(pass) permission-check deletion revalidates the entry after asynchronous rights checks [7.54ms]
+(pass) removed guide selections preserve their safe 404 for scheduling and mapping [10.98ms]
+(pass) duplicate reconciliation warnings clear after recovery while the original backend failure survives [14.43ms]
+(pass) a restored cancelled entry clears its review warning after normal reconciliation [12.82ms]
+(pass) backend error code %s preserves its cause independently of display status Waiting for stream [13.80ms]
+(pass) backend error code %s preserves its cause independently of display status Adaptateur indisponible [14.67ms]
+(pass) backend error code %s preserves its cause independently of display status No input detected [13.43ms]
+(pass) maintenance fences the last setup prerequisite before durable intent [7.85ms]
+(pass) maintenance fences the last schedule prerequisite before durable intent [11.94ms]
+(pass) closed maintenance admission skips polling and rejects explicit refresh before backend work [39.39ms]
+(pass) reconciliation released after admission closes cannot revise jobs or publish [14.19ms]
+(pass) shutdown drains an admitted create and restart reconciles its UUID without another create [15.14ms]
+
+src/server/sound-routing.test.ts:
+(pass) saved sink names control idle selection, active route confirmation and effective system volume/mute [2.18ms]
+(pass) missing output, wrong route and audio-server failure interrupt playback and reconnection never resumes [1.47ms]
+(pass) a failed route mutation retains saved route and restores the previous native device [1.69ms]
+(pass) revoked administration during asynchronous inventory cannot change an output [1.49ms]
+(pass) session pauses seekable media on audio loss, suppresses stale EOF and requires explicit resume [1.30ms]
+(pass) live media audio loss stops, cancels retry and rejects retired playback observations [0.81ms]
+(pass) saved stable sink identity and idle TV delay survive a reopened store without autoplay [21.75ms]
+(pass) inactive output profiles activate by stable card identity, persist and restore after restart/hotplug [1.74ms]
+(pass) profile rejection restores the previous card profile and saved sink without resuming [1.67ms]
+(pass) selecting a PipeWire Bluetooth sink saves its card profile and reconnect address [1.44ms]
+(pass) refresh repairs a legacy selected Bluetooth sink once without changing playback or existing profiles [9.42ms]
+
+src/server/radio.test.ts:
+(pass) discovers mirrors, retries failures, normalizes stations, and caches matching searches [0.54ms]
+(pass) expires cached searches and discovered mirrors [0.23ms]
+(pass) shares in-flight searches and caps upstream results [0.39ms]
+(pass) reports malformed providers and retries discovery on the next search [0.29ms]
+(pass) aborts a stalled provider before trying another mirror [3000.92ms]
+(pass) validates search inputs before contacting the provider [0.35ms]
+(pass) persists favorites, updates by stable station UUID, and broadcasts actual removals [14.63ms]
+(pass) rejects malformed favorites and strips fields outside the public station model [0.37ms]
+(pass) programme lookup trusts only stations currently imported from the avoid feed [1.34ms]
+
+src/server/session-play-now.test.ts:
+(pass) direct Play now while idle keeps the previously queued item upcoming [1.07ms]
+(pass) catalog Play now while idle keeps the previously queued item upcoming [0.60ms]
+(pass) queued Play now while idle keeps the previously queued item upcoming [0.52ms]
+(pass) Play now preserves waiting order through Next and natural completion [0.72ms]
+(pass) choosing an existing upcoming item moves only it and replay keeps the same order [0.59ms]
+(pass) Add to queue appends without interrupting paused playback [0.53ms]
+(pass) Play now keeps an explicitly selected album together ahead of the waiting queue [0.57ms]
+(pass) canceled album Play now stays appended without changing playback or pending order [0.52ms]
+(pass) restart retains reordered upcoming items without autoplay [21.02ms]
+(pass) failed Play now queue persistence leaves current playback, queue and cursor intact [0.96ms]
+
+src/server/validation.test.ts:
+(pass) provider albums accept a public link and discard client-supplied track lists and secrets [0.15ms]
+(pass) TV navigation accepts only remote keys and strips unrelated command fields [0.08ms]
+(pass) playback preferences accept language policy while stripping unrelated fields [0.23ms]
+(pass) save-default requests carry only current item, profile and supported choice [0.08ms]
+(pass) web queue commands validate quality and public metadata and ordinary enqueue strips extras [0.12ms]
+(pass) play accepts an explicit restart without allowing invalid flags [0.07ms]
+(pass) radio queue intent is limited to direct HTTP streams and cannot carry native settings [0.08ms]
+(pass) enqueueLibrary validates playback intent and requires play-now for a restart [0.08ms]
+(pass) enqueueJellyfin validates playback intent and requires play-now for a restart [0.04ms]
+(pass) enqueueWeb validates playback intent and requires play-now for a restart [0.04ms]
+(pass) Go live requires a current playback identity and exposes no native option parameter [0.05ms]
+(pass) web queue accepts automatic quality alongside explicit unrestricted playback [0.03ms]
+(pass) YouTube playlist commands validate quality and play intent [0.07ms]
+(pass) current video quality requires a playback ID and a known quality and strips private fields [0.05ms]
+
+src/server/appimage-update-native.test.ts:
+(pass) phone status remains available while the feed is checking [0.22ms]
+(pass) private pipe uses fixed actions, correlates replies and forwards progress [0.13ms]
+(pass) interrupted request stays exclusive until native completion and shutdown rejects it [0.07ms]
+(pass) installation uses opaque identities and preserves idle and Couch-only repair intent [0.07ms]
+(pass) concurrent phone statuses correlate out of order without interrupting download progress [0.08ms]
+(pass) timed-out status is cleaned up without releasing an interrupted mutation [0.14ms]
+(pass) pending phone statuses allow a mutation and shutdown rejects every caller [0.06ms]
+(pass) failed status dispatch preserves the running mutation [0.05ms]
+(pass) accepted installation retains the restart reservation until terminal completion [0.07ms]
+
+src/server/radio-playlists.test.ts:
+(pass) imports the actual avoid.quest Kodi feed contract with all ten stations in feed order [0.77ms]
+(pass) preserves IDs across restart, refresh and reimport while favorites follow current metadata [19.06ms]
+(pass) preserves the last catalog on refresh failure and clears it on valid empty or TV-only refresh [0.72ms]
+(pass) coalesces refresh and prevents a removed source's old response overwriting its replacement [0.66ms]
+(pass) close aborts a streaming playlist without writing to a closed database [1.73ms]
+(pass) supports BOM, CRLF, relative URLs, comma metadata, filtering and stable source-scoped IDs [0.66ms]
+(pass) rejects HLS and unsupported playback directives without silently changing stream behavior [1.68ms]
+(pass) discards invalid optional artwork while keeping playable stations [0.34ms]
+(pass) bounds bytes, station count and redirects, including streams without Content-Length [7.02ms]
+(pass) resolves relative media against the final redirect and rejects invalid feed URLs before fetching [0.46ms]
+(pass) resolves queued radio IDs against the current catalog, then the retained favorite [0.38ms]
+
+src/server/radio-discovery.test.ts:
+(pass) a stalled 50-station catalog returns partial programmes within 30s including feed loading [1.60ms]
+(pass) canceling the HTTP discovery request stops new batches while playback shares its pending fetch [0.81ms]
+(pass) canceling while the catalog loads returns promptly and preserves its shared refresh [0.58ms]
+
+src/server/session.test.ts:
+(pass) failed database operations do not publish or accept queue, volume, profile, preferences or progress changes [0.85ms]
+(pass) late provider resolutions cannot replace a newer item or restart stopped playback [1.02ms]
+(pass) metadata enrichment preserves custom titles, ignores removed sources, and persists details [0.58ms]
+(pass) track selection uses the current observed catalog and waits for native confirmation [0.67ms]
+(pass) repeated EOF observations cannot autoplay a canceled catalog addition or cancel a fresh play request [0.68ms]
+(pass) rejected stale controls preserve pending play intent, which is consumed once and forwards restart [0.52ms]
+(pass) player loss cancels pending catalog playback [0.50ms]
+(pass) profile change cancels pending catalog playback [0.44ms]
+(pass) shutdown cancels pending catalog playback [0.40ms]
+(pass) maintenance saves the last observation and suppresses later EOF, controls and native callbacks [0.69ms]
+(pass) maintenance propagates a failed progress checkpoint and keeps callbacks stopped [0.61ms]
+(pass) a source resolution finishing after maintenance cannot persist metadata or load media [0.51ms]
+(pass) programme enrichment reaches the shared snapshot separately from native tags and clears on station changes [0.66ms]
+
+src/server/jellyfin-settings.test.ts:
+(pass) only an administrator or physical host can manage Jellyfin and read its private address [8.79ms]
+(pass) a failed replacement preserves the existing token, account and library on disk [6.61ms]
+(pass) connection tests distinguish rejected credentials from an unavailable server and never change the saved connection [7.90ms]
+(pass) a slow login cannot commit after its caller becomes controller [7.90ms]
+(pass) a slow login cannot commit after its caller becomes revoked [6.71ms]
+(pass) authorization is checked again after a delayed request body before login [5.18ms]
+(pass) replace publishes its authorized configuration change before slow logout, with no later mutation after revocation [6.86ms]
+(pass) disconnect publishes its authorized configuration change before slow logout, with no later mutation after revocation [6.93ms]
+(pass) the first paired phone manages through the HTTP hub while ordinary controllers browse and profiles stay separate [7.59ms]
+
+src/server/radio-programme.test.ts:
+(pass) one shared request preserves track text, carries only provider cookie, and drops expired artwork before refreshing [0.44ms]
+(pass) station changes ignore late responses without aborting shared work; stop cancels polling [0.17ms]
+(pass) ordinary sources make no requests and provider errors honor retry-after [0.24ms]
+(pass) expired, future and malformed metadata never appears; unsafe or absent artwork still leaves a title [0.31ms]
+(pass) removing the active imported station clears its programme [0.11ms]
+(pass) catalog refresh cannot attach a new stream's programme to the old playing stream [0.09ms]
+
+src/server/lan-hub.test.ts:
+(pass) the native hub keeps loopback while sharing opens and closes a separate LAN listener [6.05ms]
+(pass) alias DNS failure preserves IP admission and recovery restores only the validated Host and Origin [6.33ms]
+(pass) a malformed optional alias cannot prevent the managed hub from starting [4.41ms]
+
+src/server/maintenance-mode.test.ts:
+(pass) remote maintenance owns only a private installation API and retains playback data [31.06ms]
+(pass) remote startup trial reports successful local readiness without contacting a remote [126.02ms]
+(pass) remote startup trial reports failed local readiness without contacting a remote [140.11ms]
+
+src/server/appearance.test.ts:
+(pass) preview publishes immediately, confirmation persists only the selected size, and reset is immediate [24.07ms]
+(pass) cancel, expired confirmation and replacement previews preserve the saved size [1.02ms]
+(pass) ordinary remotes can read TV size but only current administrators and physical hosts may change it [0.73ms]
+(pass) revocation or demotion while reading any mutation body prevents the write [4.05ms]
+(pass) reject unsupported, coerced, extra-field, oversized and malformed settings without publishing [0.83ms]
+(pass) failed persistence leaves the preview reversible and does not leak database errors [25.13ms]
+
+src/server/replaygain-http.test.ts:
+(pass) two paired HTTP controllers share observed gain, independent preference patches and a fresh reconnect snapshot [137.77ms]
+
+src/server/session-quality.test.ts:
+(pass) quality replaces only the current transport at the latest position and keeps pause, queue and preferences [3.00ms]
+(pass) pause intent received during quality resolution wins over an older native observation [8.26ms]
+(pass) live video quality reloads without a VOD seek [0.92ms]
+(pass) a newer stop cancels quality resolution without replay or queue mutation [1.75ms]
+(pass) a newer next cancels quality resolution without replay or queue mutation [1.03ms]
+(pass) a newer play cancels quality resolution without replay or queue mutation [0.69ms]
+(pass) a newer reserve cancels quality resolution without replay or queue mutation [0.67ms]
+(pass) a newer quality choice supersedes the older resolution [0.80ms]
+(pass) resolver failure keeps the original quality and playback [0.63ms]
+(pass) authority failure keeps the original quality and playback [0.53ms]
+(pass) quality rejects stale playback, radio, music and VOD without seeking [2.93ms]
+(pass) quality honors an unobserved seek to 15 instead of the older position [0.93ms]
+(pass) quality honors an unobserved seek to 130 instead of the older position [0.65ms]
+(pass) quality honors an unobserved seek to 900 instead of the older position [0.74ms]
+(pass) quality uses newer progress once native playback confirms the pending seek [0.81ms]
+(pass) an explicit replay starts a new presentation even when the queue entry is unchanged [0.62ms]
+(pass) history follows a quality replacement and ignores observations from the retired transport [0.68ms]
+(pass) history retains observed progress when quality is failed [0.80ms]
+(pass) history retains observed progress when quality is canceled [0.57ms]
+(pass) history retains observed progress when quality is loading [0.57ms]
+
+src/server/subtitle-lifecycle.test.ts:
+(pass) failed replacement releases retired PGS after native Stop, acknowledgement first=true [4.24ms]
+(pass) failed replacement releases retired PGS after native Stop, acknowledgement first=false [2.62ms]
+(pass) late A Stop preserves prepared and loaded B files without publishing stale state or reporting it [3.09ms]
+
+src/server/manual-update.test.ts:
+(pass) only an administrator's exact staged candidate reaches the fixed worker operation [0.65ms]
+(pass) revocation during worker lookup prevents acceptance; status remains readable during trial [0.14ms]
+(pass) a durable retry reaches the worker with the same fields after download state is lost [0.07ms]
+(pass) expired unaccepted candidates are distinguished from ambiguous worker failure [0.11ms]
+(pass) request-specific status retains a completed receipt superseded by another remote [0.05ms]
+(pass) automatic requests recheck new input after worker lookup and retain the private idle constraint [0.07ms]
+(pass) repair is an administrator's exact-current intent and never consults the newer staged candidate [0.20ms]
+(pass) unavailable enrolled installation rejects work until native status becomes available [0.11ms]
+
+src/server/sound.test.ts:
+(pass) only administrators may inspect or test the output [0.52ms]
+(pass) idle and current output are required before any sound process starts [0.12ms]
+(pass) confirmed route, stoppable test and stale stop rejection [0.26ms]
+(pass) playback interruption and route mismatch stop the test without resuming media [0.13ms]
+(pass) revocation and playback changes during inventory block launch [0.08ms]
+(pass) output facts preserve unavailable/mute and report observed channel volume [0.05ms]
+(pass) test PCM is exactly three seconds with a controlled peak and initial silence [10.88ms]
+(pass) legacy flat-volume outputs cannot raise system volume through a test stream [0.05ms]
+(pass) muted outputs and audio-server failures never launch a tone [0.21ms]
+(pass) Ubuntu JSON card profiles expose output-only choices and retain active duplex for rollback [0.10ms]
+(pass) PipeWire sink properties identify the ALSA and Bluetooth card without PulseAudio card indices [0.04ms]
+(pass) explicit PulseAudio card indices take precedence over PipeWire properties [0.05ms]
+
+src/server/streamingcommunity-settings.test.ts:
+(pass) saves one origin across reopen while retaining queue, devices and installation [27.30ms]
+(pass) rejects controller writes, malformed origins, credentials and demotion during body read [0.91ms]
+
+src/server/for-later.test.ts:
+(pass) shared saved items survive restart and deduplicate source identity without copying playback credentials [5.36ms]
+(pass) concurrent saves remain one item and removal never changes the queue [0.52ms]
+(pass) append and play load fresh identities and keep the saved item [0.32ms]
+(pass) missing media stays removable and does not append or interrupt playback [0.27ms]
+(pass) revocation during lookup, source checks or body reading prevents late writes and loads [0.37ms]
+(pass) removal on another controller during source lookup prevents the late load [0.16ms]
+(pass) forbids arbitrary client sources, unsupported identities and extra command fields [0.18ms]
+(pass) watching profile changes preserve For later, queue and playback, then explicit play resumes under the new profile [1.24ms]
+(pass) a newer Stop cancels delayed saved-item Play and reports the successful append without inviting a retry [0.80ms]
+
+src/server/cue.test.ts:
+(pass) the maintained parser preserves titles, order and 75-frame timestamps [1.10ms]
+(pass) a real lossless album ends its final segment at measured EOF [4.10ms]
+(pass) one PCM WAV track retains EOF that falls between cue frames [3.31ms]
+(pass) cue identities survive metadata, reference and timestamp edits and source reappearance [15.30ms]
+(pass) missing cue titles use numbered tracks and audio album metadata [3.24ms]
+(pass) the corpus rejects malformed frames, missing files and unsupported multi-file/index variants [4.42ms]
+(pass) raw INDEX timestamps reject numeric suffixes before the maintained parser normalizes them [0.85ms]
+(pass) subset validation rejects inputs that the tolerant parser could otherwise normalize [1.26ms]
+(pass) byte, line, line-length and track limits reject before parser work [0.89ms]
+(pass) file reading rejects oversized and non-UTF-8 sheets [3.00ms]
+(pass) references cannot open URLs, absolute paths, sibling escapes or symbolic links [8.60ms]
+(pass) relative parent references are allowed when they remain inside the source [3.10ms]
+(pass) unknown duration and zero-length or out-of-file final segments fail the entire album [7.24ms]
+(pass) descriptor parsing rejects file, FIFO and ancestor replacement at open without blocking [14.24ms]
+
+src/server/library-folders.test.ts:
+(pass) replaced mount directory preserves catalog and identity until the original returns, including restart [34.89ms]
+(pass) legacy source must be explicitly verified before scanning or playing, while its catalog survives [31.05ms]
+(pass) removal clears only that source's catalog and rejects later play without deleting media [65.33ms]
+(pass) revocation during folder verification prevents registration and starting a scan [47.71ms]
+(pass) folder HTTP integrates explicit add/scan/test/remove and retains source state after duplicate or invalid input [58.43ms]
+(pass) an in-flight access test cannot recreate a removed source or its identity [53.60ms]
+
+src/server/readiness-native.test.ts:
+(pass) native startup requires its current nonce and propagates initialization failure [0.21ms]
+(pass) a timed out native request cannot satisfy a later trial poll [14.61ms]
+
+src/server/hub.test.ts:
+(pass) revoking one of two controllers closes all its sockets and rejects later HTTP and reconnects [79.34ms]
+(pass) revocation prevents a delayed admitted album from appending or starting playback [59.81ms]
+(pass) revocation during source resolution prevents the late native load and metadata change [62.32ms]
+(pass) a known IP accepts the advertised TV origin while arbitrary origins and hosts remain rejected [67.98ms]
+(pass) advertised origin http://couch.avoid.local:80 preserves proxy pairing, authentication and exact scheme checks [63.66ms]
+(pass) advertised origin https://couch.avoid.local:443 preserves proxy pairing, authentication and exact scheme checks [58.75ms]
+(pass) advertised origin https://couch.avoid.local:8443 preserves proxy pairing, authentication and exact scheme checks [61.71ms]
+(pass) advertised origin rejects ftp://couch.local [0.45ms]
+(pass) advertised origin rejects https://user:secret@couch.local [0.22ms]
+(pass) advertised origin rejects https://couch.local/path [0.19ms]
+(pass) advertised origin rejects https://couch.local?query [0.18ms]
+(pass) advertised origin rejects https://couch.local#fragment [0.17ms]
+(pass) advertised origin rejects https://couch.local\evil [0.18ms]
+(pass) advertised origin rejects  https://couch.local [0.18ms]
+(pass) Bandcamp albums append once in order, play through the host resolver and persist public metadata [65.99ms]
+(pass) provider album Play now keeps its tracks together before the existing waiting queue [63.25ms]
+(pass) provider playlist Play now keeps its tracks together before the existing waiting queue [59.85ms]
+(pass) Bandcamp album failure or insufficient capacity leaves the queue unchanged [67.45ms]
+(pass) a newer stop cancels slow Bandcamp album play intent [76.74ms]
+(pass) a newer play cancels slow Bandcamp album play intent [58.33ms]
+(pass) hub shutdown aborts pending Bandcamp extraction before a queue change [57.61ms]
+(pass) the first paired phone names the TV for every controller and retains its authority after restart [70.04ms]
+(pass) named pairing keeps caller-supplied roles ordinary and rejects invalid names before saving [60.35ms]
+(pass) only authenticated controllers upload subtitle bytes, and native observations remain authoritative [68.72ms]
+(pass) legacy radio favorites gain radio policy while observed track text leaves station identity intact [61.36ms]
+(pass) paired controllers relay TV navigation only to trusted host sockets without changing shared state [63.24ms]
+(pass) TV navigation fails while the host is disconnected and never replays after reconnect [59.34ms]
+(pass) unpaired and invalid navigation requests cannot reach the TV [53.53ms]
+(pass) TV navigation uses the same command rate limit as playback controls [58.07ms]
+(pass) Jellyfin play-now forwards fromStart=%s through host resolution [61.00ms]
+(pass) Jellyfin play-now forwards fromStart=%s through host resolution [61.44ms]
+(pass) delayed library play-now cannot override idle stop [67.76ms]
+(pass) delayed library play-now cannot override playing stop [67.07ms]
+(pass) delayed library play-now cannot override queue play [76.46ms]
+(pass) delayed library play-now cannot override next [73.67ms]
+(pass) delayed library play-now cannot override newer play-now [79.30ms]
+(pass) delayed library play-now cannot override EOF [116.43ms]
+(pass) queue-only additions preserve a pending library play-now intent [116.91ms]
+(pass) delayed jellyfin play-now cannot override idle stop [113.26ms]
+(pass) delayed jellyfin play-now cannot override playing stop [113.05ms]
+(pass) delayed jellyfin play-now cannot override queue play [120.68ms]
+(pass) delayed jellyfin play-now cannot override next [107.94ms]
+(pass) delayed jellyfin play-now cannot override newer play-now [114.91ms]
+(pass) delayed jellyfin play-now cannot override EOF [116.70ms]
+(pass) queue-only additions preserve a pending jellyfin play-now intent [112.18ms]
+(pass) pairs devices and rejects foreign origins, rebinding hosts, and missing tokens [221.05ms]
+(pass) HTTP viewing profiles, observed history and resume stay shared across controllers and restart [98.17ms]
+(pass) advertised Docker addresses allow same-origin LAN pairing and retain Host and Origin checks [60.83ms]
+(pass) paired clients share web entry quality, artwork and provider favorites without native secrets [67.21ms]
+(pass) two controllers share queue and observed playback, reject stale controls, and recover current state [65.60ms]
+(pass) paired controllers and reconnects share the queue boundary after Stop [62.97ms]
+(pass) persists queue, chosen volume, and paired devices without resuming playback after restart [64.05ms]
+(pass) uses stable queue IDs for moves, removes the active item, and advances at end of media [62.09ms]
+(pass) only the desktop host can enqueue local files [60.80ms]
+(pass) limits repeated pairing attempts [59.37ms]
+(pass) catalog HTTP authenticates native CORS requests and shares only approved local files [74.28ms]
+(pass) an administrator manages a durable radio playlist while ordinary remotes browse, favorite and play [79.50ms]
+(pass) paired HTTP controllers rename and race removal with shared durable state and unchanged authority [70.24ms]
+(pass) the local host and administrators can read sanitized diagnostics through HTTP [99.04ms]
+(pass) trial admission blocks pairing and last-seen writes while keeping authenticated build identity readable [63.27ms]
+(pass) pairing admitted before maintenance is disabled cannot save after its request body arrives [59.98ms]
+(pass) pairing admitted before sharing is disabled cannot save after its request body arrives [67.44ms]
+(pass) maintenance admission cancels a delayed album before queue writes or native playback [64.24ms]
+(pass) hub maintenance checkpoint reports its actual SQLite save outcome, failing=%s [58.13ms]
+(pass) hub maintenance checkpoint reports its actual SQLite save outcome, failing=%s [59.56ms]
+(pass) trial permits private native asset acknowledgment and administrator status without last-seen writes [61.07ms]
+(pass) packaged control connections reject missing or stale asset identity before controller writes [61.46ms]
+(pass) quiesce starts and awaits recording shutdown, propagating failure=%s [57.29ms]
+(pass) quiesce starts and awaits recording shutdown, propagating failure=%s [54.02ms]
+(pass) either remote's input resets idle time, while authenticated status polling does not [65.51ms]
+(pass) active and uncertain recordings defer idle updates, while confirmed future backend jobs do not [61.57ms]
+(pass) General restart requires an administrator confirmation and installed supervisor [64.08ms]
+(pass) restart checkpoint failure preserves authenticated HTTP, playback and dirty progress for retry [63.42ms]
+(pass) authenticated first-run steps broadcast to both phones and survive coordinator restart without replaying claim [74.62ms]
+(pass) Bluetooth pairing ownership ends on administrator demotion, revocation and remote disconnect [62.90ms]
+(pass) paired controllers share For later across profile changes and restart without changing the active queue [72.74ms]
+(pass) page deep links and refresh serve the frontend while unknown APIs stay unavailable [208.93ms]
+(pass) YouTube playlist queue is atomic, ordered and applies the selected quality [63.27ms]
+(pass) a later Stop cancels playlist play intent without losing resolved queue entries [60.75ms]
+(pass) current quality commands await resolution, preserve paused position and share only public queue quality [65.30ms]
+(pass) the authorized pairing QR uses the existing code and grants only controller access [76.08ms]
+(pass) manual playback uses authenticated device names across sockets, history, Saved and playlists [77.68ms]
+(pass) failed controller operation survives coordinator restart in administrator diagnostics and export [147.30ms]
+(pass) diagnostic read and write failures leave coordinator commands and restart recovery usable [180.30ms]
+(pass) local sharing disconnects remotes immediately, preserves playback and pairings, and survives restart [68.98ms]
+(pass) trial admission rejects local sharing before reading its body [54.82ms]
+(pass) local sharing cannot save after maintenance while its request body is pending [57.54ms]
+(pass) local sharing cannot save after restart while its request body is pending [57.49ms]
+(pass) local sharing cannot save after shutdown while its request body is pending [59.91ms]
+(pass) local management works before pairing and the next role depends on remembered remotes [63.35ms]
+(pass) public installation identity binds pairing to one installation and survives restart [177.38ms]
+
+src/server/diagnostics.test.ts:
+(pass) redacts representative credentials, URL paths and signed queries [0.22ms]
+(pass) recent log is sanitized, bounded, deduplicated and copied [4.24ms]
+(pass) ordinary controllers cannot trigger collection or export [0.62ms]
+(pass) coalesces concurrent reads, bounds export and sanitizes every report section [0.50ms]
+(pass) revocation during collection denies the completed report [0.20ms]
+(pass) source and helper failures remain an honest report and mutations are denied [0.31ms]
+(pass) native bridge correlates replies and bounds malformed facts [0.26ms]
+(pass) native timeout is bounded and late replies are ignored [2011.68ms]
+(pass) helper commands are fixed and do not inherit credentials [0.44ms]
+(pass) maximum-size source facts and logs cannot create an unbounded export [11.19ms]
+(pass) redacts unknown quoted header and URL credentials in source errors and logs [0.79ms]
+(pass) a stalled filesystem observation times out without accumulating unfinished probes [3021.88ms]
+
+src/server/radio-settings.test.ts:
+(pass) only current administrators and the host can inspect definitions or mutate sources [1.21ms]
+(pass) browse summaries conceal feed URLs and raw errors while cached stations and favorites remain usable [0.65ms]
+(pass) source removal retains unrelated and imported favorites and does not alter other sources [0.42ms]
+(pass) lost administration while reading the body prevents the initial source write [0.25ms]
+(pass) lost identity during a successful refresh cannot change cache or error status [0.33ms]
+(pass) lost identity during a failed refresh cannot change cache or error status [0.20ms]
+(pass) rejects malformed source requests and preserves failed imports for administrator repair [0.34ms]
+(pass) a shared successful refresh does not disclose details to a demoted waiter [0.37ms]
+(pass) a shared successful refresh does not disclose details to a revoked waiter [0.22ms]
+(pass) a shared failed refresh does not disclose details to a demoted waiter [0.23ms]
+(pass) a shared failed refresh does not disclose details to a revoked waiter [0.19ms]
+
+src/server/progress.test.ts:
+(pass) limited shared history releases its read transaction so later progress can checkpoint [25.36ms]
+(pass) local checkpoints throttle observations, preserve rewind, and flush acknowledged pause/seek [1.19ms]
+(pass) replacement, removal, error, unavailable and shutdown flush the last observed source only [0.98ms]
+(pass) an observation from before a small rewind does not acknowledge the requested seek [0.63ms]
+(pass) EOF clears resume and marks watched; stop completion requires 90 percent and a minute-long item [0.65ms]
+(pass) each play reads the shared resume point while retaining legacy history rows across restart [25.33ms]
+(pass) late local resolution and native observations cannot create history or restart a stopped item [1.00ms]
+(pass) failed checkpoints never invalidate durable progress and retry before replacing the source [0.77ms]
+(pass) history retains non-live sources privately and excludes radio and live entries [1.12ms]
+(pass) a history source remains replayable after queue removal and store restart [23.86ms]
+(pass) resolved live metadata excludes history and Jellyfin retains its fresh upstream resume [0.89ms]
+(pass) profile storage bounds names and count and failed profile changes do not publish [0.66ms]
+(pass) a delayed history replay cannot defeat Stop or a revoked controller [1.19ms]
+(pass) a non-seekable recording enters history without an unsupported resume action [0.53ms]
+(pass) shared playback checkpoints keep the visible record and do not revive an older watched mark [0.65ms]
+
+src/server/yt-dlp.test.ts:
+(pass) honors bundled executable and Deno paths without imposing resolver playlist or format flags [4.48ms]
+(pass) cancels a catalog extractor, reaps its process, and does not start for an aborted signal [18.37ms]
+(pass) limits active and waiting extractors and cancels queued work without spawning [66.11ms]
+
+src/server/controllers-store.test.ts:
+(pass) legacy pairing migration preserves exact token hashes, stable identities and viewing data across restart [33.92ms]
+(pass) pairing stores normalized names and grants administration only to the first remembered remote [0.78ms]
+(pass) last seen writes at most once a minute and never moves backwards [0.55ms]
+(pass) setup claims expire, replace older setup codes and grant only the first existing controller [0.74ms]
+(pass) recovery expiry and consumption survive restart without retaining plaintext secrets [27.75ms]
+(pass) a failed claim commit rolls back both role promotion and code consumption [29.35ms]
+(pass) installation names persist separately from watching profiles and controller names [22.88ms]
+(pass) device management persists names and roles and permits removing the final administrator [32.52ms]
+
+src/server/diagnostics-log.test.ts:
+(pass) restart keeps the original build and dates, and duplicates stay within one session [6.68ms]
+(pass) count and UTF-8 size caps hold on disk under repeated errors [488.55ms]
+(pass) seven-day expiry uses the first observation, including after restart [18.04ms]
+(pass) idle retention timer removes expired data without a diagnostics request [193.33ms]
+(pass) credentials and media URLs never reach SQLite bytes [10.98ms]
+(pass) write lock fails promptly, retains memory and recovers on the next write [5.26ms]
+(pass) unreadable history preserves data and recovers after repair and restart [5.35ms]
+(pass) unavailable directory cannot prevent logging or shutdown [0.32ms]
+(pass) correcting a future clock bounds expiry timers and reschedules until expiry [5.44ms]
+(pass) backward clock changes preserve duplicate timestamps and the whole history on restart [6.48ms]
+
+src/server/authorization.test.ts:
+(pass) revoked request bodies cannot change profiles, progress, favorites, playlists, or subtitles [43.77ms]
+(pass) revoking a request during an M3U lookup prevents delayed stations and error writes [2.04ms]
+
+src/server/controllers.test.ts:
+(pass) only the native host can display an unclaimed setup code and identity responses omit credentials [1.01ms]
+(pass) two simultaneous setup claims yield one administrator and publish only the committed identity [0.82ms]
+(pass) setup codes refresh after expiry and invalidate the previous unconsumed code after coordinator restart [26.37ms]
+(pass) recovery availability is read from the durable claim ledger and never exposes the configured secret [26.53ms]
+(pass) recovery configuration and claim requests share the 256-character upper bound [0.79ms]
+(pass) restarting with an expired recovery code does not offer or extend it [46.28ms]
+(pass) claim attempts have a shared bounded rate limit and request bodies reject unknown fields and excess bytes [1.43ms]
+(pass) a claim rechecks authentication and role after a suspended request body [0.68ms]
+(pass) a second pending claim cannot consume another code after the same remote is promoted [0.62ms]
+(pass) only current administrators or the native host rename the installation, followed by a committed change callback [27.07ms]
+(pass) database write failures retain state, suppress broadcasts and return no database details [25.80ms]
+(pass) only current administrators manage named remotes and a racing demotion blocks a pending write [1.26ms]
+(pass) revocation notification follows the committed credential deletion and failed writes do not notify [26.26ms]
+(pass) first-run setup resumes after restart and only its administrator can advance the current step [30.95ms]
+(pass) existing claimed installations migrate to home while empty unclaimed installations still welcome [57.93ms]
+(pass) setup advancement rechecks administrator authority after a delayed request body [1.02ms]
+(pass) the pairing QR code is restricted to the host and current administrators [0.69ms]
+(pass) a device can rename itself without gaining administration, and revocation blocks pending rename [0.65ms]
+
+src/server/session-continuity.test.ts:
+(pass) one host-only successor advances identity and checkpoints the previous track once [3.69ms]
+(pass) reordering and removing invalidate the native successor before selecting another [4.88ms]
+(pass) a slow obsolete source cannot prepare or restart after queue replacement [3.80ms]
+(pass) a newer pending Play cancels preparation and native observations cannot rearm it [3.27ms]
+(pass) failed preparation preserves the song and ordinary next-source error controls [2.21ms]
+(pass) audio loss pauses the actual native session while adopting an already started successor [3.68ms]
+(pass) audio loss aborts unresolved successor preparation [3.55ms]
+(pass) a queue-position write failure still adopts the track already started by the native player [2.25ms]
+(pass) a prepared successor keeps its shared history owner and existing watched mark [2.01ms]
+
+src/server/radio-avoid.test.ts:
+(pass) first browsing loads avoid radio without setup, coalesces requests and persists stable playback IDs [8.90ms]
+(pass) default feed failure retains stations, retries explicitly, and does not alter custom playlists [0.57ms]
+(pass) paired controllers may browse default radio but cannot change source definitions [0.40ms]
+(pass) default radio loaded before custom imports leaves all 30 custom slots available [1.12ms]
+(pass) default radio loaded after custom imports leaves all 30 custom slots available [0.97ms]
+(pass) metadata cache shares discovery and playback requests, respects expiry and keeps provider description and URL [0.23ms]
+(pass) canceling metadata caller 0 leaves the other caller and shared cache healthy [0.14ms]
+(pass) canceling metadata caller 1 leaves the other caller and shared cache healthy [0.03ms]
+(pass) unsafe programme links are dropped and provider rate limits apply across stations [0.13ms]
+
+src/server/subtitles.test.ts:
+(pass) uploaded bytes use a private generated path and remain until native replacement is acknowledged [0.65ms]
+(pass) Stop overtakes a partially received upload [0.32ms]
+(pass) uploads reject host paths, unsupported contents, stale sessions and excessive size [0.82ms]
+(pass) file limit bounds each source and native Stop releases files [1.01ms]
+(pass) shutdown cancels a pending upload and removes accepted files [0.34ms]
+(pass) provider subtitles download with private headers, keep upstream order and reject redirects [42.75ms]
+(pass) Stop cancels a stalled provider subtitle without waiting for its response [1.79ms]
+(pass) PGS downloads preserve all bytes privately and reject corrupt, missing, oversized and direct SUP responses [3.59ms]
+(pass) shutdown aborts an in-flight PGS download and removes accepted files immediately [1.83ms]
+
+src/server/web-media.test.ts:
+(pass) uses safe argv, ignores user configuration, and resolves only selected media fields [3.12ms]
+(pass) automatic YouTube playback caps resolution and prefers a compatible codec without changing overrides [11.17ms]
+(pass) caps both split and combined video formats while retaining audio and unknown-height sources [5.70ms]
+(pass) returns only validated public metadata for playback and inspection [4.80ms]
+(pass) omits invalid optional metadata and allows previews before live streams have formats [12.01ms]
+(pass) preserves split best-quality media with identical effective headers [1.91ms]
+(pass) rejects a private header belonging to only one split stream in either order [3.86ms]
+(pass) inherits base headers before comparing the split streams [1.80ms]
+(pass) opens audio-only and HLS sources and gives DASH manifests to the native demuxer [6.05ms]
+(pass) carries DASH height limits separately from public metadata regardless of representation order [19.98ms]
+(pass) DASH caps do not depend on extractor stream numbering and direct sources need no native cap [23.06ms]
+(pass) rejects input protocols, credentials and control characters before spawning [0.41ms]
+(pass) rejects unusable extracted sources, DRM, playlists and header injection [32.02ms]
+(pass) classifies extractor failures without exposing private URLs or raw logs [13.10ms]
+(pass) aborts and reaps a running extractor and handles an already aborted signal [11.39ms]
+(pass) times out stalled extraction and bounds stdout and stderr [72.38ms]
+(pass) reports invalid output and an unavailable executable [2.40ms]
+(skip) actual yt-dlp selects audio-only HTML sources at every quality
+(skip) actual yt-dlp respects quality caps when selecting HLS variants
+(skip) actual yt-dlp passes DASH height limits to native playback with audio before video
+(pass) Bandcamp recovery requires an aged selected MP3, HTTP 410, and fresh identical media [13.22ms]
+(pass) other providers, formats and deceptive hosts cannot enable Bandcamp recovery [11.85ms]
+(pass) loads only the embedded extractor for the configured StreamingCommunity origin and removes its directory [9.69ms]
+(pass) normal webpage sources never load plugins, and embedded extraction cleans up on cancellation and failure [18.84ms]
+
+src/client/MusicPanel.test.tsx:
+(pass) phone album return retains query, page, scroll and focus after play and queue [281.58ms]
+(pass) TV album return retains query, page, scroll and focus after play and queue [167.14ms]
+
+src/client/SoundSettings.test.tsx:
+(pass) keeps sound tests in a secondary disclosure [18.26ms]
+(pass) test uses explicit output identity and Stop remains available before route confirmation [13.77ms]
+(pass) selection uses the stable device name and keeps unconfirmed routing separate [27.93ms]
+(pass) offers available HDMI, analog profiles and connected Bluetooth in one select [32.19ms]
+(pass) retains a disconnected selection without silently selecting another route [8.05ms]
+(pass) hides Bluetooth codec alternatives once the same speaker has a usable output [834.08ms]
+(pass) does not mistake the saved output for the currently observed playback route [8.47ms]
+(pass) a rejected selection keeps the previous output selected and reports the failure [21.13ms]
+(pass) polling leaves open choices in place and appends newly available outputs [2458.04ms]
+
+src/client/SearchPanel.test.tsx:
+(pass) phone cross-source inspect, play, queue and return retains query, scroll and focus [252.33ms]
+(pass) TV cross-source inspect, play, queue and return retains query, scroll and focus [238.25ms]
+(pass) one unavailable source does not hide local results and retries only that source [53.76ms]
+(pass) missing folders retain searchable items with disabled play and queue [72.78ms]
+(pass) pagination is independent, new searches reset both pages, and empty results are explicit [76.27ms]
+(pass) new queries cancel delayed old responses and disconnected playback stays disabled [141.92ms]
+(pass) progress broadcasts retain open details and focused result nodes during refresh [139.62ms]
+(pass) TV playback hides details and Home restores their result focus [133.18ms]
+(pass) deferred return focus is cancelled by a new query [108.41ms]
+(pass) deferred return focus is cancelled by a new hidden [104.66ms]
+(pass) one submitted search integrates online and configured radio with default quality and existing saved stores [154.02ms]
+(pass) provider errors and pagination stay independent and collection Back restores result focus [130.07ms]
+(pass) provider URL opens its existing catalogue, Bandcamp album commands remain audio, and other links use existing playback [93.04ms]
+(pass) filters retain query and source results, and broadcasts refresh saved state without repeating online searches [117.68ms]
+(pass) Search applies a temporary online quality override once and returns to the default [147.29ms]
+(pass) a superseded online search cannot overwrite the current provider results [74.92ms]
+(pass) changing TV identity clears saved radio results while the new TV request is pending [74.97ms]
+(pass) a new query aborts an in-flight provider pagination request [92.00ms]
+(pass) RaiPlay searches include matching live channels even when the programme catalogue has no match [51.92ms]
+(pass) the empty discovery field has no filters, heading or premature requests [18.10ms]
+(pass) Twitch live search channel opens broadcasts and restores its browse control without playback [47.10ms]
+(pass) Twitch offline search channel opens broadcasts and restores its browse control without playback [45.81ms]
+(pass) guest can recover from an unconfigured source without losing their query [97.15ms]
+(pass) administrator can recover from an unconfigured source without losing their query [118.02ms]
+(pass) typing searches in place after debounce and keeps input focus [416.90ms]
+(pass) synchronous route updates focus the newly selected source after recovery [41.96ms]
+(pass) deferred route updates focus the newly selected source after recovery [40.88ms]
+(pass) Evening video details preserve browsing focus and expose separate play and queue commands [104.91ms]
+(pass) Evening radio details preserve browsing focus and expose separate play and queue commands [101.27ms]
+(pass) avoid radio has its own matching group and retries a stale catalog without reloading other sources [115.66ms]
+(pass) Library failure offers a controller role explanation without losing search [39.90ms]
+(pass) Jellyfin failure offers a controller role explanation without losing search [39.17ms]
+(pass) Radio playlists failure offers a controller role explanation without losing search [36.81ms]
+(pass) Library failure offers direct source settings without losing search [52.20ms]
+(pass) Jellyfin failure offers direct source settings without losing search [53.99ms]
+(pass) Radio playlists failure offers direct source settings without losing search [54.47ms]
+(pass) saved directory stations keep their source identity and do not create a radio playlist group [59.41ms]
+(pass) disconnecting after an empty search no longer claims search completion [54.29ms]
+(pass) radio details follow refreshed results, retain saved stations and close after removal [135.88ms]
+(pass) Evening video closes while inactive and restores the original result on return [92.58ms]
+(pass) Evening video return does not steal focus from another open dialog [83.69ms]
+(pass) Evening video cannot restore an obsolete result after the query changes while inactive [113.51ms]
+(pass) Evening video cancels pending focus restoration when hidden again [112.06ms]
+(pass) Evening radio closes while inactive and restores the original result on return [89.28ms]
+(pass) Evening radio return does not steal focus from another open dialog [78.51ms]
+(pass) Evening radio cannot restore an obsolete result after the query changes while inactive [126.46ms]
+(pass) Evening radio cancels pending focus restoration when hidden again [101.68ms]
+(pass) controlled search drafts change only through the owner and never report route updates as edits [55.95ms]
+(pass) standalone drafts follow route updates without reporting synthetic edits [39.06ms]
+(pass) debounced drafts survive frequent parent renders, use the latest callback and support explicit retry [473.37ms]
+
+src/client/MetadataEditor.test.tsx:
+(pass) editor is local-only on the TV and saves only changed fields with the loaded revision [10.58ms]
+(pass) a rejected stale edit keeps the draft and tells the owner to reload [6.95ms]
+(pass) search and preview never apply a match until its explicit confirmation [10.19ms]
+(pass) browser export requires an explicit click and states its destination [1020.61ms]
+(pass) closing the editor aborts an export and ignores the late response [8.17ms]
+(pass) disconnect retains title, plot, order and artwork, rejects a late lookup, and keeps the old revision for conflict detection [18.89ms]
+(pass) removing a selected artwork clears the visible file and unchecking never silently restores it [14.36ms]
+(pass) a successful provider status retry clears the old load error [7.64ms]
+(pass) video details show metadata controls only while the viewer can administer them [16.30ms]
+
+src/client/ToolsSettings.test.tsx:
+(pass) shows release versions, package integrity, an effective override and separate runtime status [3.40ms]
+(pass) damage to the shipped copy stays visible when an override works, and unknown is not success [1.75ms]
+(pass) Check tools refreshes the observations and a failed request preserves an explicitly dated previous result [2.97ms]
+(pass) disconnect aborts pending checks and ignores late success [1.59ms]
+(pass) changing credentials clears old observations before the new check finishes [1.95ms]
+(pass) System cached security/package status is distinct from release updates and never offers an upgrade [1.63ms]
+(pass) a completed repair clears prior tool and package observations while its fresh check is pending [2.47ms]
+
+src/client/Settings.groups.test.tsx:
+(pass) settings opens a flat page index without tabs, cards or a quality control [116.13ms]
+(pass) device appearance, TV appearance and connection have separate pages [17.94ms]
+(pass) Connection shows an alias warning alongside its working recovery IP [19.26ms]
+(pass) administrator pages stay gated and demotion removes remote management [16.75ms]
+(pass) source requests open Sources and native sources remain local-only [17.86ms]
+(pass) Playback preserves an unrestricted quality choice and saves a new default [111.19ms]
+(pass) live state renders preserve unsaved profile defaults and the focused control [137.80ms]
+(pass) setup keeps its required screen step without settings navigation [8.21ms]
+(pass) linked settings pages preserve URLs, Back focus and hidden-page focus [196.09ms]
+(pass) direct protected pages wait for identity before redirecting [10.71ms]
+(pass) Sources links to one form at a time instead of piling every source into one page [12.86ms]
+(pass) Connections QR includes the pairing code and disappears when administration is removed [32.93ms]
+(pass) a failed pairing code request never shows an address-only QR [12.65ms]
+(pass) native qualification navigates current Settings links and the phone category select [92.57ms]
+(pass) the local host manages settings and the last remote without an administrator claim [13.89ms]
+(pass) sharing can only be changed locally and failed saves preserve its value and focus [27.41ms]
+
+src/client/GuidePanel.test.tsx:
+(pass) open program list advances its range and airing identities at local midnight while retaining the selected day offset [1186.24ms]
+(pass) the real group all is distinct from All groups in the rendered Select and requests [802.66ms]
+(pass) Go live invokes its explicit current-playback callback without ordinary Play [768.69ms]
+(pass) Record submits the selected future airing and setup revision, while pending cancel uses its current job revision [1558.42ms]
+(pass) offline recording snapshots retain their status with disabled play, cancellation and refresh controls [788.67ms]
+(pass) paired navigation cannot select a portalled recording setup option on the host [1359.52ms]
+(pass) an initial recordings load failure can be retried without a backend refresh or version update [775.40ms]
+(pass) recordings crossing midnight include the end date [587.24ms]
+(pass) recovered setup reload clears its error and invalid backend selection [1365.75ms]
+(pass) recording requests permit multi-step workflows and still honor caller cancellation [201.22ms]
+
+src/client/StreamingCommunitySettings.test.tsx:
+(pass) administrator can save the exact current origin and demotion removes the form [9.64ms]
+(pass) a failed settings read keeps saving disabled and an obsolete reply cannot restore administrator fields [10.00ms]
+
+src/client/session-origin.test.tsx:
+(pass) an unavailable target never sends its pairing to advertised aliases [3.52ms]
+(pass) an unpaired page checks its own origin despite cached connection addresses [2.44ms]
+(pass) a replaced installation at the same origin requires pairing before any credential is sent [2.66ms]
+(pass) navigation uses the latest committed callback without replacing its WebSocket [5.26ms]
+(pass) connection details follow session metadata and persist without rewriting for playback ticks [2.60ms]
+(pass) changing origin resets controller identity and rejects commands from the previous connection [2.76ms]
+(pass) changing token resets controller identity and rejects commands from the previous connection [2.37ms]
+(pass) changing installationId resets controller identity and rejects commands from the previous connection [2.33ms]
+(pass) changing origin clears rejection of the previous pairing [2.51ms]
+(pass) changing token clears rejection of the previous pairing [2.77ms]
+(pass) changing installationId clears rejection of the previous pairing [2.11ms]
+(pass) an origin change ignores an older public response completed after the new connection [2.42ms]
+(pass) controller refresh ignores an older response body completed after a new controller version [2.91ms]
+(pass) a disposed build response cannot reload the replacement connection [2.40ms]
+(pass) Strict Mode aborts its discarded fetch and closes the surviving socket on unmount [2.97ms]
+
+src/client/ForLaterSection.test.tsx:
+(pass) saved shared items display without queue writes; explicit actions retain the saved entry [73.43ms]
+(pass) failed source keeps its saved item removable and removal returns focus to the next item [106.19ms]
+(pass) unavailable native playback still allows append and remove; disconnected controllers cannot mutate [49.33ms]
+(pass) another controller's broadcast refreshes shared saved items [48.25ms]
+(pass) saving a library result posts only its catalog identity and never a queue operation [30.94ms]
+(pass) a successful append whose Play was canceled reports that outcome instead of a source error or retry [48.56ms]
+(pass) Saved opens details without playing and also exposes direct playback actions [98.63ms]
+
+src/client/SavedFavorites.test.tsx:
+(pass) one saved list shows existing online and radio favorites without catalog or queue writes [125.42ms]
+(pass) removal uses original stores and preserves the queue and another controller's changes [110.96ms]
+(pass) one unavailable save source does not hide the other source and retry recovers [94.93ms]
+(pass) without native playback saved media remains queueable, while disconnect clears actionable data [63.41ms]
+(pass) Saved keeps saved collections together without a separate history destination [31.63ms]
+(pass) opening a saved collection browses its provider and URL, with Back returning to that provider [97.02ms]
+(pass) an opened YouTube playlist plays or queues the full collection with a quality override beside its controls [290.95ms]
+(pass) Back from a live Twitch channel restores focus to its Past broadcasts button [156.05ms]
+
+src/client/Settings.test.tsx:
+(pass) General keeps one startup control across navigation and identity loss [18.09ms]
+
+src/client/playback-languages.test.ts:
+(pass) language choices show names and preserve existing two- and three-letter saved values [1.53ms]
+
+src/client/SessionHome.test.tsx:
+(pass) session presentation retains native playback commands and real upcoming queue actions [18.54ms]
+(pass) Stop preserves the durable queue cursor and disconnected controls cannot send commands [10.89ms]
+(pass) seek controls clamp commands, remain focused during player updates and hide for live streams [9.17ms]
+(pass) loading keeps Stop available, unavailable audio stays honest, and idle has no transport controls [9.07ms]
+(pass) removed playback controls restore focus to a useful action without taking unrelated focus [16.38ms]
+(pass) settings gear and Remote stay with the player and do not send playback commands [28.42ms]
+(pass) the playback gear offers current video quality first and keeps it through a quality reload [29.23ms]
+(pass) radio playback settings omit video quality, speed, empty tracks and unavailable music controls [7.96ms]
+(pass) quality reload restores the ready trigger without taking focus after user navigation [265.02ms]
+(pass) Home keeps finished album tracks beside resumable online history without a second destination [14.95ms]
+(pass) Home queue plays directly and moves focus into transport when the chosen row disappears [18.00ms]
+(pass) idle Home exposes discovery with 0 queued items and no history [4.62ms]
+(pass) idle Home exposes discovery with 3 queued items and no history [4.21ms]
+
+src/client/BrowseHome.test.tsx:
+(pass) browse home uses one history for continued and finished playback and preserves resume and restart commands [16.34ms]
+(pass) hidden home does not fetch and unavailable playback does not prevent browsing [6.51ms]
+(pass) home history failure has an independent retry [7.96ms]
+(pass) a paired remote starts on consolidated Home and keeps playback unchanged while browsing [142.75ms]
+(pass) Now playing opens and returns to the preserved Home search and playback trigger [27.18ms]
+(pass) Stop in Now playing then Back restores Home focus after the playback bar is gone [24.89ms]
+(pass) a terminal radio failure keeps Now playing and its retry reachable [15.22ms]
+(pass) source setup opens directly from a pasted link and restores its search and trigger [35.08ms]
+(pass) library artwork cards open details without playback and retain actual library identity [15.38ms]
+(pass) online album tracks and Jellyfin remain playable in the same history after leaving the queue [14.73ms]
+(pass) an empty TV home offers catalog browsing without a local-file placeholder [3.93ms]
+(pass) an idle paired browser can open the remote and navigate without starting playback [14.17ms]
+(pass) Home history details update watched state and clear resume using the current response [26.30ms]
+(pass) Home library details update watched state and clear resume using the current response [24.11ms]
+(pass) Home history details follow version updates and close when their item disappears [13.90ms]
+(pass) Home library details follow version updates and close when their item disappears [13.69ms]
+(pass) Home keeps its immediate search draft while hidden and commits it on return [755.33ms]
+
+src/client/PairingDialog.test.tsx:
+(pass) native shortcut renders the advertised pairing QR, manual addresses/code and visible Close [8.52ms]
+(pass) loading, failure and retry retain manual recovery without an address-only QR [7.52ms]
+(pass) disconnect removes a valid QR, ignores late responses and reconnect fetches again [8.74ms]
+(pass) no advertised address leaves Close and manual recovery available [5.49ms]
+(pass) closing restores focus to the native shortcut and reopening refreshes the QR [10.88ms]
+(pass) the QR opens the actual phone form with its code, then device submission reaches the session [12.36ms]
+(pass) stale codes and failed connections keep the name, editable code and Connect retry [8.82ms]
+(pass) scanning on an already paired browser preserves its stored pairing [8.97ms]
+
+src/client/AvoidRadioHome.test.tsx:
+(pass) browse and details do not play, queue and play are distinct, and closing details restores focus [100.85ms]
+(pass) slow programme metadata never delays station browsing or queue actions [42.56ms]
+(pass) provider failure retries directly and changing installation clears the previous station state [47.17ms]
+(pass) inactive discovery makes no requests and disconnected controls cannot send actions [47.73ms]
+(pass) programme title and artwork expire even when the following metadata request fails [35.26ms]
+(pass) only an explicit Retry forces a catalog refresh [130.12ms]
+(pass) only an explicit Retry forces a catalog refresh in Strict Mode [133.13ms]
+(pass) version changes update open station details and remove deleted actions without restarting the programme poll [102.56ms]
+(pass) obsolete catalog responses and errors cannot replace the current version [73.69ms]
+(pass) deactivation closes details and reactivation restores the result opener [106.69ms]
+(pass) returning to discovery does not focus an opener blocked by dialog [97.52ms]
+(pass) returning to discovery does not focus an opener blocked by hidden [105.40ms]
+(pass) returning to discovery does not focus an opener blocked by deleted [116.93ms]
+(pass) identity changes cancel pending favorite mutations and discard their late completion [66.04ms]
+(pass) unmount cancels reads and mutations, including a pending programme response [47.28ms]
+(pass) deactivation cancels the scheduled programme poll and reactivation starts one ordinary read [50.23ms]
+(pass) changing credentials resets details and ignores a previous queue completion [75.62ms]
+
+src/client/SourceSetupDialog.test.tsx:
+(pass) source setup opens current forms directly and restores the browsing trigger and query [203.09ms]
+(pass) controllers receive a role explanation without loading administrator forms [34.73ms]
+(pass) IPTV read failure has its own retry and leaves other setup types reachable [133.81ms]
+(pass) reopening setup mounts the requested form without reading the last selected source [156.20ms]
+(pass) changing the requested source mounts only that form even when setup is already open [131.89ms]
+
+src/client/SessionBar.test.tsx:
+(pass) compact footer sends the current transport commands and opens the session [6.60ms]
+(pass) loading allows Stop, offline disables commands, and the final entry omits Next [7.38ms]
+(pass) live streams expose Stop and Next without false pause or seek controls [4.12ms]
+(pass) seekable live playback preserves observed pause and seek capabilities [4.79ms]
+(pass) idle and ended playback hide the footer [2.30ms]
+(pass) bar uses current provider programme artwork and identifies its playback computer [5.87ms]
+(pass) Next disappearing restores an available transport and loading falls back to Stop [7.02ms]
+(pass) removing the focused footer returns to the active page without navigating or stealing focus [11.86ms]
+(pass) footer volume uses the observed output and keeps keyboard edits through live updates [10.08ms]
+(pass) footer seek clamps to the item and current quality is available in its gear [13.52ms]
+(pass) footer timeline shows current time and preserves a focused seek through live observations [7.77ms]
+(pass) footer focus recovery leaves portaled playback settings in control during quality reload [114.68ms]
+(pass) failed playback retains a visible route to playback recovery [5.27ms]
+
+src/client/PlaybackDevice.test.tsx:
+(pass) first launch chooses a device before requesting local startup [10.38ms]
+(pass) an external Tauri page uses browser UI without accessing local commands [4.80ms]
+(pass) a native marker on an external origin never grants local presentation [3.69ms]
+(pass) an unavailable remembered target retains recovery and only switches after explicit choice [12.09ms]
+(pass) sharing-only interruption needs a deliberate confirmation and preserves the selected address [19.11ms]
+(pass) local first use records private choice after the host saves it [10.66ms]
+(pass) failed local sharing save leaves the prompt available and does not mark setup complete [10.30ms]
+(pass) closing the device chooser reconnects the same remote and restores trigger focus [13.58ms]
+(pass) Play on marks the current computer and switches directly to a remembered Couch [13.63ms]
+(pass) Another Couch opens focused address entry without a submenu [12.94ms]
+(pass) an unreachable remote cannot prevent this installation's update controls [23.63ms]
+
+src/client/RestartSettings.test.tsx:
+(pass) General requires explicit interruption confirmation and keeps a checkpoint rejection visible [8.92ms]
+
+src/client/QueuePanel.navigation.test.tsx:
+(pass) directional TV controls can reach and open Previously queued [9.48ms]
+(pass) focus follows a played or replayed row and returns to the disclosure when it becomes previous [8.94ms]
+
+src/client/CollectionsPanel.test.tsx:
+(pass) broadcasts retain device-local selection and preserve draft revision on a concurrent edit [133.05ms]
+(pass) load sends the displayed digest and revision then requires review of a rejected preview [64.62ms]
+
+src/client/VideoLibraryPanel.test.tsx:
+(pass) phone show return restores each level after episode inspection, playback and queue [245.12ms]
+(pass) TV show return restores each level after episode inspection, playback and queue [240.51ms]
+(pass) movie inspection keeps the searched list and returns focus after play and queue [102.93ms]
+
+src/client/QueuePanel.test.tsx:
+(pass) current, upcoming and collapsed previous groups retain every row and full queue positions [5.49ms]
+(pass) stopped controllers use the saved position and legacy queues start entirely upcoming [5.60ms]
+(pass) an exhausted queue preserves every previous entry and presents an empty Up next [2.43ms]
+
+src/client/MediaLibrary.test.tsx:
+(pass) Library opens playable online media without a folder or an owned collection [8.72ms]
+(pass) Library keeps browsing destinations available while disconnected [5.19ms]
+(pass) every platform opens its own recent history with the same empty state and no suggestions [11.89ms]
+(pass) search keeps playback controls and returns explicitly to recent history [12.59ms]
+(pass) recent history failure leaves saved items usable and recovers when reopened [14.32ms]
+
+src/client/restart-request.test.ts:
+(pass) restart requires a different authenticated coordinator identity [7.36ms]
+(pass) exhausted restart budget or unchanged owner produces operator recovery, never false success [35.85ms]
+
+src/client/interface-size.test.tsx:
+(pass) saved Largest gets TV viewing scale while the same remote choice keeps phone scale [2.28ms]
+(pass) expired TV previews restore the confirmed viewing scale and Default remains a reachable reset [1.20ms]
+
+src/client/NowPlaying.test.tsx:
+(pass) expanded playback opens on Back, exposes current controls and returns without a playback command [6.43ms]
+(pass) upcoming queue uses the installation cursor and sends direct play and remove commands [6.37ms]
+(pass) queue removal and playback replacement preserve usable focus [7.99ms]
+(pass) disconnected playback preserves its queue while disabling mutation [4.94ms]
+(pass) programme details stay tied to the current playback and live controls omit pause and timeline [4.97ms]
+(pass) hidden Now playing does not take focus when its queue changes [6.82ms]
+
+src/client/DisplaySettings.test.tsx:
+(pass) shows observed modes and disabled outputs without offering unusable targets [1.60ms]
+(pass) preview supplies physical identity and confirm uses the native preview token [2.23ms]
+(pass) a native mutation failure remains visible after polling succeeds [1.46ms]
+(pass) disconnect aborts the pending mutation and ignores a late response [1.28ms]
+
+src/client/AdvancedSettings.test.tsx:
+(pass) Advanced loads a read-only snapshot with honest unknown and disconnected player details [3.46ms]
+(pass) export only starts after a click and reports failure without echoing a credential-bearing URL [2.19ms]
+(pass) successful export downloads the bounded server response with a fixed filename [2.18ms]
+(pass) disconnect aborts an in-flight snapshot and ignores its late response [1.18ms]
+(pass) leaving Advanced aborts an export and prevents a late download [1.67ms]
+(pass) retained failures show UTC dates, original builds, session and duplicate details [1.69ms]
+
+src/client/UpdatesSettings.test.tsx:
+(pass) shows running identity, separate manual policy, notes and only exact-candidate staging [10.34ms]
+(pass) stale or expired candidates cannot download, while Check for updates remains available [8.04ms]
+(pass) ready packages keep a disabled install action when support is unavailable [5.68ms]
+(pass) disconnect clears build details and aborts in-flight reads [2.92ms]
+(pass) a rejected mutation remains visible after background status refresh [10.14ms]
+(pass) channel picker sends Preview separately from the manual installation policy [15.07ms]
+(pass) install persists its identity before sending and requires an explicit restart action [13.31ms]
+(pass) a lost install reply keeps its retry identity through disconnect without replaying installation [15.63ms]
+(pass) repair warns before exact-current reinstall and preserves its intent after a lost reply [15.01ms]
+(pass) repair archive rejection clears its saved request and leaves the staged update available [9.06ms]
+(pass) rejection of a legacy runtime repair clears its retry without changing its saved intent [7.93ms]
+(pass) hosted AppImage installs independently of retired hosted repair [5.36ms]
+(pass) an older finished transaction cannot erase a newly saved request whose delivery is unknown [5.26ms]
+(pass) a refreshed administrator page reopens Updates for its durable pending request [8.85ms]
+(pass) definitive pre-acceptance expiry clears the saved request so checks and downloads remain usable [10.51ms]
+(pass) request-specific completion clears a saved request superseded by another remote [11.80ms]
+(pass) a terminal install retry receipt clears its saved identity even when latest status is empty [10.62ms]
+(pass) Auto when idle persists separately from the release channel [14.21ms]
+(pass) idle waiting keeps manual installation behind the restart and playback warning [7.30ms]
+(pass) an unattended failed trial displays the authenticated restored release [5.73ms]
+(pass) a historical successful install receipt does not promise a future matching build [8.00ms]
+(pass) a historical successful repair-current receipt does not promise a future matching build [11.26ms]
+(pass) a committed update with a running version mismatch stays explicit [10.40ms]
+(pass) a committed update with a running revision mismatch stays explicit [8.47ms]
+(pass) a successful install receipt confirms its exact running identity [7.73ms]
+(pass) a successful repair-current receipt confirms its exact running identity [7.27ms]
+(pass) trial keeps its outcome when a different release is running [6.32ms]
+(pass) failed keeps its outcome when a different release is running [6.68ms]
+(pass) restored keeps its outcome when a different release is running [7.24ms]
+(pass) operator-required keeps its outcome when a different release is running [6.70ms]
+(pass) controller pointer and keyboard input report activity, with no idle heartbeat [2.98ms]
+(pass) manual installation stays discoverable when maintenance support is disabled [6.59ms]
+(pass) Updates gives host its permitted operations [12.56ms]
+(pass) Updates gives controller its permitted operations [7.00ms]
+(pass) a expired staged release cannot be installed [6.41ms]
+(pass) a not-current staged release cannot be installed [8.09ms]
+(pass) AppImage staging shows byte progress and never suggests enabling the Debian updater [8.13ms]
+(pass) operator recovery result remains visible without permanently locking future repairs [6.82ms]
+
+src/client/video-quality.test.ts:
+(pass) browser video quality preference > each supported choice survives a new read without changing another browser [0.10ms]
+(pass) browser video quality preference > missing, obsolete and blocked storage fall back to automatic [0.05ms]
+(pass) browser video quality preference > a denied write is reported instead of claiming persistence [0.02ms]
+(pass) webpage quality excludes known audio-only links without matching other hosts [0.11ms]
+
+src/client/SavedPlaylists.test.tsx:
+(pass) Queue dialog reuses authenticated playlist loading and deletion confirmation [180.25ms]
+(pass) Saved page reuses authenticated playlist loading and deletion confirmation [150.94ms]
+
+src/client/Onboarding.test.tsx:
+(pass) a paired administrator resumes setup automatically and completion returns to normal Settings [25.03ms]
+(pass) a second controller cannot advance the owner's setup [21.22ms]
+(pass) failed progress saves remain retryable and disconnected setup cannot advance [11.24ms]
+(pass) the local host can complete optional setup without a phone or administrator claim [12.51ms]
+
+src/client/routes.test.tsx:
+(pass) browser direct links and page navigation keep one session and preserve search in real links [193.58ms]
+(pass) typing replaces the current history entry and returning Home keeps the query [167.71ms]
+(pass) native hash direct links, navigation and remote Back stay in the webview document [150.02ms]
+(pass) all pages map to known paths and malformed search filters use truthful defaults [2.47ms]
+(pass) settings direct links and browser history keep the session mounted [172.76ms]
+(pass) native settings links and remote Back retain the webview document [121.67ms]
+(pass) settings routes only accept defined pages [2.23ms]
+(pass) source settings direct links retain their page and browser history [92.76ms]
+(pass) Settings entry selects Playback and Back skips the index [99.03ms]
+(pass) legacy remotes URL opens Connections without remounting in browser [90.94ms]
+(pass) legacy remotes URL opens Connections without remounting in TV [91.06ms]
+(pass) legacy discovery aliases preserve queries in browser navigation [32.88ms]
+(pass) legacy discovery aliases preserve queries in native navigation [32.95ms]
+
+src/client/useTvPresentation.test.tsx:
+(pass) TV browsing and focus survive a replacement transport; new media and Stop retain their screen behavior [2.82ms]
+
+src/client/PlaybackControls.test.tsx:
+(pass) radio controls show programme artwork and attribution alongside native track text [1.41ms]
+(pass) missing programme artwork leaves a title and disconnected controllers hide stale programmes [0.76ms]
+(pass) session hero uses real artwork and keeps idle free of placeholder art and controls [0.45ms]
+
+src/client/BluetoothSettings.test.tsx:
+(pass) a remembered disconnected device stays selected separately from its paired and connected status [2.66ms]
+(pass) leaving Bluetooth or losing the remote connection cancels the exact discovery operation [2.16ms]
+(pass) an HTTP remote can start discovery without randomUUID and cancel its exact operation [1.88ms]
+(pass) all discovered devices share one list and can be selected while this remote searches [1.92ms]
+(pass) another remote's search cannot be cancelled by choosing a result [1.69ms]
+(pass) polls append new Bluetooth results without moving the focused device and retain expired rows [2.53ms]
+(pass) only an explicit new search clears expired unpaired results and preserves paired rows [1.90ms]
+(pass) successful Forget removes the retained row without hiding a later rediscovery [1.98ms]
+(pass) changing TV origin clears the previous TV's discovery results [1.85ms]
+(pass) Search and Stop search use the same control when discovery starts and finishes [1.69ms]
+
+src/client/pairing-link.test.ts:
+(pass) pairing links accept only the existing six-digit code and leave native routes alone [0.04ms]
+
+src/client/StartupSettings.test.tsx:
+(pass) General shows OS startup readback and clears stale state after a rejected write [3.81ms]
+
+src/client/RangeControl.test.tsx:
+(pass) Home followed by four arrows seeks to four while player observations lag acknowledgements [4.11ms]
+(pass) an old acknowledgement does not discard a newer keyboard edit [2.52ms]
+(pass) authoritative observations continue after leaving the keyboard edit [3.29ms]
+(pass) pointer volume commits on release and returns to the observed level after acknowledgement [3.42ms]
+(pass) an older pointer acknowledgement cannot discard the next drag [2.57ms]
+(pass) cancel and disconnect discard drafts without another command [3.50ms]
+(pass) a new playback identity discards the old draft and acknowledgement [3.02ms]
+(pass) failed commands release the draft, but old rejections preserve newer edits [3.28ms]
+(pass) late playback observations do not interrupt a focused keyboard edit [3.34ms]
+
+tests/linux/iptv-start.test.ts:
+(pass) live startup accepts a single complete new trace including later fresh segments [0.12ms]
+(pass) mpv stream sniff and HLS demuxer reopen can advertise the same startup window [0.02ms]
+(pass) an old matching pair cannot hide a contradictory startup window or older new-load segment [0.27ms]
+(pass) live startup retains and rejects pre-probe or pre-manifest requests and later older segments [0.05ms]
+(pass) startup needs a completed probe, an advertised native window and its newest first segment [0.19ms]
+
+tests/linux/iptv-native-clock.test.ts:
+(pass) failed native capture saves intervals, geometry and exit status before asserting [111.66ms]
+(pass) decoded native tick and PNG hash survive a later failed freshness assertion [113.70ms]
+
+tests/linux/settings-navigation.test.ts:
+(pass) new Settings reaches Updates from its landing and crosses ownership groups through All settings [3.91ms]
+(pass) old A keeps flat Settings and maps moved controls to their original sections [2.96ms]
+
+tests/linux/diagnostics-facts.test.ts:
+(pass) native qualification rejects an omitted fact as well as an explicit unknown [0.16ms]
+
+src/server/providers/youtube.test.ts:
+(pass) search keeps user text in one encoded YouTube URL and limits flat extraction [0.61ms]
+(pass) maps mixed search metadata to playable videos and browsable channels or playlists [0.18ms]
+(pass) returns 24 entries with a lookahead cursor and advances the upstream range [0.74ms]
+(pass) suggested channels and channel sections work without a subprocess [0.22ms]
+(pass) normalizes supported video, channel and playlist URL forms [0.13ms]
+(pass) rejects unsafe URLs and malformed or expensive requests before extraction [0.26ms]
+(pass) drops unavailable or unsafe results and bounds display metadata [0.13ms]
+(pass) long or multiline titles and descriptions can be queued and saved [0.53ms]
+(pass) invalid browse URLs and cursors return HTTP 400 through the provider route [0.31ms]
+(pass) supports sparse flat entries and individual video metadata [0.09ms]
+(pass) rejects invalid upstream JSON and propagates extractor failure [0.15ms]
+(pass) forwards cancellation, rejects stale output, and never starts with an aborted signal [0.07ms]
+(pass) playlist loader resolves every entry in order with a 500 item bound [0.29ms]
+(pass) playlist loader rejects nonplaylists, partial or unavailable entries without returning a partial queue [0.33ms]
+(pass) playlist loading discards cancelled output [0.06ms]
+(pass) playlist action eligibility accepts the same trailing slash forms as browsing [0.05ms]
+
+src/server/providers/bandcamp.test.ts:
+(pass) Bandcamp suggestions are public album links and need no extraction [0.16ms]
+(pass) Bandcamp track browsing returns only public metadata and extracts one audio item [0.36ms]
+(pass) Bandcamp album loading preserves flat order and enriches artwork with one full track [0.29ms]
+(pass) Bandcamp album artist is shared without replacing ordered track names [0.07ms]
+(pass) Bandcamp rejects unsupported URL boundaries before starting any worker [0.19ms]
+(pass) Bandcamp rejects malformed albums and tracks without silently dropping entries [0.28ms]
+(pass) Bandcamp accepts all 500 returned tracks and refuses oversized or truncated albums [1.43ms]
+(pass) Bandcamp requires actual supported audio formats for inspected tracks [0.39ms]
+(pass) Bandcamp display metadata is bounded and artwork contains no stream or credential URLs [0.23ms]
+(pass) Bandcamp rejects invalid JSON and preserves safe worker errors [0.11ms]
+(pass) Bandcamp forwards cancellation and rejects output arriving after cancellation [0.15ms]
+
+src/server/providers/twitch.test.ts:
+(pass) public search maps live and offline channels without authentication or embedding [0.81ms]
+(pass) search sends text and pagination as variables and never repeats a cursor [0.10ms]
+(pass) empty search pages stop pagination and malformed channels are skipped [0.19ms]
+(pass) home returns playable streams and a categories collection without a directory cursor [0.11ms]
+(pass) category lists and category URLs drill into the public live directory [0.27ms]
+(pass) direct channel lookup keeps a stable item ID when a channel goes offline [0.13ms]
+(pass) offline channel opens available past broadcasts with artwork and duration [0.16ms]
+(pass) live channels keep live playback alongside distinct archived broadcasts [0.10ms]
+(pass) archive pagination is not offered when Twitch requires an integrity challenge [0.10ms]
+(pass) malformed broadcast entries are skipped without inventing media [0.06ms]
+(pass) broadcast metadata stays bounded and foreign artwork is omitted [0.04ms]
+(pass) invalid URLs and unsupported cursors fail before any network request [0.14ms]
+(pass) provider errors and integrity challenges fail once without pretending a channel is offline [0.05ms]
+(pass) missing channels and categories return not found [0.06ms]
+(pass) malformed provider responses fail and foreign thumbnail hosts are omitted [0.20ms]
+(pass) cancellation reaches the request and aborts a stalled response body [15.35ms]
+(skip) actual Twitch public catalog returns live streams, offline channels, categories and search pagination
+(skip) actual offline Sabaku channel lists recent past broadcasts
+
+src/server/providers/index.test.ts:
+(pass) favorites persist multiline descriptions, compute stable IDs, and invalidate shared catalogs [10.78ms]
+(pass) favorites reject foreign provider URLs, invalid metadata and wrong methods [0.48ms]
+(pass) browse caches complete pages by provider, query and cursor and retries failures [0.30ms]
+(pass) browse bounds parallel work, forwards cancellation and aborts requests on close [0.24ms]
+
+src/server/providers/raiplay.test.ts:
+(pass) home collections open live TV and public catalog groups [1.04ms]
+(pass) programs expose sets and episodes as canonical page URLs with bounded pagination [0.68ms]
+(pass) anonymous web search returns programs and videos and advances both result offsets [0.23ms]
+(pass) genre pages browse the current A-Z dictionary schema [0.16ms]
+(pass) replay uses Italian dates, channel schedules and only available video pages [0.71ms]
+(pass) rejects external URLs, credentials, invalid selectors and invalid pagination before fetching [0.18ms]
+(pass) drops unsafe provider links and thumbnail hosts while keeping valid episodes [0.11ms]
+(pass) long media and collection titles fit the queue and favorites contract [0.13ms]
+(pass) reports upstream schema failures and cancels oversized response bodies [0.12ms]
+(pass) cancellation propagates through a stalled catalog response [0.21ms]
+(skip) public RaiPlay catalog, search, episode selection and replay
+
+20 tests skipped:
+(skip) AppImage ELF inventory > (unnamed)
+(skip) AppImage ELF inventory > inventories a valid dynamic ELF
+(skip) AppImage ELF inventory > inventories a valid static ELF
+(skip) AppImage ELF inventory > inventories a valid static-pie ELF
+(skip) AppImage ELF inventory > inventories a valid shared ELF
+(skip) AppImage ELF inventory > rejects ELF magic without a valid header
+(skip) AppImage ELF inventory > rejects a truncated static executable
+(skip) AppImage ELF inventory > rejects an incompatible ELF machine
+(skip) AppImage ELF inventory > rejects an ldd failure for a dynamic executable
+(skip) AppImage ELF inventory > rejects unexpected ldd failures even for a static executable
+(skip) AppImage ELF inventory > rejects successful ldd calls without dependency information
+(skip) AppImage ELF inventory > rejects a failed static inspection
+(skip) AppImage ELF inventory > rejects unresolved dependencies
+(skip) AppImage ELF inventory > (unnamed)
+(skip) actual yt-dlp selects audio-only HTML sources at every quality
+(skip) actual yt-dlp respects quality caps when selecting HLS variants
+(skip) actual yt-dlp passes DASH height limits to native playback with audio before video
+(skip) actual Twitch public catalog returns live streams, offline channels, categories and search pagination
+(skip) actual offline Sabaku channel lists recent past broadcasts
+(skip) public RaiPlay catalog, search, episode selection and replay
+
+ 1249 pass
+ 20 skip
+ 0 fail
+ 10326 expect() calls
+Ran 1269 tests across 131 files. [91.70s]

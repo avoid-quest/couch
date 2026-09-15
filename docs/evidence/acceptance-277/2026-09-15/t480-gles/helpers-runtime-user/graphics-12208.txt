@@ -1,0 +1,12 @@
+/usr/lib/x86_64-linux-gnu/libdrm_amdgpu.so.1.124.0
+/usr/lib/x86_64-linux-gnu/libdrm_intel.so.1.124.0
+/usr/lib/x86_64-linux-gnu/libdrm.so.2.124.0
+/usr/lib/x86_64-linux-gnu/libEGL_mesa.so.0.0.0
+/usr/lib/x86_64-linux-gnu/libEGL.so.1.1.0
+/usr/lib/x86_64-linux-gnu/libgallium-25.0.7-2+deb13u1.so
+/usr/lib/x86_64-linux-gnu/libgbm.so.1.0.0
+/usr/lib/x86_64-linux-gnu/libGLdispatch.so.0.0.0
+/usr/lib/x86_64-linux-gnu/libGLESv2.so.2.1.0
+/usr/lib/x86_64-linux-gnu/libGL.so.1.7.0
+/usr/lib/x86_64-linux-gnu/libGLX_mesa.so.0.0.0
+/usr/lib/x86_64-linux-gnu/libGLX.so.0.0.0

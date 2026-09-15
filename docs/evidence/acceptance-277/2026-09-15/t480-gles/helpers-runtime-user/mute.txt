@@ -1,0 +1,1 @@
+Verified 1 muted sink(s), each at zero volume.

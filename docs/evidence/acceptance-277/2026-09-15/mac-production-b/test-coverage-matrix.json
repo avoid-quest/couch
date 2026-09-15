@@ -1,0 +1,34 @@
+{
+  "source": "bb03a3a54f5ca2a1664cd6235c61cf39e4fa5a7e",
+  "bun": "1.4.2+744846f84",
+  "arm64PassCount": 1249,
+  "arm64SkipCount": 20,
+  "amd64InventoryPassCount": 12,
+  "unionPassingCaseCount": 1261,
+  "clockPassCount": 3,
+  "sameOptionalSkips": [
+    "actual Twitch public catalog returns live streams, offline channels, categories and search pagination",
+    "actual offline Sabaku channel lists recent past broadcasts",
+    "actual yt-dlp passes DASH height limits to native playback with audio before video",
+    "actual yt-dlp respects quality caps when selecting HLS variants",
+    "actual yt-dlp selects audio-only HTML sources at every quality",
+    "public RaiPlay catalog, search, episode selection and replay"
+  ],
+  "additionalNamedCoveredByAmd64": [
+    "AppImage ELF inventory > inventories a valid dynamic ELF",
+    "AppImage ELF inventory > inventories a valid shared ELF",
+    "AppImage ELF inventory > inventories a valid static ELF",
+    "AppImage ELF inventory > inventories a valid static-pie ELF",
+    "AppImage ELF inventory > rejects ELF magic without a valid header",
+    "AppImage ELF inventory > rejects a failed static inspection",
+    "AppImage ELF inventory > rejects a truncated static executable",
+    "AppImage ELF inventory > rejects an incompatible ELF machine",
+    "AppImage ELF inventory > rejects an ldd failure for a dynamic executable",
+    "AppImage ELF inventory > rejects successful ldd calls without dependency information",
+    "AppImage ELF inventory > rejects unexpected ldd failures even for a static executable",
+    "AppImage ELF inventory > rejects unresolved dependencies"
+  ],
+  "unnamedHookSkipCount": 2,
+  "uncoveredAdditionalNamedSkips": [],
+  "missingExecutableTestCovered": true
+}

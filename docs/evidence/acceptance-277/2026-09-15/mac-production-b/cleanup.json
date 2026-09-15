@@ -1,0 +1,28 @@
+{
+  "checkedAt": "2026-09-15T00:35:12.918932+00:00",
+  "containers": [
+    {
+      "name": "couch-production-277-b",
+      "status": "exited",
+      "running": false
+    },
+    {
+      "name": "couch-production-277-a3",
+      "status": "exited",
+      "running": false
+    },
+    {
+      "name": "couch-hosted-276-build",
+      "status": "exited",
+      "running": false
+    },
+    {
+      "name": "couch-production-277-bun-native",
+      "status": "exited",
+      "running": false
+    }
+  ],
+  "originalAndAContainersPreserved": true,
+  "allStopped": true,
+  "diagnosticVM": "stopped; see diagnostic-minimal-extraction/vm-final-state.txt"
+}

@@ -1,0 +1,6 @@
+character special file 666 root:root /dev/fuse
+directory 755 root:root /dev/dri/by-path
+character special file 660 root:video /dev/dri/card0
+character special file 660 root:render /dev/dri/renderD128
+character special file 660 root:audio /dev/snd/seq
+character special file 660 root:audio /dev/snd/timer
