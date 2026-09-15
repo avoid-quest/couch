@@ -1,0 +1,15 @@
+{
+  "transaction": {
+    "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+    "createdAt": 1789465868000,
+    "error": null,
+    "intent": "install",
+    "phase": "accepted",
+    "repairRuntime": false,
+    "requestId": "7d084d68e81a47398b8f34a6bc116163",
+    "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+    "updateId": "7d084d68e81a47398b8f34a6bc116163",
+    "updatedAt": 1789465868000,
+    "version": "0.1.0"
+  }
+}

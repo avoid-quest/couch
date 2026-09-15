@@ -1713,5 +1713,215 @@
     "retained": "final-hardware/runtime-final.json",
     "retainedSha256": "346ebfeccef7eccfbefe1390bb4894d13bf0cf59531ba58afcbd9627bd71870e",
     "transformation": "Final runtime/health/updater and controller counts/roles only; identity fields omitted"
+  },
+  {
+    "source": "owner-phone-updates-confirmation.json",
+    "sourceSha256": "33492d0f62bbafe70eb69a0ee2162591f03dd4265343f84034863d3278bd0b21",
+    "retained": "final-hardware/owner-phone-updates-confirmation.json",
+    "retainedSha256": "63669651df8bc60585a43d03209436c9b1793610d978d53a4ad4175644f4c25b",
+    "transformation": "Owner-reported UI observation normalized; no phone identity or credentials"
+  },
+  {
+    "source": "radio-reconnect-receipts/build.json",
+    "sourceSha256": "10db70b5d7107a805e23f25fa19f46a1876d71e16aca3a2829d833fcf9713690",
+    "retained": "radio-reconnect/build.json",
+    "retainedSha256": "10db70b5d7107a805e23f25fa19f46a1876d71e16aca3a2829d833fcf9713690",
+    "transformation": "Minimal fixture failure/build/cleanup; result audio claim explicitly qualified"
+  },
+  {
+    "source": "radio-reconnect-receipts/FAILURE.json",
+    "sourceSha256": "391fc9267349758ec3fb9c6c45f6902e804831944983c286b6d8d0e46e5ba9f2",
+    "retained": "radio-reconnect/FAILURE.json",
+    "retainedSha256": "391fc9267349758ec3fb9c6c45f6902e804831944983c286b6d8d0e46e5ba9f2",
+    "transformation": "Minimal fixture failure/build/cleanup; result audio claim explicitly qualified"
+  },
+  {
+    "source": "radio-reconnect-receipts/cleanup.json",
+    "sourceSha256": "dfcd10a19d7d5514744f66c0a3932d603dc5414ca58ed521ea375a5185ae5ffe",
+    "retained": "radio-reconnect/cleanup.json",
+    "retainedSha256": "dfcd10a19d7d5514744f66c0a3932d603dc5414ca58ed521ea375a5185ae5ffe",
+    "transformation": "Minimal fixture failure/build/cleanup; result audio claim explicitly qualified"
+  },
+  {
+    "source": "radio-reconnect-receipts/RESULT.json",
+    "sourceSha256": "73a24cfe59d28fb36f49483e546aecf1c316963956c6a4bcfe464a55bf0099b1",
+    "retained": "radio-reconnect/RESULT.json",
+    "retainedSha256": "1c2fd942ff36c325a004d12c9a0c4aebd22adb4f777fb71118ba3fbd5aa51a41",
+    "transformation": "Minimal fixture failure/build/cleanup; result audio claim explicitly qualified"
+  },
+  {
+    "source": "radio-test-sink.txt",
+    "sourceSha256": "cbbb79045c06fd3d459e959491efcdd5c3506812289604cbfd18c5945de034ca",
+    "retained": "radio-reconnect/null-sink-attempt.json",
+    "retainedSha256": "e69a13a3b6258172478082fc8809c110e3e4f23193eed04efc4834e4fd00add6",
+    "transformation": "Sink observations only; ephemeral module number omitted"
+  },
+  {
+    "source": "remote-own-update-receipts/fixture.json",
+    "sourceSha256": "05c93ddfbaa9e6931048aef53c07d127c5d5da8489ea44516ef14c05dd73f1cd",
+    "retained": "remote-own-update/fixture.json",
+    "retainedSha256": "11f2788b274ef2f7a4fe37afc8f65975c245dbe34b80badad050eb98dacd2618",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/request.json",
+    "sourceSha256": "46207417d59100629f4b0a3a37f1dd8b6380cd7aa01676bc07962dd03ecbd53b",
+    "retained": "remote-own-update/request.json",
+    "retainedSha256": "46207417d59100629f4b0a3a37f1dd8b6380cd7aa01676bc07962dd03ecbd53b",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/A-maintenance.json",
+    "sourceSha256": "5327b7a015af59b06223f6d0b48c761a19ab3436a07539ed17ffc01465055b8e",
+    "retained": "remote-own-update/A-maintenance.json",
+    "retainedSha256": "5327b7a015af59b06223f6d0b48c761a19ab3436a07539ed17ffc01465055b8e",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/accepted.json",
+    "sourceSha256": "4d3b90587e3a0a6b5033fdb2c7306477d66318967a5e7f0b57cb9568207e0b82",
+    "retained": "remote-own-update/accepted.json",
+    "retainedSha256": "4d3b90587e3a0a6b5033fdb2c7306477d66318967a5e7f0b57cb9568207e0b82",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/RESULT.json",
+    "sourceSha256": "b40e81b3cbf5690568c950c5e929cf81486c3ab3f15fab8f5309b263c6b4c7f5",
+    "retained": "remote-own-update/RESULT.json",
+    "retainedSha256": "b40e81b3cbf5690568c950c5e929cf81486c3ab3f15fab8f5309b263c6b4c7f5",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/B-ready.json",
+    "sourceSha256": "c7ae30aa62c1d241932eb71d3c5233b3677826c80ef6b93df5ea2d9882ef85df",
+    "retained": "remote-own-update/B-ready.json",
+    "retainedSha256": "519037d00667e8404bb00ed855d6d31ebe782e11ba8d519668956261234e943b",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/terminal-success.json",
+    "sourceSha256": "5637454e32e2529e1956b2649de26c4f70783cf8a5038c3198785982d225e932",
+    "retained": "remote-own-update/terminal-success.json",
+    "retainedSha256": "1b3642c906c008999b21530ff6d3ea0b16500ef13b57c4737fa85bdaff486b44",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/initial-installed-build.json",
+    "sourceSha256": "07400d87d831a4ac0d27858fbd5d7e4d2a13708041cedf96b70cdd3ee83c86bc",
+    "retained": "remote-own-update/initial-installed-build.json",
+    "retainedSha256": "07400d87d831a4ac0d27858fbd5d7e4d2a13708041cedf96b70cdd3ee83c86bc",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/cleanup.json",
+    "sourceSha256": "0c8c0f964b796b7db85f2b6de4207818f461e942c018520ac26711cc466bc119",
+    "retained": "remote-own-update/cleanup.json",
+    "retainedSha256": "0c8c0f964b796b7db85f2b6de4207818f461e942c018520ac26711cc466bc119",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/corrected-verdict.json",
+    "sourceSha256": "66228d561629d82624b73d367c961c176ff7ff18923e6b043a1fd00b3516b4a6",
+    "retained": "remote-own-update/corrected-verdict.json",
+    "retainedSha256": "8cc911c48b7266540a06077dac3addc54bdf3d8812fdc25460a44332a2a5c394",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/recovery-inputs.json",
+    "sourceSha256": "f73097ccdd9543d4108559565097848666205c50df8f1feb2abe525be297c3c8",
+    "retained": "remote-own-update/recovery-inputs.json",
+    "retainedSha256": "35dd09ede8bcef163b0c19dd75f61987bfe3b5df67d1720760f333b7aaee027e",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/maintenance-listeners.json",
+    "sourceSha256": "f2e0bc3649f196f2cc0af610c067ffde0dbcaf7e7692bcb8c7b869b466c1c2c0",
+    "retained": "remote-own-update/maintenance-listeners.json",
+    "retainedSha256": "f2e0bc3649f196f2cc0af610c067ffde0dbcaf7e7692bcb8c7b869b466c1c2c0",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "remote-own-update-receipts/FAILURE.json",
+    "sourceSha256": "4641b42c0370e8814657ab5db1b9df9d567644009e48f60f85fd05768c8ca672",
+    "retained": "remote-own-update/FAILURE.json",
+    "retainedSha256": "4641b42c0370e8814657ab5db1b9df9d567644009e48f60f85fd05768c8ca672",
+    "transformation": "Test account redacted; release notes omitted; fixture unit retains relevant runtime properties only"
+  },
+  {
+    "source": "/tmp/couch-277-remote-own-update.py",
+    "sourceSha256": "930180a1ac276023b378cc8fc5573d6c55eae97754b0232b70337ae5070ba20b",
+    "retained": "remote-own-update/collector.py",
+    "retainedSha256": "2515dc08cc8aadfbd55ec884b929775064712b260096d2c5fd665080bbe96c4f",
+    "transformation": "Exact executed script with test account redacted; credentials are resolved at runtime, none embedded"
+  },
+  {
+    "source": "remote-update-verdict.py",
+    "sourceSha256": "6e2ae33e8123661b46e8353e780feeda37e61c9895d0ee806d0902000dabc982",
+    "retained": "remote-own-update/verify-corrected.py",
+    "retainedSha256": "f63078d27254985a4fa7f068ebaceb677b784e4aba3cfa8b2b28f60f333fb755",
+    "transformation": "Exact executed script with test account redacted; credentials are resolved at runtime, none embedded"
+  },
+  {
+    "source": "final-isolated-cleanup.txt",
+    "sourceSha256": "7dc1f3fe565502e387f704e47c98284f2217aedc6cbd8e2d40ec930bba0614d2",
+    "retained": "remote-own-update/final-isolated-cleanup.json",
+    "retainedSha256": "abc14974c8ad1e654a39a32bce5253887e27883ae6588d14b83e0c1608476281",
+    "transformation": "Test-manager and production service/mute observations structured"
+  },
+  {
+    "source": "video-playback-receipts/sound-playing.json",
+    "sourceSha256": "fdd8f18bcd6fd3f2b6a04c37fc2df3cad41a74763f17431d8c22a87f275918fd",
+    "retained": "video-playback/sound-playing.json",
+    "retainedSha256": "08dd8ef1cf65c74f9b69289c5e0bbbfd58a0c4b939305fbc4e579faef7a72dfe",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback-receipts/sound-before.json",
+    "sourceSha256": "94ba359fd6928d402e4f9790714ff76471a3da8d0ee6bbbb7da734e7875aba9d",
+    "retained": "video-playback/sound-before.json",
+    "retainedSha256": "08dd8ef1cf65c74f9b69289c5e0bbbfd58a0c4b939305fbc4e579faef7a72dfe",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback-receipts/RESULT.json",
+    "sourceSha256": "1e9c4600cb805127a5b95d9bdd07b32bd5eba59493e01dbbe055bbcf73477fee",
+    "retained": "video-playback/RESULT.json",
+    "retainedSha256": "7ee14607adc739cbc174ea41737ee7f522b9090531877a2d4cfee18c0d0b7861",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback-receipts/samples.json",
+    "sourceSha256": "47f175a02988bc3fc76ce60facc230134959c602c53280a1b16fbe800bc5af60",
+    "retained": "video-playback/samples.json",
+    "retainedSha256": "30507f3c4a4200cbb180abb3a1f2a97f4bf46691060b7f6b9a52da965808026d",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback-receipts/playing.json",
+    "sourceSha256": "1a0e1811784e789036c750f0ddcce55a645c46467d1235925556e5ea18816526",
+    "retained": "video-playback/playing.json",
+    "retainedSha256": "6198b0870656d5868d89052d3d3d14a2e82afc75bdada8280670f09791fbab9f",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback-receipts/build.json",
+    "sourceSha256": "8dc25cca08d8dc1feab341d027607f574732d83e4f53ce7237cddd0de7f3d94d",
+    "retained": "video-playback/build.json",
+    "retainedSha256": "64d4aea0b076150727d035aec14a33273d3f54838c341dee7c1275f650c96160",
+    "transformation": "Player/track and output mute summaries; media/device identities omitted"
+  },
+  {
+    "source": "video-playback.py",
+    "sourceSha256": "fefce14d7a4793296175105826dee86bce97957f6a9e1274dadb7554d688bc72",
+    "retained": "video-playback/source-identity.json",
+    "retainedSha256": "470a9ef9a7a4da18230b0c0d617f24d2e6c14cb20d34227a5494ff3c9046abb0",
+    "transformation": "Source hash only"
+  },
+  {
+    "source": "final-runtime-after-tests.json",
+    "sourceSha256": "1e7ad5552c58c36a7445053e3bdfba953eaf33d9a4dbeb93cee44d5a04747754",
+    "retained": "final-hardware/runtime-after-followup.json",
+    "retainedSha256": "1e7ad5552c58c36a7445053e3bdfba953eaf33d9a4dbeb93cee44d5a04747754",
+    "transformation": "Final health/update/controller summary and output names/mute/volume only"
   }
 ]
