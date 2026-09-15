@@ -47,6 +47,9 @@ chmod 0700 "$state"
 exec 9<"$lock"
 flock -n 9 || fail 'Another Couch installation or recovery is running.'
 if ! $tv; then
+    for directory in "$user_home" "$user_home/.local" "$user_home/.local/share" "$user_home/.local/share/applications" "$user_home/.local/bin"; do
+        [[ ! -L $directory ]] || fail "Inspect the substituted desktop directory before migrating: $directory"
+    done
     ! pgrep -u "$desktop_user" -x 'couch|couch-server' >/dev/null || fail 'Quit Couch before migrating its desktop launcher.'
     as_user /usr/bin/couch --version >/dev/null || fail 'The native app cannot start. The AppImage launcher was retained.'
     launcher=$user_home/.local/share/applications/couch.desktop
@@ -77,6 +80,15 @@ native_unit=$templates/usr/lib/systemd/user/couch-tv.service
 old_app=/var/lib/couch/application/Couch.AppImage
 native_selected() { [[ -L $unit && $(readlink "$unit") = "$native_unit" ]]; }
 format() { sed -nE 's/.*"dataFormat"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p'; }
+check_health() {
+    for attempt in {1..20}; do
+        pid=$(user_systemctl show couch-tv.service --property=MainPID --value)
+        if as_user /usr/lib/Couch/tools/deno run --no-prompt --allow-read --allow-net=127.0.0.1 "$templates/check-health.js" "$pid" /usr/lib/Couch/release.json "$data" > "$state/health.json" 2> "$state/health-error.txt"; then return 0; fi
+        sleep 1
+    done
+    cat "$state/health-error.txt" >&2
+    return 1
+}
 restore_selection() {
     [[ -f $state/appimage.sha256 && -x $old_app ]] || fail 'No retained AppImage migration is recorded.'
     sha256sum --check --status "$state/appimage.sha256" || fail 'The retained AppImage changed. Inspect it before recovery.'
@@ -116,6 +128,33 @@ if ! getent passwd couch-tv >/dev/null; then
 fi
 chgrp couch-tv "$lock"; chmod 0440 "$lock"
 as_user /usr/bin/couch --version > "$state/native-build.json" || fail 'The native app cannot start. The existing session was retained.'
+# Validate a retained installation before exposing login or power configuration.
+if [[ ! -f $state/appimage.sha256 && -x $old_app ]]; then
+    [[ -f /usr/lib/systemd/user/couch-tv.service ]] || fail 'The retained AppImage has no vendor TV unit. Inspect the installation.'
+    cmp -s /usr/lib/systemd/user/couch-tv.service <(sed 's|ExecStart=/usr/bin/couch|ExecStart=/var/lib/couch/application/Couch.AppImage|' "$native_unit") || fail 'The AppImage service was customized. Inspect it before migration.'
+    [[ ! -L $old_app && ! -L ${old_app%/*} ]] || fail 'Inspect the substituted AppImage path before migration.'
+    as_user "$old_app" --version > "$state/appimage-build.json"
+    old_format=$(format < "$state/appimage-build.json")
+    [[ -n $old_format && $old_format = "$(format < "$state/native-build.json")" ]] || fail 'The AppImage and native data formats differ. Keep the current installation.'
+    data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
+    data=${data#\"}; data=${data%\"}
+    [[ $data = /* && -d $data && ! -L $data ]] || fail 'Inspect the configured data directory before migration.'
+    printf '%s\n' "$old_format" > "$state/data-format"
+    sha256sum "$old_app" > "$state/appimage.sha256"
+fi
+was_running=false
+if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
+    if user_systemctl is-active --quiet couch-tv.service; then was_running=true; fi
+    user_systemctl stop couch-tv.service
+fi
+! pgrep -u couch-tv -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains. Stop it before switching the service.'
+if [[ -f $state/appimage.sha256 && ! -e $state/data ]]; then
+    data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
+    data=${data#\"}; data=${data%\"}
+    [[ $data = /* && -d $data && ! -L $data ]] || fail 'Inspect the configured data directory before migration.'
+    cp -a "$data" "$state/data"
+    sync -f "$state"
+fi
 # Only the explicit setup command exposes these files to system services.
 # Existing administrator files and masks take precedence, including disabled autologin.
 while IFS= read -r path; do
@@ -141,38 +180,20 @@ while IFS= read -r path; do
     fi
 done < "$templates/files"
 systemctl daemon-reload
-if [[ ! -f $state/appimage.sha256 && -x $old_app ]]; then
-    [[ -f /usr/lib/systemd/user/couch-tv.service ]] || fail 'The retained AppImage has no vendor TV unit. Inspect the installation.'
-    [[ ! -L $old_app && ! -L ${old_app%/*} ]] || fail 'Inspect the substituted AppImage path before migration.'
-    as_user "$old_app" --version > "$state/appimage-build.json"
-    old_format=$(format < "$state/appimage-build.json")
-    [[ -n $old_format && $old_format = "$(format < "$state/native-build.json")" ]] || fail 'The AppImage and native data formats differ. Keep the current installation.'
-    printf '%s\n' "$old_format" > "$state/data-format"
-    sha256sum "$old_app" > "$state/appimage.sha256"
-fi
-was_running=false
-if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
-    if user_systemctl is-active --quiet couch-tv.service; then was_running=true; fi
-    user_systemctl stop couch-tv.service
-fi
-! pgrep -u couch-tv -x 'couch|couch-server' >/dev/null || fail 'A Couch writer remains. Stop it before switching the service.'
-if [[ -f $state/appimage.sha256 && ! -e $state/data ]]; then
-    data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
-    data=${data#\"}; data=${data%\"}
-    [[ $data = /* && -d $data && ! -L $data ]] || fail 'Inspect the configured data directory before migration.'
-    cp -a "$data" "$state/data"
-    sync -f "$state"
-fi
+data=$(sed -n 's/^COUCH_DATA_DIR=//p' /etc/couch/appliance.env | tail -1)
+data=${data#\"}; data=${data%\"}
 install -d -m 0755 /etc/systemd/user
 if ! native_selected; then ln -s "$native_unit" "$unit"; fi
 if [[ -S /run/user/$(id -u couch-tv)/bus ]]; then
     user_systemctl daemon-reload
     if $was_running; then
         user_systemctl reset-failed couch-tv.service || true
-        if ! user_systemctl start couch-tv.service || ! sleep 3 || ! user_systemctl is-active --quiet couch-tv.service; then
-            echo 'Native startup failed. Restoring the retained AppImage selection.' >&2
-            restore_selection
-            fail 'Native migration did not complete. The previous app and current data remain available.'
+        if ! user_systemctl start couch-tv.service || ! check_health; then
+            if [[ -f $state/appimage.sha256 ]]; then
+                echo 'Native startup failed. Restoring the retained AppImage selection.' >&2
+                restore_selection
+            fi
+            fail 'Native migration did not complete. Inspect couch-session logs; retained app files and current data remain available.'
         fi
     fi
 fi

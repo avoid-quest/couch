@@ -6,6 +6,9 @@ root=$(mktemp -d)
 trap '[[ -z ${socket_pid:-} ]] || kill "$socket_pid" 2>/dev/null || true; rm -rf "$root"' EXIT
 templates=/usr/share/couch/tv
 mkdir -p "$root/bin" "$templates" /run/systemd/system /usr/bin
+mkdir -p /usr/lib/Couch/tools
+printf '#!/bin/sh\nprintf '\''{"verified":true}\\n'\''\n' > /usr/lib/Couch/tools/deno
+chmod +x /usr/lib/Couch/tools/deno
 cp packaging/native/couch-setup /usr/sbin/couch-setup
 chmod 0755 /usr/sbin/couch-setup
 while read -r path; do
@@ -30,6 +33,7 @@ cat > "$root/bin/systemctl" <<'SYSTEMCTL'
 #!/bin/bash
 printf 'systemctl %s\n' "$*" >> "$FIXTURE_LOG"
 case "$*" in
+    *'show couch-tv.service --property=MainPID --value') printf '123\n' ;;
     *'is-active'*) test -f "$FIXTURE_ACTIVE" ;;
     *'stop couch-tv.service') rm -f "$FIXTURE_ACTIVE" ;;
     *'start couch-tv.service')

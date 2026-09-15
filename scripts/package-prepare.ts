@@ -48,6 +48,7 @@ if (format === "deb") {
   await Bun.write(join(tv, "files"), setup.files.join("\n") + "\n");
   await Bun.write(join(tv, "packages"), [...new Set([...setup.audio, ...setup.tv, "dbus-user-session", "libpam-systemd", "procps", "polkitd"])].join("\n") + "\n");
   await cp("packaging/appliance/root/usr/sbin/couch-recover", join(tv, "couch-recover-appimage"));
+  await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
 }
 await mkdir(staging, { recursive: true });
 await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
