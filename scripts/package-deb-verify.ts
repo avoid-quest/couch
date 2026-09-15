@@ -39,7 +39,9 @@ try {
     }
   }
   await inspect(staging);
-  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE"]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
+  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE", "usr/sbin/couch-setup", "usr/share/couch/tv/packages"]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
+  assert.ok((await lstat(join(staging, "usr/sbin/couch-setup"))).mode & 0o111, "TV setup must be executable");
+  assert.ok(!files.some(file => /^(etc\/|usr\/(lib\/systemd|share\/lightdm|share\/polkit-1)\/)/.test(file.path)), "Ordinary installation must not activate TV policy");
   const release = await Bun.file(join(staging, "usr/lib/Couch/release.json")).json();
   assert.equal(release.revision, build.revision);
   assert.equal(release.version, build.version);

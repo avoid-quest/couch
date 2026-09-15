@@ -1,5 +1,9 @@
 # Install Couch on Debian 13
 
+Native Debian package development and its explicit TV migration are documented
+in [Native Debian TV setup](native-tv.md). The instructions below describe the
+currently published AppImage release.
+
 Couch supports Debian 13 Trixie, amd64, in an X11 session. Use an existing desktop,
 or choose TV setup on minimal Debian. Both profiles use the same complete signed
 AppImage. The target needs no source checkout, Bun, Rust, compiler, ffmpeg package

@@ -12,9 +12,12 @@
     "fonts-dejavu-core",
     "dbus-user-session",
     "pulseaudio-utils",
-    "x11-xserver-utils"
+    "x11-xserver-utils",
+    "procps"
   ],
   "files": {
-    "/usr/share/doc/couch": "resources/notices/"
+    "/usr/share/doc/couch": "resources/notices/",
+    "/usr/sbin/couch-setup": "../packaging/native/couch-setup",
+    "/usr/share/couch/tv": "resources/tv/"
   }
 }
