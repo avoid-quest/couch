@@ -13,8 +13,9 @@ then launch Couch from the application menu.
 `packaging/debian.json` declares the native runtime packages. Debian supplies
 GTK, WebKit, libmpv and FFmpeg libraries; Couch includes its three pinned helpers
 and dependency material under `/usr/lib/Couch` and `/usr/share/doc/couch`.
-The native package does not require Minisign, jq, FUSE or a setup archive. It does
-not create the dedicated TV account or change desktop login. Removing the package
+The native package needs the minisign binary for the update broker's root-side
+signature check. It does not require jq, FUSE or a setup archive. It does not
+create the dedicated TV account or change desktop login. Removing the package
 leaves user data alone.
 
 The default `bun run package:build` still builds the released AppImage path.

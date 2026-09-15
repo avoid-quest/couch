@@ -20,7 +20,9 @@ assert.equal(run(["dpkg-deb", "-f", archive, "Version"]), build.version);
 assert.equal(run(["dpkg-deb", "-f", archive, "Architecture"]), "amd64");
 const depends = run(["dpkg-deb", "-f", archive, "Depends"]).split(", ");
 for (const dependency of debian.depends) assert.ok(depends.includes(dependency), `Missing ${dependency}`);
-assert.ok(!depends.some(dependency => /^(jq|minisign|fuse3|libfuse2)/.test(dependency)));
+// The broker verifies staged signatures with the packaged minisign binary, so
+// minisign is a legitimate dependency; jq, FUSE and their loaders are not.
+assert.ok(!depends.some(dependency => /^(jq|fuse3|libfuse2)/.test(dependency)));
 const staging = await mkdtemp(join(tmpdir(), "couch-deb-"));
 const files: { path: string; size: number; sha256: string }[] = [];
 try {
