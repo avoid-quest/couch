@@ -3,6 +3,7 @@ import tailwind from "bun-plugin-tailwind";
 import { version } from "../package.json";
 import tauri from "../src-tauri/tauri.conf.json";
 import { releaseVersion } from "./hosted-policy";
+import debian from "../packaging/debian.json";
 
 const targets: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
@@ -20,7 +21,7 @@ const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? awai
 const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged: helpers !== null, helpers });
 await Bun.write("src-tauri/build-info.json", buildInfo);
 if (helpers) {
-  const host = (await Bun.file("packaging/setup/files.json").json()).common;
+  const host = process.env.COUCH_PACKAGE_FORMAT === "deb" ? debian.depends.map(dependency => dependency.split(" ")[0]) : (await Bun.file("packaging/setup/files.json").json()).common;
   await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, host: { os: "debian", version: "13", architecture: "amd64", session: "x11", packages: host } }));
 }
 

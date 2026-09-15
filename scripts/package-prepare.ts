@@ -5,11 +5,14 @@ import { installMediaTools, mediaReleases } from "./setup-media";
 import inputs from "../packaging/inputs.json";
 import { packageManager, version } from "../package.json";
 import packageConfig from "../src-tauri/tauri.package.conf.json";
+import debian from "../packaging/debian.json";
 import { publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
 
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
 const staging = ".artifacts/package-tools";
+const format = process.env.COUCH_PACKAGE_FORMAT ?? "appimage";
+if (!["appimage", "deb"].includes(format)) throw new Error("Use appimage or deb packaging");
 const sha256 = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
 function run(command: string[]) {
@@ -34,30 +37,32 @@ if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean comm
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
 await mkdir(staging, { recursive: true });
-await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
-// Populate Tauri's supported tool cache with verified inputs, before its bundler runs.
-const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "tauri");
-await mkdir(cache, { recursive: true });
-for (const [name, input] of Object.entries(inputs.appimageTools)) {
-  await rm(join(cache, name), { force: true });
-  await download(input, join(cache, name));
-  await chmod(join(cache, name), 0o755);
+await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
+if (format === "appimage") {
+  // Populate Tauri's supported tool cache with verified inputs, before its bundler runs.
+  const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "tauri");
+  await mkdir(cache, { recursive: true });
+  for (const [name, input] of Object.entries(inputs.appimageTools)) {
+    await rm(join(cache, name), { force: true });
+    await download(input, join(cache, name));
+    await chmod(join(cache, name), 0o755);
+  }
+  // Static PIE AppImage runtimes do not execute under Docker's Mac emulation.
+  // Run the verified output plugin's unmodified executable from its extracted AppDir.
+  const plugin = join(cache, "linuxdeploy-plugin-appimage.AppImage");
+  const pluginBytes = new DataView(await Bun.file(plugin).arrayBuffer());
+  const squashfsOffset = Number(pluginBytes.getBigUint64(40, true)) + pluginBytes.getUint16(58, true) * pluginBytes.getUint16(60, true);
+  const extracted = join(cache, "appimage-output-plugin");
+  await rm(extracted, { recursive: true, force: true });
+  run(["unsquashfs", "-o", String(squashfsOffset), "-d", extracted, plugin]);
+  await rm(plugin);
+  await symlink(join(extracted, "AppRun"), plugin);
+  await download(inputs.appimageRuntime, join(cache, "runtime-x86_64"));
 }
-// Static PIE AppImage runtimes do not execute under Docker's Mac emulation.
-// Run the verified output plugin's unmodified executable from its extracted AppDir.
-const plugin = join(cache, "linuxdeploy-plugin-appimage.AppImage");
-const pluginBytes = new DataView(await Bun.file(plugin).arrayBuffer());
-const squashfsOffset = Number(pluginBytes.getBigUint64(40, true)) + pluginBytes.getUint16(58, true) * pluginBytes.getUint16(60, true);
-const extracted = join(cache, "appimage-output-plugin");
-await rm(extracted, { recursive: true, force: true });
-run(["unsquashfs", "-o", String(squashfsOffset), "-d", extracted, plugin]);
-await rm(plugin);
-await symlink(join(extracted, "AppRun"), plugin);
-await download(inputs.appimageRuntime, join(cache, "runtime-x86_64"));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
 await cp("/usr/bin/ffprobe", join(resources, "tools", "ffprobe"));
 // linuxdeploy adds this RPATH to resources under usr/lib; hash its final bytes.
-for (const tool of [...mediaReleases(), { name: "ffprobe" }]) run(["/usr/bin/patchelf", "--set-rpath", "$ORIGIN", join(resources, "tools", tool.name)]);
+if (format === "appimage") for (const tool of [...mediaReleases(), { name: "ffprobe" }]) run(["/usr/bin/patchelf", "--set-rpath", "$ORIGIN", join(resources, "tools", tool.name)]);
 const helpers = {} as Record<string, { version: string; sha256: string; archiveSha256: string }>;
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
 helpers.ffprobe = { version: run(["/usr/bin/ffprobe", "-version"]).split(" ")[2]!, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", "ffprobe")).arrayBuffer())), archiveSha256: "" };

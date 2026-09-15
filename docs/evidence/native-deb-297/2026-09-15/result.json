@@ -1,0 +1,50 @@
+{
+  "build": {
+    "version": "0.1.0",
+    "revision": "a6b34f25e0e988dd78d1b2e6b23d9026480db83c",
+    "dirty": false,
+    "bun": "1.4.2",
+    "helpers": {
+      "ffprobe": {
+        "archiveSha256": "",
+        "sha256": "cefc5f81c0b18429cdbf8fa5a89e1e9c759235e10f93f9b329ff1b2fdff26f46",
+        "version": "7.1.5-0+deb13u1"
+      },
+      "deno": {
+        "archiveSha256": "394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2",
+        "sha256": "bceb5b6a6239b0b010418406d8c77a508f67cf4337d94288f1c19fe71304aab0",
+        "version": "2.9.6"
+      },
+      "yt-dlp": {
+        "archiveSha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+        "sha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a",
+        "version": "2026.08.19"
+      }
+    },
+    "target": "x86_64-unknown-linux-gnu",
+    "packaged": true,
+    "dataFormat": 1,
+    "readableDataFormats": [
+      1
+    ],
+    "maintenanceProtocol": "maintenance-v1",
+    "sourceVersion": "0.1.0"
+  },
+  "checks": [
+    "Fresh native installation opens its playback-device choice",
+    "Choosing this computer starts the packaged backend",
+    "Local setup offers an explicit sharing choice",
+    "Local setup completes without enabling sharing",
+    "Native launcher, backend and packaged helper paths agree",
+    "Bundled ffprobe scans a local video",
+    "Native player reports ready",
+    "Debian libmpv plays video and audio",
+    "The installed desktop entry relaunches Couch",
+    "APT removal deletes package files and preserves user data"
+  ],
+  "limits": [
+    "Disposable Debian X11 desktop with software rendering and null audio sink",
+    "WebKit sandbox disabled for container instrumentation",
+    "No physical GPU, audible output, booted login session, native update or AppImage migration acceptance"
+  ]
+}
