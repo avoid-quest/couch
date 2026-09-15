@@ -1,0 +1,6 @@
+tests/package/package-update.sh in a disposable debian:13 amd64 container
+(COUCH_PACKAGE_UPDATE_FIXTURE=1). Install, receipt ownership and content,
+final-version enforcement, downgrade rejection, tampered bytes, foreign
+ownership, symlinked inbox paths and unknown accounts all pass:
+
+  package-update fixture: passed
