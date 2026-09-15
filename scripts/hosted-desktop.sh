@@ -24,4 +24,5 @@ for attempt in $(seq 1 180); do
   sleep 2
 done
 test -f "$output/evidence/ready"
+docker exec "$fixture" chmod 0777 /evidence
 bun tests/package/debian-desktop.ts "$fixture" "$output/evidence"
