@@ -1,0 +1,12 @@
+{
+  "bytes": 1025,
+  "sha256": "1fe2034afe02b00e4d6a78c07c807db01c0cab2dbfe61123ba4b290ae839c597",
+  "response": {
+    "version": "0.1.0",
+    "notes": "Couch 0.1.0, qualified as the final-version candidate for signed A-to-B update acceptance. This candidate uses the same application behavior as 0.1.0-preview.1 with the final version recorded consistently in native and backend metadata.\n",
+    "pub_date": "2026-09-15T01:27:37.909Z",
+    "url": "https://cdn.crabnebula.app/asset/01M2HAEK3XRJXZRH15G25VA3RT?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22updatePlatform%22%3A%22linux-x86_64-appimage%22%2C%22current%22%3A%220.1.0-preview.1%22%7D",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTU4VXZmTlJyL2FOdlFUSTloQmVZNzhZR25Vb1k3ZUNsbTdnMkNGd1NUb2RDRTdEdks5ekJWNHdsb3NnY293KzhWeEgxKzJUWUgzUitwUE9NajRJQkE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NDM0OTYzCWZpbGU6Q291Y2hfMC4xLjBfYW1kNjQuQXBwSW1hZ2UKcWF2dWRES3JTaXdkLzNIeXBoNG1PaXdrVnBNTmxhYkFpckV4TFRJRVpkSDFYWFk3eGtTWkFqc21oQys3MHlIOFlpRU1iazhkWkw4enl4Mk9yTWZCQ3c9PQo=",
+    "format": "appimage"
+  }
+}

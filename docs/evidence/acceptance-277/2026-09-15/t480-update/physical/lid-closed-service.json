@@ -1,0 +1,11 @@
+{
+  "at": "2026-09-15T09:29:49Z",
+  "lid": "closed",
+  "bootId": "6240b498-7c1e-4d32-a478-9bf8c112a835",
+  "service": [
+    "MainPID=1027",
+    "NRestarts=0",
+    "ActiveState=active"
+  ],
+  "muteVerification": "Verified 2 muted sink(s), each at zero volume."
+}

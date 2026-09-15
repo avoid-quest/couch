@@ -1,0 +1,10 @@
+{
+  "errors": [
+    {
+      "at": "2026-09-15T09:27:27.318Z",
+      "type": "result",
+      "ok": false,
+      "error": "That queue entry already exists."
+    }
+  ]
+}

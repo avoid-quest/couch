@@ -1,0 +1,10 @@
+{
+  "player": {
+    "status": "idle",
+    "position": 0,
+    "duration": null,
+    "volume": 100
+  },
+  "queueCount": 0,
+  "setupStep": "general"
+}

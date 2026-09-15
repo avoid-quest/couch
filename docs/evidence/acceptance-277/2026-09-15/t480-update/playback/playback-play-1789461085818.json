@@ -1,0 +1,16 @@
+{
+  "sampleCount": 2,
+  "states": [
+    {
+      "at": "2026-09-15T08:31:25.877Z",
+      "player": {
+        "status": "error",
+        "position": 0,
+        "duration": null,
+        "seekable": false,
+        "speed": null,
+        "volume": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "setupStep": "general",
+  "administratorClaimed": true,
+  "queueCount": 3,
+  "player": {
+    "status": "paused",
+    "position": 24.960178632652912,
+    "duration": 180,
+    "seekable": true,
+    "speed": 1,
+    "volume": 0
+  }
+}

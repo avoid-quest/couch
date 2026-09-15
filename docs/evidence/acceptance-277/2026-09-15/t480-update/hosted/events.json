@@ -1,0 +1,297 @@
+[
+  {
+    "at": "2026-09-15T08:36:54.497570+00:00",
+    "event": "scheduled",
+    "startEpoch": 1789461478
+  },
+  {
+    "at": "2026-09-15T08:37:58.000420+00:00",
+    "event": "started"
+  },
+  {
+    "at": "2026-09-15T08:37:58.170008+00:00",
+    "event": "stage-requested",
+    "status": 202
+  },
+  {
+    "at": "2026-09-15T08:37:58.172703+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": null
+  },
+  {
+    "at": "2026-09-15T08:37:59.175950+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 28174144,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:00.179740+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 71059264,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:01.182462+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 114597248,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:02.186729+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 156692160,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:03.190513+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 193089216,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:04.194489+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 236613312,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:05.198768+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 281937728,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:06.203432+00:00",
+    "event": "stage-state",
+    "status": "downloading",
+    "progress": {
+      "received": 281937728,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:07.207889+00:00",
+    "event": "stage-state",
+    "status": "ready",
+    "progress": {
+      "received": 281937728,
+      "total": 289110520
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:07.217586+00:00",
+    "event": "stage-ready"
+  },
+  {
+    "at": "2026-09-15T08:38:13.818593+00:00",
+    "event": "busy-install",
+    "requestId": "25f585110ffa40c486ef4968bc95621c",
+    "status": 202
+  },
+  {
+    "at": "2026-09-15T08:38:13.820809+00:00",
+    "event": "transaction",
+    "requestId": "25f585110ffa40c486ef4968bc95621c",
+    "transaction": {
+      "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+      "createdAt": 1789461493000,
+      "error": null,
+      "intent": "install",
+      "phase": "accepted",
+      "repairRuntime": false,
+      "requestId": "25f585110ffa40c486ef4968bc95621c",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+      "updateId": "25f585110ffa40c486ef4968bc95621c",
+      "updatedAt": 1789461493000,
+      "version": "0.1.0"
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:16.828209+00:00",
+    "event": "transaction",
+    "requestId": "25f585110ffa40c486ef4968bc95621c",
+    "transaction": {
+      "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+      "createdAt": 1789461493000,
+      "error": "Confirm interruption of current playback before installing.",
+      "intent": "install",
+      "phase": "failed",
+      "repairRuntime": false,
+      "requestId": "25f585110ffa40c486ef4968bc95621c",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+      "updateId": "25f585110ffa40c486ef4968bc95621c",
+      "updatedAt": 1789461496000,
+      "version": "0.1.0"
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:18.318185+00:00",
+    "event": "install-requested",
+    "requestId": "97670d2d6c9e40f195b717fdeacc3ef0"
+  },
+  {
+    "at": "2026-09-15T08:38:18.843718+00:00",
+    "event": "transaction",
+    "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+    "transaction": {
+      "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+      "createdAt": 1789461498000,
+      "error": null,
+      "intent": "install",
+      "phase": "accepted",
+      "repairRuntime": false,
+      "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+      "updateId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "updatedAt": 1789461498000,
+      "version": "0.1.0"
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:22.851489+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:23.852015+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:24.854066+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:25.854919+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:26.855573+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:27.856115+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:28.857552+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:29.858225+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:30.858989+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:31.860445+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:32.862020+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:33.863101+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:34.864586+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:35.865850+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:36.866465+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:37.867086+00:00",
+    "event": "reconnecting",
+    "error": "URLError"
+  },
+  {
+    "at": "2026-09-15T08:38:38.873963+00:00",
+    "event": "transaction",
+    "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+    "transaction": {
+      "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+      "createdAt": 1789461498000,
+      "error": null,
+      "intent": "install",
+      "phase": "trial",
+      "repairRuntime": false,
+      "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+      "updateId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "updatedAt": 1789461510000,
+      "version": "0.1.0"
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:41.886760+00:00",
+    "event": "transaction",
+    "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+    "transaction": {
+      "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+      "createdAt": 1789461498000,
+      "error": null,
+      "intent": "install",
+      "phase": "succeeded",
+      "repairRuntime": false,
+      "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+      "updateId": "97670d2d6c9e40f195b717fdeacc3ef0",
+      "updatedAt": 1789461520000,
+      "version": "0.1.0"
+    }
+  },
+  {
+    "at": "2026-09-15T08:38:41.887083+00:00",
+    "event": "terminal",
+    "phase": "succeeded"
+  },
+  {
+    "at": "2026-09-15T08:38:44.309341+00:00",
+    "event": "passed"
+  }
+]

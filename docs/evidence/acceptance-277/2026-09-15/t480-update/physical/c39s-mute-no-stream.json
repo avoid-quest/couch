@@ -1,0 +1,36 @@
+{
+  "at": "2026-09-15T09:27:39Z",
+  "sinkInputCount": 0,
+  "sinks": [
+    {
+      "name": "Built-in Audio Analog Stereo",
+      "state": "SUSPENDED",
+      "muted": true,
+      "volume": {
+        "front-left": {
+          "value": 0,
+          "percent": "0%"
+        },
+        "front-right": {
+          "value": 0,
+          "percent": "0%"
+        }
+      }
+    },
+    {
+      "name": "C39S",
+      "state": "SUSPENDED",
+      "muted": true,
+      "volume": {
+        "front-left": {
+          "value": 0,
+          "percent": "0%"
+        },
+        "front-right": {
+          "value": 0,
+          "percent": "0%"
+        }
+      }
+    }
+  ]
+}

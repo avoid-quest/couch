@@ -1,0 +1,10 @@
+{
+  "data": "fresh; only operating-mode.json copied",
+  "properties": [
+    "Type=exec",
+    "KillMode=process",
+    "RemainAfterExit=yes"
+  ],
+  "application": "isolated signed native AppImage",
+  "session": "Xvfb fixture"
+}

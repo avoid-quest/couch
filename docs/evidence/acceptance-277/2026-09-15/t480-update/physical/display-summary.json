@@ -1,0 +1,39 @@
+{
+  "outputs": [
+    {
+      "name": "eDP-1",
+      "connected": true,
+      "width": 1920,
+      "height": 1080,
+      "refresh": 60.01
+    },
+    {
+      "name": "DP-1",
+      "connected": false,
+      "width": 0,
+      "height": 0,
+      "refresh": null
+    },
+    {
+      "name": "HDMI-1",
+      "connected": false,
+      "width": 0,
+      "height": 0,
+      "refresh": null
+    },
+    {
+      "name": "DP-2",
+      "connected": false,
+      "width": 0,
+      "height": 0,
+      "refresh": null
+    },
+    {
+      "name": "HDMI-2",
+      "connected": false,
+      "width": 0,
+      "height": 0,
+      "refresh": null
+    }
+  ]
+}

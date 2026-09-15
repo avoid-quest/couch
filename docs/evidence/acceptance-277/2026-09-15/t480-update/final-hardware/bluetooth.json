@@ -1,0 +1,10 @@
+{
+  "devices": [
+    {
+      "name": "C39S",
+      "paired": true,
+      "trusted": true,
+      "connected": true
+    }
+  ]
+}

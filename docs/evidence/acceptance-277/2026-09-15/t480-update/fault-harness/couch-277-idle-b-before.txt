@@ -1,0 +1,6 @@
+2026-09-15T09:03:57Z
+MainPID=1027
+NRestarts=0
+MemoryCurrent=1750679552
+CPUUsageNSec=107181286000
+ActiveState=active

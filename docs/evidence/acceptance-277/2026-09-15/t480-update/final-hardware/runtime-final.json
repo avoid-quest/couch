@@ -1,0 +1,81 @@
+{
+  "at": "2026-09-15T09:38:13.008496+00:00",
+  "build": {
+    "version": "0.1.0",
+    "sourceVersion": "0.1.0",
+    "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+    "dirty": false,
+    "target": "x86_64-unknown-linux-gnu",
+    "dataFormat": 1,
+    "readableDataFormats": [
+      1
+    ],
+    "maintenanceProtocol": "maintenance-v1",
+    "bun": "1.4.2",
+    "packaged": true,
+    "helpers": {
+      "yt-dlp": {
+        "version": "2026.08.19",
+        "sha256": "5881691508856455f9aad985733f6de12d0d4c666a5ff20199d4ce6e175bca67",
+        "archiveSha256": "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+      },
+      "deno": {
+        "version": "2.9.6",
+        "sha256": "37263b25df0ed4369c04e313043cab523b7fb8fa5cbc4c2c8a5d0b7c2584dffd",
+        "archiveSha256": "394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
+      },
+      "ffprobe": {
+        "version": "7.1.5-0+deb13u1",
+        "sha256": "fc7898a8b5b0e9ad314294456007ee101dbe0bd607317ad29d22e3d6182ba4b9",
+        "archiveSha256": ""
+      }
+    }
+  },
+  "health": {
+    "ok": true,
+    "player": "idle"
+  },
+  "updates": {
+    "running": {
+      "version": "0.1.0",
+      "revision": "61739ad7ce782da5482067f16a5727306cd65d6a"
+    },
+    "channel": "preview",
+    "policy": "manual",
+    "status": "idle",
+    "currentCheck": true,
+    "lastSuccessfulCheck": 1789464966070,
+    "candidate": null,
+    "error": null,
+    "progress": null,
+    "waiting": null,
+    "installation": {
+      "enabled": true,
+      "current": {
+        "candidateId": "300d9d673ffcb3a96dbd327a77be744b83b506293ed1710bf00af912340f85d4",
+        "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+        "version": "0.1.0"
+      },
+      "repairAvailable": false,
+      "transaction": {
+        "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+        "createdAt": 1789461498000,
+        "error": null,
+        "intent": "install",
+        "phase": "succeeded",
+        "repairRuntime": false,
+        "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+        "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+        "updateId": "97670d2d6c9e40f195b717fdeacc3ef0",
+        "updatedAt": 1789461520000,
+        "version": "0.1.0"
+      }
+    }
+  },
+  "controllersSummary": {
+    "count": 1,
+    "roles": [
+      "administrator"
+    ]
+  }
+}

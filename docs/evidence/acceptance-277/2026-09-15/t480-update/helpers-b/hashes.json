@@ -1,0 +1,24 @@
+{
+  "at": "2026-09-15T09:24:02Z",
+  "comparisons": [
+    {
+      "helper": "deno",
+      "observedSha256": "37263b25df0ed4369c04e313043cab523b7fb8fa5cbc4c2c8a5d0b7c2584dffd",
+      "expectedBsha256": "37263b25df0ed4369c04e313043cab523b7fb8fa5cbc4c2c8a5d0b7c2584dffd",
+      "match": true
+    },
+    {
+      "helper": "ffprobe",
+      "observedSha256": "fc7898a8b5b0e9ad314294456007ee101dbe0bd607317ad29d22e3d6182ba4b9",
+      "expectedBsha256": "fc7898a8b5b0e9ad314294456007ee101dbe0bd607317ad29d22e3d6182ba4b9",
+      "match": true
+    },
+    {
+      "helper": "yt-dlp",
+      "observedSha256": "5881691508856455f9aad985733f6de12d0d4c666a5ff20199d4ce6e175bca67",
+      "expectedBsha256": "5881691508856455f9aad985733f6de12d0d4c666a5ff20199d4ce6e175bca67",
+      "match": true
+    }
+  ],
+  "expectedSource": "hosted/after-install-build.json"
+}

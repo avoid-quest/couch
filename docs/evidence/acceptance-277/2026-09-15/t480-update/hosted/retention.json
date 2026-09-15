@@ -1,0 +1,254 @@
+[
+  {
+    "table": "session",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "queue_position",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "watching_profiles",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "watching_state",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "viewing_progress",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "history_sources",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "watching_preferences",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "bluetooth_output",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "audio_output",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "playback_device",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "devices",
+    "rowsBefore": 2,
+    "rowsAfter": 2,
+    "equal": true
+  },
+  {
+    "table": "controller_claims",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "streamingcommunity_origin",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "installation",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "installation_identity",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "installation_sharing",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "installation_appearance",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "installation_setup",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "jellyfin",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "saved_playlists",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "library_sources",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "library_folder_identities",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "library_items",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "library_music_artists",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "library_artwork",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "library_video_nfo",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "library_metadata",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "metadata_provider",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "library_collections",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "radio_favorites",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "radio_playlists",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": true
+  },
+  {
+    "table": "radio_playlist_stations",
+    "rowsBefore": 10,
+    "rowsAfter": 10,
+    "equal": true
+  },
+  {
+    "table": "iptv_sources",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "iptv_channels",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "iptv_programs",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "iptv_logos",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "recording_setup",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "recording_jobs",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "recording_qualification",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "provider_favorites",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "for_later",
+    "rowsBefore": 0,
+    "rowsAfter": 0,
+    "equal": true
+  },
+  {
+    "table": "diagnostic_history",
+    "rowsBefore": 1,
+    "rowsAfter": 1,
+    "equal": false
+  }
+]

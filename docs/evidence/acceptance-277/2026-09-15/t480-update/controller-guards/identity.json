@@ -1,0 +1,12 @@
+[
+  200,
+  {
+    "controller": {
+      "role": "controller",
+      "createdAt": 1789460785644,
+      "lastSeenAt": 1789464023523
+    },
+    "authority": "controller",
+    "claimAvailable": false
+  }
+]

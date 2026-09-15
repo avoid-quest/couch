@@ -1,0 +1,13 @@
+{
+  "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+  "createdAt": 1789461498000,
+  "error": null,
+  "intent": "install",
+  "phase": "succeeded",
+  "repairRuntime": false,
+  "requestId": "97670d2d6c9e40f195b717fdeacc3ef0",
+  "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+  "updateId": "97670d2d6c9e40f195b717fdeacc3ef0",
+  "updatedAt": 1789461520000,
+  "version": "0.1.0"
+}

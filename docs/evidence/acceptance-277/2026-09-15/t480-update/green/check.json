@@ -1,0 +1,6 @@
+[
+  409,
+  {
+    "error": "An update operation is already running. Wait for it to finish."
+  }
+]
