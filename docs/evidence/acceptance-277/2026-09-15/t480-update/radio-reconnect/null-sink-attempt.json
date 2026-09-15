@@ -1,0 +1,9 @@
+{
+  "observedMute": false,
+  "observedChannelVolumesPercent": {
+    "front-left": 100,
+    "front-right": 100
+  },
+  "context": "Coordinator attempted standard module-null-sink after automatic dummy sink did not satisfy mute precondition",
+  "playedAudio": false
+}

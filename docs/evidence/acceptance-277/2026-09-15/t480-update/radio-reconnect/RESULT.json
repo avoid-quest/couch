@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "scope": "real radio playback, dropped HTTP audio, native reconnect and idle guard",
+  "originalAudioAssertion": "zero-valued PCM and verified muted default route",
+  "audioVerified": false,
+  "interpretation": "Failed mute precondition before playback; original audio string describes intended fixture, not observed success",
+  "cleanup": [
+    "manual restored",
+    "fixture queue entry removed",
+    "radio activity service stopped"
+  ]
+}

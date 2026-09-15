@@ -1,0 +1,11 @@
+{
+  "at": "2026-09-15T09:52:47Z",
+  "testManager": "ActiveState=inactive",
+  "testLingerDisabled": true,
+  "productionMuteVerification": "Verified 2 muted sink(s), each at zero volume.",
+  "productionService": [
+    "MainPID=1039",
+    "NRestarts=0",
+    "ActiveState=active"
+  ]
+}

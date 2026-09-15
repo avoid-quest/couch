@@ -58,10 +58,11 @@ The independent T480 collector ran inside that interval:
 | Check | Status | Exact build and evidence / limit |
 | --- | --- | --- |
 | Native setup persistence | Passed within recorded state | A to B; [before](hosted/before-install-session.json), [after](hosted/after-install-session.json), administrator claimed and saved setup step retained. `setupStep: general` is not a completed-wizard claim |
-| Native playback | Passed advancing-player API observation | A; [playback samples](playback/playback-play-1789461151892.json) advance to 33.1 seconds. Physical audio and media-video playback remain unverified; HDMI Couch UI is confirmed below |
+| Native audio-fixture and video playback | Passed decoding/advancing-player observation | A [audio-fixture samples](playback/playback-play-1789461151892.json) advance to 33.1 seconds; B [selected video track](video-playback/playing.json) playing at 0.292 seconds. Physical media-image/audible output unconfirmed; HDMI Couch UI confirmed |
 | Packaged helpers | Passed A and B execution | [Prior A](../t480-gles/helpers-runtime-user/summary.json), [B runtime execution](helpers-b/runtime.json), [B helper hashes](helpers-b/hashes.json); Deno, yt-dlp and ffprobe all exit 0 |
 | Original update error reproduced | Passed | A; [red state](red/after.json) reproduces exact Stable failure |
 | Original Stable check | Failed | A; no published Stable metadata; original failure preserved |
+| Original phone Updates UI after reboot | Passed owner observation | B; [owner confirmation](final-hardware/owner-phone-updates-confirmation.json): version 0.1.0, Preview, Manual and no release-JSON error |
 | Supported Preview correction | Passed | A discovers B; [green check](green/after.json) |
 | Controller rejection / Administrator access | Passed | A and B; [A identity](red/administrator.json), [B guard matrix](controller-guards/verdict.json), GET updates and POST check/policy/channel/stage/install all 403 while Controller |
 | Signed hosted update, Mac offline | Passed | A to B; [observer](offline/events.json), [target events](hosted/events.json), [terminal receipt](hosted/terminal.json) |
@@ -71,7 +72,8 @@ The independent T480 collector ran inside that interval:
 | Interrupted download | Passed in isolated native desktop run | A preserved at 511 downloaded bytes; [progress](idle-interruption/interrupted-progress.json), [restart](idle-interruption/restarted-after-interruption.json), [unchanged installed hash](idle-interruption/candidate-after-interruption.json) |
 | Pending import and native loading idle guards | Passed in isolated native desktop test | A with B staged; [real import](activity/import-guard.json), [native loading](activity/loading-guard.json) defer installation |
 | Real library scan idle guard | Passed in isolated native test | [Scanning source and update wait](scan-guard/guard.json), [completed scan](scan-guard/scan-completed.json), [cleanup](scan-guard/cleanup.json) |
-| Late admission input, reconnect activity and recordings | Unrun | Idle reset, imports, loading and scans do not prove these distinct cases |
+| Radio reconnect activity | Unrun; fixture precondition failed | [Mute timeout](radio-reconnect/FAILURE.json) prevented playback; [standard null-sink alternative](radio-reconnect/null-sink-attempt.json) also remained unmuted at 100% |
+| Late admission input and recordings | Unrun | Idle reset, imports, loading and scans do not prove these distinct cases |
 | State retained and no autoplay | Passed | A to B; [41 equal tables](hosted/retention.json), [idle post-update session](hosted/after-install-session.json) |
 | Corrupt staged candidate safety | Passed in isolated native desktop tests | [Restart/check rejection](corrupt-candidate/case1-check.json), [pre-acceptance install rejection](corrupt-candidate/case2-http-rejection.json); current A preserved |
 | Useful corrupt-candidate error | Failed | [HTTP 400](corrupt-candidate/case2-http-rejection.json) hides native verification cause behind a generic request error; follow-up required |
@@ -89,10 +91,11 @@ The independent T480 collector ran inside that interval:
 | Actual replacement interruption and failed-start recovery | Passed in isolated native desktop tests | [Partial replacement](fault-replacement/interrupted.json), [failed trial](fault-startup/interrupted.json), retained local recovery and no autoplay; original harness failures retained below |
 | Failed-candidate automatic retry suppression | Passed in bounded isolated observation | [Replacement](fault-replacement/suppression.json), [startup](fault-startup/suppression.json), restored transactions and explicit suppressed status; no long-duration observation claimed |
 | Fresh pristine T480 installation | Failed original run | A originally required a separate libgles2 repair. This update does not relabel that run pristine |
-| Full desktop profile and native remote-mode acceptance | Unrun here | Prior Xfce GUI and remote-mode gaps remain |
+| Native own update with unreachable saved remote | Passed in isolated seeded remote-mode test | A to B; [terminal success](remote-own-update/terminal-success.json), [corrected verification](remote-own-update/corrected-verdict.json), observed IPv4 loopback maintenance and no media database |
+| Full desktop profile and native remote GUI acceptance | Unrun here | Prior Xfce GUI and interactive remote selection/pairing/privilege-isolation gaps remain |
 | Missing hosted artifact / wrong target / unmet new host prerequisites | Unrun in installed update path | Stable metadata 404 and original GLES installation failure do not cover these download/preflight cases |
 | Genuinely incompatible signed recovery app | Unrun | A/B both use format 1; only the isolated incompatible-current-metadata guard was simulated |
-| Local native update control and remote-mode isolation/recovery | Unrun as complete UI journeys | Installed API authority is covered; native remote mode, remembered unreachable target and local-listener isolation need separate acceptance |
+| Local native update controls and remote target privilege isolation | Unrun as complete UI journeys | API authority and seeded own-update maintenance isolation are covered; interactive selection/pairing, remote-page privilege isolation and local GUI control need separate acceptance |
 | Personal/shared mode and address behavior | Unrun as complete matrix | Phone pairing is exercised; sharing-off, IP/custom-domain changes and native remote isolation are not established by this run |
 | Public signed assets, complete inventory and readiness | Passed earlier for A/B | [A readiness](../mac-production-a/hosted-release/readiness-preview.json), [B readiness](../mac-production-b-gles/hosted-release/readiness-preview.json), prior inventory/signature receipts; no new release published here |
 | Stable promotion | Unrun | No unchanged-byte promotion or Stable readiness receipt here |
@@ -216,9 +219,38 @@ The isolated account's lingering and test services/Xvfb were disabled or stopped
 
 At [09:37:11Z](final-hardware/installed-final.json), the production installed AppImage still matched B's exact hash and revision, and both outputs were muted at zero. [The temporary acceptance verifier was deleted](final-hardware/verifier-cleanup.json) through the API; deletion returned 200 and the revoked credential then returned 401. The original phone was not modified. [The final host runtime snapshot](final-hardware/runtime-final.json) confirms B, healthy idle playback, Preview/Manual with a current successful check and no error, and one remaining Administrator controller. Test installations and their local evidence remain isolated; no further production mutation is planned for this checkpoint.
 
-The current release acceptance gate remains open. The concrete product gap is the generic corrupted-candidate HTTP error described above. Remaining unrun criteria include lower/skipped releases and Stable switching/promotion, recordings, reconnect activity, late admission input, new host-prerequisite and wrong-target checks, missing hosted artifacts, genuine incompatible signed recovery, full native remote-mode behavior and pristine desktop qualification. Audible output was deliberately not exercised because playback stayed muted. Earlier pristine-startup failures remain separate from repaired runtime passes.
+After the merged baseline checkpoint, [the owner checked Updates on the original paired phone](final-hardware/owner-phone-updates-confirmation.json) and replied, "All four are correct", confirming version `0.1.0`, Preview, Manual and no release-JSON error. The observation was recorded at `09:45:02.337432Z`. This completes the original phone UI confirmation separately from the automated verifier checks.
+
+The current release acceptance gate remains open. The concrete product gap is the generic corrupted-candidate HTTP error described above. Remaining unrun criteria include lower/skipped releases and Stable switching/promotion, recordings, reconnect activity, late admission input, new host-prerequisite and wrong-target checks, missing hosted artifacts, genuine incompatible signed recovery, remaining interactive native remote-mode behavior and pristine desktop qualification. Audible output was deliberately not exercised because playback stayed muted. Earlier pristine-startup failures remain separate from repaired runtime passes.
 
 Only A and B are currently production-qualified/published versions in the retained evidence. A third higher signed version is required to prove a skipped release; a populated lower Stable channel is required for the proposed newer-Preview-to-Stable downgrade refusal. Those checks cannot be inferred from an arbitrary `current_version` provider query or edited build metadata.
+
+
+## Follow-up radio reconnect attempt
+
+The isolated radio reconnect test stopped before playback because it could not verify a muted default output. [The failure](radio-reconnect/FAILURE.json) is a timeout waiting for that prerequisite. [The result](radio-reconnect/RESULT.json) has `passed: false`; its original audio-description string named the intended fixture and must not be read as successful mute or routing verification. [Cleanup](radio-reconnect/cleanup.json) restored Manual, removed the fixture queue entry and stopped the radio activity service.
+
+The coordinator also attempted PipeWire's standard `module-null-sink`, after the automatic dummy sink failed the same prerequisite. PipeWire documents [loading its built-in Pulse modules](https://docs.pipewire.org/page_pulse_modules.html) and [the null sink module](https://docs.pipewire.org/page_pulse_module_null_sink.html). These references establish the supported mechanism, not a successful test. [The alternative sink observation](radio-reconnect/null-sink-attempt.json) still reported unmuted channels at 100% after requested mute/zero volume.
+
+No audio played, and the mute requirement was not relaxed. The production C39S and speaker mute settings were unchanged. Radio reconnect deferral remains unrun; this fixture precondition failure is not evidence that Couch's radio reconnect behavior failed.
+
+
+## Follow-up native own update in remote mode
+
+A final isolated test seeded remote mode with a saved loopback target that refused connections. [The fixture](remote-own-update/fixture.json) explicitly does not claim GUI selection, target pairing or remote-page privilege qualification. Native A kept its maintenance coordinator on [observed IPv4 loopback listeners](remote-own-update/maintenance-listeners.json), without creating a media database, and completed its own real signed hosted update despite the unreachable target. The collector inspected `/proc/PID/net/tcp`; these receipts do not establish absence of IPv6 listeners.
+
+[The terminal receipt](remote-own-update/terminal-success.json) records request `7d084d68e81a47398b8f34a6bc116163` succeeded at `09:51:23Z` on B. The real native frontend acknowledged health; the collector did not post an acknowledgement. [Supplemental verification](remote-own-update/corrected-verdict.json) confirms B's exact archive hash and version/revision, changed native process, retained saved mode/fixture, absent media database, continued target refusal and retained known-good A recovery.
+
+The initial [result](remote-own-update/RESULT.json) is false because [the collector](remote-own-update/collector.py) compared the entire running-build dictionary against only version/revision. B legitimately included `dataFormat`, so that assertion failed after terminal success. [The original failure](remote-own-update/FAILURE.json) remains unchanged. [The supplemental validator](remote-own-update/verify-corrected.py) checked the required fields and the remaining preservation assertions, producing the separate passing verdict. This corrects the harness assertion, not Couch or the original receipt.
+
+[Final cleanup](remote-own-update/final-isolated-cleanup.json) at `09:52:47Z` records the test user manager inactive and lingering disabled. Production remained active with PID 1039, zero restarts and both sinks muted at zero. One final finite video check followed, recorded below.
+
+
+## Final finite video playback check
+
+Production [native B](video-playback/build.json) decoded the repository fixture `tests/fixtures/subtitles/replacement.mkv`, served through a temporary local HTTP fixture. [Player samples](video-playback/samples.json) reached [playing state at 0.292 seconds with a selected video track](video-playback/playing.json). This establishes native video decoding and advancing playback through Couch, not a separate owner observation of the media image on the TV.
+
+[Before](video-playback/sound-before.json) and [during playback](video-playback/sound-playing.json), the selected output remained muted at zero. No audible test or unmute occurred. [The result](video-playback/RESULT.json) retains the fixture hash and confirms the temporary queue entry was removed and the HTTP fixture stopped. [The collector source identity](video-playback/source-identity.json) is retained. [The final read-only runtime snapshot](final-hardware/runtime-after-followup.json) confirms B healthy and idle, Preview/Manual, a current successful check with no error, one Administrator controller, and both C39S and built-in outputs muted at zero. No further T480 tests or mutations are planned after this check.
 
 ## Retention and scope
 

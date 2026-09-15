@@ -1,0 +1,18 @@
+{
+  "at": "2026-09-15T09:52:22.731771+00:00",
+  "passed": true,
+  "originalHarnessFailure": "Strict dictionary comparison rejected the additional legitimate dataFormat field after terminal success. Original failure retained.",
+  "running": {
+    "version": "0.1.0",
+    "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+    "dataFormat": 1
+  },
+  "installedSha256": "dd50813112c9643faddeedee46889e8102965c97f5d77bfd43d45756a20c6a05",
+  "nativeServerChanged": true,
+  "modeRetained": true,
+  "fixtureSha256": "8b6a8e767fb1efa5cc1081d0fd58a9a60681f345e8280d29481347317a70eb2a",
+  "mediaDatabaseAbsent": true,
+  "remoteTargetConnectionRefused": true,
+  "knownGoodARecoveryRetained": true,
+  "frontendAcknowledgement": "real native frontend; no script acknowledgement"
+}

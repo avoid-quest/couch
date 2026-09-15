@@ -1,0 +1,39 @@
+[
+  {
+    "pid": 18196,
+    "port": 46389,
+    "maintenanceOnly": true,
+    "listeners": [
+      {
+        "addressHex": "0100007F",
+        "port": 46389
+      }
+    ]
+  },
+  {
+    "pid": 18593,
+    "port": 43485,
+    "maintenanceOnly": true,
+    "listeners": [
+      {
+        "addressHex": "0100007F",
+        "port": 43485
+      }
+    ]
+  },
+  {
+    "pid": 18593,
+    "port": 43485,
+    "maintenanceOnly": true,
+    "listeners": [
+      {
+        "addressHex": "0100007F",
+        "port": 43485
+      },
+      {
+        "addressHex": "0100007F",
+        "port": 41807
+      }
+    ]
+  }
+]

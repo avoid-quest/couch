@@ -1,0 +1,32 @@
+{
+  "at": "2026-09-15T09:56:06.981804+00:00",
+  "running": {
+    "version": "0.1.0",
+    "revision": "61739ad7ce782da5482067f16a5727306cd65d6a"
+  },
+  "health": {
+    "ok": true,
+    "player": "idle"
+  },
+  "channel": "preview",
+  "policy": "manual",
+  "currentCheck": true,
+  "error": null,
+  "controllerCount": 1,
+  "controllerRoles": [
+    "administrator"
+  ],
+  "outputs": [
+    {
+      "name": "Built-in Audio Analog Stereo",
+      "muted": true,
+      "volume": 0
+    },
+    {
+      "name": "C39S",
+      "muted": true,
+      "volume": 0
+    }
+  ],
+  "passed": true
+}
