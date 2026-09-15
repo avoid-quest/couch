@@ -1,0 +1,22 @@
+{
+  "defaultOutput": "C39S",
+  "routing": {
+    "selectedOutput": "C39S",
+    "observedOutput": null,
+    "volume": 0,
+    "muted": true,
+    "error": null
+  },
+  "outputs": [
+    {
+      "name": "Built-in Audio Analog Stereo",
+      "state": "SUSPENDED",
+      "volume": 0
+    },
+    {
+      "name": "C39S",
+      "state": "SUSPENDED",
+      "volume": 0
+    }
+  ]
+}

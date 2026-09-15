@@ -1,0 +1,10 @@
+{
+  "at": "2026-09-15T09:23:49Z",
+  "underlyingMount": {
+    "target": "/",
+    "source": "/dev/sda2",
+    "filesystem": "ext4"
+  },
+  "installedSha256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7",
+  "applicationPath": "/home/ISOLATED_USER/.local/lib/couch/Couch.AppImage"
+}

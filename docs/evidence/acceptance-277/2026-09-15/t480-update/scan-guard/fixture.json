@@ -1,0 +1,6 @@
+{
+  "path": "/home/ISOLATED_USER/Videos/SCAN_FIXTURE",
+  "files": 500,
+  "method": "one independent copy, 499 hardlinks; path-based scanner does not deduplicate inodes",
+  "sha256": "5fc64d1a30f3d7f331b0dd6fd0325f76229b3fb9e33ae94a281f001d336edf1b"
+}

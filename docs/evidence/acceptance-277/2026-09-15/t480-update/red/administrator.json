@@ -1,0 +1,12 @@
+[
+  200,
+  {
+    "controller": {
+      "role": "administrator",
+      "createdAt": 1789460785644,
+      "lastSeenAt": 1789460785644
+    },
+    "authority": "administrator",
+    "claimAvailable": false
+  }
+]

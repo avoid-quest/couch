@@ -1,0 +1,15 @@
+{
+  "candidateId": "7106cd48f564f481ab4e780da2ed84460895887dbf836fc7772a1ede5ad1d846",
+  "createdAt": 1789463618000,
+  "error": "Operator restored the retained compatible app; current data was preserved.",
+  "intent": "install",
+  "phase": "restored",
+  "repairRuntime": false,
+  "requestId": "1f5cab2ad91041d681102f525a346fbb",
+  "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+  "updateId": "1f5cab2ad91041d681102f525a346fbb",
+  "updatedAt": 1789463629000,
+  "version": "0.1.0",
+  "restoredVersion": "0.1.0-preview.1",
+  "restoredRevision": "3f91c0564bbbeea04eef421977f2e67b17c8fb14"
+}

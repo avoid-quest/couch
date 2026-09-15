@@ -1,0 +1,14 @@
+{
+  "sources": [
+    {
+      "path": "/home/ISOLATED_USER/Videos/SCAN_FIXTURE",
+      "status": "scanning",
+      "lastScanned": null,
+      "error": null,
+      "warning": null,
+      "itemCount": 0,
+      "verified": true,
+      "scannedItems": 0
+    }
+  ]
+}

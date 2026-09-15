@@ -1,0 +1,278 @@
+[
+  {
+    "event": "initial",
+    "at": "2026-09-15T08:36:54.566297+00:00",
+    "state": {
+      "at": "2026-09-15T08:36:54.327282+00:00",
+      "wifi": "On",
+      "defaultInterface": "en0",
+      "defaultRouteExit": 0,
+      "probeExit": 0,
+      "probeHttpStatus": "200"
+    },
+    "scheduledStart": 1789461448,
+    "durationSeconds": 600
+  },
+  {
+    "event": "idle-sleep-inhibited",
+    "at": "2026-09-15T08:37:28.008074+00:00",
+    "pid": 8317,
+    "durationSeconds": 780
+  },
+  {
+    "event": "restoration-scheduled",
+    "at": "2026-09-15T08:37:28.010769+00:00",
+    "pid": 8318,
+    "delaySeconds": 645
+  },
+  {
+    "event": "disable-wifi",
+    "at": "2026-09-15T08:37:28.122231+00:00",
+    "exit": 0
+  },
+  {
+    "event": "offline-start",
+    "at": "2026-09-15T08:37:30.717470+00:00",
+    "state": {
+      "at": "2026-09-15T08:37:30.675220+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0,
+      "probeExit": 6,
+      "probeHttpStatus": "000"
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:38:00.754648+00:00",
+    "state": {
+      "at": "2026-09-15T08:38:00.724433+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:38:30.795771+00:00",
+    "state": {
+      "at": "2026-09-15T08:38:30.766599+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:39:00.838364+00:00",
+    "state": {
+      "at": "2026-09-15T08:39:00.805927+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:39:30.874418+00:00",
+    "state": {
+      "at": "2026-09-15T08:39:30.845129+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:40:00.917349+00:00",
+    "state": {
+      "at": "2026-09-15T08:40:00.891176+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:40:30.952123+00:00",
+    "state": {
+      "at": "2026-09-15T08:40:30.930089+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:41:00.988449+00:00",
+    "state": {
+      "at": "2026-09-15T08:41:00.964070+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:41:31.032218+00:00",
+    "state": {
+      "at": "2026-09-15T08:41:31.004647+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:42:01.076023+00:00",
+    "state": {
+      "at": "2026-09-15T08:42:01.046678+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:42:31.112604+00:00",
+    "state": {
+      "at": "2026-09-15T08:42:31.083237+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:43:01.157370+00:00",
+    "state": {
+      "at": "2026-09-15T08:43:01.125008+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:43:31.194738+00:00",
+    "state": {
+      "at": "2026-09-15T08:43:31.163977+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:44:01.235804+00:00",
+    "state": {
+      "at": "2026-09-15T08:44:01.206685+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:44:31.281266+00:00",
+    "state": {
+      "at": "2026-09-15T08:44:31.249120+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:45:01.320712+00:00",
+    "state": {
+      "at": "2026-09-15T08:45:01.290695+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:45:31.361419+00:00",
+    "state": {
+      "at": "2026-09-15T08:45:31.331965+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:46:01.406710+00:00",
+    "state": {
+      "at": "2026-09-15T08:46:01.375060+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:46:31.443772+00:00",
+    "state": {
+      "at": "2026-09-15T08:46:31.414726+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:47:01.479833+00:00",
+    "state": {
+      "at": "2026-09-15T08:47:01.455664+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-check",
+    "at": "2026-09-15T08:47:30.756868+00:00",
+    "state": {
+      "at": "2026-09-15T08:47:30.727748+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0
+    }
+  },
+  {
+    "event": "offline-end",
+    "at": "2026-09-15T08:47:30.786852+00:00",
+    "state": {
+      "at": "2026-09-15T08:47:30.760124+00:00",
+      "wifi": "Off",
+      "defaultInterface": null,
+      "defaultRouteExit": 0,
+      "probeExit": 6,
+      "probeHttpStatus": "000"
+    }
+  },
+  {
+    "event": "enable-wifi",
+    "at": "2026-09-15T08:47:30.830096+00:00",
+    "exit": 0
+  },
+  {
+    "event": "restored",
+    "at": "2026-09-15T08:47:36.183576+00:00",
+    "state": {
+      "at": "2026-09-15T08:47:35.858027+00:00",
+      "wifi": "On",
+      "defaultInterface": "en0",
+      "defaultRouteExit": 0,
+      "probeExit": 0,
+      "probeHttpStatus": "200"
+    }
+  },
+  {
+    "event": "unused-restoration-timer-stopped",
+    "at": "2026-09-15T08:47:36.185601+00:00"
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "case": "native insufficient-storage preflight before shutdown",
+  "restoredOriginalApp": true,
+  "testService": "stopped",
+  "data": "retained; update settings and failed receipt intentionally remain",
+  "production": "untouched"
+}

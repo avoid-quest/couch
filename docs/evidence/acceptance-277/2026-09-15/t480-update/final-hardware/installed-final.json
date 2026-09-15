@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-15T09:37:11Z",
+  "installedSha256": "dd50813112c9643faddeedee46889e8102965c97f5d77bfd43d45756a20c6a05",
+  "build": {
+    "archiveSha256": "dd50813112c9643faddeedee46889e8102965c97f5d77bfd43d45756a20c6a05",
+    "dataFormat": 1,
+    "readableDataFormats": [
+      1
+    ],
+    "revision": "61739ad7ce782da5482067f16a5727306cd65d6a",
+    "version": "0.1.0"
+  },
+  "muteVerification": "Verified 2 muted sink(s), each at zero volume."
+}

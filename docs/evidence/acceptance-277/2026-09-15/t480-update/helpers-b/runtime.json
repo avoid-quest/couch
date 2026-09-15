@@ -1,0 +1,40 @@
+{
+  "at": "2026-09-15T09:24:53.061538+00:00",
+  "mode": "Actual sidecar environment under couch-tv user",
+  "runningSidecar": "APPIMAGE_MOUNT/usr/bin/couch-server",
+  "helpers": [
+    {
+      "name": "deno",
+      "exit": 0,
+      "stderr": "",
+      "stdout": "deno 2.9.6 (stable, release, x86_64-unknown-linux-gnu)\nv8 15.0.245.2-rusty\ntypescript 6.0.3\n"
+    },
+    {
+      "name": "yt-dlp",
+      "exit": 0,
+      "stderr": "",
+      "stdout": "2026.08.19\n"
+    },
+    {
+      "name": "ffprobe",
+      "exit": 0,
+      "stderr": "",
+      "result": {
+        "streams": [
+          {
+            "codec_name": "pcm_s16le",
+            "codec_type": "audio",
+            "sample_rate": "22050",
+            "channels": 1,
+            "duration": "180.000000"
+          }
+        ],
+        "format": {
+          "format_name": "wav",
+          "duration": "180.000000",
+          "size": "7938044"
+        }
+      }
+    }
+  ]
+}

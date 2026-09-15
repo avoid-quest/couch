@@ -1,0 +1,9 @@
+Failed to start couch-277-x11.service: Unit couch-277-x11.service not found.
+Traceback (most recent call last):
+  File "/var/tmp/couch-277-replacement-fault.py", line 78, in <module>
+    subprocess.run(sc+['start','couch-277-x11.service'],check=True);time.sleep(1)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['runuser', '-u', 'ISOLATED_USER', '--', 'env', 'XDG_RUNTIME_DIR=/run/user/1001', 'systemctl', '--user', 'start', 'couch-277-x11.service']' returned non-zero exit status 5.

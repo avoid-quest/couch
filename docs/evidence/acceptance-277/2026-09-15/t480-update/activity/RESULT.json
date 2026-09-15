@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "scope": "real pending radio import and native loading idle guards only",
+  "cleanup": [
+    "manual restored",
+    "fixture queue entry removed",
+    "fixture playlist removed",
+    "dedicated activity service stopped"
+  ],
+  "service": "dedicated activity unit stopped; data and receipts retained"
+}

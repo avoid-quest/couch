@@ -1,0 +1,7 @@
+provider_http=000
+provider_exit=6
+Signature and comment signature verified
+Trusted comment: timestamp:1789430874	file:Couch_0.1.0-preview.1_amd64.AppImage
+Launch Couch from the desktop application menu.
+Known-good application restored; current user data retained. Failed data saved in /home/ISOLATED_USER/.local/state/couch-recovery/failed-20260915T091328Z-39821.
+Verify couch-session status/logs and retained phone reconnection before declaring recovery complete.

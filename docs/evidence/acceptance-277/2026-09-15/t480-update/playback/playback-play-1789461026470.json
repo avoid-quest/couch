@@ -1,0 +1,49 @@
+{
+  "sampleCount": 5,
+  "states": [
+    {
+      "at": "2026-09-15T08:30:26.596Z",
+      "player": {
+        "status": "idle",
+        "position": 0,
+        "duration": null,
+        "seekable": false,
+        "speed": 1,
+        "volume": 0
+      }
+    },
+    {
+      "at": "2026-09-15T08:30:26.627Z",
+      "player": {
+        "status": "idle",
+        "position": 0,
+        "duration": null,
+        "seekable": false,
+        "speed": 1,
+        "volume": 0
+      }
+    },
+    {
+      "at": "2026-09-15T08:30:26.629Z",
+      "player": {
+        "status": "loading",
+        "position": 0,
+        "duration": null,
+        "seekable": false,
+        "speed": null,
+        "volume": 0
+      }
+    },
+    {
+      "at": "2026-09-15T08:30:28.405Z",
+      "player": {
+        "status": "error",
+        "position": 0,
+        "duration": null,
+        "seekable": false,
+        "speed": null,
+        "volume": 0
+      }
+    }
+  ]
+}

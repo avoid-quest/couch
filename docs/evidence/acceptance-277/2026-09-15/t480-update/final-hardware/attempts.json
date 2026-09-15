@@ -1,0 +1,49 @@
+[
+  {
+    "at": "2026-09-15T09:35:24.537358+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Operation timed out"
+  },
+  {
+    "at": "2026-09-15T09:35:28.557968+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Operation timed out"
+  },
+  {
+    "at": "2026-09-15T09:35:32.577572+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Operation timed out"
+  },
+  {
+    "at": "2026-09-15T09:35:36.596728+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Operation timed out"
+  },
+  {
+    "at": "2026-09-15T09:35:40.619364+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Operation timed out"
+  },
+  {
+    "at": "2026-09-15T09:35:42.631079+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Host is down"
+  },
+  {
+    "at": "2026-09-15T09:35:44.648054+00:00",
+    "exit": 255,
+    "error": "ssh: connect to host TARGET port 22: Host is down"
+  },
+  {
+    "at": "2026-09-15T09:35:47.605539+00:00",
+    "exit": 0,
+    "targetAt": "2026-09-15T09:35:47Z",
+    "bootId": "bbf735a7-2a78-4e8e-8a84-635eed47b303",
+    "muteVerification": "Verified 2 muted sink(s), each at zero volume.",
+    "service": [
+      "MainPID=1039",
+      "NRestarts=0",
+      "ActiveState=active"
+    ]
+  }
+]

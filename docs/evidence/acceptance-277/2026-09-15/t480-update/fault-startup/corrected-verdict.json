@@ -1,0 +1,4 @@
+{
+  "passed": true,
+  "note": "Recreated stopped transient Xvfb unit as persistent fixture unit; original restoration error retained."
+}
