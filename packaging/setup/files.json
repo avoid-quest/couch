@@ -22,6 +22,7 @@
     "libfuse2t64",
     "libgl1",
     "libegl1",
+    "libgles2",
     "libgl1-mesa-dri",
     "va-driver-all",
     "dbus-user-session",

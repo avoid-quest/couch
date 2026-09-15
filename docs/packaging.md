@@ -114,6 +114,8 @@ disposable container. It uses real Minisign verification with a disposable key
 and fixture AppImage, and doubles APT, services and successful FUSE access.
 It checks installer logic, not installation of the built candidate.
 
+Before a release, also run `docker run --rm --platform linux/amd64 -v "$PWD:/work:ro" -w /work debian:13-slim bash tests/package/host-graphics.sh` from the repository root. This fresh Debian container installs the declared common host packages through real APT and checks that GLESv2 loads. The builder already has graphics dependencies, and the installer fixture doubles APT, so neither detects an omitted host library. This check covers host-library provisioning; booted-host GUI and playback acceptance are still required.
+
 After copying the outputs and completing the checks, stop the builder. The EXIT
 trap also stops it on failure. The stopped container retains `/work` for inspection:
 
