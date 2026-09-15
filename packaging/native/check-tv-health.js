@@ -4,7 +4,7 @@ import process from "node:process";
 const [pid, expectedFile, data] = process.argv.slice(2);
 if (!/^[1-9][0-9]*$/.test(pid ?? "")) throw new Error("The TV service has no native process.");
 const expected = JSON.parse(await readFile(expectedFile, "utf8"));
-if ((await stat(`/proc/${pid}`)).uid !== process.getuid() || await readlink(`/proc/${pid}/exe`) !== "/usr/bin/couch") throw new Error("The service is not running the installed native Couch.");
+if ((await stat(`/proc/${pid}`)).uid !== (await stat("/proc/self")).uid || await readlink(`/proc/${pid}/exe`) !== "/usr/bin/couch") throw new Error("The service is not running the installed native Couch.");
 const children = (await readFile(`/proc/${pid}/task/${pid}/children`, "utf8")).trim().split(/\s+/);
 const child = (await Promise.all(children.filter(Boolean).map(async candidate => {
   try { return await readlink(`/proc/${candidate}/exe`) === "/usr/bin/couch-server" ? candidate : null; } catch { return null; }
@@ -26,6 +26,6 @@ const get = async path => {
 };
 const remote = environment.COUCH_MAINTENANCE_ONLY === "1";
 const actual = remote ? (await get("/api/updates")).running : await get("/api/build");
-if (["version", "revision", "dataFormat"].some(key => actual[key] !== expected[key])) throw new Error("The native backend build differs from the installed package.");
+if ((remote ? ["version", "revision"] : ["version", "revision", "dataFormat"]).some(key => actual[key] !== expected[key])) throw new Error("The native backend build differs from the installed package.");
 if (!remote && !(await get("/api/health")).ok) throw new Error("The native backend is unhealthy.");
 console.log(JSON.stringify({ version: actual.version, revision: actual.revision, dataFormat: actual.dataFormat, mode: remote ? "remote" : "local", nativePid: Number(pid), backendPid: Number(child) }));

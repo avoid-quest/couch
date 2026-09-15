@@ -7,7 +7,7 @@ trap '[[ -z ${socket_pid:-} ]] || kill "$socket_pid" 2>/dev/null || true; rm -rf
 templates=/usr/share/couch/tv
 mkdir -p "$root/bin" "$templates" /run/systemd/system /usr/bin
 mkdir -p /usr/lib/Couch/tools
-printf '#!/bin/sh\nprintf '\''{"verified":true}\\n'\''\n' > /usr/lib/Couch/tools/deno
+printf '#!/bin/sh\n[ "${FIXTURE_HEALTH_FAIL:-0}" != 1 ] || exit 1\nprintf '\''{"verified":true}\\n'\''\n' > /usr/lib/Couch/tools/deno
 chmod +x /usr/lib/Couch/tools/deno
 cp packaging/native/couch-setup /usr/sbin/couch-setup
 chmod 0755 /usr/sbin/couch-setup
@@ -134,6 +134,10 @@ FIXTURE_START_FAIL=1 reject --tv
 grep -q 'Native migration did not complete' "$root/failure"
 test ! -e /etc/systemd/user/couch-tv.service
 test -e "$FIXTURE_ACTIVE"
+sha256sum -c "$root/retained.sha256"
+FIXTURE_HEALTH_FAIL=1 reject --tv
+grep -q 'Native migration did not complete' "$root/failure"
+test ! -e /etc/systemd/user/couch-tv.service
 sha256sum -c "$root/retained.sha256"
 setup --tv
 grep -qx 'ExecStart=/usr/bin/couch' /etc/systemd/user/couch-tv.service
