@@ -1,0 +1,12 @@
+{
+  "repository": "avoid-quest/couch",
+  "authorization": "Owner explicitly requested deletion of all unexpired GitHub Actions artifacts.",
+  "capturedAt": "2026-09-15T11:14:07.321765+00:00",
+  "deletedArtifacts": 107,
+  "deletedBytes": 14985935405,
+  "failedDeletions": 0,
+  "verifiedAt": "2026-09-15T11:15:12.359725+00:00",
+  "remainingUnexpiredArtifacts": 0,
+  "remainingUnexpiredBytes": 0,
+  "scope": "Only GitHub Actions artifacts marked expired=false. No Actions caches, releases, CrabNebula assets or local qualified files removed."
+}

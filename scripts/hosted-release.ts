@@ -2,11 +2,12 @@ import { strict as assert } from "node:assert";
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { application, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, updaterEndpoint, type Channel } from "./hosted-policy";
+import { application, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, packageFormat, releasePlatforms, type PackageFormat, type Channel } from "./hosted-policy";
 
 type FileIdentity = { bytes: number; sha256: string; signature?: string };
 export type Manifest = {
   schemaVersion: 1;
+  format?: PackageFormat;
   buildRun?: { id: number; attempt: number };
   version: string;
   revision: string;
@@ -30,11 +31,11 @@ function cn(args: string[]) {
   return run([process.env.CN_BIN ?? "cn", "--no-quality-reports", "release", ...args]);
 }
 
-export async function verifySignature(file: string, key: string) {
+export async function verifySignature(file: string, key: string, signature?: string) {
   const temporary = await mkdtemp(join(tmpdir(), "couch-signature-"));
   try {
     await Bun.write(join(temporary, "key"), Buffer.from(publicKey(key), "base64"));
-    await Bun.write(join(temporary, "signature"), Buffer.from((await Bun.file(`${file}.sig`).text()).trim(), "base64"));
+    await Bun.write(join(temporary, "signature"), Buffer.from(signature ?? (await Bun.file(`${file}.sig`).text()).trim(), "base64"));
     run(["minisign", "-Vm", file, "-p", join(temporary, "key"), "-x", join(temporary, "signature")]);
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
@@ -46,7 +47,7 @@ export function validateManifest(manifest: Manifest) {
   publicKey(manifest.publicKey);
   if (manifest.buildRun) assert.ok(Number.isSafeInteger(manifest.buildRun.id) && manifest.buildRun.id > 0 && Number.isSafeInteger(manifest.buildRun.attempt) && manifest.buildRun.attempt > 0);
   assert.match(manifest.inventorySha256, /^[a-f0-9]{64}$/);
-  assert.deepEqual(Object.keys(manifest.files).sort(), publicFiles(manifest.version).sort(), "The public asset allowlist differs.");
+  assert.deepEqual(Object.keys(manifest.files).sort(), publicFiles(manifest.version, packageFormat(manifest.format)).sort(), "The public asset allowlist differs.");
   for (const [name, file] of Object.entries(manifest.files)) {
     assert.ok(Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= 2 * 1024 ** 3, `Invalid size: ${name}`);
     assert.match(file.sha256, /^[a-f0-9]{64}$/);
@@ -56,7 +57,7 @@ export function validateManifest(manifest: Manifest) {
 
 export async function verifyFiles(directory: string, manifest: Manifest) {
   validateManifest(manifest);
-  assert.deepEqual((await readdir(join(directory, "public"))).sort(), publicFiles(manifest.version).sort(), "Unexpected or missing public file.");
+  assert.deepEqual((await readdir(join(directory, "public"))).sort(), publicFiles(manifest.version, packageFormat(manifest.format)).sort(), "Unexpected or missing public file.");
   for (const [name, expected] of Object.entries(manifest.files)) {
     const path = join(directory, "public", name);
     assert.ok((await lstat(path)).isFile(), `Public assets must be regular files: ${name}`);
@@ -64,8 +65,8 @@ export async function verifyFiles(directory: string, manifest: Manifest) {
     assert.equal(bytes.length, expected.bytes, `Size changed: ${name}`);
     assert.equal(hash(bytes), expected.sha256, `Bytes changed: ${name}`);
     if (!name.endsWith(".sig")) {
-      assert.equal((await Bun.file(`${path}.sig`).text()).trim(), expected.signature, `Signature changed: ${name}`);
-      await verifySignature(path, manifest.publicKey);
+      if (manifest.format !== "deb") assert.equal((await Bun.file(`${path}.sig`).text()).trim(), expected.signature, `Signature changed: ${name}`);
+      await verifySignature(path, manifest.publicKey, expected.signature);
     }
   }
 }
@@ -75,14 +76,56 @@ export function verifyCloud(release: CloudRelease, manifest: Manifest, channel: 
   assert.equal(release.version, manifest.version, "Cloud version differs from the built app.");
   assert.equal(release.channel, channel === "preview" ? "preview" : null, "Cloud channel differs.");
   assert.match(release.id, /^[A-Z0-9]{26}$/);
-  assert.deepEqual(release.assets.map(asset => asset.filename).sort(), publicFiles(manifest.version).sort(), "Cloud has an incomplete or unapproved public asset set.");
+  assert.deepEqual(release.assets.map(asset => asset.filename).sort(), publicFiles(manifest.version, packageFormat(manifest.format)).sort(), "Cloud has an incomplete or unapproved public asset set.");
   for (const asset of release.assets) {
     const expected = manifest.files[asset.filename]!;
     assert.equal(Number(asset.size), expected.bytes, `Cloud size differs: ${asset.filename}`);
     assert.equal(asset.signature ?? undefined, expected.signature, `Cloud signature differs: ${asset.filename}`);
-    assert.equal(asset.publicPlatform, asset.filename.endsWith(".AppImage") ? "appimage-x86_64" : null);
-    assert.equal(asset.updatePlatform, asset.filename.endsWith(".AppImage") ? "linux-x86_64-appimage" : null);
+    const platforms = releasePlatforms(packageFormat(manifest.format));
+    const applicationAsset = asset.filename === publicFiles(manifest.version, packageFormat(manifest.format))[0];
+    assert.equal(asset.publicPlatform, applicationAsset ? platforms.public : null);
+    assert.equal(asset.updatePlatform, applicationAsset ? platforms.update : null);
   }
+}
+
+export function qualificationChecks(format: PackageFormat) {
+  return ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", format === "deb" ? "debian-desktop" : "installer"];
+}
+
+export function verifyQualification(qualified: { version: string; revision: string; files: Manifest["files"]; checks: string[] }, manifest: Manifest) {
+  assert.equal(qualified.revision, manifest.revision);
+  assert.equal(qualified.version, manifest.version);
+  assert.deepEqual(qualified.files, manifest.files, "Qualification must identify these exact files.");
+  assert.deepEqual(qualified.checks, qualificationChecks(packageFormat(manifest.format)));
+}
+
+// These small signed receipts allow retries without keeping another binary copy in Actions.
+export async function verifyReceipt(directory: string) {
+  const manifest: Manifest = await Bun.file(join(directory, "manifest.json")).json();
+  validateManifest(manifest);
+  assert.equal(manifest.publicKey, publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), "Use the enrolled production key for receipt reuse.");
+  await verifySignature(join(directory, "manifest.json"), manifest.publicKey);
+  await verifySignature(join(directory, "qualified.json"), manifest.publicKey);
+  verifyQualification(await Bun.file(join(directory, "qualified.json")).json(), manifest);
+  return manifest;
+}
+
+export async function restorePublic(directory: string, manifest: Manifest, fetcher: typeof fetch = fetch) {
+  const receipt = await Bun.file(join(directory, "readiness-preview.json")).json();
+  assert.equal(receipt.channel, "preview");
+  assert.equal(receipt.version, manifest.version);
+  assert.equal(receipt.revision, manifest.revision);
+  assert.deepEqual(receipt.files, manifest.files, "Restore the exact qualified Preview.");
+  for (const [name, identity] of Object.entries(manifest.files)) {
+    const check = receipt.checks.find((value: { url: string }) => value.url === downloadUrl(name, "preview"));
+    assert.equal(check?.sha256, identity.sha256);
+    const url = new URL(check.finalUrl);
+    assert.equal(url.origin, "https://cdn.crabnebula.app");
+    assert.match(url.pathname, /^\/asset\/[A-Z0-9]{26}$/);
+    const { bytes } = await downloadPublic(url.href, identity, fetcher);
+    await Bun.write(join(directory, "public", name), bytes);
+  }
+  await verifyFiles(directory, manifest);
 }
 
 // cn latest follows publication order. Inspect published records, including Stable's null channel.
@@ -94,47 +137,53 @@ export function assertIncreasing(releases: { version: string; channel: string | 
   if (channel === "stable") assert.ok(!version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
 }
 
+export async function downloadPublic(url: string, expected?: FileIdentity, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
+  assert.equal(new URL(url).protocol, "https:", "Public downloads require HTTPS.");
+  let response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+  for (let retries = 0; response.status === 429 && retries < 2; retries++) {
+    const retry = response.headers.get("retry-after");
+    const milliseconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
+    const wait = Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
+    await response.body?.cancel();
+    assert.ok(Number.isFinite(wait) && wait <= 120_000, `CDN Retry-After exceeds the readiness wait limit: ${url}. Retry verification later.`);
+    console.warn(`CDN rate limited ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
+    await sleep(wait);
+    response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+  }
+  if (response.status !== 200) await response.body?.cancel();
+  assert.equal(response.status, 200, `Public download is not ready: ${url} (${response.status}). Retry verification of the existing release.`);
+  assert.equal(new URL(response.url || url).protocol, "https:");
+  const maximum = expected?.bytes ?? 64 * 1024;
+  assert.ok(response.body, "The download body is missing.");
+  const chunks: Uint8Array[] = []; let size = 0;
+  for await (const chunk of response.body) { size += chunk.byteLength; assert.ok(size <= maximum, "The download exceeds its expected size."); chunks.push(chunk); }
+  const bytes = Buffer.concat(chunks, size);
+  if (expected) {
+    assert.equal(bytes.length, expected.bytes, `Public download size differs: ${url}`);
+    assert.equal(hash(bytes), expected.sha256, `Public download bytes differ: ${url}`);
+  }
+  return { bytes, finalUrl: response.url || url };
+}
+
 export async function verifyPublic(manifest: Manifest, channel: Channel, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
   validateManifest(manifest);
   const checks: { url: string; finalUrl: string; sha256: string }[] = [];
   const get = async (url: string, expected?: FileIdentity) => {
-    assert.equal(new URL(url).protocol, "https:", "Public downloads require HTTPS.");
-    let response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
-    for (let retries = 0; response.status === 429 && retries < 2; retries++) {
-      const retry = response.headers.get("retry-after");
-      const milliseconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
-      const wait = Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
-      await response.body?.cancel();
-      assert.ok(Number.isFinite(wait) && wait <= 120_000, `CDN Retry-After exceeds the readiness wait limit: ${url}. Retry verification later.`);
-      console.warn(`CDN rate limited ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
-      await sleep(wait);
-      response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
-    }
-    if (response.status !== 200) await response.body?.cancel();
-    assert.equal(response.status, 200, `Public download is not ready: ${url} (${response.status}). Retry verification of the existing release.`);
-    assert.equal(new URL(response.url || url).protocol, "https:");
-    const maximum = expected?.bytes ?? 64 * 1024;
-    assert.ok(response.body, "The download body is missing.");
-    const chunks: Uint8Array[] = []; let size = 0;
-    for await (const chunk of response.body) { size += chunk.byteLength; assert.ok(size <= maximum, "The download exceeds its expected size."); chunks.push(chunk); }
-    const bytes = Buffer.concat(chunks, size);
-    if (expected) {
-      assert.equal(bytes.length, expected.bytes, `Public download size differs: ${url}`);
-      assert.equal(hash(bytes), expected.sha256, `Public download bytes differ: ${url}`);
-    }
-    checks.push({ url, finalUrl: response.url || url, sha256: hash(bytes) });
-    return bytes;
+    const result = await downloadPublic(url, expected, fetcher, sleep);
+    checks.push({ url, finalUrl: result.finalUrl, sha256: hash(result.bytes) });
+    return result.bytes;
   };
-  const app = manifest.files[`Couch_${manifest.version}_amd64.AppImage`]!;
+  const format = packageFormat(manifest.format), platforms = releasePlatforms(format);
+  const app = manifest.files[publicFiles(manifest.version, format)[0]!]!;
   for (const [name, identity] of Object.entries(manifest.files)) await get(downloadUrl(name, channel), identity);
-  await get(downloadUrl("platform/appimage-x86_64", channel), app);
+  await get(downloadUrl(`platform/${platforms.public}`, channel), app);
   // An earlier current version asks for metadata even when this is the first release.
-  const endpoint = updaterEndpoint.replace("{{current_version}}", "0.0.0") + (channel === "preview" ? "?channel=preview" : "");
+  const endpoint = `https://cdn.crabnebula.app/update/${application}/${platforms.update}/0.0.0` + (channel === "preview" ? "?channel=preview" : "");
   const metadata = JSON.parse(new TextDecoder().decode(await get(endpoint)));
   assert.equal(metadata.version, manifest.version, "CDN still offers another version. Retry verification without republishing.");
   assert.equal(metadata.signature.trim(), app.signature);
   await get(metadata.url, app);
-  return { version: manifest.version, revision: manifest.revision, channel, checkedAt: new Date().toISOString(), files: manifest.files, checks };
+  return { version: manifest.version, format: packageFormat(manifest.format), revision: manifest.revision, channel, checkedAt: new Date().toISOString(), files: manifest.files, checks };
 }
 
 async function seal(directory: string) {
@@ -145,14 +194,15 @@ async function seal(directory: string) {
   const config = await Bun.file(".artifacts/tauri-release.conf.json").json();
   assert.equal(build.version, config.version);
   assert.equal(config.plugins.updater.pubkey, publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY));
-  const inventory = await read(".artifacts/appimage-inventory.json");
+  const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
+  const inventory = await read(format === "deb" ? ".artifacts/deb-inventory.json" : ".artifacts/appimage-inventory.json");
   assert.deepEqual(JSON.parse(new TextDecoder().decode(inventory)).build, build);
-  const manifest: Manifest = { schemaVersion: 1, version: build.version, revision: build.revision, publicKey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), inventorySha256: hash(inventory), files: {} };
+  const manifest: Manifest = { schemaVersion: 1, format, version: build.version, revision: build.revision, publicKey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), inventorySha256: hash(inventory), files: {} };
   if (process.env.GITHUB_RUN_ID) manifest.buildRun = { id: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT) };
-  for (const name of publicFiles(build.version)) {
+  for (const name of publicFiles(build.version, format)) {
     const path = join(directory, "public", name);
     const bytes = await read(path);
-    manifest.files[name] = { bytes: bytes.length, sha256: hash(bytes), ...(!name.endsWith(".sig") ? { signature: (await Bun.file(`${path}.sig`).text()).trim() } : {}) };
+    manifest.files[name] = { bytes: bytes.length, sha256: hash(bytes), ...(!name.endsWith(".sig") ? { signature: (await Bun.file(format === "deb" ? join(directory, "signatures", `${name}.sig`) : `${path}.sig`).text()).trim() } : {}) };
   }
   await verifyFiles(directory, manifest);
   await Bun.write(join(directory, "inventory.json"), inventory);
@@ -167,6 +217,7 @@ if (import.meta.main) {
   if (operation === "draft-source") {
     assert.equal(channel, "preview", "Fresh builds go through Preview before Stable.");
     const version = releaseVersion((await Bun.file("src-tauri/tauri.conf.json").json()).version);
+    publicFiles(version, packageFormat(process.env.COUCH_PACKAGE_FORMAT));
     publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY);
     assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), version, channel);
     const release: CloudRelease = releaseId
@@ -175,18 +226,31 @@ if (import.meta.main) {
     assert.equal(release.status, "Draft");
     assert.equal(release.version, version);
     assert.equal(release.channel, "preview");
+    assert.equal(release.assets.length, 0, "A fresh build cannot replace an uploaded candidate. Reuse its signed receipt or choose a new version.");
     assert.match(release.id, /^[A-Z0-9]{26}$/);
     await Bun.write(join(directory, "draft-preview.json"), JSON.stringify(release, null, 2));
     if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${release.id}\n`);
   } else if (operation === "seal") await seal(directory);
   else {
     const manifest: Manifest = await Bun.file(join(directory, "manifest.json")).json();
-    await verifyFiles(directory, manifest);
-    assert.equal(hash(await read(join(directory, "inventory.json"))), manifest.inventorySha256, "The retained inventory changed.");
+    if (["verify-receipt", "restore", "resume"].includes(operation!) || !await Bun.file(join(directory, "inventory.json")).exists()) await verifyReceipt(directory);
+    else {
+      await verifyFiles(directory, manifest);
+      assert.equal(hash(await read(join(directory, "inventory.json"))), manifest.inventorySha256, "The retained inventory changed.");
+    }
     const key = process.env.COUCH_UPDATER_PUBLIC_KEY;
     if (key) assert.equal(manifest.publicKey, publicKey(key), "The artifact uses another signing key.");
-    if (operation === "verify") console.log(`Verified ${manifest.version} from ${manifest.revision}`);
-    else if (operation === "readiness") {
+    if (operation === "verify" || operation === "verify-receipt") console.log(`Verified ${manifest.version} from ${manifest.revision}`);
+    else if (operation === "qualify") {
+      await Bun.write(join(directory, "qualified.json"), JSON.stringify({ version: manifest.version, revision: manifest.revision, files: manifest.files, checks: qualificationChecks(packageFormat(manifest.format)) }, null, 2) + "\n");
+    } else if (operation === "restore") await restorePublic(directory, manifest);
+    else if (operation === "resume") {
+      const uploaded: CloudRelease = await Bun.file(join(directory, "receipts", `upload-${channel}.json`)).json();
+      verifyCloud(uploaded, manifest, channel);
+      if (releaseId) assert.equal(releaseId, uploaded.id, "Retry the completed uploaded draft.");
+      verifyCloud(JSON.parse(cn(["show", application, uploaded.id, ...channels])), manifest, channel);
+      if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${uploaded.id}\n`);
+    } else if (operation === "readiness") {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
     } else if (operation === "draft") {
       const releases = JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"]));
@@ -207,10 +271,8 @@ if (import.meta.main) {
       if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${release.id}\n`);
     } else if (operation === "upload" || operation === "publish") {
       const qualified = await Bun.file(join(directory, "qualified.json")).json();
-      assert.equal(qualified.revision, manifest.revision);
-      assert.equal(qualified.version, manifest.version);
-      assert.deepEqual(qualified.files, manifest.files, "Qualification must identify these exact files.");
-      assert.deepEqual(qualified.checks, ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", "installer"]);
+      verifyQualification(qualified, manifest);
+      if (operation === "upload") await verifyFiles(directory, manifest);
       assert.match(releaseId ?? "", /^[A-Z0-9]{26}$/, "Use the recorded draft release ID for retries.");
       let release: CloudRelease = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       assert.equal(release.status, "Draft", "This release is already published. Run readiness instead.");
@@ -218,14 +280,18 @@ if (import.meta.main) {
       assert.equal(release.channel, channel === "preview" ? "preview" : null);
       if (operation === "upload") {
         // Explicit provider uploads keep private receipts, source and stale bundles out of Cloud.
-        for (const name of publicFiles(manifest.version)) {
+        for (const name of publicFiles(manifest.version, packageFormat(manifest.format))) {
           const existing = release.assets.find(asset => asset.filename === name);
           if (existing) {
             assert.equal(Number(existing.size), manifest.files[name]!.bytes);
             assert.equal(existing.signature ?? undefined, manifest.files[name]!.signature);
             continue;
           }
-          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(name.endsWith(".AppImage") ? ["--public-platform", "appimage-x86_64", "--update-platform", "linux-x86_64-appimage"] : [])]);
+          const platforms = releasePlatforms(packageFormat(manifest.format));
+          const applicationAsset = name === publicFiles(manifest.version, packageFormat(manifest.format))[0];
+          const signaturePath = join(directory, "signatures", `${name}.sig`);
+          if (manifest.format === "deb") await Bun.write(signaturePath, manifest.files[name]!.signature!);
+          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(applicationAsset ? ["--public-platform", platforms.public, "--update-platform", platforms.update] : []), ...(manifest.format === "deb" ? ["--signature", signaturePath] : [])]);
         }
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       }
@@ -239,6 +305,6 @@ if (import.meta.main) {
       }
       await mkdir(join(directory, "receipts"), { recursive: true });
       await Bun.write(join(directory, "receipts", `${operation}-${channel}.json`), JSON.stringify(release, null, 2) + "\n");
-    } else throw new Error("Use draft-source, seal, verify, draft, upload, publish or readiness.");
+    } else throw new Error("Use draft-source, seal, verify, qualify, verify-receipt, restore, resume, draft, upload, publish or readiness.");
   }
 }

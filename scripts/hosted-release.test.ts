@@ -1,9 +1,9 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { channelArgs, downloadUrl, publicFiles, releaseVersion } from "./hosted-policy";
-import { assertIncreasing, hash, verifyCloud, verifyFiles, verifyPublic, type CloudRelease, type Manifest } from "./hosted-release";
+import { assertIncreasing, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
 
 const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()).trim();
 const signature = (await Bun.file("src-tauri/tests/fixtures/update/archive.sig").text()).trim();
@@ -105,5 +105,142 @@ describe("hosted versions and promotion", () => {
     const fetcher = (async () => ++calls === 1 ? new Response(null, { status: 429, headers: { "Retry-After": "51" } }) : new Response(new Uint8Array(archive.length))) as unknown as typeof fetch;
     await expect(verifyPublic(fixture(), "preview", fetcher, async () => {})).rejects.toThrow("Public download bytes differ");
     expect(calls).toBe(2);
+  });
+});
+
+describe("native package delivery", () => {
+  function nativeFixture(): Manifest {
+    const manifest = fixture();
+    return { ...manifest, format: "deb", files: { [publicFiles(manifest.version, "deb")[0]!]: { bytes: archive.length, sha256: hash(archive), signature } } };
+  }
+
+  test("one public Debian package carries its signature in provider metadata", async () => {
+    const manifest = nativeFixture(), release = cloud(manifest);
+    release.assets[0]!.publicPlatform = "deb-x86_64";
+    release.assets[0]!.updatePlatform = "linux-x86_64-deb";
+    expect(() => verifyCloud(release, manifest, "stable")).not.toThrow();
+    expect(publicFiles("0.1.1", "deb")).toEqual(["Couch_0.1.1_amd64.deb"]);
+    expect(() => publicFiles("0.1.1-preview.1", "deb")).toThrow("final");
+    expect(publicFiles("0.1.0")).toHaveLength(6);
+    const urls: string[] = [];
+    const receipt = await verifyPublic(manifest, "preview", (async input => {
+      const url = String(input); urls.push(url);
+      return url.includes("/update/") ? Response.json({ version: manifest.version, signature, url: "https://cdn.crabnebula.app/asset/AAAAAAAAAAAAAAAAAAAAAAAAAA" }) : new Response(archive);
+    }) as typeof fetch);
+    expect(receipt.format).toBe("deb");
+    expect(receipt.checks).toHaveLength(4);
+    expect(urls.some(url => url.includes("linux-x86_64-deb"))).toBe(true);
+    expect(urls.some(url => url.includes("platform/deb-x86_64"))).toBe(true);
+    expect(urls.some(url => url.includes(".sig"))).toBe(false);
+    const qualified = { ...manifest, checks: qualificationChecks("deb") };
+    expect(() => verifyQualification(qualified, manifest)).not.toThrow();
+    expect(() => verifyQualification({ ...qualified, checks: qualificationChecks("appimage") }, manifest)).toThrow();
+  });
+
+  test.skipIf(!Bun.which("minisign"))("restore uses the recorded immutable Preview URL, rejects tampering, and needs no public signature file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-native-restore-"));
+    try {
+      const manifest = nativeFixture(), name = Object.keys(manifest.files)[0]!;
+      const finalUrl = "https://cdn.crabnebula.app/asset/AAAAAAAAAAAAAAAAAAAAAAAAAA";
+      const receipt = { ...manifest, channel: "preview", checks: [{ url: downloadUrl(name, "preview"), finalUrl, sha256: hash(archive) }] };
+      await Bun.write(join(directory, "readiness-preview.json"), JSON.stringify(receipt));
+      const calls: string[] = [];
+      await restorePublic(directory, manifest, (async input => { calls.push(String(input)); return new Response(archive); }) as typeof fetch);
+      expect(calls).toEqual([finalUrl]);
+      expect(await Bun.file(join(directory, "public", `${name}.sig`)).exists()).toBe(false);
+      await expect(restorePublic(directory, manifest, (async () => new Response("tampered")) as unknown as typeof fetch)).rejects.toThrow();
+      receipt.checks[0]!.finalUrl = "https://another.example/asset/AAAAAAAAAAAAAAAAAAAAAAAAAA";
+      await Bun.write(join(directory, "readiness-preview.json"), JSON.stringify(receipt));
+      await expect(restorePublic(directory, manifest)).rejects.toThrow();
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+
+  test.skipIf(!Bun.which("minisign"))("only authentic complete qualification receipts authorize binary-free retries", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-native-receipt-"));
+    const previousKey = process.env.COUCH_UPDATER_PUBLIC_KEY;
+    const run = (args: string[]) => {
+      const result = Bun.spawnSync(["minisign", ...args], { stdout: "ignore", stderr: "pipe" });
+      expect(result.exitCode).toBe(0);
+    };
+    try {
+      run(["-G", "-W", "-p", join(directory, "key.pub"), "-s", join(directory, "key")]);
+      const manifest = { ...nativeFixture(), publicKey: Buffer.from(await Bun.file(join(directory, "key.pub")).text()).toString("base64") };
+      process.env.COUCH_UPDATER_PUBLIC_KEY = manifest.publicKey;
+      const qualified = { version: manifest.version, revision: manifest.revision, files: manifest.files, checks: qualificationChecks("deb") };
+      for (const [name, value] of [["manifest.json", manifest], ["qualified.json", qualified]] as const) {
+        const file = join(directory, name);
+        await Bun.write(file, JSON.stringify(value));
+        run(["-S", "-s", join(directory, "key"), "-m", file, "-x", `${file}.minisig`]);
+        await Bun.write(`${file}.sig`, Buffer.from(await Bun.file(`${file}.minisig`).text()).toString("base64"));
+      }
+      expect((await verifyReceipt(directory)).revision).toBe(manifest.revision);
+      await Bun.write(join(directory, "qualified.json"), JSON.stringify({ ...qualified, checks: [] }));
+      await expect(verifyReceipt(directory)).rejects.toThrow();
+      process.env.COUCH_UPDATER_PUBLIC_KEY = key;
+      await expect(verifyReceipt(directory)).rejects.toThrow("production key");
+    } finally {
+      if (previousKey === undefined) delete process.env.COUCH_UPDATER_PUBLIC_KEY; else process.env.COUCH_UPDATER_PUBLIC_KEY = previousKey;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(!Bun.which("minisign"))("a qualified native upload and later publication reuse only signed receipts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-native-cloud-"));
+    const execute = async (args: string[], env?: Record<string, string>) => {
+      const child = Bun.spawn(args, { env: env ?? process.env, stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+      expect(code, stderr).toBe(0);
+      return stdout;
+    };
+    try {
+      await execute(["minisign", "-G", "-W", "-p", join(directory, "key.pub"), "-s", join(directory, "key")]);
+      const sign = async (file: string) => {
+        await execute(["minisign", "-S", "-s", join(directory, "key"), "-m", file, "-x", `${file}.minisig`]);
+        const signature = Buffer.from(await Bun.file(`${file}.minisig`).text()).toString("base64");
+        await Bun.write(`${file}.sig`, signature);
+        await rm(`${file}.minisig`);
+        return signature;
+      };
+      const manifest = nativeFixture(), name = Object.keys(manifest.files)[0]!;
+      const app = join(directory, "public", name);
+      await Bun.write(app, archive);
+      manifest.publicKey = Buffer.from(await Bun.file(join(directory, "key.pub")).text()).toString("base64");
+      manifest.files[name]!.signature = await sign(app);
+      await rm(`${app}.sig`);
+      await Bun.write(join(directory, "manifest.json"), JSON.stringify(manifest));
+      await sign(join(directory, "manifest.json"));
+      await Bun.write(join(directory, "qualified.json"), JSON.stringify({ ...manifest, checks: qualificationChecks("deb") }));
+      await sign(join(directory, "qualified.json"));
+      const fake = join(directory, "cn");
+      await Bun.write(fake, `#!/usr/bin/env bun
+const [flag, release, operation, application, id, ...args] = process.argv.slice(2);
+const stateFile = process.env.COUCH_FAKE_STATE;
+const state = await Bun.file(stateFile).json();
+if (operation === "upload") {
+  const option = name => args[args.indexOf(name) + 1];
+  if (!args.includes("--signature")) throw Error("Missing provider signature metadata");
+  const path = option("--file");
+  state.assets.push({id:"BBBBBBBBBBBBBBBBBBBBBBBBBB",filename:path.split("/").at(-1),size:String(Bun.file(path).size),signature:(await Bun.file(option("--signature")).text()).trim(),publicPlatform:option("--public-platform"),updatePlatform:option("--update-platform")});
+}
+if (operation === "publish") state.status = "Published";
+await Bun.write(stateFile, JSON.stringify(state));
+console.log(JSON.stringify(operation === "list" ? [] : state));
+`);
+      await chmod(fake, 0o755);
+      const stateFile = join(directory, "cloud.json"), releaseId = "A".repeat(26);
+      await Bun.write(stateFile, JSON.stringify({ id: releaseId, version: manifest.version, channel: "preview", status: "Draft", assets: [] }));
+      const env = { PATH: process.env.PATH!, CN_BIN: fake, COUCH_FAKE_STATE: stateFile, COUCH_UPDATER_PUBLIC_KEY: manifest.publicKey };
+      const command = (operation: string) => [process.execPath, "scripts/hosted-release.ts", operation, directory, "preview", releaseId];
+      await execute(command("upload"), env);
+      const uploaded = await Bun.file(stateFile).json();
+      expect(uploaded.assets).toHaveLength(1);
+      expect(uploaded.assets[0].signature).toBe(manifest.files[name]!.signature);
+      expect(uploaded.assets[0].updatePlatform).toBe("linux-x86_64-deb");
+      await rm(join(directory, "public"), { recursive: true });
+      await execute(command("resume"), env);
+      await execute(command("publish"), env);
+      expect((await Bun.file(stateFile).json()).status).toBe("Published");
+      expect(await Bun.file(join(directory, "public", name)).exists()).toBe(false);
+    } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });
