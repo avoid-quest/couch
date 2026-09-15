@@ -33,6 +33,7 @@
   },
   "bundle": {
     "active": true,
+    "shortDescription": "A media player for your library and online sources",
     "targets": [
       "appimage",
       "deb"
