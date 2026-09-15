@@ -1,5 +1,34 @@
 # Debian AppImage
 
+## Native desktop package
+
+The native Debian desktop slice uses the same pinned Debian 13 amd64 builder,
+backend and bundled helpers. Run `bun run package:build deb` in that builder
+with the existing Tauri signing environment. Tauri creates
+`src-tauri/target/release/bundle/deb/Couch_0.1.0_amd64.deb` and updater signature.
+`scripts/package-deb-verify.ts` checks the actual package and writes its inventory.
+Install the downloaded package through `sudo apt install ./Couch_0.1.0_amd64.deb`,
+then launch Couch from the application menu.
+
+`packaging/debian.json` declares the native runtime packages. Debian supplies
+GTK, WebKit, libmpv and FFmpeg libraries; Couch includes its three pinned helpers
+and dependency material under `/usr/lib/Couch` and `/usr/share/doc/couch`.
+The native package does not require Minisign, jq, FUSE or a setup archive. It does
+not create the dedicated TV account or change desktop login. Removing the package
+leaves user data alone.
+
+The default `bun run package:build` still builds the released AppImage path.
+Native update integration, dedicated TV setup, migration and public download
+changes are separate work. This desktop slice does not replace the published
+0.1.0 AppImage. See the [native desktop qualification](qualification/native-deb-297.md).
+
+Use final SemVer versions in the native Preview channel, then promote the same
+bytes to Stable. Tauri CLI 2.11.4 writes the Debian version verbatim;
+`0.1.1-preview.1` sorts after `0.1.1` in Debian. Do not use prerelease suffixes for
+this native promotion path or add a custom version rewrite.
+
+## Released AppImage
+
 The supported package is one signed Debian 13 amd64/X11 Tauri AppImage. It carries
 the native app, local/remote UI, compiled Bun backend, yt-dlp, Deno, ffprobe and
 application libraries. The installer provisions Debian's host packages and optional

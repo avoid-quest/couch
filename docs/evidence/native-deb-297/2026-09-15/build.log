@@ -1,0 +1,22 @@
+$ tsc --noEmit
+$ bash scripts/package-build.sh deb
+Downloading yt-dlp 2026.08.19 for linux/x64...
+Downloading deno 2.9.6 for linux/x64...
+Installed yt-dlp 2026.08.19 and Deno 2.9.6 in /work/src-tauri/resources/tools
+Prepared pinned package resources and redistribution notices
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `bun run build`
+$ bun scripts/build.ts
+Built frontend and Bun sidecar for x86_64-unknown-linux-gnu
+   Compiling couch v0.1.0 (/work/src-tauri)
+    Finished `release` profile [optimized] target(s) in 48.63s
+       Built application at: /work/src-tauri/target/release/couch
+        Info Patching /work/src-tauri/target/release/couch with bundle type information: deb
+    Bundling Couch_0.1.0_amd64.deb (/work/src-tauri/target/release/bundle/deb/Couch_0.1.0_amd64.deb)
+    Finished 1 bundle at:
+        /work/src-tauri/target/release/bundle/deb/Couch_0.1.0_amd64.deb
+
+    Finished 1 updater signature at:
+        /build-target/release/bundle/deb/Couch_0.1.0_amd64.deb.sig
+
+Verified src-tauri/target/release/bundle/deb/Couch_0.1.0_amd64.deb: 1443 files, native resources and declared dependencies

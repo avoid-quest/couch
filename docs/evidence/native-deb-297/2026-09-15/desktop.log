@@ -1,0 +1,8 @@
+PASS Fresh native installation opens its playback-device choice
+PASS Choosing this computer starts the packaged backend
+PASS Local setup offers an explicit sharing choice
+PASS Local setup completes without enabling sharing
+PASS Bundled ffprobe scans a local video
+PASS Native player reports ready
+PASS Debian libmpv plays video and audio
+PASS The installed desktop entry relaunches Couch

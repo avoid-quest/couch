@@ -1,0 +1,5 @@
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fffff5c8000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007ffffffc8000)
+	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007fffff5c3000)
+	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007fffff5be000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fffff4ce000)
