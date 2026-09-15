@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { application, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, packageFormat, releasePlatforms, type PackageFormat, type Channel } from "./hosted-policy";
+import { application, cdn, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, packageFormat, releasePlatforms, type PackageFormat, type Channel } from "./hosted-policy";
 
 type FileIdentity = { bytes: number; sha256: string; signature?: string };
 export type Manifest = {
@@ -128,16 +128,22 @@ export async function restorePublic(directory: string, manifest: Manifest, fetch
   await verifyFiles(directory, manifest);
 }
 
-// cn latest follows publication order. Inspect published records, including Stable's null channel.
-export function assertIncreasing(releases: { version: string; channel: string | null; status: string; assets?: { updatePlatform: string | null }[] }[], version: string, channel: Channel, updatePlatform?: string) {
+// Each package format keeps its own version history. The public updater endpoint serves the
+// newest published release per update platform and channel, or rejects the platform when empty.
+export async function assertIncreasing(version: string, channel: Channel, updatePlatform: string, fetcher: typeof fetch = fetch) {
   releaseVersion(version);
-  for (const release of releases) {
-    if (release.status !== "Published" || release.channel !== (channel === "preview" ? "preview" : null)) continue;
-    // Each package format keeps its own version history; a release without asset platforms predates the split and still counts.
-    if (updatePlatform && release.assets?.length && !release.assets.some(asset => asset.updatePlatform === updatePlatform)) continue;
-    assert.ok(Bun.semver.order(version, release.version) > 0, `Publish a version newer than ${release.version} in ${channel}.`);
-  }
   if (channel === "stable") assert.ok(!version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
+  const url = new URL(`${cdn}/update/${application}/${updatePlatform}/0.0.0`);
+  if (channel === "preview") url.searchParams.set("channel", "preview");
+  const response = await fetcher(url, { signal: AbortSignal.timeout(60_000) });
+  if (response.status === 400 || response.status === 404) {
+    await response.body?.cancel();
+    return;
+  }
+  assert.equal(response.status, 200, `The ${updatePlatform} update feed answered ${response.status}. Retry later.`);
+  const latest = await response.json();
+  assert.ok(latest && typeof latest.version === "string", "The update feed returned no release version.");
+  assert.ok(Bun.semver.order(version, latest.version) > 0, `Publish a version newer than ${latest.version} in ${channel}.`);
 }
 
 export async function downloadPublic(url: string, expected?: FileIdentity, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
@@ -222,7 +228,7 @@ if (import.meta.main) {
     const version = releaseVersion((await Bun.file("src-tauri/tauri.conf.json").json()).version);
     publicFiles(version, packageFormat(process.env.COUCH_PACKAGE_FORMAT));
     publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY);
-    assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), version, channel, releasePlatforms(packageFormat(process.env.COUCH_PACKAGE_FORMAT)).update);
+    await assertIncreasing(version, channel, releasePlatforms(packageFormat(process.env.COUCH_PACKAGE_FORMAT)).update);
     const release: CloudRelease = releaseId
       ? JSON.parse(cn(["show", application, releaseId, ...channels]))
       : JSON.parse(cn(["draft", application, version, ...channels, "--notes-file", join(directory, "notes.md")]));
@@ -256,8 +262,7 @@ if (import.meta.main) {
     } else if (operation === "readiness") {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
     } else if (operation === "draft") {
-      const releases = JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"]));
-      assertIncreasing(releases, manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
+      await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
       if (channel === "stable") {
         const receipt = await Bun.file(join(directory, "readiness-preview.json")).json();
         assert.equal(receipt.version, manifest.version);
@@ -300,7 +305,7 @@ if (import.meta.main) {
       }
       verifyCloud(release, manifest, channel);
       if (operation === "publish") {
-        assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
+        await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
         cn(["publish", application, releaseId!, ...channels]);
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
         verifyCloud(release, manifest, channel);
