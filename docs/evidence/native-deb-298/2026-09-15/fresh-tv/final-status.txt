@@ -1,0 +1,8 @@
+fresh-tv: setup+reboot PASS
+● couch-tv.service - Couch TV native host and coordinator
+     Loaded: loaded (/etc/systemd/user/couch-tv.service; static)
+     Active: active (running) since Tue 2026-09-15 16:04:27 UTC; 3min 19s ago
+ Invocation: 6fbc39ca82fa4932be0c2ceffb180237
+couch 0.1.0
+ 1  102 couch-tv seat0 749  user          - no -
+ 2  102 couch-tv -     757  manager-early - no -

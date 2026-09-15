@@ -1,0 +1,40 @@
+Sep 15 16:18:42 couch-minimal couch-tv[15429]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:18:42 couch-minimal couch-tv[15429]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:18:42 couch-minimal couch-tv[15429]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:18:46 couch-minimal couch-tv[15561]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:18:46 couch-minimal couch-tv[15561]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:18:46 couch-minimal couch-tv[15561]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:18:46 couch-minimal couch-tv[15561]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:19:37 couch-minimal systemd[722]: Stopping couch-tv.service - Couch TV native host and coordinator...
+Sep 15 16:19:37 couch-minimal systemd[722]: Stopped couch-tv.service - Couch TV native host and coordinator.
+Sep 15 16:19:37 couch-minimal systemd[722]: couch-tv.service: Consumed 33.188s CPU time, 432.5M memory peak.
+Sep 15 16:19:38 couch-minimal systemd[722]: Reload requested from client PID 16218 ('systemctl')...
+Sep 15 16:19:38 couch-minimal systemd[722]: Reloading...
+Sep 15 16:19:39 couch-minimal systemd[722]: Reloading finished in 765 ms.
+Sep 15 16:19:39 couch-minimal couch-session[16235]: Couch TV is inactive. Inspect couch-session logs; recover with couch-session restart.
+Sep 15 16:19:39 couch-minimal systemd[722]: Starting couch-tv.service - Couch TV native host and coordinator...
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Server String: /run/user/102/pulse/native
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Library Protocol Version: 35
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Server Protocol Version: 35
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Is Local: yes
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Client Index: 5476
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Tile Size: 65472
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: User Name: couch-tv
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Host Name: couch-minimal
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Server Name: PulseAudio (on PipeWire 1.4.2)
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Server Version: 15.0.0
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Default Sample Specification: float32le 2ch 48000Hz
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Default Channel Map: front-left,front-right
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Default Sink: auto_null
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Default Source: auto_null.monitor
+Sep 15 16:19:40 couch-minimal couch-tv[16242]: Cookie: 31cd:f6dd
+Sep 15 16:19:40 couch-minimal systemd[722]: Started couch-tv.service - Couch TV native host and coordinator.
+Sep 15 16:19:46 couch-minimal couch[16246]: AT-SPI: Error retrieving accessibility bus address: org.freedesktop.DBus.Error.ServiceUnknown: The name org.a11y.Bus was not provided by any .service files
+Sep 15 16:19:49 couch-minimal couch-tv[16246]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:19:49 couch-minimal couch-tv[16246]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:19:49 couch-minimal couch-tv[16246]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:19:49 couch-minimal couch-tv[16246]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:19:55 couch-minimal couch-tv[16320]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:19:55 couch-minimal couch-tv[16320]: libEGL warning: DRI2: failed to create screen
+Sep 15 16:19:55 couch-minimal couch-tv[16320]: libEGL warning: egl: failed to create dri2 screen
+Sep 15 16:19:55 couch-minimal couch-tv[16320]: libEGL warning: DRI2: failed to create screen
