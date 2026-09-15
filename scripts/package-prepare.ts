@@ -49,6 +49,10 @@ if (format === "deb") {
   await Bun.write(join(tv, "packages"), [...new Set([...setup.audio, ...setup.tv, "dbus-user-session", "libpam-systemd", "procps", "polkitd"])].join("\n") + "\n");
   await cp("packaging/appliance/root/usr/sbin/couch-recover", join(tv, "couch-recover-appimage"));
   await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
+  const broker = join(resources, "package-update");
+  await mkdir(broker, { recursive: true });
+  for (const file of ["couch-package-update@.service", "50-couch-package-update.rules"]) await cp(join("packaging/native", file), join(broker, file));
+  await Bun.write(join(broker, "couch-updater.pub"), Buffer.from(publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), "base64"));
 }
 await mkdir(staging, { recursive: true });
 await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));

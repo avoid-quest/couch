@@ -1,0 +1,9 @@
+// Any active local account may start only its own signed Couch package install.
+// The root helper re-verifies the staged signature, so this grants no general
+// package authority.
+polkit.addRule(function(action, subject) {
+    if (subject.local && subject.active &&
+        action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "couch-package-update@" + subject.user + ".service" &&
+        action.lookup("verb") === "start") return polkit.Result.YES;
+});
