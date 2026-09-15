@@ -129,9 +129,12 @@ export async function restorePublic(directory: string, manifest: Manifest, fetch
 }
 
 // cn latest follows publication order. Inspect published records, including Stable's null channel.
-export function assertIncreasing(releases: { version: string; channel: string | null; status: string }[], version: string, channel: Channel) {
+export function assertIncreasing(releases: { version: string; channel: string | null; status: string; assets?: { updatePlatform: string | null }[] }[], version: string, channel: Channel, updatePlatform?: string) {
   releaseVersion(version);
-  for (const release of releases) if (release.status === "Published" && release.channel === (channel === "preview" ? "preview" : null)) {
+  for (const release of releases) {
+    if (release.status !== "Published" || release.channel !== (channel === "preview" ? "preview" : null)) continue;
+    // Each package format keeps its own version history; a release without asset platforms predates the split and still counts.
+    if (updatePlatform && release.assets?.length && !release.assets.some(asset => asset.updatePlatform === updatePlatform)) continue;
     assert.ok(Bun.semver.order(version, release.version) > 0, `Publish a version newer than ${release.version} in ${channel}.`);
   }
   if (channel === "stable") assert.ok(!version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
@@ -219,7 +222,7 @@ if (import.meta.main) {
     const version = releaseVersion((await Bun.file("src-tauri/tauri.conf.json").json()).version);
     publicFiles(version, packageFormat(process.env.COUCH_PACKAGE_FORMAT));
     publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY);
-    assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), version, channel);
+    assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), version, channel, releasePlatforms(packageFormat(process.env.COUCH_PACKAGE_FORMAT)).update);
     const release: CloudRelease = releaseId
       ? JSON.parse(cn(["show", application, releaseId, ...channels]))
       : JSON.parse(cn(["draft", application, version, ...channels, "--notes-file", join(directory, "notes.md")]));
@@ -254,7 +257,7 @@ if (import.meta.main) {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
     } else if (operation === "draft") {
       const releases = JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"]));
-      assertIncreasing(releases, manifest.version, channel);
+      assertIncreasing(releases, manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
       if (channel === "stable") {
         const receipt = await Bun.file(join(directory, "readiness-preview.json")).json();
         assert.equal(receipt.version, manifest.version);
@@ -297,7 +300,7 @@ if (import.meta.main) {
       }
       verifyCloud(release, manifest, channel);
       if (operation === "publish") {
-        assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), manifest.version, channel);
+        assertIncreasing(JSON.parse(cn(["list", application, "--format", "json", "--limit", "10000", "--status", "published"])), manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
         cn(["publish", application, releaseId!, ...channels]);
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
         verifyCloud(release, manifest, channel);

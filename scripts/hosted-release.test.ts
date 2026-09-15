@@ -36,6 +36,9 @@ describe("hosted versions and promotion", () => {
     expect(() => assertIncreasing([{ version: "0.2.0", channel: null, status: "Published" }], "0.1.0", "stable")).toThrow();
     expect(() => assertIncreasing([], "0.1.0-preview.1", "stable")).toThrow();
     expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published" }], "0.1.0", "stable")).not.toThrow();
+    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published", assets: [{ updatePlatform: "linux-x86_64-appimage" }] }], "0.1.0", "preview", "linux-x86_64-deb")).not.toThrow();
+    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published", assets: [{ updatePlatform: "linux-x86_64-deb" }] }], "0.1.0", "preview", "linux-x86_64-deb")).toThrow();
+    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published" }], "0.1.0", "preview", "linux-x86_64-deb")).toThrow();
   });
   test("Cloud must have the complete approved asset set, platform and original signatures", () => {
     const manifest = fixture();
