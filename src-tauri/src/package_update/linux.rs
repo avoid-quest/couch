@@ -291,7 +291,7 @@ fn inspect(archive: &Path) -> Result<(Release, String)> {
         .take()
         .ok_or("Missing package archive stream")?;
     let extracted = command("/usr/bin/tar")
-        .args(["-xOf", "-", "./usr/lib/Couch/release.json"])
+        .args(["-xOf", "-", "--wildcards", "usr/lib/Couch/release.json"])
         .stdin(Stdio::from(stream))
         .stdout(Stdio::piped())
         .spawn();
