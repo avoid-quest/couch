@@ -1,0 +1,89 @@
+#!/bin/bash
+# Root-side signed Couch package install. Started through
+# couch-package-update@<user>.service with the account name as the instance.
+# The signature check below is the security boundary: root never trusts the
+# staged bytes, the request, or the app that wrote them.
+set -euo pipefail
+fail() { echo "package-update: $*" >&2; error=${error:-$*}; exit 1; }
+
+[[ $EUID = 0 ]] || fail 'Run as root.'
+[[ $# = 1 ]] || fail 'usage: package-update USERNAME'
+user=$1
+[[ $user =~ ^[a-z_][a-z0-9_-]*$ ]] || fail 'Invalid account name.'
+entry=$(getent passwd "$user") || fail "Unknown account $user."
+uid=$(echo "$entry" | cut -d: -f3)
+home=$(echo "$entry" | cut -d: -f6)
+[[ $uid -ge 1000 || $user = couch-tv ]] || fail 'Only a real account or the TV runtime account may update Couch.'
+[[ $home = /* && -d $home ]] || fail 'The account has no usable home directory.'
+
+exec 9>/run/lock/couch-package-update.lock
+flock -n 9 || fail 'Another package update is already running.'
+
+request_dir=/var/lib/couch-package-update
+install -d -m 0755 -o root -g root "$request_dir" "$request_dir/$user"
+rm -f "$request_dir/$user/receipt"
+
+inbox=$home/.local/share/couch/updates
+[[ -d $inbox && ! -L $inbox ]] || fail 'The update inbox is missing.'
+deb=$inbox/couch.deb
+signature=$inbox/couch.deb.sig
+
+work=$(mktemp -d "$request_dir/work.XXXXXX")
+error=
+staged=false
+version=
+digest=
+receipt() {
+    local outcome=$1
+    {
+        echo "outcome=$outcome"
+        [[ -n $version ]] && echo "version=$version"
+        [[ -n $digest ]] && echo "sha256=$digest"
+        [[ -n $error ]] && echo "error=$(printf '%s' "$error" | tr -c '[:print:]' '?' | cut -c1-200)"
+        return 0
+    } > "$request_dir/$user/receipt"
+    chmod 0644 "$request_dir/$user/receipt"
+}
+trap 'status=$?; if [[ $staged = true ]]; then if [[ $status = 0 ]]; then receipt installed; else receipt failed; fi; fi; rm -rf "$work"' EXIT
+
+# Stage the inbox into root-owned private storage before any inspection, so
+# later races on the user's files cannot touch what gets verified and installed.
+for file in "$deb" "$signature"; do
+    [[ -f $file && ! -L $file ]] || fail "Missing or invalid inbox file ${file##*/}."
+    [[ $(stat -c %u "$file") = "$uid" ]] || fail "${file##*/} is not owned by $user."
+done
+[[ $(stat -c %s "$deb") -ge 65536 && $(stat -c %s "$deb") -le 2147483648 ]] || fail 'The staged package has an implausible size.'
+[[ $(stat -c %s "$signature") -le 65536 ]] || fail 'The staged signature is too large.'
+install -m 0600 -o root -g root "$deb" "$work/couch.deb"
+install -m 0600 -o root -g root "$signature" "$work/couch.deb.sig"
+staged=true
+
+command -v minisign >/dev/null || fail 'The minisign verifier is missing. Reinstall the Couch package.'
+minisign -V -q -p /usr/lib/couch/couch-updater.pub -x "$work/couch.deb.sig" -m "$work/couch.deb" \
+    || fail 'Signature verification failed. The staged package is not a trusted Couch release.'
+
+version=$(dpkg-deb -f "$work/couch.deb" Version)
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'The package version is not a supported release version.'
+[[ $(dpkg-deb -f "$work/couch.deb" Package) = couch ]] || fail 'The staged package is not Couch.'
+[[ $(dpkg-deb -f "$work/couch.deb" Architecture) = amd64 ]] || fail 'The staged package architecture is not amd64.'
+
+installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
+if [[ -n $installed ]]; then
+    dpkg --compare-versions "$installed" lt "$version" \
+        || fail "The staged package $version is not newer than the installed $installed."
+fi
+
+. /etc/os-release
+[[ $ID = debian && $VERSION_ID = 13 && $(dpkg --print-architecture) = amd64 ]] \
+    || fail 'This host is not the supported Debian 13 amd64.'
+
+if ! apt-get install -y --no-install-recommends --no-remove "$work/couch.deb" >"$work/apt.log" 2>&1; then
+    error="apt failed: $(tail -n 3 "$work/apt.log" | tr '\n' ' ')"
+    fail 'Package installation failed.'
+fi
+
+[[ $(dpkg-query -W -f='${Version}' couch 2>/dev/null) = "$version" ]] \
+    || fail 'The installed version does not match the staged package.'
+digest=$(sha256sum "$work/couch.deb" | cut -d' ' -f1)
+install -m 0644 -o root -g root "$work/apt.log" "$request_dir/$user/apt.log"
+echo "package-update: installed Couch $version for $user."

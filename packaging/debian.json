@@ -13,11 +13,16 @@
     "dbus-user-session",
     "pulseaudio-utils",
     "x11-xserver-utils",
-    "procps"
+    "procps",
+    "minisign"
   ],
   "files": {
     "/usr/share/doc/couch": "resources/notices/",
     "/usr/sbin/couch-setup": "../packaging/native/couch-setup",
-    "/usr/share/couch/tv": "resources/tv/"
+    "/usr/share/couch/tv": "resources/tv/",
+    "/usr/lib/couch/package-update": "../packaging/native/package-update",
+    "/usr/lib/couch/couch-updater.pub": "resources/package-update/couch-updater.pub",
+    "/usr/lib/systemd/system/couch-package-update@.service": "resources/package-update/couch-package-update@.service",
+    "/usr/share/polkit-1/rules.d/50-couch-package-update.rules": "resources/package-update/50-couch-package-update.rules"
   }
 }
