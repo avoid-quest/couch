@@ -37,9 +37,9 @@ describe("hosted versions and promotion", () => {
     const published = (version: string) => feed(200, JSON.stringify({ version }));
     const empty = feed(400, '"Unknown update platform"');
     await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", published("0.2.0"))).rejects.toThrow();
-    await expect(assertIncreasing("0.1.0-preview.1", "stable", "linux-x86_64-deb", empty)).rejects.toThrow();
-    await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", empty)).resolves.toBeUndefined();
-    await expect(assertIncreasing("0.1.2", "preview", "linux-x86_64-deb", empty)).resolves.toBeUndefined();
+    await expect(assertIncreasing("0.1.0-preview.1", "stable", "linux-x86_64-deb", empty, async () => {})).rejects.toThrow();
+    await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", empty, async () => {})).resolves.toBeUndefined();
+    await expect(assertIncreasing("0.1.2", "preview", "linux-x86_64-deb", empty, async () => {})).resolves.toBeUndefined();
     await expect(assertIncreasing("0.1.0", "preview", "linux-x86_64-deb", published("0.1.0"))).rejects.toThrow();
   });
   test("Cloud must have the complete approved asset set, platform and original signatures", () => {
@@ -73,7 +73,7 @@ describe("hosted versions and promotion", () => {
     expect((await verifyPublic(manifest, "preview", fetcher)).checks).toHaveLength(9);
     expect(downloadUrl("platform/appimage-x86_64", "preview")).toEndWith("?channel=preview");
     for (const response of [new Response(null, { status: 404 }), new Response("bad"), Response.json({ version: "0.0.1", signature, url: "https://example.com/app" })]) {
-      await expect(verifyPublic(manifest, "preview", (async () => response.clone()) as unknown as typeof fetch)).rejects.toThrow();
+      await expect(verifyPublic(manifest, "preview", (async () => response.clone()) as unknown as typeof fetch, async () => {})).rejects.toThrow();
     }
   });
   test("a rate-limited metadata-selected asset waits and retries only that download", async () => {
