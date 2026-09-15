@@ -4,7 +4,10 @@
     "checkedAt": "2026-09-15T10:48:29.696Z"
   },
   "preview": {
-    "version": "0.1.0",
-    "checkedAt": "2026-09-15T01:32:18.191Z"
+    "version": "0.1.1",
+    "format": "deb",
+    "checkedAt": "2026-09-15T19:00:10.115Z",
+    "url": "https://cdn.crabnebula.app/asset/01M2JW0CR53G0EDRN8XQJVHSRV?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22Couch_0.1.1_amd64.deb%22%7D",
+    "bytes": 133293530
   }
 }
