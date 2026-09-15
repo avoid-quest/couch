@@ -1,9 +1,18 @@
 ---
 import "../styles.css";
 import releases from "../releases.json";
-import { downloadUrl, publicFiles, type Channel } from "../../../../scripts/hosted-policy";
-const channels: Channel[] = ["stable", "preview"];
-const ready = releases as Record<Channel, { version: string; checkedAt: string } | null>;
+import { buttonVariants } from "../../../../src/client/components/ui/button";
+import { downloadUrl, type Channel } from "../../../../scripts/hosted-policy";
+
+type Release = { version: string; checkedAt: string; format?: string; url?: string };
+const ready = releases as Record<Channel, Release | null>;
+const stable = ready.stable?.format === "deb" ? ready.stable : null;
+const preview = ready.preview?.format === "deb" ? ready.preview : null;
+const primary = stable ?? preview;
+const channel: Channel = stable ? "stable" : "preview";
+const filename = (release: Release) => `Couch_${release.version}_amd64.deb`;
+const url = (release: Release, channel: Channel) => release.url ?? downloadUrl(filename(release), channel);
+const newerPreview = stable && preview && preview.version.localeCompare(stable.version, "en", { numeric: true }) > 0;
 ---
 <!doctype html>
 <html lang="en" class="dark">
@@ -11,48 +20,87 @@ const ready = releases as Record<Channel, { version: string; checkedAt: string }
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <title>Download Couch</title>
-    <meta name="description" content="Signed Couch downloads for Debian 13 desktops and TV devices." />
+    <meta name="description" content="Install Couch on Debian 13. One package for your desktop or dedicated TV." />
+    <link rel="canonical" href={new URL("/download", Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/avoid.svg" />
   </head>
   <body>
     <main class="downloads">
-      <a href="/">couch.avoid.quest</a>
-      <h1>Download Couch</h1>
-      <p>One signed app for Debian 13, amd64, in an X11 session. Install on your desktop or choose the dedicated TV setup.</p>
-      {channels.map(channel => {
-        const release = ready[channel];
-        return <section aria-label={channel === "stable" ? "Stable downloads" : "Preview downloads"}>
-          <h2>{channel === "stable" ? "Stable" : "Preview"}</h2>
-          <p>{channel === "stable" ? "For everyday use." : "Try releases before they reach Stable."}</p>
-          {release ? <>
-            <p>Version {release.version}</p>
-            <ul>{publicFiles(release.version).map(file => <li><a href={downloadUrl(file, channel)}>{file}</a></li>)}</ul>
-            <p>Download the AppImage, setup archive and their signatures. The distribution material contains dependency notices and approved dependency material.</p>
-          </> : <p>A verified download is not available yet.</p>}
-        </section>;
-      })}
-      {channels.some(channel => ready[channel]) && <section>
-        <h2>Verify and install</h2>
-        <p>Save the <a href="/couch-updater.pub" download>enrolled public key</a> from this HTTPS site. Use Debian's Minisign to verify the setup archive before extracting it. The verified setup checks the AppImage before it runs.</p>
-        <pre><code>{`sudo apt-get update
-sudo apt-get install minisign jq
-base64 --decode couch-updater.pub > couch-updater.minisign.pub
-base64 --decode couch-setup-VERSION.tar.gz.sig > couch-setup.minisig
-minisign -Vm couch-setup-VERSION.tar.gz -p couch-updater.minisign.pub -x couch-setup.minisig`}</code></pre>
-        <p>Replace VERSION with the version you downloaded. Continue only after verification succeeds, then follow README.md inside the signed setup archive for desktop or TV installation.</p>
+      <nav aria-label="Home"><a href="/">couch.avoid.quest</a></nav>
+      <header>
+        <h1>Couch for Debian</h1>
+        <p class="intro">One package for your desktop or dedicated TV.</p>
+        <p class="target">Debian 13 · Intel or AMD 64-bit · X11 desktop</p>
+        {primary ? <div class="download">
+          <a class={buttonVariants({ size: "lg" })} href={url(primary, channel)}>
+            Download Couch{channel === "preview" ? " Preview" : ""}
+          </a>
+          <span>Version {primary.version} · .deb</span>
+        </div> : <p>A verified Debian package is not available yet.</p>}
+      </header>
+
+      {primary && <section aria-labelledby="install">
+        <h2 id="install">Install and open</h2>
+        <ol>
+          <li>Download the package above.</li>
+          <li>Open a terminal in the folder where you saved it, then run:
+            <pre><code>{`sudo apt install ./${filename(primary)}`}</code></pre>
+            <p class="muted">Enter your computer's administrator password. Debian installs the app and its dependencies.</p>
+          </li>
+          <li>Open <strong>Couch</strong> from your applications menu and choose <strong>This computer</strong>. Allow remote control if you want to pair your phone.</li>
+        </ol>
       </section>}
-      <p>Couch updates each installation independently. Manual installation is the default; Auto when idle waits for ten continuous idle minutes. Switching to Stable waits for a newer Stable release and never downgrades your app.</p>
+
+      {primary && <section aria-labelledby="tv">
+        <details>
+          <summary id="tv">Using a dedicated TV?</summary>
+          <p>After installing the package, run:</p>
+          <pre><code>sudo couch-setup --tv</code></pre>
+          <p>This sets up a dedicated Couch account, automatic sign-in and TV power settings. Your administrator account stays available. Reboot to enter the Couch session.</p>
+          <p>On first use, choose <strong>This computer</strong>, allow remote control, and pair your phone using the code on screen. Migrating an existing Couch TV keeps its data and paired devices.</p>
+        </details>
+      </section>}
+
+      {primary && <section aria-labelledby="updates">
+        <h2 id="updates">Updates from your phone</h2>
+        <p>A paired Administrator can install updates from Couch's settings. Updates are signed and verified by the app. Automatic updates are optional and wait for ten continuous idle minutes.</p>
+      </section>}
+
+      {newerPreview && preview && <section aria-labelledby="preview">
+        <details>
+          <summary id="preview">Try the next release</summary>
+          <p>Preview {preview.version} is available for testing. Install it with the same steps, using its filename:</p>
+          <p><a href={url(preview, "preview")}>Download Couch Preview {preview.version}</a></p>
+          <pre><code>{`sudo apt install ./${filename(preview)}`}</code></pre>
+          <p>Switching back to Stable waits for a newer Stable release.</p>
+        </details>
+      </section>}
+
+      <footer>Dependency licenses and notices are included in the package.</footer>
     </main>
   </body>
 </html>
 <style>
-  .downloads { display: block; position: static; max-width: 48rem; margin: auto; padding: 3rem 1.5rem; }
-  .downloads h1 { position: static; font-size: 2rem; margin: 2rem 0 1rem; }
-  h2 { font-size: 1.3rem; margin: 1.5rem 0 .5rem; }
-  section { border-top: 1px solid var(--border); margin-top: 2rem; padding-top: .5rem; }
-  p { margin: .75rem 0; line-height: 1.6; }
-  ul { padding-left: 1.25rem; list-style: disc; overflow-wrap: anywhere; }
-  li { margin: .5rem 0; }
-  a { text-decoration: underline; }
-  pre { overflow-x: auto; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: .85rem; }
+  .downloads { display: block; position: static; max-width: 42rem; margin: auto; padding: 2rem 1.5rem 3rem; }
+  nav, .target, .download span, .muted, footer { color: var(--muted-foreground); }
+  nav { font-size: .85rem; }
+  header { margin: 4rem 0 3rem; }
+  .downloads h1 { position: static; font-size: clamp(2rem, 6vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -.05em; margin: 0 0 1rem; }
+  .intro { font-size: 1.1rem; }
+  .target { font-size: .85rem; margin-top: 1.25rem; }
+  .download { display: flex; align-items: flex-start; flex-direction: column; gap: .75rem; margin-top: 1.5rem; }
+  .download a { min-height: 2.75rem; padding-inline: 1.25rem; font-size: .875rem; }
+  .download a:hover { text-decoration: none; }
+  .download span { font-size: .8rem; }
+  section { border-top: 1px solid var(--border); padding: 1.5rem 0; }
+  h2, summary { font-size: 1rem; font-weight: 500; }
+  summary { cursor: pointer; }
+  p, li { font-size: .95rem; line-height: 1.65; }
+  p { margin: .75rem 0; }
+  ol { padding-left: 1.25rem; list-style: decimal; }
+  li { margin-top: 1rem; padding-left: .25rem; }
+  li .muted { font-size: .85rem; }
+  section a { text-decoration: underline; }
+  pre { overflow-x: auto; margin: .75rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: .8rem; }
+  footer { font-size: .8rem; margin-top: 1.5rem; }
 </style>

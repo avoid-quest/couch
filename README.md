@@ -29,7 +29,7 @@ on your local network. `couch.avoid.quest` is the project identity; the commands
 below run a local app and do not deploy a hosted service.
 
 On Mac or Windows, [connect as a browser controller](docs/desktop-controllers.md)
-or save the TV's address as a Dock or taskbar app. The Ubuntu TV plays the media.
+or save the TV's address as a Dock or taskbar app. The Debian TV plays the media.
 
 ## Try it with Docker
 
@@ -57,24 +57,30 @@ options.
 
 ## Put it on your TV
 
-The supported appliance is Ubuntu 24.04 Server on x86_64 hardware. An SSH
-administrator installs an authenticated `Couch.AppImage` and `couch-appliance`
-Debian package with the [installer](docs/install-couch.md). Obtain the release,
-manifest and public-key fingerprint from the trusted publisher. Current private
-delivery uses the signed LAN feed; the publishing Mac must be reachable for
-checks and downloads. The TV only installs and runs Couch.
+Download the native Debian package from [couch.avoid.quest/download](https://couch.avoid.quest/download).
+Couch supports Debian 13 on amd64 hardware with an X11 session. Install the
+package with APT, then open Couch from your applications menu. Dependencies and
+license notices are included in the installation path.
 
-The [release guide](docs/tauri-releases.md) covers the temporary Mac build and
-publication path while GitHub Actions is paused. For source development, use the
-[Linux development instructions](docs/usage.md#run-from-source-for-development)
-or Docker preview above.
+For a dedicated TV, run `sudo couch-setup --tv` after installing the package.
+This explicitly enables the dedicated account and TV login/power configuration.
+Existing TV migration preserves application data and paired devices. See
+[installation and recovery](docs/install-couch.md).
 
-On a fresh TV, scan the QR or use the address and six-digit controller code
-on **Claim and name**. On a configured TV, **Pair a remote** shows its address
-and code; **Settings > Connections** on the TV or an administrator remote has
-the pairing QR. Use **Search** to find a title or paste a supported link;
-**Library** opens the provider catalogs, Radio, Live TV, Jellyfin and TV folders.
-An administrator manages folders and Jellyfin in **Settings > Sources**.
+Paired Administrators can install signed native updates remotely. Manual updates
+are the default; automatic updates wait for ten continuous idle minutes. A
+restricted system service verifies the package before APT installs it. It does
+not give the Couch account general package-manager privileges.
+
+CrabNebula hosts downloads independently of the build machine. GitHub Actions
+builds and qualifies releases in the pinned Debian container. If hosted capacity
+is unavailable, the Mac runs the same build; the T480 only installs and runs
+Couch. See [hosted releases](docs/hosted-releases.md).
+
+On first launch, choose **This computer** for local playback. Enable remote
+control to pair a phone using the displayed code or QR address. Existing
+installations retain their operating mode and pairings. An Administrator manages
+folders and Jellyfin in **Settings > Sources**.
 
 The coordinator's default port is `4100`; a configured named address can use
 port 80. Use the address shown by your TV consistently. Settings, pairings and
@@ -117,25 +123,17 @@ development uses `.data/`.
 
 ## Where things stand
 
-The [14 September 2026 status record](docs/qualification/current-status-2026-09-14.md)
-compares remote main with installed application build `34172088349.1` and Ubuntu
-companion `34172088347.1`. It separates source, package and physical evidence.
+The native Debian delivery replaces the earlier AppImage setup archive with one
+package. The [release guide](docs/hosted-releases.md) records qualification and
+publication, and the [Debian delivery tickets](https://github.com/avoid-quest/couch/issues/301)
+track its installed acceptance. Earlier dated qualification records describe
+their tested builds, not the current release.
 
-Implemented software includes signed installation and updates, shared search and
-history, controller administration, phone source setup, profiles, local/NAS and
-Jellyfin playback, subtitles, CUE albums, ReplayGain, measured lossless music
-continuity, NFO metadata and corrections, collections, IPTV guides, scheduling
-and completed recordings. Provider and format limits still apply. Software
-captures do not qualify every physical display, speaker or media source.
-
-Remaining acceptance belongs to [YouTube rendering #150](https://github.com/avoid-quest/couch/issues/150),
-[display #13](https://github.com/avoid-quest/couch/issues/13),
-[sound #14](https://github.com/avoid-quest/couch/issues/14),
-[interface size #12](https://github.com/avoid-quest/couch/issues/12),
-[real TV folders #17](https://github.com/avoid-quest/couch/issues/17) and
-[first-run setup #23](https://github.com/avoid-quest/couch/issues/23).
-The status record also links the open lid, guest discovery, pairing and diagnostics
-work. These fixes are not part of the verified installed baseline.
+Implemented software includes shared search and history, controller
+administration, phone source setup, profiles, local/NAS and Jellyfin playback,
+subtitles, CUE albums, ReplayGain, NFO metadata, collections, IPTV guides,
+scheduling and completed recordings. Provider and format limits still apply.
+Software captures do not qualify every physical display, speaker or media source.
 
 Growing timeshift is [deferred #67](https://github.com/avoid-quest/couch/issues/67).
 CEC was closed as not planned. Native Mac/Windows playback, a full Rust port,
