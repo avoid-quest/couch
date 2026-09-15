@@ -24,7 +24,7 @@ async function fixture(trial = false, corrupt = false) {
   const build = { version: "0.3.0", revision: "a".repeat(40), dataFormat: 1, packaged: true, helpers };
   if (corrupt) await Bun.write(join(directory, "deno"), "changed");
   const messages: any[] = [];
-  const process = Bun.spawn([Bun.which("bun") ?? "bun", "--define", `COUCH_BUILD_INFO=${JSON.stringify(JSON.stringify(build))}`, "-e", `import { runMaintenanceMode } from ${JSON.stringify(join(import.meta.dir, "maintenance-mode.ts"))}; await runMaintenanceMode(${JSON.stringify(directory)}, "local-secret", true);`], { env: { ...globalThis.process.env, COUCH_BUNDLED_TOOLS: directory }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const process = Bun.spawn([Bun.which("bun") ?? "bun", "--define", `COUCH_BUILD_INFO=${JSON.stringify(JSON.stringify(build))}`, "-e", `import { runMaintenanceMode } from ${JSON.stringify(join(import.meta.dir, "maintenance-mode.ts"))}; await runMaintenanceMode(${JSON.stringify(directory)}, "local-secret", "appimage");`], { env: { ...globalThis.process.env, COUCH_BUNDLED_TOOLS: directory }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const send = (message: unknown) => process.stdin.write(JSON.stringify(message) + "\n");
   cleanup.push(async () => { send({ type: "shutdown" }); const timeout = setTimeout(() => process.kill(), 2000); await process.exited; clearTimeout(timeout); });
   void (async () => {

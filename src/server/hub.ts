@@ -68,7 +68,7 @@ type HubOptions = {
   frontend?: HTMLBundle;
   development?: boolean;
   advertisedUrls?: string[];
-  appimageFeed?: UpdateFeed<UpdateRelease>;
+  updateFeed?: UpdateFeed<UpdateRelease>;
   updater?: { request: (request: UpdateRequest) => Promise<unknown> };
   admitted?: () => boolean;
   frontendReady?: (build: unknown) => boolean;
@@ -239,7 +239,7 @@ export function createHub(options: HubOptions) {
   };
   const idleReason = () => idle.reason(updateWork());
   const idleAdmission = () => manual?.needsRefresh() ? "Check the AppImage installation through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
-  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.appimageFeed, undefined, admitted, options.updater ? {
+  const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.updateFeed, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),
   } : undefined);

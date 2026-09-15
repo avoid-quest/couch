@@ -1,5 +1,6 @@
 mod appimage_update;
 mod bluetooth;
+mod deb_update;
 mod diagnostics;
 mod display;
 mod operating_mode;
@@ -39,6 +40,8 @@ struct Host {
     display: mpsc::Sender<display::Request>,
     updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
     update_busy: AtomicBool,
+    deb_updates: tokio::sync::mpsc::Sender<deb_update::Request>,
+    deb_busy: AtomicBool,
     update_checkpoint: Mutex<
         Option<(
             String,
@@ -234,6 +237,14 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                 "0"
             },
         )
+        .env(
+            "COUCH_PACKAGE_UPDATE",
+            if deb_update::running(app) {
+                "1"
+            } else {
+                "0"
+            },
+        )
         .env("COUCH_HOST_TOKEN", token)
         .env("COUCH_DATA_DIR", &host.data_dir)
         .env(
@@ -364,6 +375,27 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                 }
                             }
                         }
+                        Ok(SidecarMessage::DebUpdate { request_id, action }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                if host
+                                    .deb_busy
+                                    .swap(true, std::sync::atomic::Ordering::SeqCst)
+                                {
+                                    host.report_message(serde_json::json!({"type":"debUpdate","requestId":request_id,"error":"A package update operation is already running."}));
+                                } else if host
+                                    .deb_updates
+                                    .try_send(deb_update::Request {
+                                        id: request_id.clone(),
+                                        action,
+                                    })
+                                    .is_err()
+                                {
+                                    host.deb_busy
+                                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                                    host.report_message(serde_json::json!({"type":"debUpdate","requestId":request_id,"error":"A package update operation is already running."}));
+                                }
+                            }
+                        }
                         Ok(SidecarMessage::Bluetooth { request_id, action }) => {
                             if uuid::Uuid::parse_str(&request_id).is_ok() {
                                 let handle = handle.clone();
@@ -468,6 +500,7 @@ pub fn run() {
             };
             prepare_data_dir(&data_dir)?;
             let (update_sender, update_receiver) = tokio::sync::mpsc::channel(1);
+            let (deb_sender, deb_receiver) = tokio::sync::mpsc::channel(1);
             let (display_sender, display_receiver) = mpsc::channel();
             let (player_sender, player_receiver) = mpsc::channel();
             let (connection, _) = watch::channel(None);
@@ -483,6 +516,8 @@ pub fn run() {
                 display: display_sender,
                 updates: update_sender,
                 update_busy: AtomicBool::new(false),
+                deb_updates: deb_sender,
+                deb_busy: AtomicBool::new(false),
                 update_checkpoint: Mutex::new(None),
                 shutting_down: AtomicBool::new(false),
                 child_exited,
@@ -491,6 +526,11 @@ pub fn run() {
                 app.handle().clone(),
                 data_dir.join("updates/appimage"),
                 update_receiver,
+            ));
+            tauri::async_runtime::spawn(deb_update::run(
+                app.handle().clone(),
+                data_dir.join("updates/deb"),
+                deb_receiver,
             ));
             app.manage(operating_mode::Modes::load(
                 data_dir.join("operating-mode.json"),

@@ -4,6 +4,7 @@ import { loadedBuild } from "../shared/build";
 import type { HostMessage, SidecarMessage } from "../shared/protocol";
 import { checkpointAppImage } from "./appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./appimage-update-native";
+import { createNativeDebUpdates } from "./deb-update-native";
 import { createManualUpdate } from "./manual-update";
 import { createNativeReadiness } from "./readiness-native";
 import { createUpdateIdle } from "./update-idle";
@@ -13,16 +14,19 @@ import { buildInfo } from "./build-info";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
 // It opens no media catalog, recording scheduler, player, LAN listener or pairing endpoint.
-export async function runMaintenanceMode(directory: string, token: string, appimage: boolean): Promise<never> {
+export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "deb" | null): Promise<never> {
   const send = (message: SidecarMessage) => { process.stdout.write(`${JSON.stringify(message)}\n`); };
-  const native = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
+  const native = format === "deb"
+    ? createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }))
+    : createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
+  const installed = format !== null;
   const readiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
   const idle = createUpdateIdle();
   idle.playback("idle", false);
-  let admitted = !appimage;
+  let admitted = !installed;
   let frontendReady = false;
   const manual = createManualUpdate(native, () => admitted, id => updates.candidateReady(id), () => updates.canRepair());
-  const updates = createUpdates(join(directory, "updates"), loadedBuild, appimage ? native.feed : undefined, undefined, () => admitted, appimage ? {
+  const updates = createUpdates(join(directory, "updates"), loadedBuild, installed ? native.feed : undefined, undefined, () => admitted, installed ? {
     busy: manual.busy, idle: () => idle.reason(), status: manual.status,
     install: manual.automatic,
   } : undefined);
@@ -52,7 +56,7 @@ export async function runMaintenanceMode(directory: string, token: string, appim
       if (path === "/api/updates" && request.method === "GET") {
         try {
           const requestId = new URL(request.url).searchParams.get("requestId") ?? undefined;
-          return reply(Response.json({ ...updates.state, installation: appimage ? await manual.read(identity, requestId) : undefined }));
+          return reply(Response.json({ ...updates.state, installation: installed ? await manual.read(identity, requestId) : undefined }));
         } catch { return reply(Response.json({ error: "This installation's updater is unavailable." }, { status: 503 })); }
       }
       if (path === "/api/updates/install" && request.method === "POST") return reply(await manual.install(request, identity));
@@ -65,7 +69,7 @@ export async function runMaintenanceMode(directory: string, token: string, appim
   const close = async () => { admitted = false; await updates.close(); native.close(); readiness.close(); await server.stop(true); process.exit(0); };
   process.on("SIGTERM", close);
   process.on("SIGINT", close);
-  if (appimage) void (async () => {
+  if (installed) void (async () => {
     try {
       const status = await native.request({ op: "status" });
       if (status.transaction?.phase === "trial") {
@@ -96,7 +100,7 @@ export async function runMaintenanceMode(directory: string, token: string, appim
       if (!line) continue;
       const message: HostMessage = JSON.parse(line);
       if (message.type === "shutdown") await close();
-      else if (message.type === "appimageUpdate") native.receive(message);
+      else if (message.type === "appimageUpdate" || message.type === "debUpdate") native.receive(message);
       else if (message.type === "readiness") readiness.receive(message.nonce, message.ok, message.build);
       else if (message.type === "appimageQuiesce") void (async () => {
         const result = await checkpointAppImage({ ...message, idle: () => idle.reason(), player: () => "idle", closeAdmission: () => { admitted = false; }, quiesce: async () => {

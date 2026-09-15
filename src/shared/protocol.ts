@@ -122,11 +122,12 @@ export type ConnectionInfo = {
   urls: string[];
 };
 
-export type HostMessage = { type: "bluetooth"; requestId: string; state?: import("./bluetooth").BluetoothState; error?: string } | { type: "appimageQuiesce"; restart?: boolean; nonce: string; confirmInterrupt: boolean; whenIdle: boolean } | ({ type: "appimageUpdate" } & import("./updates").AppImageUpdateReply) | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
+export type HostMessage = { type: "bluetooth"; requestId: string; state?: import("./bluetooth").BluetoothState; error?: string } | { type: "appimageQuiesce"; restart?: boolean; nonce: string; confirmInterrupt: boolean; whenIdle: boolean } | ({ type: "appimageUpdate" } & import("./updates").AppImageUpdateReply) | ({ type: "debUpdate" } & import("./updates").DebUpdateReply) | { type: "display"; requestId: string; state?: import("./display").DisplayState; error?: string } | { type: "readiness"; nonce: string; ok: boolean; build: unknown } | { type: "diagnostics"; requestId: string; report: unknown } | { type: "player"; state: PlayerState } | { type: "shutdown" };
 export type SidecarMessage =
   | { type: "addresses"; urls: string[] }
   | { type: "appimageQuiesced"; nonce: string; closed: boolean; error: string | null }
   | { type: "appimageUpdate"; requestId: string; action: import("./updates").AppImageUpdateAction }
+  | { type: "debUpdate"; requestId: string; action: import("./updates").DebUpdateAction }
   | { type: "bluetooth"; requestId: string; action: import("./bluetooth").BluetoothAction }
   | { type: "display"; requestId: string; action: import("./display").DisplayAction }
   | ({ type: "ready" } & ConnectionInfo)

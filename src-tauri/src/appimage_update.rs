@@ -55,19 +55,19 @@ pub struct Request {
     pub action: Action,
 }
 #[derive(Deserialize)]
-struct Enrollment {
-    pubkey: String,
+pub(crate) struct Enrollment {
+    pub(crate) pubkey: String,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Candidate {
-    id: String,
-    release_id: String,
-    version: String,
-    revision: String,
-    notes: String,
-    bytes: u64,
-    published_at: i64,
+pub(crate) struct Candidate {
+    pub(crate) id: String,
+    pub(crate) release_id: String,
+    pub(crate) version: String,
+    pub(crate) revision: String,
+    pub(crate) notes: String,
+    pub(crate) bytes: u64,
+    pub(crate) published_at: i64,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,12 +89,12 @@ struct HostRequirements {
     session: String,
     packages: Vec<String>,
 }
-const MAX_ARCHIVE: u64 = 2 * 1024 * 1024 * 1024;
+pub(crate) const MAX_ARCHIVE: u64 = 2 * 1024 * 1024 * 1024;
 const ENDPOINT: &str = "https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-appimage/";
-fn error(value: impl std::fmt::Display) -> String {
+pub(crate) fn error(value: impl std::fmt::Display) -> String {
     value.to_string()
 }
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     time::OffsetDateTime::now_utc().unix_timestamp() * 1000
 }
 
@@ -109,7 +109,7 @@ pub fn running(app: &tauri::AppHandle) -> bool {
         false
     }
 }
-fn enrollment(app: &tauri::AppHandle) -> Result<Enrollment, String> {
+pub(crate) fn enrollment(app: &tauri::AppHandle) -> Result<Enrollment, String> {
     let trust: Enrollment = serde_json::from_value(
         app.config()
             .plugins
@@ -124,7 +124,7 @@ fn enrollment(app: &tauri::AppHandle) -> Result<Enrollment, String> {
     PublicKey::decode(&decoded).map_err(|_| "This build has no enrolled updater key.")?;
     Ok(trust)
 }
-fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
+pub(crate) fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
     let decode = |value: &str| {
         String::from_utf8(STANDARD.decode(value.trim()).map_err(error)?).map_err(error)
     };
@@ -147,7 +147,7 @@ fn update_url(current: &str, channel: Channel) -> Result<reqwest::Url, String> {
     }
     Ok(url)
 }
-fn candidate(update: &Update) -> Result<Candidate, String> {
+pub(crate) fn candidate(update: &Update) -> Result<Candidate, String> {
     let version = semver::Version::parse(&update.version).map_err(error)?;
     if !version.build.is_empty() || update.download_url.scheme() != "https" {
         return Err(
@@ -303,7 +303,7 @@ async fn host_ready(requirements: &Requirements) -> Result<(), String> {
     fs::OpenOptions::new().read(true).write(true).open("/dev/fuse").map_err(|_| "The runtime account cannot access /dev/fuse. Repair Debian host permissions before updating.")?;
     Ok(())
 }
-fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let directory = path.parent().unwrap();
     crate::prepare_data_dir(directory).map_err(error)?;
     let temporary = path.with_extension("partial");
@@ -412,7 +412,7 @@ fn installation_lock(application: &Path) -> Result<fs::File, String> {
         Err("Unsupported installation".into())
     }
 }
-fn build() -> serde_json::Value {
+pub(crate) fn build() -> serde_json::Value {
     serde_json::from_str(option_env!("COUCH_BUILD_INFO").unwrap_or("{}")).unwrap_or_default()
 }
 pub fn status(
@@ -439,11 +439,11 @@ pub fn status(
         }
     }
 }
-fn current_identity() -> serde_json::Value {
+pub(crate) fn current_identity() -> serde_json::Value {
     let build = build();
     serde_json::json!({"candidateId":format!("{:x}", Sha256::digest(format!("{}:{}", build["version"], build["revision"]))),"version":build["version"],"revision":build["revision"]})
 }
-fn read_transaction(
+pub(crate) fn read_transaction(
     directory: &Path,
     request_id: Option<&str>,
 ) -> Result<serde_json::Value, String> {
@@ -460,7 +460,7 @@ fn read_transaction(
         _ => Err("Cannot read the durable update request. Check storage through SSH.".into()),
     }
 }
-fn journal(
+pub(crate) fn journal(
     directory: &Path,
     transaction: &mut serde_json::Value,
     phase: &str,
