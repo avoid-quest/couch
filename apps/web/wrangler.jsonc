@@ -1,7 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "couch",
+  "main": "./src/worker.ts",
   "compatibility_date": "2026-09-07",
-  "assets": { "directory": "./dist" },
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
   "routes": [{ "pattern": "couch.avoid.quest", "custom_domain": true }]
 }
