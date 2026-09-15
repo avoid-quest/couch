@@ -2,6 +2,7 @@ import type { ProviderId } from "../shared/providers";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -120,7 +121,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     <div><h3 className="text-xl font-semibold">Recently played</h3></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
-    {loading && <p className="text-sm text-muted-foreground" role="status">Loading history…</p>}
+    {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
     {!loading && !error && !items.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
     <ul className="history-items space-y-3" aria-busy={loading}>{items.map(item => {
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);

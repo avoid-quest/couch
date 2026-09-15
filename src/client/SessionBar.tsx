@@ -1,6 +1,7 @@
 import { Play } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Action, SessionState } from "../shared/protocol";
 import type { Credentials } from "./session";
 import { AuthArtwork } from "./AuthArtwork";
@@ -61,7 +62,7 @@ export function SessionBar({ state, credentials, connected, run, onOpen, onRemot
     </div>
     <div className="session-bar-volume">
       <PlaybackVolume state={state!} connected={connected} run={run} />
-      {onRemote && <Button variant="ghost" size="icon" className="session-bar-remote" aria-label="Remote" title="Remote" onClick={onRemote}><Icon name="remote" /></Button>}
+      {onRemote && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="session-bar-remote" aria-label="Remote" onClick={onRemote}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
     </div>
   </footer>;
 }

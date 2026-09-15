@@ -45,13 +45,13 @@ afterEach(async () => {
 
 test("browser direct links and page navigation keep one session and preserve search in real links", async () => {
   await render();
-  expect(document.querySelector("output")?.textContent).toBe("Home:existing-playback");
+  expect(document.querySelector("output")?.textContent).toBe("Find:existing-playback");
   expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("initial");
   await click("Submit search");
-  expect(window.location.pathname + window.location.search).toBe("/?q=moon+%26+stars&source=TV+folders");
-  for (const page of ["Saved", "Queue", "Settings", "Home"]) { await click(page); expect(window.location.pathname).toBe(page === "Settings" ? "/settings/playback" : pagePaths[page]); }
-  expect(document.querySelector<HTMLAnchorElement>('a[href^="/?q="]')?.getAttribute("href")).toBe("/?q=moon+%26+stars&source=TV+folders");
-  await click("Search");
+  expect(window.location.pathname + window.location.search).toBe("/find?q=moon+%26+stars&source=TV+folders");
+  for (const page of ["Saved", "Now", "Settings", "Find"]) { await click(page); expect(window.location.pathname).toBe(page === "Settings" ? "/settings/playback" : pagePaths[page]); }
+  expect(document.querySelector<HTMLAnchorElement>('a[href^="/find?q="]')?.getAttribute("href")).toBe("/find?q=moon+%26+stars&source=TV+folders");
+  await click("Find");
   expect(document.querySelector("[data-query]")?.getAttribute("data-source")).toBe("TV folders");
   expect(mounts).toBe(1); expect(unmounts).toBe(0);
 });
@@ -62,11 +62,11 @@ test("typing replaces the current history entry and returning Home keeps the que
   expect(window.history.length).toBe(before);
   await click("Saved");
   await act(async () => window.history.back()); await flush();
-  expect(document.querySelector("output")?.textContent).toBe("Home:existing-playback");
+  expect(document.querySelector("output")?.textContent).toBe("Find:existing-playback");
   expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("moon & stars");
   await act(async () => window.history.forward()); await flush();
   expect(document.querySelector("output")?.textContent).toBe("Saved:existing-playback");
-  await click("Home");
+  await click("Find");
   expect(window.location.search).toBe("?q=moon+%26+stars&source=TV+folders");
   expect(mounts).toBe(1); expect(unmounts).toBe(0);
 });
@@ -76,20 +76,22 @@ test("native hash direct links, navigation and remote Back stay in the webview d
   await render(true);
   expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
   expect(window.location.hash).toBe("#/settings/playback");
-  await click("Search"); await click("Submit search"); await click("Queue");
-  expect(window.location.pathname).toBe("/index.html"); expect(window.location.hash).toBe("#/up-next");
+  await click("Now"); await click("Submit search"); await click("Find");
+  expect(window.location.pathname).toBe("/index.html"); expect(window.location.hash).toBe("#/find?q=moon+%26+stars&source=TV+folders");
   await click("Back");
-  expect(window.location.hash).toBe("#/?q=moon+%26+stars&source=TV+folders");
+  expect(window.location.hash).toBe("#/settings/playback");
   expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("moon & stars");
   expect(mounts).toBe(1); expect(unmounts).toBe(0);
 });
 
 test("all pages map to known paths and malformed search filters use truthful defaults", () => {
-  for (const [section, path] of Object.entries(pagePaths)) expect(sectionForPath(path)).toBe(["Search", "Browse"].includes(section) ? "Home" : section);
-  expect(sectionForPath("/search/")).toBe("Home");
+  for (const [section, path] of Object.entries(pagePaths)) expect(sectionForPath(path)).toBe(section);
+  expect(sectionForPath("/up-next")).toBe("Now");
+  expect(sectionForPath("/browse/radio")).toBe("Find");
+  expect(sectionForPath("/search/")).toBe("Find");
   expect(sectionForPath("/api/settings")).toBeUndefined();
   expect(readSearchState("?q=a%26b&source=Unknown")).toEqual({ query: "a&b", source: "All" });
-  expect(searchLocation({ query: "", source: "All" })).toBe("/");
+  expect(searchLocation({ query: "", source: "All" })).toBe("/find");
 });
 
 
@@ -157,7 +159,7 @@ test("Settings entry selects Playback and Back skips the index", async () => {
   expect(window.location.pathname).toBe("/settings/playback");
   expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
   await click("Back");
-  expect(window.location.pathname).toBe("/");
+  expect(window.location.pathname).toBe("/find");
   expect(mounts).toBe(1);
 });
 
@@ -175,7 +177,7 @@ for (const native of [false, true]) test(`legacy remotes URL opens Connections w
 for (const native of [false, true]) test(`legacy discovery aliases preserve queries in ${native ? "native" : "browser"} navigation`, async () => {
   window.history.replaceState(null, "", native ? "/index.html#/browse?q=jazz" : "/browse?q=jazz");
   await render(native);
-  expect(native ? window.location.hash : window.location.pathname + window.location.search).toBe(native ? "#/?q=jazz" : "/?q=jazz");
+  expect(native ? window.location.hash : window.location.pathname + window.location.search).toBe(native ? "#/find?q=jazz" : "/find?q=jazz");
   expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("jazz");
-  expect(document.title).toBe("Couch");
+  expect(document.title).toBe("Find · Couch");
 });

@@ -1,13 +1,25 @@
 import { settingsPageForPath, settingsPages } from "./settings-pages";
 
-// The native webview uses these paths after #; the browser serves them directly.
+// Four destinations. Sources are filters inside Find, not places.
 export const pagePaths: Record<string, string> = {
-  Home: "/", Search: "/search", Saved: "/saved", Queue: "/up-next", Settings: "/settings",
-  Browse: "/browse", Library: "/browse/library", Files: "/browse/files", Online: "/browse/online",
-  Guide: "/browse/guide", Radio: "/browse/radio", Jellyfin: "/browse/jellyfin",
+  Now: "/", Find: "/find", Saved: "/saved", Settings: "/settings",
 };
 
-export const frontendPaths = ["/settings/remotes", ...Object.values(pagePaths), ...Object.values(settingsPages).map(page => page.path)];
+// Old links keep working: sources became filters, the queue moved onto Now.
+const legacyPaths: Record<string, string> = {
+  "/search": "/find", "/up-next": "/", "/browse": "/find", "/browse/library": "/find",
+  "/browse/files": "/find", "/browse/online": "/find", "/browse/guide": "/find",
+  "/browse/radio": "/find", "/browse/jellyfin": "/find",
+};
 
-export const sectionForPath = (pathname: string) => ["/search", "/browse"].includes(pathname.replace(/\/$/, "")) ? "Home" : settingsPageForPath(pathname) ? "Settings" : Object.entries(pagePaths).find(([, path]) => path === (pathname.replace(/\/$/, "") || "/"))?.[0];
-export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : ["Search", "Browse"].includes(section) ? "Home" : section] ?? "/";
+export const frontendPaths = ["/settings/remotes", ...Object.values(pagePaths), ...Object.keys(legacyPaths), ...Object.values(settingsPages).map(page => page.path)];
+
+export const sectionForPath = (pathname: string): string | undefined => {
+  const clean = pathname.replace(/\/$/, "") || "/";
+  const section = Object.keys(pagePaths).find(name => pagePaths[name] === clean);
+  if (section) return section;
+  if (clean in legacyPaths) return sectionForPath(legacyPaths[clean]!);
+  return settingsPageForPath(pathname) ? "Settings" : undefined;
+};
+export const pathForSection = (section: string) => pagePaths[section === "For later" ? "Saved" : section] ?? "/";
+export const redirectForPath = (pathname: string): string | undefined => legacyPaths[pathname.replace(/\/$/, "") || "/"];

@@ -3,6 +3,7 @@ import { RestartSettings } from "./RestartSettings";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, RefreshCw, Settings2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -213,9 +214,15 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
 
   const sourcePages = Object.entries(settingsPages).filter(([id]) => id.startsWith("source-")) as [SettingsPage, (typeof settingsPages)[SettingsPage]][];
   const sourcePage = section?.startsWith("source-");
-  const visiblePages = Object.entries(settingsPages).filter(([id]) =>
-    !id.startsWith("source-") && (administrator || !["bluetooth", "sound", "display", "advanced"].includes(id)) && (id !== "tv-appearance" || !host),
-  ) as [SettingsPage, (typeof settingsPages)[SettingsPage]][];
+  const pageVisible = (id: SettingsPage) => (administrator || !["bluetooth", "sound", "display", "advanced"].includes(id)) && (id !== "tv-appearance" || !host);
+  const groupEntries = (pages: SettingsPage[]) => pages.filter(pageVisible).map(id => [id, settingsPages[id]] as [SettingsPage, (typeof settingsPages)[SettingsPage]]);
+  const settingsGroups = [
+    { label: "Playback", pages: groupEntries(["playback", "appearance"]) },
+    { label: "Library", pages: groupEntries(["sources"]) },
+    { label: "TV", pages: groupEntries(["general", "display", "sound", "tv-appearance"]) },
+    { label: "Connections", pages: groupEntries(["connection", "bluetooth"]) },
+    { label: "System", pages: groupEntries(["updates", "advanced"]) },
+  ].filter(group => group.pages.length);
   const pageLink = (id: SettingsPage | null, label: React.ReactNode, className = "", back = false) => <Button
     variant="ghost" className={`settings-link ${className}`} asChild={!!onSectionChange && !setup}
     data-settings-page={id ?? undefined} data-back={back ? "" : undefined}
@@ -227,9 +234,9 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
 
   const content = <>
       {setup && <SetupProgress step={setupStep!} host={!!host} administrator={administrator} administratorClaimed={administratorClaimed} />}
-      {!setup && page && <label className="settings-category"><span className="sr-only">Settings category</span><select value={sourcePage ? "sources" : section ?? "playback"} onChange={event => setSection(event.target.value as SettingsPage)}>{visiblePages.map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label>}
+      {!setup && page && <label className="settings-category"><span className="sr-only">Settings category</span><select value={sourcePage ? "sources" : section ?? "playback"} onChange={event => setSection(event.target.value as SettingsPage)}>{settingsGroups.map(group => <optgroup key={group.label} label={group.label}>{group.pages.map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</optgroup>)}</select></label>}
       {!setup && <nav className="settings-nav" aria-label="Settings pages">
-        {visiblePages.map(([id, item]) => <div key={id}>{pageLink(id, <><span>{item.label}</span><ChevronRight aria-hidden="true" className="settings-link-arrow" /></>)}</div>)}
+        {settingsGroups.map(group => <div key={group.label} className="settings-nav-group"><p className="settings-nav-label" aria-hidden="true">{group.label}</p>{group.pages.map(([id, item]) => <div key={id}>{pageLink(id, <><span>{item.label}</span><ChevronRight aria-hidden="true" className="settings-link-arrow" /></>)}</div>)}</div>)}
       </nav>}
       <div ref={sectionContent} className="settings-content min-w-0">
         {!setup && section && <header className="settings-section-header">
@@ -305,7 +312,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
       {setup && administrator && <Button className="min-h-11" disabled={!canWrite || section === "general" && draftName.trim() !== savedName} onClick={event => void update(event, "/api/settings/setup", { step: setupStep }, "Setup progress saved.")}>
         {pending ? "Saving…" : section === "general" ? "Continue to screen" : section === "display" ? "I can see Couch on the right screen" : section === "sound" ? "I heard the test sound" : "Finish setup"}
       </Button>}
-      {loading && <p role="status" className="text-muted-foreground">Loading settings…</p>}
+      {loading && <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading settings…</p>}
       {!connected && <p role="status" className="text-muted-foreground">{credentials ? "Connect to the TV to change its settings." : "This browser is not paired."}</p>}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {notice && <p role="status">{notice}</p>}

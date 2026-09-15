@@ -3,6 +3,7 @@ import { isNativeHost } from "./native-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { MetadataCandidate, MetadataPreview, MetadataValues, MetadataView } from "../shared/metadata";
 
@@ -110,7 +111,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: { orig
         <form className="space-y-3" onSubmit={save}>
           {(Object.entries(fields) as Array<[Field, string]>).filter(([key]) => metadata.type === "episode" || !["showTitle", "season", "episode"].includes(key)).map(([key, label]) => <div className="space-y-1" key={key}>
             <Label htmlFor={`${prefix}-${key}`}>{label}</Label><p id={`${prefix}-${key}-origin`} className="text-xs text-muted-foreground">Origin: {metadata.origins[key]}</p>
-            {key === "plot" || key === "genres" ? <textarea id={`${prefix}-${key}`} data-metadata-field={key} className="flex min-h-22 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base" rows={key === "plot" ? 4 : 2} value={draft[key]} maxLength={key === "plot" ? 4000 : 1296} disabled={busy} aria-describedby={`${prefix}-${key}-origin`} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />
+            {key === "plot" || key === "genres" ? <Textarea id={`${prefix}-${key}`} data-metadata-field={key} className="min-h-22" rows={key === "plot" ? 4 : 2} value={draft[key]} maxLength={key === "plot" ? 4000 : 1296} disabled={busy} aria-describedby={`${prefix}-${key}-origin`} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />
               : <Input id={`${prefix}-${key}`} data-metadata-field={key} className="min-h-11" type={["year", "season", "episode"].includes(key) ? "number" : key === "premiered" ? "date" : "text"} min={key === "year" ? 1000 : 0} max={key === "season" ? 999 : 9999} maxLength={300} required={key === "title" || key === "showTitle"} value={draft[key]} disabled={busy} aria-describedby={`${prefix}-${key}-origin`} onChange={event => setDraft({ ...draft, [key]: event.target.value })} />}
           </div>)}
           <div className="space-y-1"><Label htmlFor={`${prefix}-artwork`}>Replace artwork</Label><p className="text-xs text-muted-foreground">Origin: {metadata.origins.artworkId}. PNG or JPEG, up to 2 MiB.</p><Input ref={artworkInput} id={`${prefix}-artwork`} data-metadata-artwork className="min-h-11" type="file" accept="image/png,image/jpeg" disabled={busy} onChange={event => selectArtwork(event.target.files?.[0])} />{artwork && <p className="text-sm">Artwork selected. Save corrections to apply it.</p>}</div>

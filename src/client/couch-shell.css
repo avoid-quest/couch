@@ -58,8 +58,16 @@
   .couch-shell.remote-shell .header-status { gap: 6px; }
   .couch-shell.remote-shell .header-status [role="status"] { max-width: 80px; font-size: 10px; }
 }
-.couch-shell .media-browser > section > .browse-home,
+.couch-shell .media-browser .browse-home,
 .couch-shell .media-browser > section > .session-home { padding: 0; }
+.couch-shell .media-browser .now-playing .session-home { padding: 0; }
+.couch-shell .find-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px; margin-bottom: 26px; border-radius: var(--radius-lg); background: var(--muted); scrollbar-width: none; }
+.couch-shell .find-tabs > button { flex: 1 0 auto; min-height: 44px; font-size: 14px; }
+.couch-shell .find-tabs > button[aria-pressed="true"] { background: var(--background); }
+.couch-shell .now-search { display: flex; align-items: center; gap: 14px; padding: 6px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); transition: border-color 140ms; }
+.couch-shell .now-search:focus-within { border-color: var(--primary); }
+.couch-shell .now-search > svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--muted-foreground); }
+.couch-shell .now-search input { height: 54px; border: 0; background: transparent; box-shadow: none; padding: 0; font-size: 18px; letter-spacing: -.01em; }
 .couch-shell .settings-page > h1 { font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }
 
 .couch-shell .page-title { margin-bottom: 26px; font-size: 34px; font-weight: 600; letter-spacing: -1.2px; }

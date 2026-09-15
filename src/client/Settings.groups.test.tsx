@@ -49,11 +49,12 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("settings opens a flat page index without tabs, cards or a quality control", async () => {
+test("settings opens a grouped page index without tabs, cards or a quality control", async () => {
   const command = spyOn(props, "onCommand");
   try {
     await render();
-    expect([...document.querySelectorAll<HTMLElement>("[data-settings-page]")].map(button => button.dataset.settingsPage)).toEqual(["playback", "appearance", "connection", "general", "sources", "bluetooth", "sound", "display", "tv-appearance", "updates", "advanced"]);
+    expect([...document.querySelectorAll<HTMLElement>("[data-settings-page]")].map(button => button.dataset.settingsPage)).toEqual(["playback", "appearance", "sources", "general", "display", "sound", "tv-appearance", "connection", "bluetooth", "updates", "advanced"]);
+    expect([...document.querySelectorAll<HTMLElement>(".settings-nav-label")].map(label => label.textContent)).toEqual(["Playback", "Library", "TV", "Connections", "System"]);
     expect(document.querySelector('[role="tablist"]')).toBeNull();
     expect(document.querySelector('[data-settings-group]')).toBeNull();
     expect(document.querySelector("#default-video-quality")).toBeNull();
@@ -259,7 +260,7 @@ test("native qualification navigates current Settings links and the phone catego
     expect(option.tagName).toBe("OPTION");
     nativeClicks.push(option.value);
     await act(async () => {
-      const select = option.parentElement as HTMLSelectElement;
+      const select = option.closest("select") as HTMLSelectElement;
       select.value = option.value;
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });

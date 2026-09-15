@@ -22,6 +22,8 @@ h3 { font-weight: 600; }
 .pair-shortcut strong { font-family: ui-monospace, monospace; letter-spacing: .12em; }
 .connection-dot { height: 8px; width: 8px; background: #e4b25c; border-radius: 50%; }
 .connection-dot.online { background: #92dcb3; }
+.playback-status { gap: 8px; font-size: .875rem; }
+.playback-status-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
 .workspace { min-width: 0; }
 .player-panel { min-width: 0; border-radius: var(--radius-xl); overflow: hidden; border: 1px solid var(--border); }
 .video-stage { aspect-ratio: 16 / 9; background: var(--background); position: relative; display: grid; place-items: center; }

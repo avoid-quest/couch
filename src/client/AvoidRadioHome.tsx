@@ -4,6 +4,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Play, Plus, Radio, Star } from "lucide-react";
 
@@ -17,6 +19,7 @@ export type AvoidRadioHomeProps = {
   onBrowse?: () => void;
   currentStationId?: string;
   active?: boolean;
+  limit?: number;
 };
 
 function Artwork({ station, programme, expanded = false }: { station: RadioStation; programme?: RadioProgrammeDetails; expanded?: boolean }) {
@@ -31,7 +34,7 @@ export function AvoidRadioHome(props: AvoidRadioHomeProps) {
   return <AvoidRadioDiscovery key={`${props.origin}\0${props.token}`} {...props} />;
 }
 
-function AvoidRadioDiscovery({ origin, token, connected, canPlay, version, onEnqueue, onBrowse, currentStationId, active = true }: AvoidRadioHomeProps) {
+function AvoidRadioDiscovery({ origin, token, connected, canPlay, version, onEnqueue, onBrowse, currentStationId, active = true, limit }: AvoidRadioHomeProps) {
   const headingId = useId();
   const [catalog, setCatalog] = useState<AvoidRadioCatalog | null>(null);
   const [programmes, setProgrammes] = useState<Record<string, RadioProgrammeDetails>>({});
@@ -177,13 +180,14 @@ function AvoidRadioDiscovery({ origin, token, connected, canPlay, version, onEnq
 
   return <section className="space-y-4" aria-labelledby={headingId}>
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id={headingId} className="text-xl font-medium">avoid radio</h2>{onBrowse && <Button variant="ghost" onClick={onBrowse}>All radio</Button>}</div>
-    {loading && !catalog && <p role="status" className="text-sm text-muted-foreground">Loading stations…</p>}
+    {loading && !catalog && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Loading stations…</p>}
+    {loading && !catalog && <ul className="radio-grid" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <li key={index}><Card className="catalog-card h-full gap-3 p-3"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="h-4 w-2/5" /><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full" /></Card></li>)}</ul>}
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to a playback computer to load radio.</p>}
     {error && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => loadCatalog(true)}>Retry avoid radio</Button></AlertDescription></Alert>}
     {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
     {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
     {catalog && !loading && !catalog.stations.length && !error && <p className="text-sm text-muted-foreground">No stations are available from avoid radio right now.</p>}
-    <ul className="radio-grid">{catalog?.stations.map(station => {
+    <ul className="radio-grid">{catalog?.stations.slice(0, limit).map(station => {
       const current = programme(station);
       return <li key={station.id} className="min-w-0"><Card className="catalog-card h-full justify-between gap-3 p-3">
         <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-3 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(station.id); }}>
