@@ -32,10 +32,10 @@ const newerPreview = stable && preview && preview.version.localeCompare(stable.v
         <p class="intro">One package for your desktop or dedicated TV.</p>
         <p class="target">Debian 13 · Intel or AMD 64-bit · X11 desktop</p>
         {primary ? <div class="download">
-          <a class={buttonVariants({ size: "lg" })} href={url(primary, channel)}>
+          <a class={buttonVariants({ size: "lg" })} href={url(primary, channel)} data-release={channel}>
             Download Couch{channel === "preview" ? " Preview" : ""}
           </a>
-          <span>Version {primary.version} · .deb</span>
+          <span data-release-version={channel}>Version {primary.version} · .deb</span>
         </div> : <p>A verified Debian package is not available yet.</p>}
       </header>
 
@@ -70,7 +70,7 @@ const newerPreview = stable && preview && preview.version.localeCompare(stable.v
         <details>
           <summary id="preview">Try the next release</summary>
           <p>Preview {preview.version} is available for testing. Install it with the same steps, using its filename:</p>
-          <p><a href={url(preview, "preview")}>Download Couch Preview {preview.version}</a></p>
+          <p><a href={url(preview, "preview")} data-release="preview">Download Couch Preview {preview.version}</a></p>
           <pre><code>{`sudo apt install ./${filename(preview)}`}</code></pre>
           <p>Switching back to Stable waits for a newer Stable release.</p>
         </details>
@@ -80,6 +80,14 @@ const newerPreview = stable && preview && preview.version.localeCompare(stable.v
     </main>
   </body>
 </html>
+<script>
+  const releases: Record<string, { version: string; url: string } | null> | null = await fetch("/api/releases").then(response => response.json()).catch(() => null);
+  if (releases) for (const [channel, release] of Object.entries(releases)) {
+    if (!release) continue;
+    for (const anchor of document.querySelectorAll<HTMLAnchorElement>(`a[data-release="${channel}"]`)) anchor.href = release.url;
+    for (const label of document.querySelectorAll<HTMLElement>(`[data-release-version="${channel}"]`)) if (label.textContent) label.textContent = label.textContent.replace(/\d+\.\d+\.\d+/, release.version);
+  }
+</script>
 <style>
   .downloads { display: block; position: static; max-width: 42rem; margin: auto; padding: 2rem 1.5rem 3rem; }
   nav, .target, .download span, .muted, footer { color: var(--muted-foreground); }
