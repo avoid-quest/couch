@@ -77,12 +77,10 @@ builds and qualifies releases in the pinned Debian container. If hosted capacity
 is unavailable, the Mac runs the same build; the T480 only installs and runs
 Couch. See [hosted releases](docs/hosted-releases.md).
 
-On a fresh TV, scan the QR or use the address and six-digit controller code
-on **Claim and name**. On a configured TV, **Pair a remote** shows its address
-and code; **Settings > Connections** on the TV or an administrator remote has
-the pairing QR. Use **Search** to find a title or paste a supported link;
-**Library** opens the provider catalogs, Radio, Live TV, Jellyfin and TV folders.
-An administrator manages folders and Jellyfin in **Settings > Sources**.
+On first launch, choose **This computer** for local playback. Enable remote
+control to pair a phone using the displayed code or QR address. Existing
+installations retain their operating mode and pairings. An Administrator manages
+folders and Jellyfin in **Settings > Sources**.
 
 The coordinator's default port is `4100`; a configured named address can use
 port 80. Use the address shown by your TV consistently. Settings, pairings and
