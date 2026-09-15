@@ -94,12 +94,23 @@ export function assertIncreasing(releases: { version: string; channel: string | 
   if (channel === "stable") assert.ok(!version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
 }
 
-export async function verifyPublic(manifest: Manifest, channel: Channel, fetcher: typeof fetch = fetch) {
+export async function verifyPublic(manifest: Manifest, channel: Channel, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
   validateManifest(manifest);
   const checks: { url: string; finalUrl: string; sha256: string }[] = [];
   const get = async (url: string, expected?: FileIdentity) => {
     assert.equal(new URL(url).protocol, "https:", "Public downloads require HTTPS.");
-    const response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+    let response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+    for (let retries = 0; response.status === 429 && retries < 2; retries++) {
+      const retry = response.headers.get("retry-after");
+      const milliseconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
+      const wait = Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
+      await response.body?.cancel();
+      assert.ok(Number.isFinite(wait) && wait <= 120_000, `CDN Retry-After exceeds the readiness wait limit: ${url}. Retry verification later.`);
+      console.warn(`CDN rate limited ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
+      await sleep(wait);
+      response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
+    }
+    if (response.status !== 200) await response.body?.cancel();
     assert.equal(response.status, 200, `Public download is not ready: ${url} (${response.status}). Retry verification of the existing release.`);
     assert.equal(new URL(response.url || url).protocol, "https:");
     const maximum = expected?.bytes ?? 64 * 1024;

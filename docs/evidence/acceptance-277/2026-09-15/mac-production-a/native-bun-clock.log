@@ -1,0 +1,11 @@
+bun test v1.4.2 (744846f84)
+
+tests/linux/iptv-clock.test.ts:
+(pass) video clock decodes timestamps and rejects damaged, absent and stale markers [5.61ms]
+(pass) delayed-window readiness follows published HLS when elapsed time gets ahead [4394.40ms]
+(pass) real H264 live fixture presents advancing pixel timestamps; a delayed reload fails the same freshness assertion [45769.66ms]
+
+ 3 pass
+ 0 fail
+ 188 expect() calls
+Ran 3 tests across 1 file. [50.18s]
