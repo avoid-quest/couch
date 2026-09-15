@@ -71,7 +71,7 @@ struct Candidate {
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct Requirements {
+pub(super) struct Requirements {
     schema_version: u64,
     version: String,
     revision: String,
@@ -101,7 +101,7 @@ fn now() -> i64 {
 pub fn running(app: &tauri::AppHandle) -> bool {
     #[cfg(target_os = "linux")]
     {
-        app.env().appimage.is_some()
+        app.env().appimage.is_some() || crate::native_deb_update::running()
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -124,7 +124,7 @@ fn enrollment(app: &tauri::AppHandle) -> Result<Enrollment, String> {
     PublicKey::decode(&decoded).map_err(|_| "This build has no enrolled updater key.")?;
     Ok(trust)
 }
-fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
+pub(super) fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
     let decode = |value: &str| {
         String::from_utf8(STANDARD.decode(value.trim()).map_err(error)?).map_err(error)
     };
@@ -141,7 +141,12 @@ fn verify(bytes: &[u8], signature: &str, pubkey: &str) -> Result<(), String> {
 }
 fn update_url(current: &str, channel: Channel) -> Result<reqwest::Url, String> {
     semver::Version::parse(current).map_err(error)?;
-    let mut url = reqwest::Url::parse(&format!("{ENDPOINT}{current}")).map_err(error)?;
+    let endpoint = if crate::native_deb_update::running() {
+        "https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/"
+    } else {
+        ENDPOINT
+    };
+    let mut url = reqwest::Url::parse(&format!("{endpoint}{current}")).map_err(error)?;
     if matches!(channel, Channel::Preview) {
         url.set_query(Some("channel=preview"));
     }
@@ -230,6 +235,19 @@ fn validate_requirements(
     Ok(())
 }
 async fn inspect(path: &Path, version: &str, directory: &Path) -> Result<Requirements, String> {
+    if crate::native_deb_update::running() {
+        let requirements =
+            serde_json::from_slice(&crate::native_deb_update::manifest(path, version).await?)
+                .map_err(error)?;
+        validate_requirements(
+            &requirements,
+            version,
+            build()["dataFormat"]
+                .as_u64()
+                .ok_or("Missing current data format")?,
+        )?;
+        return Ok(requirements);
+    }
     let inspection = directory.join(format!("inspect-{}", uuid::Uuid::new_v4()));
     crate::prepare_data_dir(&inspection).map_err(error)?;
     #[cfg(unix)]
@@ -281,6 +299,10 @@ async fn host_ready(requirements: &Requirements) -> Result<(), String> {
     {
         return Err("Updates require the supported Debian 13 amd64 X11 host.".into());
     }
+    // APT resolves native package dependencies in the privileged transaction.
+    if crate::native_deb_update::running() {
+        return Ok(());
+    }
     let mut packages = tokio::process::Command::new("/usr/bin/dpkg-query");
     let output = tokio::time::timeout(
         Duration::from_secs(10),
@@ -300,15 +322,24 @@ async fn host_ready(requirements: &Requirements) -> Result<(), String> {
     {
         return Err("Required Debian host packages are missing or unconfigured. Ask the machine administrator to rerun signed setup before updating.".into());
     }
-    fs::OpenOptions::new().read(true).write(true).open("/dev/fuse").map_err(|_| "The runtime account cannot access /dev/fuse. Repair Debian host permissions before updating.")?;
+    if !crate::native_deb_update::running() {
+        fs::OpenOptions::new().read(true).write(true).open("/dev/fuse").map_err(|_| "The runtime account cannot access /dev/fuse. Repair Debian host permissions before updating.")?;
+    }
     Ok(())
 }
-fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let directory = path.parent().unwrap();
     crate::prepare_data_dir(directory).map_err(error)?;
     let temporary = path.with_extension("partial");
     let result = (|| {
-        let mut file = fs::File::create(&temporary).map_err(error)?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+        }
+        let mut file = options.open(&temporary).map_err(error)?;
         file.write_all(bytes).map_err(error)?;
         file.sync_all().map_err(error)?;
         fs::rename(&temporary, path).map_err(error)?;
@@ -323,6 +354,11 @@ fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 const TV_APPLICATION: &str = "/var/lib/couch/application";
 fn application(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if crate::native_deb_update::running() {
+        let directory = crate::native_deb_update::directory()?;
+        crate::prepare_data_dir(&directory).map_err(error)?;
+        return Ok(directory);
+    }
     #[cfg(target_os = "linux")]
     {
         let image = app
@@ -360,13 +396,13 @@ fn application(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
 }
 async fn restart_ready(application: &Path) -> Result<(), String> {
-    if application == Path::new(TV_APPLICATION) {
+    if application == Path::new(TV_APPLICATION) || crate::native_deb_update::tv() {
         supervised_restart().await?;
     }
     Ok(())
 }
 async fn relaunch(app: &tauri::AppHandle, application: &Path) {
-    if application == Path::new(TV_APPLICATION) {
+    if application == Path::new(TV_APPLICATION) || crate::native_deb_update::tv() {
         app.exit(0);
     } else {
         // Tauri's restart event cannot be prevented. Drain our writer before requesting it.
@@ -391,7 +427,16 @@ fn installation_lock(application: &Path) -> Result<fs::File, String> {
     #[cfg(unix)]
     {
         use std::os::fd::AsRawFd;
-        let path = if application == Path::new(TV_APPLICATION) {
+        let path = if crate::native_deb_update::running() {
+            let path = application.join("request.lock");
+            fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&path)
+                .map_err(error)?;
+            path
+        } else if application == Path::new(TV_APPLICATION) {
             PathBuf::from("/var/lib/couch-install-locks/tv.lock")
         } else {
             PathBuf::from(format!(
@@ -432,7 +477,7 @@ pub fn status(
         });
     match result {
         Ok(transaction) => {
-            serde_json::json!({"type":"appimageUpdate","requestId":request_id,"ok":true,"transaction":transaction,"current":current_identity(),"repairCurrent":false,"installationAvailable":running(app) && enrollment(app).is_ok() && application(app).is_ok()})
+            serde_json::json!({"type":"appimageUpdate","requestId":request_id,"ok":true,"transaction":transaction,"current":current_identity(),"repairCurrent":false,"installationFormat":if crate::native_deb_update::running() { "deb" } else { "appimage" },"installationAvailable":running(app) && enrollment(app).is_ok() && application(app).is_ok()})
         }
         Err(message) => {
             serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":message})
@@ -509,7 +554,7 @@ async fn command(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 }
-async fn copy(source: &Path, destination: &Path) -> Result<(), String> {
+pub(super) async fn copy(source: &Path, destination: &Path) -> Result<(), String> {
     let mut cp = std::process::Command::new("/usr/bin/cp");
     cp.arg("-a").arg("--").arg(source).arg(destination);
     command(
@@ -519,7 +564,11 @@ async fn copy(source: &Path, destination: &Path) -> Result<(), String> {
     )
     .await
 }
-async fn sizes(program: &str, arguments: &[&str], paths: &[&Path]) -> Result<Vec<u64>, String> {
+pub(super) async fn sizes(
+    program: &str,
+    arguments: &[&str],
+    paths: &[&Path],
+) -> Result<Vec<u64>, String> {
     let mut command = tokio::process::Command::new(program);
     command
         .args(arguments)
@@ -564,6 +613,9 @@ fn archive_hash(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hash.finalize()))
 }
 fn known_good(application: &Path, trust: &Enrollment) -> Result<serde_json::Value, String> {
+    if crate::native_deb_update::running() {
+        return Ok(build());
+    }
     let metadata: serde_json::Value =
         serde_json::from_slice(&fs::read(application.join("build.json")).map_err(error)?)
             .map_err(error)?;
@@ -592,6 +644,14 @@ async fn preflight(application: &Path, directory: &Path, bytes: u64) -> Result<(
         return Err(
             "Application and data directories must not overlap for a consistent backup.".into(),
         );
+    }
+    if crate::native_deb_update::running() {
+        return crate::native_deb_update::preflight(
+            application,
+            data,
+            &directory.join("candidate.deb"),
+        )
+        .await;
     }
     let sizes = sizes(
         "/usr/bin/du",
@@ -630,6 +690,19 @@ async fn backup(
     directory: &Path,
     request_id: &str,
 ) -> Result<(), String> {
+    if crate::native_deb_update::running() {
+        return crate::native_deb_update::backup(
+            application,
+            directory
+                .parent()
+                .and_then(Path::parent)
+                .ok_or("Invalid data directory")?,
+            request_id,
+            &trust.pubkey,
+            &build(),
+        )
+        .await;
+    }
     let destination = application.join("backups").join(request_id);
     fs::create_dir_all(destination.parent().unwrap()).map_err(error)?;
     fs::create_dir(&destination).map_err(error)?;
@@ -715,12 +788,21 @@ pub async fn run(
 ) {
     if let Ok(mut transaction) = read_transaction(&directory, None) {
         if !transaction.is_null()
-            && !matches!(
+            && (transaction["nativePending"] == true || !matches!(
                 transaction["phase"].as_str(),
                 Some("succeeded" | "failed" | "operator-required" | "restored" | "trial")
-            )
+            ))
         {
-            let _ = journal(&directory, &mut transaction, "operator-required", Some("The update was interrupted. Inspect the retained application and data through SSH.".into()));
+            let recovered = if crate::native_deb_update::running() {
+                crate::native_deb_update::reconcile(&transaction, &build())
+            } else {
+                Ok(false)
+            };
+            let (phase, message) = match recovered {
+                Ok(true) => { transaction["nativePending"] = false.into(); ("trial", None) },
+                result => ("operator-required", Some(result.err().unwrap_or_else(|| "The update was interrupted. An OS administrator must inspect the retained package and data before retrying.".into()))),
+            };
+            let _ = journal(&directory, &mut transaction, phase, message);
         }
     }
     let mut selected: Option<(Channel, Update, Candidate)> = None;
@@ -735,12 +817,12 @@ pub async fn run(
         let operation = async {
             if !running(&app) {
                 return Err::<serde_json::Value, String>(
-                    "Signed AppImage updates require the running AppImage installation.".into(),
+                    "Signed updates require an installed Couch package.".into(),
                 );
             }
             if let Action::Status { ref request_id } = request.action {
                 return Ok(
-                    serde_json::json!({"ok":true,"transaction":read_transaction(&directory, request_id.as_deref())?,"current":current_identity(),"repairCurrent":false,"installationAvailable":enrollment(&app).is_ok() && application(&app).is_ok()}),
+                    serde_json::json!({"ok":true,"transaction":read_transaction(&directory, request_id.as_deref())?,"current":current_identity(),"repairCurrent":false,"installationFormat":if crate::native_deb_update::running() { "deb" } else { "appimage" },"installationAvailable":enrollment(&app).is_ok() && application(&app).is_ok()}),
                 );
             }
             if let Action::Complete { ref error } = request.action {
@@ -792,7 +874,11 @@ pub async fn run(
                 return Ok(serde_json::json!({"ok":true}));
             }
             let trust = enrollment(&app)?;
-            let path = directory.join("candidate.AppImage");
+            let path = directory.join(if crate::native_deb_update::running() {
+                "candidate.deb"
+            } else {
+                "candidate.AppImage"
+            });
             match request.action {
                 Action::Restart { .. } | Action::Status { .. } | Action::Complete { .. } => {
                     unreachable!()
@@ -857,7 +943,7 @@ pub async fn run(
                     }
                     let requirements = inspect(&path, &summary.version, &directory).await?;
                     host_ready(&requirements).await?;
-                    let mut transaction = serde_json::json!({"updateId":request_id,"requestId":request_id,"candidateId":candidate_id,"version":summary.version,"revision":requirements.revision,"createdAt":now(),"repairRuntime":false,"intent":"install"});
+                    let mut transaction = serde_json::json!({"updateId":request_id,"requestId":request_id,"candidateId":candidate_id,"version":summary.version,"revision":requirements.revision,"createdAt":now(),"digest":format!("{:x}", Sha256::digest(fs::read(&path).map_err(error)?)),"repairRuntime":false,"intent":"install"});
                     journal(&directory, &mut transaction, "accepted", None)?;
                     report(
                         serde_json::json!({"ok":true,"accepted":true,"transaction":transaction}),
@@ -865,7 +951,7 @@ pub async fn run(
                     let mut disrupted = false;
                     let installation = async {
                         let bytes = fs::read(&path).map_err(error)?;
-                        if bytes.is_empty() || bytes.len() as u64 > MAX_ARCHIVE { return Err("The saved AppImage size is invalid.".into()); }
+                        if bytes.is_empty() || bytes.len() as u64 > MAX_ARCHIVE { return Err("The saved package size is invalid.".into()); }
                         verify(&bytes, &update.signature, &trust.pubkey)?;
                         known_good(&application, &trust)?;
                         preflight(&application, &directory, bytes.len() as u64).await?;
@@ -883,10 +969,17 @@ pub async fn run(
                         result?;
                         if !closed { return Err("The data writers did not stop.".into()); }
                         backup(&application, &trust, &directory, request_id).await?;
+                        if crate::native_deb_update::running() { transaction["nativePending"] = true.into(); }
                         journal(&directory, &mut transaction, "installing", None)?;
-                        update.install(&bytes).map_err(error)?;
-                        save(&application.join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":requirements.revision,"dataFormat":requirements.data_format,"readableDataFormats":requirements.readable_data_formats,"archiveSha256":format!("{:x}", Sha256::digest(&bytes))})).map_err(error)?)?;
-                        save(&application.join("Couch.AppImage.sig"), update.signature.as_bytes())?;
+                        if crate::native_deb_update::running() {
+                            crate::native_deb_update::release_guard(&app);
+                            crate::native_deb_update::install(&bytes, &update.signature, request_id, &summary.version).await?;
+                            transaction["nativePending"] = false.into();
+                        } else {
+                            update.install(&bytes).map_err(error)?;
+                            save(&application.join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":requirements.revision,"dataFormat":requirements.data_format,"readableDataFormats":requirements.readable_data_formats,"archiveSha256":format!("{:x}", Sha256::digest(&bytes))})).map_err(error)?)?;
+                            save(&application.join("Couch.AppImage.sig"), update.signature.as_bytes())?;
+                        }
                         journal(&directory, &mut transaction, "trial", None)?;
                         Ok::<(), String>(())
                     }.await;

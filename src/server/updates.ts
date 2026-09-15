@@ -16,7 +16,7 @@ type Attempt = { candidateId: string; requestId: string };
 const finished = new Set(["succeeded", "failed", "restored", "operator-required"]);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 export function createUpdates(directory: string, running: UpdateState["running"], feed?: UpdateFeed<UpdateRelease>, interval = 15 * 60_000, admitted = () => true, automation?: Automation) {
-  const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require the installed Debian AppImage." };
+  const state: UpdateState = { running, installationUnavailable: feed?.installationUnavailable, channel: "stable", policy: "manual", status: feed ? "idle" : "unavailable", currentCheck: false, lastSuccessfulCheck: null, candidate: null, error: feed ? null : "Updates require an installed Couch package." };
   let attempt: Attempt | null = null;
   try {
     const saved = JSON.parse(readFileSync(join(directory, "settings.json"), "utf8"));
@@ -130,14 +130,14 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         if (path === "/api/updates" && request.method === "GET") return json(state);
         if (!["/api/updates/channel", "/api/updates/policy", "/api/updates/check", "/api/updates/stage"].includes(path)) return json({ error: "Not found." }, 404);
         if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
-        if (!feed) throw new ControllerError("Updates require the installed Debian AppImage.", 409);
+        if (!feed) throw new ControllerError("Updates require an installed Couch package.", 409);
         const field = path.endsWith("/channel") ? "channel" : path.endsWith("/policy") ? "policy" : path.endsWith("/check") ? "check" : "candidateId";
         const value = await settingField(request, field);
         authorize();
         if (busy()) throw new ControllerError("An update operation is already running. Wait for it to finish.", 409);
         if (field === "policy") {
           if (value !== "manual" && value !== "idle") throw new ControllerError("Choose Manual or Auto when idle.");
-          if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Complete the signed AppImage appliance installation before enabling automatic installation.", 409);
+          if (value === "idle" && !automation) throw new ControllerError(feed.installationUnavailable ?? "Complete the Couch package installation before enabling automatic installation.", 409);
           const previous = state.policy;
           changing = true; state.policy = value;
           try { saving = persist(); await saving; state.waiting = value === "idle" ? "Waiting for a current verified download and ten idle minutes." : null; }

@@ -1,4 +1,5 @@
 mod appimage_update;
+mod native_deb_update;
 mod bluetooth;
 mod diagnostics;
 mod display;
@@ -24,6 +25,7 @@ use tokio::sync::watch;
 use protocol::{ConnectionInfo, PlayerState, SidecarMessage, VideoRect};
 
 struct Host {
+    package_guard: Mutex<Option<std::fs::File>>,
     data_dir: std::path::PathBuf,
     local_running: AtomicBool,
     workers: Mutex<
@@ -227,12 +229,8 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                 .join("tools"),
         )
         .env(
-            "COUCH_APPIMAGE",
-            if appimage_update::running(app) {
-                "1"
-            } else {
-                "0"
-            },
+            "COUCH_PACKAGE_FORMAT",
+            if native_deb_update::running() { "deb" } else if appimage_update::running(app) { "appimage" } else { "source" },
         )
         .env("COUCH_HOST_TOKEN", token)
         .env("COUCH_DATA_DIR", &host.data_dir)
@@ -269,7 +267,12 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
             sidecar = sidecar.env(variable, path);
         }
     }
-    let (mut events, child) = sidecar.spawn().map_err(|error| error.to_string())?;
+    if let Some(fd) = native_deb_update::inherit_guard(app, true)? {
+        sidecar = sidecar.env("COUCH_PACKAGE_LOCK_FD", fd.to_string());
+    }
+    let spawned = sidecar.spawn();
+    native_deb_update::inherit_guard(app, false)?;
+    let (mut events, child) = spawned.map_err(|error| error.to_string())?;
 
     host.connection.send_replace(None);
     host.child_exited.send_replace(false);
@@ -431,6 +434,10 @@ pub fn run() {
         );
         return;
     }
+    let package_guard = native_deb_update::startup().unwrap_or_else(|error| {
+        eprintln!("Cannot start Couch: {error}");
+        std::process::exit(1);
+    });
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
@@ -461,7 +468,7 @@ pub fn run() {
             operating_mode::complete_local_setup,
             operating_mode::show_playback_device
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let data_dir = match std::env::var_os("COUCH_DATA_DIR") {
                 Some(path) => std::path::PathBuf::from(path),
                 None => app.path().app_data_dir()?,
@@ -473,6 +480,7 @@ pub fn run() {
             let (connection, _) = watch::channel(None);
             let (child_exited, _) = watch::channel(false);
             app.manage(Host {
+                package_guard: Mutex::new(package_guard),
                 data_dir: data_dir.clone(),
                 local_running: AtomicBool::new(false),
                 workers: Mutex::new(Some((player_receiver, display_receiver))),

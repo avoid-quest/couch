@@ -10,7 +10,7 @@ afterEach(async () => {
   for (const task of cleanup.splice(0).reverse()) await task();
 });
 
-test.each(["stdin close", "shutdown message", "AppImage admission"])("the sidecar accepts native observations, protects its data, and exits on %s", async reason => {
+test.each(["stdin close", "shutdown message", "AppImage admission", "Debian admission"])("the sidecar accepts native observations, protects its data, and exits on %s", async reason => {
   const dir = await mkdtemp(join(tmpdir(), "couch-sidecar-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
   await chmod(dir, 0o755);
@@ -20,7 +20,7 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
       ...process.env,
       NODE_ENV: "production",
       COUCH_NATIVE: "1",
-      COUCH_APPIMAGE: reason === "AppImage admission" ? "1" : "0",
+      COUCH_PACKAGE_FORMAT: reason === "AppImage admission" ? "appimage" : reason === "Debian admission" ? "deb" : "source",
       COUCH_HOST: "127.0.0.1",
       COUCH_PORT: "0",
       COUCH_HOST_TOKEN: token,
@@ -63,7 +63,7 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
     type: "player",
     state: { playbackId: null, status: "idle", position: 0, duration: null, volume: 50, seekable: false, error: null },
   };
-  if (reason === "AppImage admission") {
+  if (reason.endsWith("admission")) {
     expect((await enableSharing()).status).toBe(503);
     expect((await fetch(`${ready.origin}/api/connection`).then(response => response.json())).remoteControlEnabled).toBe(false);
     const status = await message();

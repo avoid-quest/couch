@@ -1,3 +1,4 @@
+import { nativePackageLock } from "./server/native-package-lock";
 import { checkpointAppImage } from "./server/appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./server/appimage-update-native";
 import { createNativeBluetooth } from "./server/bluetooth-native";
@@ -25,14 +26,15 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 // The one-time recovery secret must not reach media-helper subprocesses.
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
+const releasePackageLock = nativePackageLock();
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
-if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1");
+if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, ["appimage", "deb"].includes(process.env.COUCH_PACKAGE_FORMAT ?? ""), releasePackageLock);
 
 function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
-const appimage = native && process.env.COUCH_APPIMAGE === "1";
+const appimage = native && ["appimage", "deb"].includes(process.env.COUCH_PACKAGE_FORMAT ?? "");
 const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
 const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
@@ -151,6 +153,7 @@ if (native) {
             // Let the accepted HTTP response leave before closing its listener.
             await Bun.sleep(250);
             const result = await checkpointAppImage({ ...message, work: hub.updateWork, idle: hub.idleAdmission, player: () => hub.session.state.player.status, closeAdmission: () => { admission = false; }, quiesce: hub.quiesce });
+            if (result.closed && !result.error) releasePackageLock();
             send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
           })();
         }

@@ -1,0 +1,14 @@
+[Unit]
+Description=Install a verified Couch package for %i
+After=systemd-tmpfiles-setup.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/lib/couch/couch-package-update %i
+UMask=0077
+TimeoutStartSec=infinity
+KillMode=control-group
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

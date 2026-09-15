@@ -105,7 +105,7 @@ test("unavailable enrolled installation rejects work until native status becomes
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: false, current: null });
   expect(manual.needsRefresh()).toBe(true);
   expect(await (await manual.install(request(), admin)).json()).toMatchObject({ accepted: false });
-  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("AppImage installation");
+  await expect(manual.automatic(payload.candidateId, payload.requestId, () => {})).rejects.toThrow("Package installation");
   expect(calls.every(op => op === "status")).toBe(true);
   upgraded = true;
   expect(await manual.read(admin)).toMatchObject({ repairAvailable: true, current: { candidateId: payload.candidateId } });

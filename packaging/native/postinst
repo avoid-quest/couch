@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$1" = configure ]; then
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/couch-updater.conf
+    if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+fi

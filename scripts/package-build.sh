@@ -12,10 +12,13 @@ if [ "$COUCH_PACKAGE_FORMAT" = appimage ]; then
 else
   rm -rf src-tauri/target/release/bundle/deb
 fi
-bun scripts/desktop.ts build --bundles "$COUCH_PACKAGE_FORMAT" --config .artifacts/tauri-release.conf.json -- --locked
 if [ "$COUCH_PACKAGE_FORMAT" = deb ]; then
+  bun scripts/desktop.ts build --no-bundle --config .artifacts/tauri-release.conf.json -- --locked
+  "${CARGO:-$HOME/.cargo/bin/cargo}" build --manifest-path src-tauri/Cargo.toml --release --locked --features package-update-broker --bin couch-package-update
+  bun scripts/desktop.ts bundle --bundles deb --config .artifacts/tauri-release.conf.json
   bun scripts/package-deb-verify.ts
 else
+  bun scripts/desktop.ts build --bundles appimage --config .artifacts/tauri-release.conf.json -- --locked
   bun scripts/package-verify-helpers.ts
   bun scripts/package-inventory.ts
 fi

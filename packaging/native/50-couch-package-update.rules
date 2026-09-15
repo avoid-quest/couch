@@ -1,0 +1,7 @@
+// The installed verifier independently authenticates the fixed account inbox.
+polkit.addRule(function(action, subject) {
+    if (/^[A-Za-z_][A-Za-z0-9_-]{0,31}$/.test(subject.user) &&
+        action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "couch-package-update@" + subject.user + ".service" &&
+        action.lookup("verb") === "start") return polkit.Result.YES;
+});

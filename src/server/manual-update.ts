@@ -13,6 +13,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   let busy = false;
   let repairAvailable: boolean | null = null;
   let installationAvailable: boolean | null = null;
+  let format: "deb" | "appimage" | undefined;
   let current: NonNullable<UpdateState["installation"]>["current"] = null;
   const authorize = (identity: () => ControllerIdentity | null) => {
     const caller = identity();
@@ -20,10 +21,11 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     if (caller.authority === "controller") throw new ControllerError("An administrator is required to install updates.", 403);
   };
   const status = async (requestId?: string) => {
-    const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean; installationAvailable?: boolean };
-    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Check Couch through SSH.", 503);
+    const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean; installationAvailable?: boolean; installationFormat?: "deb" | "appimage" };
+    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Ask the machine administrator to inspect Couch.", 503);
     current = result.current && /^[a-f0-9]{64}$/.test(result.current.candidateId) && typeof result.current.version === "string" && typeof result.current.revision === "string" ? result.current : null;
     repairAvailable = result.repairCurrent === true;
+    format = result.installationFormat;
     installationAvailable = result.installationAvailable ?? result.repairCurrent ?? false;
     if (!requestId) busy = !!result.transaction && !finished.has(result.transaction.phase);
     return result.transaction;
@@ -34,7 +36,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     guard();
     if (!previous && installationAvailable === false) {
       onUnaccepted();
-      throw new ControllerError("AppImage installation is not available. Check the enrolled installation through SSH.", 409);
+      throw new ControllerError("Package installation is not available. Ask the machine administrator to inspect the installed Couch package.", 409);
     }
     const repairing = "expectedCurrentId" in body;
     const ready = repairing ? canRepair() && current?.candidateId === body.expectedCurrentId : candidateReady(body.candidateId);
@@ -80,7 +82,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       const transaction = await status();
       const requestedTransaction = requestId ? await status(requestId) : undefined;
       authorize(identity);
-      return { enabled: installationAvailable === true, current, repairAvailable: repairAvailable === true, transaction, ...(requestId ? { requestedTransaction } : {}) };
+      return { enabled: installationAvailable === true, format, current, repairAvailable: repairAvailable === true, transaction, ...(requestId ? { requestedTransaction } : {}) };
     },
     install: (request: Request, identity: () => ControllerIdentity | null) => handle(request, identity),
     repair: (request: Request, identity: () => ControllerIdentity | null) => handle(request, identity, true),

@@ -63,6 +63,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
     finally { if (!controller.signal.aborted) { setPending(false); setRefresh(value => value + 1); } if (mutation.current === controller) mutation.current = null; }
   };
   const transaction = state?.installation?.transaction;
+  const nativeDebian = state?.installation?.format === "deb";
   const installing = !!transaction && !["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase);
   const install = async () => {
     try {
@@ -82,15 +83,15 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
   const canStage = state?.currentCheck && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now()) && state.status !== "ready";
   const canInstall = !busy && state?.installation?.enabled && state.currentCheck && state.status === "ready" && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now());
   return <div className="min-w-0 space-y-4">
-    <p className="text-muted-foreground">Release settings apply to this installation. Checks and downloads keep playback running.</p>
+    <p className="text-muted-foreground">{nativeDebian ? "Couch package updates apply to this computer. Close Couch in other login sessions before installing." : "Release settings apply to this installation."} Checks and downloads keep playback running.</p>
     {(retry || transaction) && <div className="space-y-2 rounded-lg border p-3" role="status">
-      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
+      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? nativeDebian ? "Update needs administrator recovery" : "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       <p>{transaction?.phase || "Waiting for the app to confirm this request"}</p>
       {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
       {transaction?.error && <p>{transaction.error}</p>}
       {!connected && <p>Couch is restarting or offline. This page will reconnect; keep it open.</p>}
-      {transaction?.phase === "operator-required" && <p>From the administrator's SSH account, inspect <code>sudo couch-session status</code> and use the documented <code>couch-recover</code> procedure. Do not reinstall or delete the data directory.</p>}
+      {transaction?.phase === "operator-required" && (nativeDebian ? <p>An OS administrator should inspect the Couch package update service and reinstall a retained compatible Debian package if needed. Preserve current data. The initial download may not be retained, and package recovery is not an atomic rollback.</p> : <p>From the administrator's SSH account, inspect <code>sudo couch-session status</code> and use the documented <code>couch-recover</code> procedure. Do not reinstall or delete the data directory.</p>)}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button>}
     </div>}
     {state && <>
@@ -120,7 +121,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
     </div>
     {state && !retry && !installing && <div className="space-y-2">
       {confirming === "install" ? <>
-        <p>Install {candidate?.version} and restart Couch. Its viewing data will be backed up before AppImage replacement. Other remotes will disconnect.</p>
+        <p>Install {candidate?.version} and restart Couch. Its viewing data will be backed up before {nativeDebian ? "the Debian package is installed for every account on this computer" : "AppImage replacement"}. Other remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>
@@ -129,8 +130,8 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <div className="space-y-2 rounded-lg border p-3">
       <p className="font-medium">Manual installation is not enabled on this installation.</p>
-      <p>Manual updates work independently of Auto when idle. Use the signed Debian AppImage and the supported desktop or TV setup.</p>
-      <p>From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects. Keep SSH available for recovery.</p>
+      <p>{nativeDebian ? "Native updates are included in the Debian package. An OS administrator can reinstall Couch to repair its update service." : "Manual updates work independently of Auto when idle. Use the signed Debian AppImage and the supported desktop or TV setup."}</p>
+      {!nativeDebian && <p>From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects. Keep SSH available for recovery.</p>}
     </div>}
     {state?.installation?.enabled && !installing && state.status !== "ready" && <p className="text-muted-foreground">Check for updates, then download and verify an available release to enable Install update. You can install manually with either installation policy.</p>}
     <p className="text-muted-foreground">Couch checks the hosted release service after startup and every 15 minutes.</p>
@@ -155,8 +156,8 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       </div>
     </>}
     {showTools && <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
-      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>Retained recovery is available through couch-recover. Keep the previous verified AppImage and backup; an old hosted download may expire.</p>}
-      {state?.installation?.enabled && state.installation.current && !retry && !installing && <div className="space-y-2">
+      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>{nativeDebian ? "Keep a compatible downloaded Debian package for administrator recovery. Couch preserves data backups; the initial download is not retained automatically." : "Retained recovery is available through couch-recover. Keep the previous verified AppImage and backup; an old hosted download may expire."}</p>}
+      {state?.installation?.enabled && state.installation.current && state.installation.repairAvailable !== false && !retry && !installing && <div className="space-y-2">
         <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
         {confirming === "repair" ? <>
           <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>

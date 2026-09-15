@@ -51,6 +51,7 @@ if (format === "deb") {
   await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
 }
 await mkdir(staging, { recursive: true });
+if (format === "deb") await Bun.write(join(resources, "updater.pub"), publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY) + "\n");
 await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
 if (format === "appimage") {
   // Populate Tauri's supported tool cache with verified inputs, before its bundler runs.

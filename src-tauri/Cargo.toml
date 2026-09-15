@@ -3,6 +3,15 @@ name = "couch"
 version = "0.1.0"
 edition = "2021"
 publish = false
+default-run = "couch"
+
+[features]
+package-update-broker = []
+
+[[bin]]
+name = "couch-package-update"
+path = "src/bin/couch-package-update.rs"
+required-features = ["package-update-broker"]
 
 [lib]
 name = "couch"

@@ -13,11 +13,20 @@
     "dbus-user-session",
     "pulseaudio-utils",
     "x11-xserver-utils",
-    "procps"
+    "procps",
+    "apt",
+    "polkitd",
+    "systemd"
   ],
   "files": {
     "/usr/share/doc/couch": "resources/notices/",
     "/usr/sbin/couch-setup": "../packaging/native/couch-setup",
-    "/usr/share/couch/tv": "resources/tv/"
-  }
+    "/usr/share/couch/tv": "resources/tv/",
+    "/usr/lib/couch/couch-package-update": "target/release/couch-package-update",
+    "/usr/share/couch/updater.pub": "resources/updater.pub",
+    "/usr/lib/systemd/system/couch-package-update@.service": "../packaging/native/couch-package-update@.service",
+    "/usr/share/polkit-1/rules.d/50-couch-package-update.rules": "../packaging/native/50-couch-package-update.rules",
+    "/usr/lib/tmpfiles.d/couch-updater.conf": "../packaging/native/couch-updater.conf"
+  },
+  "postInstallScript": "../packaging/native/postinst"
 }

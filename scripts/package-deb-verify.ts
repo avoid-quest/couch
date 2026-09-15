@@ -39,9 +39,15 @@ try {
     }
   }
   await inspect(staging);
-  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE", "usr/sbin/couch-setup", "usr/share/couch/tv/packages"]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
+  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE", "usr/sbin/couch-setup", "usr/share/couch/tv/packages", "usr/lib/couch/couch-package-update", "usr/share/couch/updater.pub", "usr/lib/systemd/system/couch-package-update@.service", "usr/share/polkit-1/rules.d/50-couch-package-update.rules", "usr/lib/tmpfiles.d/couch-updater.conf"]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
   assert.ok((await lstat(join(staging, "usr/sbin/couch-setup"))).mode & 0o111, "TV setup must be executable");
-  assert.ok(!files.some(file => /^(etc\/|usr\/(lib\/systemd|share\/lightdm|share\/polkit-1)\/)/.test(file.path)), "Ordinary installation must not activate TV policy");
+  assert.ok(!files.some(file => /^(etc\/|usr\/share\/lightdm\/|usr\/lib\/systemd\/user\/|usr\/lib\/systemd\/system\/couch-autostart)/.test(file.path)), "Ordinary installation must not activate TV policy");
+  assert.ok(!files.some(file => file.path === "usr/bin/couch-package-update"), "Package the privileged helper once at its fixed private path");
+  assert.ok((await lstat(join(staging, "usr/lib/couch/couch-package-update"))).mode & 0o111, "The broker must be executable");
+  assert.equal((await Bun.file(join(staging, "usr/share/couch/updater.pub")).text()).trim(), (await Bun.file(".artifacts/tauri-release.conf.json").json()).plugins.updater.pubkey, "Root and application updater keys must match");
+  const control = join(staging, "control");
+  run(["dpkg-deb", "--control", archive, control]);
+  assert.equal(await Bun.file(join(control, "postinst")).text(), await Bun.file("packaging/native/postinst").text());
   const release = await Bun.file(join(staging, "usr/lib/Couch/release.json")).json();
   assert.equal(release.revision, build.revision);
   assert.equal(release.version, build.version);

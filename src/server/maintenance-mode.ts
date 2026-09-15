@@ -13,7 +13,7 @@ import { buildInfo } from "./build-info";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
 // It opens no media catalog, recording scheduler, player, LAN listener or pairing endpoint.
-export async function runMaintenanceMode(directory: string, token: string, appimage: boolean): Promise<never> {
+export async function runMaintenanceMode(directory: string, token: string, appimage: boolean, releasePackageLock = () => {}): Promise<never> {
   const send = (message: SidecarMessage) => { process.stdout.write(`${JSON.stringify(message)}\n`); };
   const native = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
   const readiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
@@ -104,6 +104,7 @@ export async function runMaintenanceMode(directory: string, token: string, appim
           // Do not close its in-flight automatic request while acknowledging this checkpoint.
           return { progressSaved: true, admissionClosed: true };
         } });
+        if (result.closed && !result.error) releasePackageLock();
         send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
       })();
     }
