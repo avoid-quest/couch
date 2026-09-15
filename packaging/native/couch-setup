@@ -83,7 +83,7 @@ format() { sed -nE 's/.*"dataFormat"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p'; }
 check_health() {
     for attempt in {1..20}; do
         pid=$(user_systemctl show couch-tv.service --property=MainPID --value)
-        if as_user /usr/lib/Couch/tools/deno run --no-prompt --allow-read --allow-net=127.0.0.1 "$templates/check-health.js" "$pid" /usr/lib/Couch/release.json "$data" > "$state/health.json" 2> "$state/health-error.txt"; then return 0; fi
+        if as_user /usr/lib/Couch/tools/deno run --no-prompt --allow-all "$templates/check-health.js" "$pid" /usr/lib/Couch/release.json "$data" > "$state/health.json" 2> "$state/health-error.txt"; then return 0; fi
         sleep 1
     done
     cat "$state/health-error.txt" >&2
