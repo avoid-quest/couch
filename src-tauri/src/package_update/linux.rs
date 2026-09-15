@@ -446,7 +446,7 @@ pub(super) fn run() -> Result<()> {
         // Clear only a marker that parses as a genuine interrupted installation.
         let active = Path::new(STATE).join("active.json");
         let marker: Receipt = serde_json::from_slice(&trusted_read(&active, MAX_METADATA)?)
-            .map_err(|_| "The retained marker is not a readable receipt; inspect it manually".into())?;
+            .map_err(|_| String::from("The retained marker is not a readable receipt; inspect it manually"))?;
         if marker.phase != "installing"
             || !hex(&marker.request_id, 32)
             || !hex(&marker.digest, 64)
