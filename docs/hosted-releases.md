@@ -1,205 +1,197 @@
 # Hosted releases
 
-This implements [Deliver hosted Stable/Preview releases and Tauri updates](https://github.com/avoid-quest/couch/issues/276).
-The [accepted policy](https://github.com/avoid-quest/couch/issues/266#issuecomment-5669079411)
-owns release and update behavior. The owner has authorized release publication and
-Actions activation after local checks pass, using the selected Blacksmith workers.
-The [acceptance preparation record](evidence/acceptance-277/2026-09-15/README.md)
-records the current gates. The owner subsequently authorized the freshly installed
-Debian T480 to consume published packages for acceptance. It never builds Couch.
+The manual [Package workflow](../.github/workflows/package.yml) builds in the
+pinned Debian 13 container on Blacksmith, qualifies the package, and uploads
+directly to CrabNebula in one job. GitHub retains small signed receipts, never
+another application payload. The [artifact cleanup and initial workflow checks](evidence/native-debian/2026-09-15/actions-preparation/README.md)
+record removal of 107 obsolete unexpired artifacts. Repository Actions and the
+`COUCH_RELEASES_ENABLED` variable are enabled; a fresh hosted run still needs to
+establish current capacity.
 
-[Local qualification evidence](evidence/hosted-release-276/2026-09-15/README.md)
-records the signed candidate, exact sources, passed checks and remaining hosted gates.
+## Package and channel selection
 
-## Build and delivery
+`format=deb` is the workflow default. It publishes one file,
+`Couch_<V>_amd64.deb`. Its detached signature remains in the private build output
+and signed manifest. The upload passes that signature through CrabNebula's
+supported `--signature` metadata, using public platform `deb-x86_64` and update
+platform `linux-x86_64-deb`. Dependency material is inside the package. Users do
+not download a setup archive or signature file.
 
-The manual Package workflow uses the accepted Blacksmith 4 vCPU Ubuntu 24.04
-runner to host the pinned Debian 13 builder from `packaging/Dockerfile.mac`.
-Ubuntu does not build the package directly. Both hosted and temporary Mac builds
-use `scripts/hosted-build.sh`, Tauri CLI 2.11.4 and the existing Debian packaging
-and explicit distribution-material allowlists. Swatinem/rust-cache retains Cargo
-dependencies and the Bun download cache even after qualification failure.
-Docker's pinned Buildx actions retain the Debian builder layers through GitHub's
-Actions cache backend and load the image locally. Cache export failure does not
-fail a release. The first run populates this cache; the [local validation](evidence/acceptance-277/2026-09-15/builder-cache.md)
-does not establish a hosted cache hit or timing improvement.
+Native Preview uses a final SemVer version such as `0.1.1` in channel `preview`.
+Tauri's Debian bundler writes the version unchanged, and Debian orders
+`0.1.1-preview.1` after `0.1.1`. Native publication therefore rejects prerelease
+suffixes. Stable promotion copies the tested final-version Preview bytes and
+signatures unchanged. Stable is CrabNebula's unnamed channel, with no `--channel`
+argument. Each channel rejects a version equal to or below one already published.
 
-CrabNebula's supported action is pinned to
-`1a8803698ba41de6b23e42abc5dcc3721308233c`. It downloads the current supported Cloud
-CLI, so its `version` step records the actual version in each run. The retained
-channel probe used cn 0.13.4. Check a changed CLI against the recorded draft,
-show, list, upload and publish commands before authorizing a release run.
-The action exposes no CLI-version input.
+`format=appimage` retains the existing six-file AppImage/setup/dependency-material
+contract and `linux-x86_64-appimage` updater platform. Ordinary
+`bun run package:build` and `bash scripts/hosted-build.sh` still default to
+AppImage for the existing Mac path. Select `deb` explicitly for a native local
+build. A native-only publication must separately check the existing AppImage
+feed and retained download URLs before announcing a migration; mocked Cloud
+responses do not establish provider behavior across formats.
 
-Tauri 2.11.5 and updater 2.11.0 use their standard greater-than comparison,
-`check()`, verified `download()`, and `install(bytes)`. Couch reverifies the
-retained bytes before installation. There is no POC metadata signature, expiry
-renewal, build-number comparator or redirect override. Host/data requirements
-live inside the signed AppImage at `usr/lib/Couch/release.json`; they are extracted
-only after signature verification. The app checks Debian 13 amd64/X11, declared
-host packages, FUSE access and compatible data before interruption.
-
-The jobs run in order: draft, build/sign, qualify, explicit upload, manual
-publication, public readiness. Publication defaults off. The source must be a
-committed main revision. Fresh candidates start in Preview. Every signed asset,
-size, SHA-256, source revision, public key and inventory hash is recorded in
-`manifest.json`; hosted builds also record the original run and attempt.
-Private GitHub artifacts expire after seven days. Retain qualified artifacts
-outside Actions before expiry if a later retry or promotion will need them.
-
-`qualified.json` requires signatures, typecheck, the Bun suite, native tests,
-signed manifest extraction and the fresh disposable installer fixture. It does
-not claim the pristine desktop/TV and signed A-to-B acceptance owned by
-[the acceptance ticket](https://github.com/avoid-quest/couch/issues/277).
-
-Only these files enter CrabNebula:
-
-- `Couch_<V>_amd64.AppImage` and `.sig`
-- `couch-setup-<V>.tar.gz` and `.sig`
-- `couch-distribution-material-<V>.tar.gz` and `.sig`
-
-The AppImage has public platform `appimage-x86_64` and update platform
-`linux-x86_64-appimage`. Each archive also has its detached signature explicitly
-uploaded as a public file. Source bundles, manifests, inventory, diagnostics,
-qualification receipts, databases and signing material stay private. The workflow
-uses explicit `cn release upload --file` calls because automatic Tauri directory
-scanning cannot enforce the approved six-file set across these setup archives.
-No asset is announced until all six downloads, the installer selector, Tauri
-metadata and metadata-selected AppImage match the qualified identities. Public
-readiness retries a rate-limited URL at most twice, honoring Retry-After delays up
-to two minutes. Longer delays or continued failures require a later verification
-run; they never trigger another publication or rebuild.
-
-Stable is the unnamed channel, with no `--channel` flag. Preview is `preview`.
-The feeds are:
+Both public feeds use normal HTTPS redirects:
 
 ```text
-https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-appimage/<current-version>
-https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-appimage/<current-version>?channel=preview
+https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/<current-version>
+https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/<current-version>?channel=preview
 ```
 
-Public files use
-`https://cdn.crabnebula.app/download/avoid-quest/couch/latest/<filename>`, with
-`?channel=preview` for Preview. The installer selector replaces `<filename>` with
-`platform/appimage-x86_64`. Normal HTTPS redirects are supported. The Astro
-`/download` page links directly to CrabNebula; it does not proxy app bytes.
+Downloads and installed updates come from CrabNebula. The Mac can be offline.
+The T480 only installs and runs packages.
 
-## Owner setup before an authorized hosted run
+## Gates and signing
 
-The owner authorized this setup on 15 September 2026. Both environments restrict
-deployment to main. Publication requires the explicit `publish=true` dispatch
-input after qualification; the owner removed the separate reviewer requirement.
+The single release job requires committed `main`, `COUCH_RELEASES_ENABLED=true`,
+and the existing main-only `couch-release` environment. Its `publish` input
+defaults to false. One job avoids an artifact-storage handoff before publication;
+there is no separate `couch-publication` job. The existing owner approval uses
+the explicit dispatch input and main restriction, not a separate environment
+reviewer.
 
-1. Create `couch-release` and `couch-publication`, both restricted to main. Put
-   `CN_API_KEY` in both environments. Put `TAURI_SIGNING_PRIVATE_KEY` and
-   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in `couch-release`. Keep the key and
-   password in an owner-held offline backup. Both channels use the same key.
-   The new encrypted key and password are retained in the owner's private local
-   configuration. The owner will make the offline copy later.
-2. Set repository variable `COUCH_UPDATER_PUBLIC_KEY` to the Tauri public-key file
-   contents, including its outer base64 wrapper. The builder embeds it in the app.
-   Never put a private key in a variable, PR check, cache or artifact.
-3. Run the local `act` checks and review the pinned workflow and Cloud CLI output
-   before enabling Actions and setting `COUCH_RELEASES_ENABLED=true`. The owner
-   authorized activation once ready. A manual main dispatch is still required.
-   No PR event receives release secrets.
-4. Keep `publish=false` for a build/qualification/upload trial. Use `publish=true`
-   for the authorized publication after qualification succeeds. The main-only
-   publication environment holds only the provider credential.
+`CN_API_KEY`, `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` remain environment secrets. The repository
+variable `COUCH_UPDATER_PUBLIC_KEY` contains only the Tauri public-key wrapper.
+The key and password remain in owner-held private configuration; the owner has
+deferred the offline backup. No release secrets are passed to tests, fixture
+containers, PR checks or dependency caches. The native package, `manifest.json`
+and successful `qualified.json` are signed. The manifest identifies source,
+original run/attempt, inventory hash, package size/hash and signature.
 
-The initial version is `0.1.0-preview.1`. Bump `package.json`, the Tauri config,
-Cargo package version and Cargo lock's Couch entry together in a reviewed commit.
-`scripts/build.ts` embeds the same version/revision in native code, backend and
-both frontend bundles. No CI build metadata is appended.
+Qualification includes signature checks, typecheck, the isolated-clock Bun
+suite, locked native tests and extraction of the signed internal release
+metadata. Native builds then install the exact package in a fresh disposable
+Debian container, launch through Tauri WebDriver, scan/play generated media,
+relaunch its desktop entry, and check reinstall/removal data preservation.
+[scripts/hosted-desktop.sh](../scripts/hosted-desktop.sh) runs that fixture on the
+Docker host and stops it afterward. Software rendering, a null audio sink and
+container instrumentation limit this proof; it is not hardware or installed
+native-update acceptance. The integrated TV/update package must pass this
+fixture again after those changes merge. AppImage builds retain the existing
+installer fixture.
 
-## Retry and promote the tested bytes
+The Debian builder layers, Cargo dependencies and Bun downloads remain caches.
+Cache misses build normally. No cache hit or hosted duration is claimed by local
+act checks. The workflow has a 60-minute cap; observe the actual cold run before
+changing that budget.
 
-These are future owner-run dispatch examples, after the setup and authorization
-above. `RUN` and `ATTEMPT` identify the original retained artifact. The workflow
-checks both the artifact-producing run and its recorded original build against
-main Package dispatches. It never relabels bytes with the new run's revision.
+## Build and retry
+
+A fresh build defaults to a Preview draft. Publication is explicit:
 
 ```sh
-# Build, qualify and upload a Preview draft, without publishing.
+# Build, sign, qualify and upload a native Preview draft.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
-  -f channel=preview -f publish=false -f notes='Describe this release'
+  -f format=deb -f channel=preview -f publish=false -f notes='Describe this release'
 
-# Retry qualification/upload, or publish the same qualified draft.
+# Publish that completed draft using its signed receipts, without rebuilding.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
-  -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f artifact-kind=hosted-release -f release-id=DRAFT_ID \
+  -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
   -f publish=true -f notes='Describe this release'
 
-# CDN delay after publication: verification only, with the same bytes.
+# Retry public verification after publication, without publishing again.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
-  -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f artifact-kind=hosted-release -f readiness-only=true \
-  -f notes='Recheck the existing publication'
+  -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
+  -f readiness-only=true -f notes='Recheck publication'
+
+# Promote a final-version Preview whose readiness receipt passed.
+gh workflow run package.yml --repo avoid-quest/couch --ref main \
+  -f format=deb -f channel=stable -f build-run=RUN -f build-attempt=ATTEMPT \
+  -f publish=true -f notes='Promote the tested Preview'
 ```
 
-A candidate with a successful qualification receipt skips compilation and tests
-on retry. Without that receipt the workflow checks out its original source,
-restores caches and reruns qualification beside the retained AppImage. It does
-not rebuild or resign the AppImage. A failed build without complete signed assets
-needs a fresh build; incomplete bytes cannot be qualified.
+Here `RUN` and `ATTEMPT` select `release-receipts-RUN.ATTEMPT`. The workflow
+verifies both receipt signatures against the enrolled public key, checks the
+complete qualification identity, and checks the original main Package dispatch
+and source revision. A retry can use a receipt from a failed overall run if its
+qualified upload completed. It never recompiles or resigns the candidate.
 
-To release Stable, first build and qualify the final `X.Y.Z` version in Preview.
-Publish that Preview and pass readiness. Dispatch `channel=stable`,
-`build-run=RUN`, `build-attempt=ATTEMPT`, `artifact-kind=hosted-ready`, using the
-run that retained `readiness-preview.json`. Stable drafting rejects prereleases
-and requires identical files/signatures/source to that receipt. A fresh Stable
-build is refused. Changed bytes require a new version. Publication rejects a
-version equal to or lower than an already published version in its channel.
-Tauri independently rejects equal/lower offers and supports skipping releases.
-Switching a newer Preview installation to Stable waits without downgrading.
+When artifact storage rejects even the small receipt, publication remains
+independent of that failure. A bounded `COUCH_RELEASE_RECEIPTS=` JSON record in
+the run log retains only the allowlisted manifests, signatures and provider
+receipts. A retry first tries the artifact, then restores those same files using
+`gh run view --attempt --log`; signatures and run provenance are verified before
+use. No private key, provider token, inventory, source or app payload enters that
+export. Retain the small receipts outside GitHub before their 90-day artifact or
+run-log retention expires. These are verification records, not another binary
+store.
 
-After readiness passes, download `hosted-ready-RUN.ATTEMPT` and separately retain
-`hosted-upload-*` and `hosted-publish-*` Cloud receipts. Prepare the site locally:
+A completed unpublished draft can be published using its signed qualification
+and Cloud metadata, without downloading private draft bytes. Public Preview
+promotion downloads the exact provider-issued `/asset/<ID>` URLs already
+recorded by readiness, verifies every byte and signature, and uploads unchanged
+files to Stable. It does not use a moving `latest` URL for restored bytes or
+invent a version-specific CDN route.
+
+Upload retries run at most three times while the signed bytes remain on the
+same runner. If that runner disappears before a complete upload, its missing
+private draft bytes cannot be recovered by the supported Cloud CLI. A retry
+without the completed upload receipt stops. Use a retained local candidate or
+build a new candidate under a new version. Never replace uploaded bytes under an
+existing version; a fresh build refuses a nonempty draft. A completed publication
+with delayed CDN readiness needs only another readiness run.
+
+## Mac fallback
+
+If Actions cannot build because capacity remains unavailable, use the existing
+[isolated Mac Debian builder](packaging.md#isolated-mac-build) with the exact
+committed source and same build inputs. Do not build on the T480. With the
+owner's signing variables available only to signing commands, the core sequence
+is:
 
 ```sh
-bun scripts/hosted-site.ts /absolute/hosted-ready-directory preview
+# Inside the committed-source Debian builder.
+bash scripts/hosted-build.sh deb
+# In a fresh exec without private signing/provider variables.
+COUCH_PACKAGE_FORMAT=deb bash scripts/hosted-qualify.sh
+
+# On the Docker host, with the fixture run from that same source checkout.
+mkdir -p .artifacts/native-qualification
+bash scripts/hosted-desktop.sh BUILDER_CONTAINER .artifacts/native-qualification
+
+# Inside the builder, only after both qualification steps pass.
+bun scripts/hosted-release.ts qualify .artifacts/hosted-release
+# Separate signing exec with the private signing variables available.
+bun x --no-install tauri signer sign .artifacts/hosted-release/qualified.json
+```
+
+Retain that directory privately, then use the existing `draft`, `upload`,
+`publish` and `readiness` operations in `scripts/hosted-release.ts`, with the
+qualified directory, channel and recorded release ID. These commands work
+without a GitHub build run. They upload only the selected public allowlist.
+Keep the same version identity only when using the same retained bytes; a
+fresh fallback build after a partial upload needs a new candidate identity.
+
+## Download page
+
+After public readiness, prepare the site from the retained full candidate or
+signed receipt directory:
+
+```sh
+bun scripts/hosted-site.ts /absolute/qualified-receipts preview
 bun run web:build
 ```
 
-The command reverifies local signatures and current public endpoints, then writes
-the enrolled `apps/web/public/couch-updater.pub` and the channel's version in
-`apps/web/src/releases.json`. It refuses a silent key replacement. Review and
-commit those files. Deployment to the authenticated `couch.avoid.quest` site is a
-separate owner action. Until then the default page says no verified download is
-available; no dummy production key or test release is advertised.
+The command independently rechecks downloads and metadata before recording
+`version`, `format`, `checkedAt`, the actual package URL and its size in
+`apps/web/src/releases.json`. It refuses silent signing-key replacement.
+The website can use that verified asset URL even after another release becomes
+latest. Site deployment remains a separate action after the intended package
+and install path are ready.
 
-## Acceptance handoff
-
-Use [Install Couch](install-couch.md) for the signed bootstrap, profiles, manual
-and idle updates, and retained recovery. For each new acceptance run record the
-source revision, manifest hash, all six asset hashes/signatures, Cloud release
-and asset IDs, installer/updater URLs and final redirect URLs, installed paths,
-public-key hash, running build identity and durable update request ID.
-
-Before any VM diagnostics read the [retained UTM instructions](https://github.com/avoid-quest/couch/blob/7bcc7f7090948e0d355b6a4e02ee3b2d408de9a7/docs/evidence/fresh-install-debian-2026-09-14/utm/README.md).
-Preserve the stopped baselines and existing installations. The acceptance owner
-must run pristine minimal and Xfce Debian setup, freeze failures before repairs,
-then qualify signed A-to-B updates with the Mac offline. Include both saved local
-and remote modes, an unreachable remote, native desktop relaunch, TV supervision,
-manual/Administrator/Controller permissions, idle deferral, failed startup and
-retained compatible recovery after newer writes. No repaired run passes a
-pristine gate. Existing POC evidence is historical; no POC migration or LAN TLS
-work is required.
-
-## References and deliberate adaptations
+## Official references
 
 - [CrabNebula Tauri workflow](https://docs.crabnebula.dev/cloud/ci/tauri-v2-workflow/)
-  supplies the draft/upload/publish sequence and supported action/CLI.
-- [Tauri updater](https://v2.tauri.app/plugin/updater/) supplies signatures,
-  standard ordering and update APIs. The pinned Rust source confirms
-  `download()` verifies signatures while `install(bytes)` needs caller rechecking.
-- Tauri 2.11.5's `request_restart()` cannot be delayed by `prevent_exit()`.
-  Desktop Couch therefore drains its backend before requesting native restart.
-  TV Couch retains its existing supervisor and clean-exit restart policy.
-- Remote mode reuses the compiled backend's existing update handlers on a private,
-  authenticated loopback listener. It starts no local catalog, recording scheduler,
-  playback or sharing. Its startup trial checks the app's own frontend/native
-  identity, database integrity and bundled tools without contacting the remote.
-- The app reuses shadcn Dialog and Button for its own remote-mode update control.
-  The Astro download page uses existing theme tokens and native document links;
-  it needs no interactive component or new UI library.
+  builds and uploads together; GitHub binary artifacts are not required.
+- [Cloud upload](https://docs.crabnebula.dev/cloud/cli/upload-assets/) supplies
+  file/signature/platform metadata. [Release metadata and downloads](https://docs.crabnebula.dev/cloud/cli/fetch-latest-release/)
+  describe `release show` and public CDN endpoints. The checked CLI is 0.13.4,
+  with no download, copy or promote command.
+- [Tauri updater](https://v2.tauri.app/plugin/updater/) requires signatures.
+  Native install elevation and migration belong to the native-update work,
+  not to this publication script.
+- [act limitations](https://nektosact.com/not_supported.html) include ignored
+  concurrency, environments, permissions and timeouts. The local workflow
+  fixtures prove control flow with inert actions, not hosted release execution.

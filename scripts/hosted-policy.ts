@@ -1,4 +1,5 @@
 export type Channel = "stable" | "preview";
+export type PackageFormat = "appimage" | "deb";
 export const application = "avoid-quest/couch";
 export const cdn = `https://cdn.crabnebula.app`;
 export const updaterEndpoint = `${cdn}/update/${application}/linux-x86_64-appimage/{{current_version}}`;
@@ -8,9 +9,22 @@ export function releaseVersion(version: string) {
   return version;
 }
 
-export function publicFiles(version: string) {
+export function packageFormat(value: string | undefined): PackageFormat {
+  if (value !== undefined && value !== "appimage" && value !== "deb") throw new Error("Choose appimage or deb.");
+  return value ?? "appimage";
+}
+
+export function publicFiles(version: string, format: PackageFormat = "appimage") {
   releaseVersion(version);
+  if (format === "deb") {
+    if (version.includes("-")) throw new Error("Use a final X.Y.Z version in the native Preview channel.");
+    return [`Couch_${version}_amd64.deb`];
+  }
   return [`Couch_${version}_amd64.AppImage`, `couch-setup-${version}.tar.gz`, `couch-distribution-material-${version}.tar.gz`].flatMap(file => [file, `${file}.sig`]);
+}
+
+export function releasePlatforms(format: PackageFormat) {
+  return { public: `${format}-x86_64`, update: `linux-x86_64-${format}` };
 }
 
 export function channelArgs(channel: Channel) {

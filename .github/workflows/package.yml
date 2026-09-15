@@ -1,182 +1,153 @@
 name: Package
-
-# Enable repository Actions only after the local release checks pass.
-on:
+"on":
   workflow_dispatch:
     inputs:
       channel:
         type: choice
-        options: [preview, stable]
+        options:
+          - preview
+          - stable
         default: preview
-        description: Stable requires the qualified final-version Preview artifact
+        description: Stable restores the identical final-version Preview bytes
       build-run:
         type: number
         default: 0
-        description: Reuse this Package run's retained artifact, 0 builds once
+        description: "Reuse signed receipts from this Package run, 0 builds once"
       build-attempt:
         type: number
         default: 1
         description: Attempt that produced the retained artifact
-      artifact-kind:
-        type: choice
-        options: [hosted-release, hosted-ready]
-        default: hosted-release
-        description: Use hosted-ready for Stable promotion
       release-id:
         type: string
-        description: Existing draft ID for a retry, or published ID for readiness-only
+        description: "Optional recorded draft ID, must match the completed upload on retry"
       readiness-only:
         type: boolean
         default: false
-        description: Recheck CDN readiness without drafting, building or publishing
+        description: "Recheck CDN readiness without drafting, building or publishing"
       publish:
         type: boolean
         default: false
-        description: Publish after qualification through the main-only release environment
+        description: Publish the qualified draft; false only uploads it
       notes:
         type: string
         required: true
         description: Release notes
-
+      format:
+        type: choice
+        options:
+          - deb
+          - appimage
+        default: deb
+        description: Native Debian package or retained AppImage compatibility build
 permissions:
   contents: read
-
 concurrency:
   group: couch-hosted-release
   cancel-in-progress: false
-
 env:
-  COUCH_UPDATER_PUBLIC_KEY: ${{ vars.COUCH_UPDATER_PUBLIC_KEY }}
-
+  COUCH_UPDATER_PUBLIC_KEY: "${{ vars.COUCH_UPDATER_PUBLIC_KEY }}"
+  COUCH_PACKAGE_FORMAT: "${{ inputs.format }}"
 jobs:
-  draft:
-    if: ${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}
+  release:
+    if: "${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}"
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: couch-release
-    timeout-minutes: 10
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
-    outputs:
-      release-id: ${{ steps.draft.outputs.release-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2
-      - name: Validate retained run provenance
+      - name: Install receipt verifier
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+      - name: Download retained receipts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        id: receipts
         if: inputs.build-run > 0
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_RUN: ${{ inputs.build-run }}
-          BUILD_ATTEMPT: ${{ inputs.build-attempt }}
-        run: |
-          mkdir -p .artifacts
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/run.json
-          jq -e '.path == ".github/workflows/package.yml" and .event == "workflow_dispatch" and .head_branch == "main"' .artifacts/run.json
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        if: inputs.build-run > 0
+        continue-on-error: true
         with:
-          name: ${{ inputs.artifact-kind }}-${{ inputs.build-run }}.${{ inputs.build-attempt }}
-          run-id: ${{ inputs.build-run }}
-          github-token: ${{ github.token }}
+          name: "release-receipts-${{ inputs.build-run }}.${{ inputs.build-attempt }}"
+          run-id: "${{ inputs.build-run }}"
+          github-token: "${{ github.token }}"
           path: .artifacts/hosted-release
+      - name: Restore signed receipts from the original run log when artifact storage was unavailable
+        if: inputs.build-run > 0 && steps.receipts.outcome == 'failure'
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          BUILD_RUN: "${{ inputs.build-run }}"
+          BUILD_ATTEMPT: "${{ inputs.build-attempt }}"
+        run: |
+          mkdir -p .artifacts/hosted-release
+          gh run view "$BUILD_RUN" --attempt "$BUILD_ATTEMPT" --log --repo "$GITHUB_REPOSITORY" > .artifacts/receipt-run.log
+          bun scripts/hosted-receipts.ts restore .artifacts/receipt-run.log .artifacts/hosted-release
       - name: Check the candidate inputs
         env:
-          NOTES: ${{ inputs.notes }}
-          BUILD_RUN: ${{ inputs.build-run }}
-          CHANNEL: ${{ inputs.channel }}
-          READINESS_ONLY: ${{ inputs.readiness-only }}
-          GH_TOKEN: ${{ github.token }}
+          NOTES: "${{ inputs.notes }}"
+          BUILD_RUN: "${{ inputs.build-run }}"
+          BUILD_ATTEMPT: "${{ inputs.build-attempt }}"
+          CHANNEL: "${{ inputs.channel }}"
+          READINESS_ONLY: "${{ inputs.readiness-only }}"
+          GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p .artifacts/hosted-release
           printf '%s\n' "$NOTES" > .artifacts/hosted-release/notes.md
-          if [ "$BUILD_RUN" != 0 ]; then
-            sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
-            bun scripts/hosted-release.ts verify .artifacts/hosted-release
+          if [ "$BUILD_RUN" = 0 ]; then
+            test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
+          else
+            bun scripts/hosted-release.ts verify-receipt .artifacts/hosted-release
+            test "$(jq -r '.format // "appimage"' .artifacts/hosted-release/manifest.json)" = "$COUCH_PACKAGE_FORMAT"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/receipt-run.json
             source_run=$(jq -er '.buildRun.id' .artifacts/hosted-release/manifest.json)
             source_attempt=$(jq -er '.buildRun.attempt' .artifacts/hosted-release/manifest.json)
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$source_run/attempts/$source_attempt" > .artifacts/source-run.json
-            jq -e '.path == ".github/workflows/package.yml" and .event == "workflow_dispatch" and .head_branch == "main"' .artifacts/source-run.json
+            for receipt in .artifacts/receipt-run.json .artifacts/source-run.json; do
+              jq -e '.path == ".github/workflows/package.yml" and .event == "workflow_dispatch" and .head_branch == "main"' "$receipt"
+            done
             test "$(jq -r .revision .artifacts/hosted-release/manifest.json)" = "$(jq -r .head_sha .artifacts/source-run.json)"
-          else
-            test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
           fi
       - name: Install supported Cloud CLI
-        if: ${{ !inputs.readiness-only }}
-        uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
+        if: "${{ !inputs.readiness-only }}"
+        uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
         with:
           command: version
-          api-key: ${{ secrets.CN_API_KEY }}
+          api-key: "${{ secrets.CN_API_KEY }}"
           path: .artifacts
-      - name: Draft the effective Tauri version or retained promotion
+      - name: Restore the exact published Preview for Stable
+        if: "inputs.build-run > 0 && inputs.channel == 'stable' && !inputs.readiness-only"
+        run: bun scripts/hosted-release.ts restore .artifacts/hosted-release
+      - name: Select the qualified draft
         id: draft
-        if: ${{ !inputs.readiness-only }}
+        if: "${{ !inputs.readiness-only }}"
         env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-          CN_BIN: ${{ github.workspace }}/.artifacts/cn
-          BUILD_RUN: ${{ inputs.build-run }}
-          CHANNEL: ${{ inputs.channel }}
-          RELEASE_ID: ${{ inputs.release-id }}
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          BUILD_RUN: "${{ inputs.build-run }}"
+          CHANNEL: "${{ inputs.channel }}"
+          RELEASE_ID: "${{ inputs.release-id }}"
         run: |
-          operation=draft
-          if [ "$BUILD_RUN" = 0 ]; then operation=draft-source; fi
-          bun scripts/hosted-release.ts "$operation" .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
-
-  candidate:
-    needs: draft
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: couch-release
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        if: inputs.build-run > 0
-        with:
-          name: ${{ inputs.artifact-kind }}-${{ inputs.build-run }}.${{ inputs.build-attempt }}
-          run-id: ${{ inputs.build-run }}
-          github-token: ${{ github.token }}
-          path: .artifacts/hosted-release
-      - name: Select the original source and qualification work
-        id: qualification
-        env:
-          BUILD_RUN: ${{ inputs.build-run }}
-        run: |
-          if [ "$BUILD_RUN" != 0 ] && jq -e --slurpfile manifest .artifacts/hosted-release/manifest.json '
-            .version == $manifest[0].version and .revision == $manifest[0].revision and
-            .files == $manifest[0].files and
-            .checks == ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", "installer"]
-          ' .artifacts/hosted-release/qualified.json > /dev/null 2>&1; then
-            echo 'needed=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'needed=true' >> "$GITHUB_OUTPUT"
-            if [ "$BUILD_RUN" != 0 ]; then
-              revision=$(jq -er .revision .artifacts/hosted-release/manifest.json)
-              git fetch origin "$revision"
-              git checkout --detach "$revision"
-            fi
+          operation=draft-source
+          if [ "$BUILD_RUN" != 0 ]; then
+            if [ "$CHANNEL" = stable ]; then operation=draft; else operation=resume; fi
           fi
+          bun scripts/hosted-release.ts "$operation" .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
       - name: Read the pinned Debian builder inputs
         id: builder-inputs
-        if: steps.qualification.outputs.needed == 'true'
+        if: inputs.build-run == 0
         run: |
           echo "debian-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" >> "$GITHUB_OUTPUT"
           echo "debian-snapshot=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" >> "$GITHUB_OUTPUT"
           echo "bun-version=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" >> "$GITHUB_OUTPUT"
           echo "rust-version=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-        if: steps.qualification.outputs.needed == 'true'
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+        if: inputs.build-run == 0
       - name: Prepare the pinned Debian builder
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        if: steps.qualification.outputs.needed == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        if: inputs.build-run == 0
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
@@ -191,10 +162,10 @@ jobs:
             DEBIAN_SNAPSHOT=${{ steps.builder-inputs.outputs.debian-snapshot }}
             BUN_VERSION=${{ steps.builder-inputs.outputs.bun-version }}
             RUST_VERSION=${{ steps.builder-inputs.outputs.rust-version }}
-          cache-from: type=gha,version=2,scope=couch-debian-builder-amd64
-          cache-to: type=gha,version=2,scope=couch-debian-builder-amd64,mode=min,ignore-error=true
+          cache-from: "type=gha,version=2,scope=couch-debian-builder-amd64"
+          cache-to: "type=gha,version=2,scope=couch-debian-builder-amd64,mode=min,ignore-error=true"
       - name: Start the pinned Debian builder
-        if: steps.qualification.outputs.needed == 'true'
+        if: inputs.build-run == 0
         run: |
           docker create --name couch-build --init --cpus 4 --memory 10g couch-release-builder
           docker start couch-build
@@ -204,43 +175,80 @@ jobs:
           docker exec -w /work couch-build git checkout --detach "$(git rev-parse HEAD)"
           rustup show active-toolchain
           mkdir -p src-tauri/target "$HOME/.cargo/registry" "$HOME/.cargo/git" .artifacts/cache/bun
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
-        if: steps.qualification.outputs.needed == 'true'
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c
+        if: inputs.build-run == 0
         with:
           workspaces: src-tauri
           cache-bin: false
           cache-on-failure: true
-          key: debian-13-release-${{ hashFiles('packaging/inputs.json', 'bun.lock') }}
+          key: "debian-13-release-${{ hashFiles('packaging/inputs.json', 'bun.lock') }}"
           cache-directories: .artifacts/cache/bun
       - name: Restore compiler and dependency caches
-        if: steps.qualification.outputs.needed == 'true'
+        if: inputs.build-run == 0
         run: |
           docker exec couch-build mkdir -p /work/src-tauri/target /root/.cargo/registry /root/.cargo/git /root/.bun/install/cache
           docker cp src-tauri/target/. couch-build:/work/src-tauri/target
           docker cp "$HOME/.cargo/registry/." couch-build:/root/.cargo/registry
           docker cp "$HOME/.cargo/git/." couch-build:/root/.cargo/git
           docker cp .artifacts/cache/bun/. couch-build:/root/.bun/install/cache
-      - name: Build and sign the complete AppImage and public archives
+      - name: Build and sign the selected package
         if: inputs.build-run == 0
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
         run: |
-          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh
-      - name: Prepare retained-byte qualification without rebuilding the AppImage
-        if: steps.qualification.outputs.needed == 'true' && inputs.build-run > 0
-        run: |
-          docker exec couch-build mkdir -p /work/.artifacts/hosted-release
-          docker cp .artifacts/hosted-release/. couch-build:/work/.artifacts/hosted-release/
-          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY couch-build bash -c 'bun install --frozen-lockfile && bun run package:prepare && bun run build'
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh "$COUCH_PACKAGE_FORMAT"
       - name: Qualify the exact signed bytes
-        if: steps.qualification.outputs.needed == 'true'
+        if: inputs.build-run == 0
         run: |
-          docker exec -w /work couch-build bash scripts/hosted-qualify.sh
-          docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
-          docker exec -w /work couch-build bun -e 'const manifest=await Bun.file(".artifacts/hosted-release/manifest.json").json(); await Bun.write(".artifacts/hosted-release/qualified.json",JSON.stringify({version:manifest.version,revision:manifest.revision,files:manifest.files,checks:["signatures","typecheck","bun","native","signed-manifest-extraction","installer"]},null,2))'
+          docker exec -w /work -e COUCH_PACKAGE_FORMAT couch-build bash scripts/hosted-qualify.sh
+          if [ "$COUCH_PACKAGE_FORMAT" = deb ]; then
+            mkdir -p .artifacts/native-qualification
+            bash scripts/hosted-desktop.sh couch-build .artifacts/native-qualification
+          else
+            docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
+          fi
+          docker exec -w /work couch-build bun scripts/hosted-release.ts qualify .artifacts/hosted-release
+      - name: Sign the qualification receipt
+        if: inputs.build-run == 0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+        run: docker exec -w /work -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD couch-build bun x --no-install tauri signer sign .artifacts/hosted-release/qualified.json
+      - name: Copy the qualified candidate for direct upload
+        if: inputs.build-run == 0
+        run: |
+          docker cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/
+          bun scripts/hosted-release.ts verify .artifacts/hosted-release
+      - name: Upload only qualified files directly to CrabNebula
+        if: "!inputs.readiness-only && (inputs.build-run == 0 || inputs.channel == 'stable')"
+        env:
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          CHANNEL: "${{ inputs.channel }}"
+          RELEASE_ID: "${{ steps.draft.outputs.release-id }}"
+        run: |
+          # Retry transport while the exact signed bytes remain on this runner.
+          for attempt in 1 2 3; do
+            if bun scripts/hosted-release.ts upload .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"; then exit 0; fi
+            test "$attempt" != 3
+            sleep 10
+          done
+      - name: Publish the complete qualified release
+        if: inputs.publish && !inputs.readiness-only
+        env:
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          CHANNEL: "${{ inputs.channel }}"
+          RELEASE_ID: "${{ steps.draft.outputs.release-id }}"
+        run: "bun scripts/hosted-release.ts publish .artifacts/hosted-release \"$CHANNEL\" \"$RELEASE_ID\""
+      - name: Verify public downloads and updater metadata
+        if: inputs.publish || inputs.readiness-only
+        env:
+          CHANNEL: "${{ inputs.channel }}"
+        run: "bun scripts/hosted-release.ts readiness .artifacts/hosted-release \"$CHANNEL\""
       - name: Retain compiler and dependency caches after any build outcome
-        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
+        if: "${{ always() && inputs.build-run == 0 }}"
         run: |
           if docker container inspect couch-build > /dev/null 2>&1; then
             mkdir -p src-tauri/target "$HOME/.cargo/registry" "$HOME/.cargo/git" .artifacts/cache/bun
@@ -250,128 +258,36 @@ jobs:
             copy_cache /root/.cargo/git "$HOME/.cargo/git"
             copy_cache /root/.bun/install/cache .artifacts/cache/bun
           fi
-      - name: Retain build bytes and receipts
-        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
+      - name: Retain small signed receipts after any outcome
+        if: "${{ always() && inputs.build-run == 0 }}"
         run: |
           mkdir -p .artifacts/hosted-release
-          docker cp couch-build:/work/.artifacts/hosted-release/. .artifacts/hosted-release/
-          docker cp couch-build:/work/.artifacts/appimage-inventory.json .artifacts/hosted-release/inventory.json || test -f .artifacts/hosted-release/inventory.json
+          if docker container inspect couch-build > /dev/null 2>&1; then
+            for file in manifest.json manifest.json.sig qualified.json qualified.json.sig; do
+              docker cp "couch-build:/work/.artifacts/hosted-release/$file" ".artifacts/hosted-release/$file" 2>/dev/null || true
+            done
+          fi
       - name: Stop the builder
-        if: ${{ always() && steps.qualification.outputs.needed == 'true' }}
+        if: "${{ always() && inputs.build-run == 0 }}"
         run: |
           if docker container inspect couch-build > /dev/null 2>&1; then docker stop couch-build; fi
-      - name: Verify retained candidate
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
-          bun scripts/hosted-release.ts verify .artifacts/hosted-release
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - name: Keep signed receipts in the run log if artifact storage is unavailable
         if: always()
-        with:
-          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release/
-          compression-level: 0
-          if-no-files-found: error
-          retention-days: 7
-
-  upload:
-    needs: [draft, candidate]
-    if: ${{ !inputs.readiness-only }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: couch-release
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release
-      - uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
-        with:
-          command: version
-          api-key: ${{ secrets.CN_API_KEY }}
-          path: .artifacts
-      - name: Upload only the qualified allowlist and inspect Cloud
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-          CN_BIN: ${{ github.workspace }}/.artifacts/cn
-          CHANNEL: ${{ inputs.channel }}
-          RELEASE_ID: ${{ needs.draft.outputs.release-id }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
-          bun scripts/hosted-release.ts upload .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
-
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        continue-on-error: true
+        run: bun scripts/hosted-receipts.ts export .artifacts/hosted-release
+      - name: Retain receipts without blocking publication on artifact quota
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
+        continue-on-error: true
         with:
-          name: hosted-upload-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release/receipts/
+          name: "release-receipts-${{ github.run_id }}.${{ github.run_attempt }}"
+          path: |
+            .artifacts/hosted-release/manifest.json
+            .artifacts/hosted-release/manifest.json.sig
+            .artifacts/hosted-release/qualified.json
+            .artifacts/hosted-release/qualified.json.sig
+            .artifacts/hosted-release/draft-*.json
+            .artifacts/hosted-release/readiness-*.json
+            .artifacts/hosted-release/receipts/*.json
           if-no-files-found: warn
-          retention-days: 7
-
-  publish:
-    needs: [draft, candidate, upload]
-    if: ${{ inputs.publish && !inputs.readiness-only }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: couch-publication
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release
-      - uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c # v0
-        with:
-          command: version
-          api-key: ${{ secrets.CN_API_KEY }}
-          path: .artifacts
-      - name: Publish the complete qualified release
-        env:
-          CN_API_KEY: ${{ secrets.CN_API_KEY }}
-          CN_BIN: ${{ github.workspace }}/.artifacts/cn
-          CHANNEL: ${{ inputs.channel }}
-          RELEASE_ID: ${{ needs.draft.outputs.release-id }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
-          bun scripts/hosted-release.ts publish .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
-
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        if: always()
-        with:
-          name: hosted-publish-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release/receipts/
-          if-no-files-found: warn
-          retention-days: 7
-
-  readiness:
-    needs: [draft, candidate, publish]
-    if: ${{ always() && needs.candidate.result == 'success' && (needs.publish.result == 'success' || inputs.readiness-only) }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.4.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: hosted-release-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release
-      - name: Verify every public file and the installer/updater endpoints
-        env:
-          CHANNEL: ${{ inputs.channel }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
-          bun scripts/hosted-release.ts readiness .artifacts/hosted-release "$CHANNEL"
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: hosted-ready-${{ github.run_id }}.${{ github.run_attempt }}
-          path: .artifacts/hosted-release/
-          compression-level: 0
-          retention-days: 7
+          retention-days: 90

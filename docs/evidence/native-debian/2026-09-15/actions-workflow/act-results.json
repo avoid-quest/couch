@@ -1,0 +1,254 @@
+{
+  "workflowSha256": "a462432df83a0239d93ba569cba9fc192427db79e92a009e712ab4221e78e24a",
+  "limits": "Inert action/build/provider replacements. No signing, compilation, package installation, permissions, artifact transport or CDN verification is established.",
+  "cases": [
+    {
+      "name": "native-draft",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.692
+    },
+    {
+      "name": "appimage-draft",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.481
+    },
+    {
+      "name": "native-publish",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "build",
+        "publish",
+        "qualify",
+        "readiness",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "publish",
+        "qualify",
+        "readiness",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.43
+    },
+    {
+      "name": "completed-draft-retry",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "publish",
+        "readiness"
+      ],
+      "expected": [
+        "publish",
+        "readiness"
+      ],
+      "seconds": 1.76
+    },
+    {
+      "name": "receipt-log-fallback",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "logs",
+        "publish",
+        "readiness"
+      ],
+      "expected": [
+        "logs",
+        "publish",
+        "readiness"
+      ],
+      "seconds": 1.76
+    },
+    {
+      "name": "stable-promotion",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "publish",
+        "readiness",
+        "restore",
+        "upload"
+      ],
+      "expected": [
+        "publish",
+        "readiness",
+        "restore",
+        "upload"
+      ],
+      "seconds": 1.868
+    },
+    {
+      "name": "readiness-only",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "readiness"
+      ],
+      "expected": [
+        "readiness"
+      ],
+      "seconds": 1.498
+    },
+    {
+      "name": "reject-fresh-stable",
+      "pass": true,
+      "exit": 1,
+      "observed": [],
+      "expected": [],
+      "seconds": 1.536
+    },
+    {
+      "name": "reject-fresh-readiness",
+      "pass": true,
+      "exit": 1,
+      "observed": [],
+      "expected": [],
+      "seconds": 1.638
+    },
+    {
+      "name": "branch-guard",
+      "pass": true,
+      "exit": 0,
+      "observed": [],
+      "expected": [],
+      "seconds": 0.728
+    },
+    {
+      "name": "disabled-guard",
+      "pass": true,
+      "exit": 0,
+      "observed": [],
+      "expected": [],
+      "seconds": 0.744
+    },
+    {
+      "name": "builder-fails",
+      "pass": true,
+      "exit": 1,
+      "observed": [],
+      "expected": [],
+      "seconds": 1.791
+    },
+    {
+      "name": "qualification-fails",
+      "pass": true,
+      "exit": 1,
+      "observed": [
+        "build",
+        "qualify"
+      ],
+      "expected": [
+        "build",
+        "qualify"
+      ],
+      "seconds": 2.336
+    },
+    {
+      "name": "signing-fails",
+      "pass": true,
+      "exit": 1,
+      "observed": [
+        "build",
+        "qualify",
+        "sign"
+      ],
+      "expected": [
+        "build",
+        "qualify",
+        "sign"
+      ],
+      "seconds": 2.316
+    },
+    {
+      "name": "upload-fails",
+      "pass": true,
+      "exit": 1,
+      "observed": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.281
+    },
+    {
+      "name": "publish-fails",
+      "pass": true,
+      "exit": 1,
+      "observed": [
+        "build",
+        "publish",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "publish",
+        "qualify",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.451
+    },
+    {
+      "name": "receipt-quota-nonblocking",
+      "pass": true,
+      "exit": 0,
+      "observed": [
+        "build",
+        "publish",
+        "qualify",
+        "readiness",
+        "sign",
+        "upload"
+      ],
+      "expected": [
+        "build",
+        "publish",
+        "qualify",
+        "readiness",
+        "sign",
+        "upload"
+      ],
+      "seconds": 2.551
+    }
+  ]
+}
