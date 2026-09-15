@@ -1,0 +1,4 @@
+active
+USER     COMMAND
+couch-tv     878  1.4  0.5 1050004 22332 ?       Ssl  16:01   0:14 /var/lib/couch/application/Couch.AppImage
+couch-tv    1852  4.7  2.0 6734992 80648 ?       Sl   16:04   0:37 /tmp/.mount_Couch.mnPjcJ/usr/bin/couch-server

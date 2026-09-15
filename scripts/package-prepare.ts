@@ -6,6 +6,7 @@ import inputs from "../packaging/inputs.json";
 import { packageManager, version } from "../package.json";
 import packageConfig from "../src-tauri/tauri.package.conf.json";
 import debian from "../packaging/debian.json";
+import setup from "../packaging/setup/files.json";
 import { publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
 
 const resources = "src-tauri/resources";
@@ -36,6 +37,19 @@ if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManag
 if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean committed source revision");
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
+if (format === "deb") {
+  const tv = join(resources, "tv");
+  for (const path of setup.files) {
+    await mkdir(join(tv, path, ".."), { recursive: true });
+    await cp(join("packaging/appliance/root", path), join(tv, path));
+  }
+  const unit = join(tv, "usr/lib/systemd/user/couch-tv.service");
+  await Bun.write(unit, (await Bun.file(unit).text()).replace("ExecStart=/var/lib/couch/application/Couch.AppImage", "ExecStart=/usr/bin/couch"));
+  await Bun.write(join(tv, "files"), setup.files.join("\n") + "\n");
+  await Bun.write(join(tv, "packages"), [...new Set([...setup.audio, ...setup.tv, "dbus-user-session", "libpam-systemd", "procps", "polkitd"])].join("\n") + "\n");
+  await cp("packaging/appliance/root/usr/sbin/couch-recover", join(tv, "couch-recover-appimage"));
+  await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
+}
 await mkdir(staging, { recursive: true });
 await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
 if (format === "appimage") {

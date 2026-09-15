@@ -1,0 +1,11 @@
+total 40
+drwx------ 7 couch-tv couch-tv  4096 Sep 15 16:04 .
+drwx------ 3 couch-tv couch-tv  4096 Sep 15 16:04 ..
+drwx------ 2 couch-tv couch-tv  4096 Sep 15 16:04 CacheStorage
+drwx------ 3 couch-tv couch-tv  4096 Sep 15 16:04 WebKitCache
+-rw------- 1 couch-tv couch-tv 12288 Sep 15 16:04 hsts-storage.sqlite
+drwx------ 2 couch-tv couch-tv  4096 Sep 15 16:04 logs
+drwx------ 3 couch-tv couch-tv  4096 Sep 15 16:04 mediakeys
+drwx------ 2 couch-tv couch-tv  4096 Sep 15 16:04 storage
+---
+

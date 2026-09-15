@@ -1,0 +1,17 @@
+● couch-tv.service - Couch TV native host and coordinator
+     Loaded: loaded (/etc/systemd/user/couch-tv.service; static)
+     Active: active (running) since Tue 2026-09-15 16:04:27 UTC; 32s ago
+ Invocation: 6fbc39ca82fa4932be0c2ceffb180237
+    Process: 886 ExecStartPre=/usr/bin/pactl info (code=exited, status=0/SUCCESS)
+    Process: 892 ExecStartPre=/usr/lib/couch-appliance/initialize-audio (code=exited, status=0/SUCCESS)
+   Main PID: 957 (couch)
+      Tasks: 44 (limit: 4595)
+     Memory: 483.7M (peak: 486.5M)
+        CPU: 19.169s
+     CGroup: /user.slice/user-102.slice/user@102.service/app.slice/couch-tv.service
+             ├─ 957 /usr/bin/couch
+             ├─1109 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess 1 34
+             └─1128 /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess 4 40
+---
+---
+appimage-search-done

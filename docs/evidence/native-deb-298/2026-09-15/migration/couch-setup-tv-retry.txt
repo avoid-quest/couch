@@ -1,0 +1,30 @@
+polkitd is already the newest version (126-2).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Preserved /etc/couch/appliance.env
+Preserved /usr/lib/couch-appliance/initialize-audio
+Preserved /usr/lib/couch-appliance/session
+Preserved /usr/lib/couch-appliance/set-autostart
+Preserved /usr/lib/systemd/logind.conf.d/50-couch.conf
+Preserved /usr/lib/systemd/system/couch-autostart@.service
+Preserved /usr/sbin/couch-session
+Preserved /usr/share/couch-appliance/openbox.xml
+Preserved /usr/share/lightdm/lightdm.conf.d/50-couch.conf
+Preserved /usr/share/polkit-1/rules.d/50-couch-autostart.rules
+Preserved /usr/share/xsessions/couch.desktop
+Failed to reset failed state of unit couch-tv.service: Unit couch-tv.service not loaded.
+[0m[1m[31merror[0m: Uncaught (in promise) NotCapable: Requires all access to "/proc/19703", run again with the --allow-all flag
+    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mObject.stat[0m[0m[2m[38;5;245m ([0m[0m[2m[38;5;245mext:deno_fs/30_fs.js[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m6243[0m[0m[2m[38;5;245m)[0m
+    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mstat[0m[0m[2m[38;5;245m ([0m[0m[2m[38;5;245mext:deno_node/fs.ts[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m5794[0m[0m[2m[38;5;245m)[0m
+    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mext:deno_node/internal/util.mjs[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1863[0m
+    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mstat[0m[0m[2m[38;5;245m ([0m[0m[2m[38;5;245mext:deno_node/internal/util.mjs[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1713[0m[0m[2m[38;5;245m)[0m
+    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mext:deno_node/internal/fs/promises.ts[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1431[0m
+Native startup failed. Restoring the retained AppImage selection.
+Failed to reset failed state of unit couch-tv.service: Unit couch-tv.service not loaded.
+Restored the retained AppImage service selection. Current data was not replaced.
+couch-setup: Native migration did not complete. Inspect couch-session logs; retained app files and current data remain available.
+Setup did not complete. Existing data and AppImage files were retained. Inspect sudo couch-session logs; rerun couch-setup, or use sudo couch-setup --tv --restore-appimage after a recorded migration.
+exit=0
+active
+    PID USER     COMMAND
+  20498 couch-tv couch
+couch-tv   20506 23.2  0.3 1050004 14704 ?       Ssl  16:24   0:00 /var/lib/couch/application/Couch.AppImage

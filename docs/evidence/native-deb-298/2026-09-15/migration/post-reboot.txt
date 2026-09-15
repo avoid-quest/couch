@@ -1,0 +1,4 @@
+1  102 couch-tv seat0 772 user          - no -
+3  102 couch-tv -     783 manager-early - no -
+activating
+/usr/share/couch/tv/usr/lib/systemd/user/couch-tv.service
