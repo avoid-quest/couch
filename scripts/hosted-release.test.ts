@@ -29,16 +29,18 @@ describe("hosted versions and promotion", () => {
     expect(channelArgs("preview")).toEqual(["--channel", "preview"]);
     for (const version of ["01.0.0", "0.1.0+build.1.1", "0.1.0-preview.01", "0.1.0-beta.1"]) expect(() => releaseVersion(version)).toThrow();
   });
-  test("a newer Preview waits for Stable, equal versions do not reinstall, and skips order normally", () => {
+  test("a newer Preview waits for Stable, equal versions do not reinstall, and skips order normally", async () => {
     expect(Bun.semver.order("0.2.0-preview.1", "0.1.0")).toBe(1);
     expect(Bun.semver.order("0.2.0", "0.2.0")).toBe(0);
     expect(Bun.semver.order("0.1.0-preview.1", "0.3.0")).toBe(-1);
-    expect(() => assertIncreasing([{ version: "0.2.0", channel: null, status: "Published" }], "0.1.0", "stable")).toThrow();
-    expect(() => assertIncreasing([], "0.1.0-preview.1", "stable")).toThrow();
-    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published" }], "0.1.0", "stable")).not.toThrow();
-    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published", assets: [{ updatePlatform: "linux-x86_64-appimage" }] }], "0.1.0", "preview", "linux-x86_64-deb")).not.toThrow();
-    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published", assets: [{ updatePlatform: "linux-x86_64-deb" }] }], "0.1.0", "preview", "linux-x86_64-deb")).toThrow();
-    expect(() => assertIncreasing([{ version: "0.1.0", channel: "preview", status: "Published" }], "0.1.0", "preview", "linux-x86_64-deb")).toThrow();
+    const feed = (status: number, body: string) => (async () => new Response(body, { status })) as typeof fetch;
+    const published = (version: string) => feed(200, JSON.stringify({ version }));
+    const empty = feed(400, '"Unknown update platform"');
+    await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", published("0.2.0"))).rejects.toThrow();
+    await expect(assertIncreasing("0.1.0-preview.1", "stable", "linux-x86_64-deb", empty)).rejects.toThrow();
+    await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", empty)).resolves.toBeUndefined();
+    await expect(assertIncreasing("0.1.2", "preview", "linux-x86_64-deb", empty)).resolves.toBeUndefined();
+    await expect(assertIncreasing("0.1.0", "preview", "linux-x86_64-deb", published("0.1.0"))).rejects.toThrow();
   });
   test("Cloud must have the complete approved asset set, platform and original signatures", () => {
     const manifest = fixture();
