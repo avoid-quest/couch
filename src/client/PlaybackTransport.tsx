@@ -1,7 +1,7 @@
 import { ChevronUp, RotateCcw, RotateCw, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Action, SessionState } from "../shared/protocol";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";

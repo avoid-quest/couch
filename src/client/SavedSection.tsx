@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SessionState } from "../shared/protocol";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { ForLaterSection } from "./ForLaterSection";
 import { SavedPlaylists } from "./SavedPlaylists";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";

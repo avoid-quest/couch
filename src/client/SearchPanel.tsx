@@ -20,7 +20,7 @@ import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./
 import { SearchRadioResults } from "./SearchRadioResults";
 import { QualityOptions } from "./QualitySelect";
 import { supportsWebVideoQuality, useEnqueueVideoQuality } from "./video-quality";
-import { createId } from "./session";
+import { createId } from "./session/session";
 import type { SourceSetupKind } from "./SourceSetupDialog";
 
 type Source = "Library" | "Jellyfin";

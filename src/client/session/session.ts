@@ -1,7 +1,7 @@
-import { buildKey, loadedBuild } from "../shared/build";
+import { buildKey, loadedBuild } from "../../shared/build";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
-import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../shared/protocol";
-import type { ConnectionDetails, ControllerIdentity } from "../shared/controllers";
+import type { Action, ClientMessage, NavigationKey, ServerMessage, SessionState } from "../../shared/protocol";
+import type { ConnectionDetails, ControllerIdentity } from "../../shared/controllers";
 import { knownConnection, rememberConnection } from "./connection";
 
 export type Credentials = { origin: string; token: string; installationId?: string };

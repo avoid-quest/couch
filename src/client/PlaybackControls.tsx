@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Action, PlayerState, SessionState } from "../shared/protocol";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";

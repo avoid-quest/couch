@@ -15,7 +15,6 @@ import { useEnqueueVideoQuality } from "./video-quality";
 type Props = {
   showHeading?: boolean;
   active?: boolean;
-  historyVersion?: number;
   onPlayHistory: HistoryPlayback;
   initialItem?: ProviderItem;
   initialProvider?: ProviderId;
@@ -80,7 +79,7 @@ export function ProviderPanel(props: Props) {
   </section>;
 }
 
-function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, onSavePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
+function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, onSavePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
   const qualityId = useId();
   const [input, setInput] = useState("");
@@ -318,7 +317,7 @@ function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, ini
         {actionError && <p className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{actionError}</p>}
         {notice && <p className="provider-notice rounded-lg border bg-muted p-4 text-sm" role="status">{notice}</p>}
         {favoriteError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">Saved items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
-        {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={historyVersion} onPlay={onPlayHistory} provider={provider} active={active} />}
+        {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} onPlay={onPlayHistory} provider={provider} active={active} />}
         {view === "browse" && !atRecent && <div className="provider-location flex items-center gap-3">
           {trail.length > 1 && <Button data-back variant="outline" className="min-h-11 shrink-0" disabled={!connected} onClick={back}>Back</Button>}
           <h3 className="text-lg font-medium wrap-anywhere">{page?.title || location.title}</h3>

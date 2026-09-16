@@ -9,7 +9,7 @@ import { HistoryPanel, type HistoryPlayback } from "./HistoryPanel";
 import { Icon } from "./Icon";
 import { PlaybackControls, sourceLabel } from "./PlaybackControls";
 import { MediaArtwork } from "./ProviderPanel";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import "./session-home.css";
 
 export function SessionHome({ state, credentials, connected, run, onBrowse, onPlay, active }: {
@@ -70,7 +70,7 @@ export function SessionHome({ state, credentials, connected, run, onBrowse, onPl
         </li>)}</ol> : <p className="session-empty">Your queue is empty. Add items from Search or Saved to play them next.</p>}
         {current && <div className="session-browse-actions"><Button variant="outline" className="session-find" onClick={() => onBrowse("Search")}><Search aria-hidden="true" />Find something</Button><Button variant="ghost" className="session-find" onClick={() => onBrowse("Browse")}>Browse sources <ChevronRight aria-hidden="true" /></Button></div>}
       </section>
-      <HistoryPanel presentation="inspect" key={state?.activeProfile.id} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.libraryVersion ?? 0} onPlay={onPlay} active={active} />
+      <HistoryPanel presentation="inspect" key={state?.activeProfile.id} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} onPlay={onPlay} active={active} />
     </div>
     <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="session-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>

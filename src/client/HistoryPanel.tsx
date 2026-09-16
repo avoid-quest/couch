@@ -1,4 +1,5 @@
 import type { ProviderId } from "../shared/providers";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { HistoryItem, ViewingProgress } from "../shared/library";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
+import { historyQuery } from "./api/library";
 import "./history-presentation.css";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
@@ -60,52 +62,39 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   </Popover>;
 }
 
-export function HistoryPanel({ origin, token, connected, canPlay, version, onPlay, active = true, presentation = "default", provider }: {
+export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active = true, presentation = "default", provider }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
-  version: number;
   onPlay: HistoryPlayback;
   active?: boolean;
   presentation?: "default" | "inspect";
   provider?: ProviderId;
 }) {
-  const [items, setItems] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(connected && active);
+  // The history reads through Query: the session invalidates ["library"] on
+  // socket events, so the panel no longer needs a version prop.
+  const queryClient = useQueryClient();
+  const { data, isPending: loading, error: queryError, refetch } = useQuery({ ...historyQuery({ origin, token }, provider), enabled: connected && active });
+  const items = data?.items ?? [];
+  const queryMessage = queryError instanceof Error ? queryError.message : "Could not load viewing history.";
   const [pending, setPending] = useState<string | null>(null);
-  const [refresh, setRefresh] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [playError, setPlayError] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const detail = items.find(item => item.mediaId === detailId);
   useEffect(() => { setDetailId(null); }, [origin, token, connected, active]);
-
-  useEffect(() => {
-    if (!connected || !active) { setLoading(false); return; }
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    void fetch(`${origin}/api/progress/history?limit=40${provider ? `&provider=${provider}` : ""}`, {
-      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
-    }).then(async response => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not load viewing history.");
-      if (!controller.signal.aborted) { setItems(result.items); }
-    }).catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load viewing history.");
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [origin, token, connected, active, version, refresh, provider]);
+  const refreshHistory = () => { void queryClient.invalidateQueries({ queryKey: ["library", "history"] }); };
+  const error = connected && active && queryError ? queryMessage : null;
 
   const play = async (item: HistoryItem, fromStart = false) => {
     setPending(item.mediaId);
-    setError(null);
+    setPlayError(null);
     setNotice(null);
     try {
       if (await onPlay(item, { fromStart })) setNotice(`${fromStart || !item.position ? "Starting" : "Resuming"} ${item.title} on the TV.`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not play this item."); }
+    } catch (reason) { setPlayError(reason instanceof Error ? reason.message : "Could not play this item."); }
     finally { setPending(null); }
   };
 
@@ -119,7 +108,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
 
   return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label="Playback history">
     <div><h3 className="text-xl font-semibold">Recently played</h3></div>
-    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => void refetch()}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
     {!loading && !error && !items.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
@@ -137,7 +126,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
             <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-base font-medium">{item.title}</strong>{item.watched && <Badge variant="secondary"><Check aria-hidden="true" />Watched</Badge>}</div>
             <p className="mt-1 text-sm text-muted-foreground">{resumable ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}{item.lastPlayedAt && ` · ${new Date(item.lastPlayedAt).toLocaleDateString()}`}{item.playedBy && ` · Started from ${item.playedBy.name}`}</p>
           </div>
-          <ProgressActions origin={origin} token={token} connected={connected} mediaId={item.mediaId} title={item.title} progress={item} onUpdated={() => setRefresh(value => value + 1)} />
+          <ProgressActions origin={origin} token={token} connected={connected} mediaId={item.mediaId} title={item.title} progress={item} onUpdated={refreshHistory} />
         </div>
         {playbackActions(item)}
         {!available && <p className="text-sm text-muted-foreground">Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
@@ -146,8 +135,8 @@ export function HistoryPanel({ origin, token, connected, canPlay, version, onPla
     {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="history-inspect-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail, "history-inspect-art history-inspect-detail-art")}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Recently played</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
         {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
-        {playbackActions(detail)}<ProgressActions origin={origin} token={token} connected={connected} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={() => setRefresh(value => value + 1)} />
-        {notice && <p role="status">{notice}</p>}{error && <p role="alert">{error}</p>}
+        {playbackActions(detail)}<ProgressActions origin={origin} token={token} connected={connected} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={refreshHistory} />
+        {notice && <p role="status">{notice}</p>}{playError && <p role="alert">{playError}</p>}
       </>}
     </DialogContent></Dialog>}
   </section>;

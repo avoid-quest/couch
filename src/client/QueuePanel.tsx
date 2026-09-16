@@ -14,7 +14,7 @@ import { QualitySelect } from "./QualitySelect";
 import { supportsWebVideoQuality, useEnqueueVideoQuality, videoQualityLabels } from "./video-quality";
 import { QueueActions } from "./QueueActions";
 import { SavedPlaylists } from "./SavedPlaylists";
-import { createId, type Credentials } from "./session";
+import { createId, type Credentials } from "./session/session";
 import "./queue-panel.css";
 
 type Props = {

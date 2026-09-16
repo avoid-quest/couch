@@ -11,7 +11,7 @@ import type { SessionState } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { ProgressActions, progressTime, type HistoryPlayback } from "./HistoryPanel";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { SaveForLater } from "./SaveForLater";
 import "./browse-home.css";
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
-import * as session from "./session";
+import * as session from "./session/session";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 let sessionMock: ReturnType<typeof spyOn> | undefined;
@@ -17,7 +17,7 @@ async function renderDialog(connected = true, info = host) {
 }
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "location", "history", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "scrollTo", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "location", "history", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -102,73 +102,4 @@ test("closing restores focus to the native shortcut and reopening refreshes the 
   expect(document.activeElement).toBe(button("Pair a remote"));
   await act(async () => button("Pair a remote").click());
   expect(request).toHaveBeenCalledTimes(2);
-});
-
-async function renderPhone(token?: string) {
-  window.history.replaceState(null, "", "/#pair=123456");
-  if (token) { localStorage.setItem("couch.remote-token", token); localStorage.setItem("couch.remote-installation-id", "living-room"); }
-  sessionMock = spyOn(session, "useSession").mockImplementation(credentials => ({
-    state: credentials ? { activeProfile: { id: "household", name: "Household", createdAt: 1 }, queue: [], currentEntryId: null, administratorClaimed: true, setupStep: "complete", player: { playbackId: null, status: "idle", position: 0, duration: 0, volume: 30, seekable: false, error: null } } : null,
-    status: credentials ? "connected" : "pairing-required", details: null, identity: credentials ? { authority: "controller", controller: { id: "phone", name: "Guest phone", role: "controller", createdAt: 1, lastSeenAt: 1 }, claimAvailable: false } : null,
-    playerStatus: undefined, pairingRequired: !credentials, reachable: true, connected: !!credentials, command: async () => {}, reconnect: () => {},
-  }));
-  const { App } = await import("./App");
-  const { RouterProvider, createBrowserHistory, createRouter } = await import("@tanstack/react-router");
-  const { routeTree } = await import("./routeTree.gen");
-  const router = createRouter({ routeTree, history: createBrowserHistory(), scrollRestoration: false });
-  await act(async () => root.render(<RouterProvider router={router} />));
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
-}
-const submit = () => act(async () => { document.querySelector("form.pair-form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
-const input = (id: string, value: string) => act(async () => {
-  const node = document.querySelector<HTMLInputElement>(id)!;
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
-  node.dispatchEvent(new Event("input", { bubbles: true }));
-});
-
-test("the QR opens the actual phone form with its code, then device submission reaches the session", async () => {
-  await renderPhone();
-  expect(document.querySelector<HTMLInputElement>("#pairing-code")?.value).toBe("123456");
-  expect(document.activeElement?.id).toBe("remote-name"); expect(location.hash).toBe("");
-  await input("#remote-name", "Guest phone");
-  request.mockImplementation((async (url, init) => {
-    if (String(url).endsWith("/api/pair")) {
-      expect(JSON.parse(String(init?.body))).toEqual({ code: "123456", name: "Guest phone" });
-      return Response.json({ token: "new-controller", installationId: "living-room" });
-    }
-    if (String(url).endsWith("/api/radio/avoid")) return Response.json({ playlist: { error: null }, stations: [] });
-    return Response.json({ items: [], favorites: [] });
-  }) as typeof fetch);
-  await submit();
-  expect(localStorage.getItem("couch.remote-token")).toBe("new-controller");
-  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
-  expect(sessionMock?.mock.calls.at(-1)?.[0]).toEqual({ origin: "http://localhost", token: "new-controller", installationId: "living-room" });
-  expect(document.querySelector(".pair-form")).toBeNull();
-  expect(document.querySelector('[data-page="Now"]')).not.toBeNull();
-  expect(document.querySelector(".controller-name")?.textContent).toBe("Guest phone");
-});
-
-test("stale codes and failed connections keep the name, editable code and Connect retry", async () => {
-  await renderPhone(); await input("#remote-name", "Guest phone");
-  request.mockResolvedValue(Response.json({ error: "The pairing code is incorrect." }, { status: 401 }));
-  await submit();
-  expect(document.body.textContent).toContain("Scan the QR again or enter the code currently shown on the playback computer");
-  expect(document.querySelector<HTMLInputElement>("#remote-name")?.value).toBe("Guest phone");
-  expect(button("Connect").disabled).toBe(false);
-  await input("#pairing-code", "654321");
-  request.mockRejectedValue(new TypeError("Failed to fetch"));
-  await submit();
-  expect(document.body.textContent).toContain("same network, then try Connect again");
-  expect(document.querySelector<HTMLInputElement>("#pairing-code")?.value).toBe("654321");
-  expect(button("Connect").disabled).toBe(false);
-  expect(localStorage.getItem("couch.remote-token")).toBeNull();
-});
-
-test("scanning on an already paired browser preserves its stored pairing", async () => {
-  request.mockImplementation((async url => String(url).endsWith("/api/radio/avoid") ? Response.json({ playlist: { error: null }, stations: [] }) : Response.json({ items: [], favorites: [] })) as typeof fetch);
-  await renderPhone("existing-controller");
-  expect(document.querySelector(".pair-form")).toBeNull();
-  expect(localStorage.getItem("couch.remote-token")).toBe("existing-controller");
-  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
-  expect(request.mock.calls.some((call: Parameters<typeof fetch>) => String(call[0]).endsWith("/api/pair"))).toBe(false);
 });

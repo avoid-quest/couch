@@ -31,7 +31,7 @@ import { BluetoothSettings } from "./BluetoothSettings";
 import { SoundSettings } from "./SoundSettings";
 import { DisplaySettings } from "./DisplaySettings";
 import { AdvancedSettings } from "./AdvancedSettings";
-import { knownConnection } from "./connection";
+import { knownConnection } from "./session/connection";
 import { readUpdateRequest } from "./update-request";
 import type { SetupStep } from "../shared/setup";
 import { SetupProgress } from "./SetupProgress";

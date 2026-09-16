@@ -3,7 +3,7 @@ import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
-import { createId } from "./session";
+import { createId } from "./session/session";
 import type { SourceSetupKind } from "./SourceSetupDialog";
 import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
 

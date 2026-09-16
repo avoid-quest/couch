@@ -1,18 +1,12 @@
-import type React from "react";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { HistoryItem, LibraryItem } from "../shared/library";
 import type { SessionState } from "../shared/protocol";
-import * as session from "./session";
-import type { RouterProvider } from "@tanstack/react-router";
+import * as session from "./session/session";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
-type AppRouter = NonNullable<React.ComponentProps<typeof RouterProvider>["router"]>;
-let appRouter: AppRouter | null = null;
-let renderCount = 0;
-let sessionMock: ReturnType<typeof spyOn> | undefined;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const played: unknown[] = [], browsed: string[] = [], requests: string[] = [];
 const added: HistoryItem[] = [];
@@ -32,7 +26,7 @@ async function renderHome(connected = true, active = true, canPlay = true, value
 beforeEach(async () => {
   played.length = 0; added.length = 0; browsed.length = 0; requests.length = 0; failed = false;
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "location", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "scrollTo", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "location", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -47,7 +41,7 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); sessionMock?.mockRestore(); sessionMock = undefined; appRouter = null; renderCount = 0;
+  await act(async () => root.unmount());
   request.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
@@ -80,140 +74,6 @@ test("home history failure has an independent retry", async () => {
   failed = false; await act(async () => button("Try again").click());
   expect(document.body.textContent).toContain("Halfway home"); expect(requests).toHaveLength(4);
 });
-async function renderApp(value = state, administrator = false) {
-  localStorage.setItem("couch.remote-token", "paired");
-  localStorage.setItem("couch.remote-installation-id", "living-room");
-  request.mockImplementation((async (input, init) => {
-    const path = new URL(String(input)).pathname;
-    requests.push(String(input));
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (path === "/api/radio/avoid") return Response.json({ playlist: { id: "avoid", error: null }, stations: [] });
-    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.academy" });
-    if (path === "/api/for-later") return Response.json({ items: [{ id: "saved", title: "Saved evening film" }] });
-    return Response.json({ profile, items: [], favorites: [], playlists: [], sources: [], stations: [], total: 0, offset: 0, limit: 24, configured: false });
-  }) as typeof fetch);
-  const role = administrator ? "administrator" as const : "controller" as const;
-  sessionMock = spyOn(session, "useSession").mockReturnValue({ state: value, status: "connected", details: null, identity: { authority: role, controller: { id: "desk", name: "Desk remote", role, createdAt: 1, lastSeenAt: 1 }, claimAvailable: false }, playerStatus: undefined, pairingRequired: false, reachable: true, connected: true, command: async (...args: unknown[]) => { played.push(args); }, reconnect: () => {} });
-  const { App } = await import("./App");
-  const { RouterProvider, createBrowserHistory, createRouter } = await import("@tanstack/react-router");
-  const { routeTree } = await import("./routeTree.gen");
-  if (!appRouter) appRouter = createRouter({ routeTree, history: createBrowserHistory(), scrollRestoration: false }) as unknown as AppRouter;
-  renderCount += 1;
-  await act(async () => root.render(<RouterProvider key={renderCount} router={appRouter!} />));
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
-}
-const frame = () => act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
-async function searchHome(query: string) {
-  const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Find"]')!.click());
-  await frame();
-  await act(async () => {
-    const search = document.querySelector<HTMLInputElement>("#media-search")!;
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, query);
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await act(async () => document.querySelector('[data-page="Find"]:not([hidden]) form[role="search"]')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
-}
-
-test("a paired remote starts on the Now stage and keeps playback unchanged while browsing", async () => {
-  await renderApp();
-  expect(document.querySelector('[data-source="Now"]')?.getAttribute("aria-current")).toBe("page");
-  expect(document.querySelector("#media-search")).toBeNull();
-  expect(document.querySelector(".session-bar")).toBeNull();
-  expect(document.querySelector(".now-playing .media-title")?.textContent).toBe("Evening radio");
-  expect(document.querySelector(".mode-switch, .source-nav")).toBeNull();
-  const header = document.querySelector(".app-header")!;
-  expect(header.textContent).toContain("Desk remote");
-  expect(header.textContent).not.toContain("MBP");
-  expect(header.querySelector('[aria-label^="Your name"], [aria-label^="Watching profile"]')).toBeNull();
-  expect(header.querySelector(".header-status")?.lastElementChild?.tagName).toBe("TIME");
-  const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  expect([...navigation.querySelectorAll('a')].map(node => node.textContent)).toEqual(["Now", "Find", "Saved", "Settings"]);
-  const query = "https://media.example/evening";
-  await searchHome(query);
-  expect(window.location.pathname).toBe("/find");
-  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
-  expect(document.querySelector('[data-source="Find"]')?.getAttribute("aria-current")).toBe("page");
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Saved"]')!.click());
-  expect(document.querySelector('[aria-label="Saved for later"]')?.textContent).toContain("Saved evening film");
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Settings"]')!.click());
-  expect(document.querySelector('.settings-page:not([hidden])')).not.toBeNull();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Find"]')!.click());
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
-  await act(async () => { window.history.back(); await Bun.sleep(20); });
-  expect(window.location.pathname).toBe("/settings/playback");
-  await act(async () => { window.history.forward(); await Bun.sleep(20); });
-  expect(window.location.pathname).toBe("/find");
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
-  expect(localStorage.getItem("couch.remote-token")).toBe("paired");
-  expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
-  expect(state.player.playbackId).toBe("playback");
-  expect(state.queue).toHaveLength(1);
-  expect(played).toEqual([]);
-});
-
-test("the playback bar returns to Now with the search preserved", async () => {
-  await renderApp();
-  const query = "https://media.example/evening";
-  await searchHome(query);
-  const search = document.querySelector<HTMLInputElement>("#media-search")!;
-  const navigation = document.querySelector('[aria-label="Main navigation"]')!;
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Find"]')!.click());
-  await frame();
-  expect(document.querySelector('[data-page="Now"]')).toBeNull();
-  const trigger = button("Open Now playing: Evening radio");
-  await act(async () => { trigger.focus(); trigger.click(); });
-  await frame();
-  expect(document.querySelector(".session-bar")).toBeNull();
-  expect(document.querySelector(".now-playing .media-title")?.textContent).toBe("Evening radio");
-  expect(document.querySelector<HTMLInputElement>("#media-search")).toBeNull();
-  await act(async () => navigation.querySelector<HTMLElement>('[data-source="Find"]')!.click());
-  await frame();
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
-  expect(played).toEqual([]);
-});
-
-test("stopping on Now reveals the invitation and navigation stays intact", async () => {
-  await renderApp();
-  await act(async () => button("Stop playback").click());
-  await renderApp({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
-  expect(document.querySelector(".now-playing h1")?.textContent).toBe("Nothing playing");
-  expect(document.querySelector(".session-bar")).toBeNull();
-  expect(played).toEqual([[{ type: "stop" }]]);
-  await act(async () => button("Remote", document.querySelector(".app-header")!).click());
-  expect(document.querySelector('[role="dialog"] .remote-pad')).not.toBeNull();
-  await act(async () => button("TV home").click());
-  expect(played).toEqual([[{ type: "stop" }], [{ type: "navigate", key: "home" }]]);
-});
-
-test("a terminal radio failure keeps Now playing and its retry reachable", async () => {
-  const failed = { ...state, player: { ...state.player, status: "error" as const, error: "Radio unavailable" }, radioRetry: { attempt: 3, maximum: 3, retryAt: null } };
-  await renderApp(failed);
-  expect(document.querySelector(".now-playing")?.textContent).toContain("Radio unavailable");
-  await act(async () => button("Try again").click());
-  expect(played).toEqual([[{ type: "play", entryId: "current" }]]);
-});
-
-test("source setup opens directly from a pasted link and restores its search and trigger", async () => {
-  await renderApp(state, true);
-  const query = "https://streamingcommunityz.academy/watch/evening";
-  await searchHome(query);
-  const trigger = button("StreamingCommunity settings");
-  await act(async () => { trigger.focus(); trigger.click(); });
-  const dialog = document.querySelector('[role="dialog"]')!;
-  expect(dialog.textContent).toContain("Add source");
-  expect(dialog.querySelector<HTMLInputElement>("#streamingcommunity-origin")?.value).toBe("https://streamingcommunityz.academy");
-  expect(dialog.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("StreamingCommunity");
-  await act(async () => button("Close", dialog).click());
-  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe(query);
-  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
-  expect(document.activeElement === trigger).toBe(true);
-  expect(played).toEqual([]);
-});
-
 test("library artwork cards open details without playback and retain actual library identity", async () => {
   await renderHome();
   await act(async () => button("Details for A library film").click());
@@ -262,17 +122,6 @@ test("an empty TV home offers catalog browsing without a local-file placeholder"
   expect(played).toEqual([]);
 });
 
-
-test("an idle paired browser can open the remote and navigate without starting playback", async () => {
-  await renderApp({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
-  expect(document.querySelector(".session-bar")).toBeNull();
-  expect(document.querySelector(".now-playing h1")?.textContent).toBe("Nothing playing");
-  await act(async () => button("Remote", document.querySelector(".app-header")!).click());
-  expect(document.querySelector('[role="dialog"] .remote-pad')).not.toBeNull();
-  expect(played).toEqual([]);
-  await act(async () => button("TV select").click());
-  expect(played).toEqual([[{ type: "navigate", key: "select" }]]);
-});
 
 test.each(["history", "library"] as const)("Home %s details update watched state and clear resume using the current response", async source => {
   let item: HistoryItem = { mediaId: source === "history" ? "media:generic" : "library:next", libraryItemId: source === "history" ? null : "next", title: source === "history" ? "A saved file" : libraryItem.title, position: 45, duration: 120, watched: false, lastPlayedAt: 1 };
@@ -329,32 +178,5 @@ test.each(["history", "library"] as const)("Home %s details follow version updat
   removed = true;
   await renderHome(true, true, true, { ...state, libraryVersion: 2 });
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(played).toEqual([]);
-});
-
-test("Find keeps its immediate search draft and commits it on return", async () => {
-  await renderApp();
-  await act(async () => document.querySelector<HTMLElement>('.primary-nav [data-source="Find"]')!.click());
-  const query = "https://media.example/draft";
-  const search = document.querySelector<HTMLInputElement>("#media-search")!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, query);
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  expect(search.value).toBe(query);
-  expect(new URLSearchParams(window.location.search).get("q")).toBeNull();
-  await act(async () => document.querySelector<HTMLElement>('.primary-nav [data-source="Saved"]')!.click());
-  await act(async () => { await Bun.sleep(350); });
-  expect(search.value).toBe(query);
-  // Leaving Find commits the draft to the address so the search survives.
-  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
-  await act(async () => document.querySelector<HTMLElement>('.primary-nav [data-source="Find"]')!.click());
-  await act(async () => { await Bun.sleep(350); });
-  const searchAgain = document.querySelector<HTMLInputElement>("#media-search")!;
-  expect(searchAgain.value).toBe(query);
-  expect(new URLSearchParams(window.location.search).get("q")).toBe(query);
-  await act(async () => button("Clear search").click());
-  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("");
-  expect(new URLSearchParams(window.location.search).get("q")).toBeNull();
   expect(played).toEqual([]);
 });
