@@ -167,6 +167,16 @@ without a GitHub build run. They upload only the selected public allowlist.
 Keep the same version identity only when using the same retained bytes; a
 fresh fallback build after a partial upload needs a new candidate identity.
 
+## Storage
+
+Release bytes never occupy GitHub storage: uploads and updates go to CrabNebula.
+The repository quota holds compiler caches, the small signed receipt artifacts
+and run logs. Expired artifacts linger in that accounting until deletion, and a
+retired workflow once uploaded a 385 MiB inputs bundle per run; the weekly
+Housekeeping workflow deletes expired artifacts and caches untouched for 30
+days, so a fresh release always finds room. Cache eviction at the quota cap
+stays the fallback, not the plan.
+
 ## Download page
 
 After public readiness, prepare the site from the retained full candidate or
