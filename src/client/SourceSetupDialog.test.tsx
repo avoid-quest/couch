@@ -32,7 +32,7 @@ beforeEach(async () => {
     if (init?.method === "POST") { writes.push({ path, body: JSON.parse(String(init.body)) }); return Response.json({}); }
     if (path === "/api/controllers/me") return Response.json({ authority: "administrator" });
     if (path === "/api/jellyfin/connection") return Response.json({ connected: false, url: null });
-    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.taxi" });
+    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.academy" });
     if (path === "/api/iptv/sources" && iptvFailure) return Response.json({ error: "Guide unavailable" }, { status: 503 });
     return Response.json({ sources: [] });
   }) as typeof fetch);

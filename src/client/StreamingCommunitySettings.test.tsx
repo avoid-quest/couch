@@ -18,7 +18,7 @@ beforeEach(async () => {
   calls.length = 0;
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ path: String(input), method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
-    return Response.json({ origin: init?.method === "POST" ? JSON.parse(String(init.body)).origin : "https://streamingcommunityz.taxi" });
+    return Response.json({ origin: init?.method === "POST" ? JSON.parse(String(init.body)).origin : "https://streamingcommunityz.academy" });
   }) as unknown as typeof fetch);
   const { createRoot } = await import("react-dom/client"); ({ StreamingCommunitySettings: Settings } = await import("./StreamingCommunitySettings"));
   root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -31,7 +31,7 @@ afterEach(async () => {
 test("administrator can save the exact current origin and demotion removes the form", async () => {
   await render();
   const input = document.querySelector("input")!;
-  expect(input.value).toBe("https://streamingcommunityz.taxi");
+  expect(input.value).toBe("https://streamingcommunityz.academy");
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "https://streamingcommunity.example/");
     input.dispatchEvent(new Event("input", { bubbles: true }));
