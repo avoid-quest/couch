@@ -136,6 +136,27 @@ build a new candidate under a new version. Never replace uploaded bytes under an
 existing version; a fresh build refuses a nonempty draft. A completed publication
 with delayed CDN readiness needs only another readiness run.
 
+## GitHub Releases mirror
+
+After a publication passes public readiness, the Package workflow also mirrors
+the version to GitHub Releases with the workflow token, which needs
+`contents: write` for the release job. The release carries only the changelog
+notes from the dispatch; downloads stay on CrabNebula. The tag is `v<version>`
+pinned to the built revision with `target_commitish`, so Preview publication of
+`0.1.5-preview.2` produces prerelease `v0.1.5-preview.2` and Stable promotion of
+`0.1.5` produces full release `v0.1.5`. A final version published to Preview
+first appears as a prerelease and the promotion flips that same tag to a full
+release, matching how the feeds treat prerelease and final versions.
+
+[scripts/hosted-release.ts](../scripts/hosted-release.ts) implements the mirror
+as a `github-release` operation: it looks the release up by tag, creates it when
+missing, and patches notes, title and prerelease flag when present. Re-running a
+publication therefore updates one release instead of duplicating it. A
+`readiness-only` recheck never touches GitHub Releases. Preview publication
+always carries the dispatch notes; a Stable promotion flip keeps the changelog
+already on the release and only changes the prerelease flag, because the
+promotion dispatch notes are promote remarks, not changelog.
+
 ## Mac fallback
 
 If Actions cannot build because capacity remains unavailable, use the existing
