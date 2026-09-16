@@ -742,12 +742,21 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (["unavailable", "error", "idle"].includes(player.status)) { state.playedBy = undefined; finishProgress(); }
       radioRetry.observe(player);
       if (player.status === "playing") state.radioRetry = null;
+      const current = state.queue.find(entry => entry.id === state.currentEntryId);
+      // Live streams keep growing mpv's demuxer-cache duration, so every observation
+      // would push the full state and re-render the whole TV UI several times a
+      // second. Absorb radio/iptv ticks that only advance duration/position.
+      const tickMask = (value: PlayerState) => JSON.stringify({ ...value, duration: 0, position: 0, ...(options.systemAudio ? { volume: 0 } : {}) });
+      const liveTick = (isRadio(current) || current?.live === true)
+        && ["playing", "paused"].includes(player.status)
+        && player.playbackId === state.player.playbackId && player.status === state.player.status
+        && tickMask(player) === tickMask(state.player);
       state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
       catch { state.progressError = "Could not save viewing progress. Check the TV's storage."; }
       options.observe?.(state.player);
       if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
-      broadcast();
+      if (!liveTick) broadcast();
       if (ended) {
         const index = state.queue.findIndex(entry => entry.id === state.currentEntryId);
         const following = state.queue[index + 1];

@@ -11,6 +11,7 @@ async function fixture() {
   let savedProfile: SavedSoundProfile | null = null;
   let saved: string | null = null, stream: string | null = null, active = false, lost = 0, failDefault = false;
   const pins: string[] = [];
+  const events: (() => void)[] = [];
   const backend = {
     inventory: async () => structuredClone(inventory), route: async () => stream,
     profile: async (_card: string, _profile: string) => {},
@@ -18,10 +19,25 @@ async function fixture() {
     volume: async (name: string, value: number) => { inventory.outputs.find(output => output.id === name)!.volume = value; },
     mute: async (name: string, value: boolean) => { inventory.outputs.find(output => output.id === name)!.muted = value; },
   };
-  const sound = createSoundRouting({ backend, saved: () => saved, savedProfile: () => savedProfile, save: (name, profile) => { saved = name; savedProfile = profile ?? null; }, active: () => active, pin: name => { pins.push(name); if (stream) stream = name; }, lost: () => { lost++; active = false; }, changed: () => {} });
+  const sound = createSoundRouting({ backend, saved: () => saved, savedProfile: () => savedProfile, save: (name, profile) => { saved = name; savedProfile = profile ?? null; }, active: () => active, pin: name => { pins.push(name); if (stream) stream = name; }, lost: () => { lost++; active = false; }, changed: () => {}, subscribe: onEvent => { events.push(onEvent); return { stop: () => {} }; } });
   await Bun.sleep(1);
-  return { sound, inventory, backend, pins, savedProfile: () => savedProfile, saved: () => saved, lost: () => lost, stream: (name: string | null) => { stream = name; }, active: () => { active = true; }, failDefault: () => { failDefault = true; } };
+  return { sound, inventory, backend, pins, events: (index = 0) => events[index]!, savedProfile: () => savedProfile, saved: () => saved, lost: () => lost, stream: (name: string | null) => { stream = name; }, active: () => { active = true; }, failDefault: () => { failDefault = true; } };
 }
+
+test("pactl events refresh the snapshot without the polling loop", async () => {
+  const f = await fixture();
+  try {
+    f.inventory.outputs[0]!.volume = 77;
+    f.events(0)();
+    await Bun.sleep(300);
+    expect(f.sound.state.volume).toBe(77);
+    f.sound.close();
+    f.events(0)();
+    f.inventory.outputs[0]!.volume = 10;
+    await Bun.sleep(300);
+    expect(f.sound.state.volume).toBe(77);
+  } finally { f.sound.close(); }
+});
 
 test("saved sink names control idle selection, active route confirmation and effective system volume/mute", async () => {
   const f = await fixture();

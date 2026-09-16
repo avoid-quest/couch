@@ -239,3 +239,25 @@ test("programme enrichment reaches the shared snapshot separately from native ta
   session.command({ type: "stop" });
   session.close(); store.close();
 });
+
+test("live radio ticks that only advance duration and position skip the full-state broadcast", () => {
+  const store = openStore(":memory:");
+  let publications = 0;
+  const session = createSession(store, () => {}, () => publications++);
+  try {
+    session.observe(idle);
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "radio:one", kind: "radio" } });
+    session.command({ type: "play", entryId: "one" });
+    const player = { ...idle, playbackId: session.state.player.playbackId!, status: "playing" as const };
+    session.observe(player);
+    const tracks = [{ id: "mpv-audio-1", index: 1, kind: "audio" as const, label: "", language: "", selected: true }];
+    session.observe({ ...player, tracks: [...tracks] });
+    const baseline = publications;
+    session.observe({ ...player, position: 1, duration: 30, tracks: [...tracks] });
+    session.observe({ ...player, position: 2, duration: 60, tracks: [...tracks] });
+    expect(publications).toBe(baseline);
+    expect(session.state.player).toMatchObject({ position: 2, duration: 60 });
+    session.observe({ ...player, position: 3, duration: 90, seekable: true });
+    expect(publications).toBe(baseline + 1);
+  } finally { session.close(); store.close(); }
+});

@@ -108,7 +108,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       state.waiting = "The native updater accepted the idle installation.";
     } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and the TV connection."; }
   })().finally(() => { polling = undefined; });
-  const automaticTimer = automation ? setInterval(() => void automatic(), Math.min(interval, 5_000)) : undefined;
+  const automaticTimer = automation ? setInterval(() => void automatic(), 30_000) : undefined;
   automaticTimer?.unref();
   const startup = feed ? setTimeout(() => start("checking"), 1_000) : undefined;
   const timer = feed ? setInterval(() => start("checking"), interval) : undefined;

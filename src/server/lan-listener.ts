@@ -75,7 +75,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
       throw error;
     }
   });
-  const timer = setInterval(() => { void refresh().catch(() => {}); }, 10_000);
+  const timer = setInterval(() => { void refresh().catch(() => {}); }, 60_000);
   timer.unref();
   void refresh().catch(() => {});
   return {
