@@ -57,7 +57,7 @@ hub = createHub({
   ...(appimage || deb ? { updateFeed: (appimage ? appimageUpdates : debUpdates).feed } : {}),
   nativeDisplay: nativeDisplay.request,
   ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
-  ...(appimage ? {
+  ...(appimage || deb ? {
     admitted: () => admission,
     frontendReady: (value: unknown) => {
       const build = value as MaintenanceBuild;
