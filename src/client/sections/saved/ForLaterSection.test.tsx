@@ -2,7 +2,9 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-let root: Root, window: Window, fetchSpy: ReturnType<typeof spyOn>;
+import type { QueryClient } from "@tanstack/react-query";
+
+let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 let missing = false, canceled = false;
@@ -10,9 +12,11 @@ let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Ev
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
-async function render(connected = true, canPlay = true, version = 1, inspect = false) {
+async function render(connected = true, canPlay = true, inspect = false) {
   const { ForLaterSection } = await import("./ForLaterSection");
-  await act(async () => root.render(<ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} version={version} inspect={inspect} />));
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} /></QueryClientProvider>));
   await flush();
 }
 beforeEach(async () => {
@@ -73,21 +77,21 @@ test("unavailable native playback still allows append and remove; disconnected c
   expect(document.querySelectorAll("li")).toHaveLength(0); expect(calls).toHaveLength(count);
 });
 
-test("another controller's broadcast refreshes shared saved items", async () => {
+test("another controller's socket revision refreshes shared saved items", async () => {
   await render(); items = [{ id: "new", title: "New shared item" }];
-  await render(true, true, 2);
+  await act(async () => { await client.invalidateQueries({ queryKey: ["for-later"] }); }); await flush();
   expect(document.body.textContent).toContain("New shared item");
   expect(document.body.textContent).not.toContain("Evening movie");
 });
 
 test("saving a library result posts only its catalog identity and never a queue operation", async () => {
-  const { SaveForLater } = await import("./SaveForLater");
-  await act(async () => root.render(<SaveForLater origin="http://localhost" token="paired" connected reference={{ kind: "library", id: "movie" }} title="Evening movie" />));
+  const { SaveForLater } = await import("../../SaveForLater");
+  const { QueryClientProvider } = await import("@tanstack/react-query");
+  await act(async () => root.render(<QueryClientProvider client={client}><SaveForLater origin="http://localhost" token="paired" connected reference={{ kind: "library", id: "movie" }} title="Evening movie" /></QueryClientProvider>));
   await click("Save Evening movie for later");
   expect(calls).toEqual([{ path: "/api/for-later", method: "POST", body: { reference: { kind: "library", id: "movie" } } }]);
   expect(document.body.textContent).toContain("Saved for everyone on this TV");
 });
-
 
 test("a successful append whose Play was canceled reports that outcome instead of a source error or retry", async () => {
   await render(); canceled = true;
@@ -99,9 +103,8 @@ test("a successful append whose Play was canceled reports that outcome instead o
   expect(document.querySelectorAll("li")).toHaveLength(2);
 });
 
-
 test("Saved opens details without playing and also exposes direct playback actions", async () => {
-  await render(true, true, 1, true);
+  await render(true, true, true);
   expect(button("Play Evening movie")).toBeDefined();
   await click("Details for Evening movie");
   expect(calls.every(call => call.method === "GET")).toBe(true);
