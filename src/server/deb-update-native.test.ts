@@ -1,0 +1,38 @@
+import { expect, test } from "bun:test";
+import { createNativeDebUpdates } from "./deb-update-native";
+import type { DebUpdateAction } from "../shared/updates";
+const candidate = { summary: { id: "a".repeat(64), releaseId: "2.1", version: "0.2.0", revision: "", notes: "new", bytes: 50, publishedAt: 1, expiresAt: Date.now() + 60_000 }, staged: true };
+test("deb feed correlates check and stage over its own channel and forwards progress", async () => {
+  const sent: { id: string; action: DebUpdateAction }[] = [];
+  const native = createNativeDebUpdates((id, action) => sent.push({ id, action }));
+  const checking = native.feed.check("stable", new AbortController().signal);
+  expect(sent[0]!.action).toEqual({ type: "check", channel: "stable" });
+  native.receive({ requestId: sent[0]!.id, candidate });
+  expect(await checking).toEqual(candidate);
+  const progress: unknown[] = [];
+  const staging = native.feed.stage(candidate, new AbortController().signal, value => progress.push(value));
+  expect(sent[1]!.action).toEqual({ type: "stage", candidateId: candidate.summary.id });
+  native.receive({ requestId: sent[1]!.id, progress: { received: 25, total: 50 } });
+  native.receive({ requestId: sent[1]!.id, staged: true });
+  await staging;
+  expect(progress).toEqual([{ received: 25, total: 50 }]);
+  native.close();
+});
+test("deb install keeps idle intent and maps repair to a rejected native action", async () => {
+  const sent: { id: string; action: DebUpdateAction }[] = [];
+  const native = createNativeDebUpdates((id, action) => sent.push({ id, action }));
+  const requestId = "c".repeat(32);
+  const installing = native.request({ op: "install", candidateId: candidate.summary.id, requestId, confirmInterrupt: false, whenIdle: true });
+  expect(sent[0]!.action).toEqual({ type: "install", candidateId: candidate.summary.id, requestId, confirmInterrupt: false, whenIdle: true, repair: false, repairRuntime: false });
+  native.receive({ requestId: sent[0]!.id, ok: true, transaction: null });
+  await installing;
+  const repairing = native.request({ op: "repair-current", expectedCurrentId: candidate.summary.id, requestId, confirmInterrupt: true, repairRuntime: false });
+  expect(sent[1]!.action).toMatchObject({ type: "install", repair: true, repairRuntime: false, whenIdle: false });
+  native.receive({ requestId: sent[1]!.id, ok: true, transaction: null });
+  await repairing;
+  const status = native.request({ op: "status", requestId });
+  expect(sent[2]!.action).toEqual({ type: "status", requestId });
+  native.receive({ requestId: sent[2]!.id, ok: true, transaction: null });
+  await status;
+  native.close();
+});

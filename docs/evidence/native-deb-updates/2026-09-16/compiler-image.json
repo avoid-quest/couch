@@ -1,0 +1,54 @@
+[
+    {
+        "Id": "sha256:06eabf6d5fc71b95424aaf5e82f7c068fa6126d3fd210400ce3e60296e67f527",
+        "RepoTags": [
+            "couch-debian-builder:a74b51d1a9c5"
+        ],
+        "RepoDigests": [
+            "couch-debian-builder@sha256:06eabf6d5fc71b95424aaf5e82f7c068fa6126d3fd210400ce3e60296e67f527"
+        ],
+        "Comment": "buildkit.dockerfile.v0",
+        "Created": "2026-09-15T22:31:36.779390385Z",
+        "Config": {
+            "Env": [
+                "PATH=/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "DEBIAN_FRONTEND=noninteractive",
+                "CARGO_BUILD_JOBS=2",
+                "PATCHELF=/usr/bin/patchelf"
+            ],
+            "Cmd": [
+                "sleep",
+                "infinity"
+            ],
+            "ArgsEscaped": true
+        },
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Size": 844243810,
+        "RootFS": {
+            "Type": "layers",
+            "Layers": [
+                "sha256:411a86676185cb54d695a805b238194a64e9b77e0c723f3802fbb87d333ea0b3",
+                "sha256:ba925a6b781630c9a1f865fceea4cbf459b6ff8c83c44da2298c612fc106c424",
+                "sha256:1f482bff0d94097a3e25cd9c4bf8524c310a06765138c1907802fd86f234cdd5",
+                "sha256:f91fcec01636571b40829fa3c494764d6863bb0fad39271bb048ec29e9360a96"
+            ]
+        },
+        "Metadata": {
+            "LastTagTime": "2026-09-15T23:04:06.305212301Z"
+        },
+        "Descriptor": {
+            "mediaType": "application/vnd.oci.image.index.v1+json",
+            "digest": "sha256:06eabf6d5fc71b95424aaf5e82f7c068fa6126d3fd210400ce3e60296e67f527",
+            "size": 856
+        },
+        "Identity": {
+            "Build": [
+                {
+                    "Ref": "o11lfcitl8j6aemod4efdzld9",
+                    "CreatedAt": "2026-09-15T23:04:06.306664384Z"
+                }
+            ]
+        }
+    }
+]

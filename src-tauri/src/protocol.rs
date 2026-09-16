@@ -27,6 +27,11 @@ pub enum SidecarMessage {
         request_id: String,
         action: crate::appimage_update::Action,
     },
+    DebUpdate {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        action: crate::deb_update::Action,
+    },
     Display {
         #[serde(rename = "requestId")]
         request_id: String,

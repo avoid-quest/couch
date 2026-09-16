@@ -20,7 +20,9 @@ assert.equal(run(["dpkg-deb", "-f", archive, "Version"]), build.version);
 assert.equal(run(["dpkg-deb", "-f", archive, "Architecture"]), "amd64");
 const depends = run(["dpkg-deb", "-f", archive, "Depends"]).split(", ");
 for (const dependency of debian.depends) assert.ok(depends.includes(dependency), `Missing ${dependency}`);
-assert.ok(!depends.some(dependency => /^(jq|minisign|fuse3|libfuse2)/.test(dependency)));
+// The broker verifies staged signatures with the packaged minisign binary, so
+// minisign is a legitimate dependency; jq, FUSE and their loaders are not.
+assert.ok(!depends.some(dependency => /^(jq|fuse3|libfuse2)/.test(dependency)));
 const staging = await mkdtemp(join(tmpdir(), "couch-deb-"));
 const files: { path: string; size: number; sha256: string }[] = [];
 try {
@@ -39,9 +41,11 @@ try {
     }
   }
   await inspect(staging);
-  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE", "usr/sbin/couch-setup", "usr/share/couch/tv/packages"]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
+  const brokerPolicy = ["usr/lib/systemd/system/couch-package-update@.service", "usr/share/polkit-1/rules.d/50-couch-package-update.rules"];
+  for (const path of ["usr/bin/couch", "usr/bin/couch-server", "usr/share/applications/Couch.desktop", "usr/share/doc/couch/NOTICE", "usr/sbin/couch-setup", "usr/share/couch/tv/packages", "usr/lib/couch/package-update", "usr/lib/couch/couch-updater.pub", ...brokerPolicy]) assert.ok(files.some(file => file.path === path), `Missing ${path}`);
   assert.ok((await lstat(join(staging, "usr/sbin/couch-setup"))).mode & 0o111, "TV setup must be executable");
-  assert.ok(!files.some(file => /^(etc\/|usr\/(lib\/systemd|share\/lightdm|share\/polkit-1)\/)/.test(file.path)), "Ordinary installation must not activate TV policy");
+  // The update broker's own unit and polkit rule ship by design; TV policy does not.
+  assert.ok(!files.some(file => !brokerPolicy.includes(file.path) && /^(etc\/|usr\/(lib\/systemd|share\/lightdm|share\/polkit-1)\/)/.test(file.path)), "Ordinary installation must not activate TV policy");
   const release = await Bun.file(join(staging, "usr/lib/Couch/release.json")).json();
   assert.equal(release.revision, build.revision);
   assert.equal(release.version, build.version);

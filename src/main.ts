@@ -1,5 +1,6 @@
 import { checkpointAppImage } from "./server/appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./server/appimage-update-native";
+import { createNativeDebUpdates } from "./server/deb-update-native";
 import { createNativeBluetooth } from "./server/bluetooth-native";
 import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
@@ -26,7 +27,7 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
-if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1");
+if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null);
 
 function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -34,14 +35,16 @@ function send(message: SidecarMessage) {
 
 const appimage = native && process.env.COUCH_APPIMAGE === "1";
 const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
+const deb = native && process.env.COUCH_PACKAGE_UPDATE === "1";
+const debUpdates = createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }));
 const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
 let hub: Hub;
-let admission = !appimage;
-const updater = appimage ? appimageUpdates : undefined;
+let admission = !(appimage || deb);
+const updater = appimage ? appimageUpdates : deb ? debUpdates : undefined;
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
@@ -50,8 +53,8 @@ hub = createHub({
   managedLan: native,
   onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
-  ...(appimage ? { restart: appimageUpdates.restart } : {}),
-  ...(appimage ? { appimageFeed: appimageUpdates.feed } : {}),
+  ...(appimage || deb ? { restart: (appimage ? appimageUpdates : debUpdates).restart } : {}),
+  ...(appimage || deb ? { updateFeed: (appimage ? appimageUpdates : debUpdates).feed } : {}),
   nativeDisplay: nativeDisplay.request,
   ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
   ...(appimage ? {
@@ -99,15 +102,17 @@ async function close() {
   nativeDisplay.close();
   nativeBluetooth.close();
   appimageUpdates.close();
+  debUpdates.close();
   nativeReadiness.close();
   try { await hub.close(); } finally { process.exit(0); }
 }
 process.on("SIGINT", close);
 process.on("SIGTERM", close);
 
-if (appimage) void (async () => {
+if (appimage || deb) void (async () => {
+  const updates = appimage ? appimageUpdates : debUpdates;
   try {
-    const status = await appimageUpdates.request({ op: "status" });
+    const status = await updates.request({ op: "status" });
     if (status.transaction?.phase === "trial") {
       const deadline = Date.now() + 30_000;
       while (!frontendBuild && Date.now() < deadline) await Bun.sleep(100);
@@ -117,9 +122,9 @@ if (appimage) void (async () => {
       const db = new Database(join(dataDir, "couch.sqlite"), { readonly: true });
       try { if (db.query<{ quick_check: string }, []>("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error("The database integrity check failed."); } finally { db.close(); }
       await hub.verifyTools(status.transaction.repairRuntime === true);
-      await appimageUpdates.complete(null);
+      await updates.complete(null);
     }
-  } catch (error) { await appimageUpdates.complete(error instanceof Error ? error.message : "Startup verification failed.").catch(() => {}); }
+  } catch (error) { await updates.complete(error instanceof Error ? error.message : "Startup verification failed.").catch(() => {}); }
   finally { admission = true; send({ type: "observe" }); }
 })();
 
@@ -155,6 +160,7 @@ if (native) {
           })();
         }
         else if (message.type === "appimageUpdate") appimageUpdates.receive(message);
+        else if (message.type === "debUpdate") debUpdates.receive(message);
         else if (message.type === "bluetooth") nativeBluetooth.receive(message);
         else if (message.type === "display") nativeDisplay.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);

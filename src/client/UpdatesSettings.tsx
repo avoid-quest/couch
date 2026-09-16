@@ -120,7 +120,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
     </div>
     {state && !retry && !installing && <div className="space-y-2">
       {confirming === "install" ? <>
-        <p>Install {candidate?.version} and restart Couch. Its viewing data will be backed up before AppImage replacement. Other remotes will disconnect.</p>
+        <p>Install {candidate?.version} and restart Couch. Other remotes will disconnect; viewing data is preserved.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
         <Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button>
         <Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button>

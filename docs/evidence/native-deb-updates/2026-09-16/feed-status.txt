@@ -1,0 +1,8 @@
+Live CrabNebula feed state during this slice (2026-09-16):
+
+  GET /update/avoid-quest/couch/linux-x86_64-deb/0.1.2  -> 400 "Unknown update platform"
+  GET /update/avoid-quest/couch/linux-x86_64-appimage/0.1.2 -> 204 (live, current)
+
+No deb release has been published to the CDN yet, so the app-side check
+surfaces its bounded-retry failure there. Live-feed check and stage
+qualification happens once a deb release is published.

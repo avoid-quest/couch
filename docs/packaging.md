@@ -13,14 +13,18 @@ then launch Couch from the application menu.
 `packaging/debian.json` declares the native runtime packages. Debian supplies
 GTK, WebKit, libmpv and FFmpeg libraries; Couch includes its three pinned helpers
 and dependency material under `/usr/lib/Couch` and `/usr/share/doc/couch`.
-The native package does not require Minisign, jq, FUSE or a setup archive. It does
-not create the dedicated TV account or change desktop login. Removing the package
+The native package needs the minisign binary for the update broker's root-side
+signature check. It does not require jq, FUSE or a setup archive. It does not
+create the dedicated TV account or change desktop login. Removing the package
 leaves user data alone.
 
 The default `bun run package:build` still builds the released AppImage path.
-Native update integration, dedicated TV setup, migration and public download
-changes are separate work. This desktop slice does not replace the published
-0.1.0 AppImage. See the [native desktop qualification](qualification/native-deb-297.md).
+Dedicated TV setup, migration and public download changes are separate work.
+In-app updates for this package stage a verified download into
+`~/.local/share/couch/updates` and start the `couch-package-update@` broker
+unit; see the [remote update research](research/2026-09-15-native-deb-remote-updates.md).
+This desktop slice does not replace the published 0.1.0 AppImage. See the
+[native desktop qualification](qualification/native-deb-297.md).
 
 Use final SemVer versions in the native Preview channel, then promote the same
 bytes to Stable. Tauri CLI 2.11.4 writes the Debian version verbatim;
