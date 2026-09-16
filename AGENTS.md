@@ -3,3 +3,4 @@
 - UI work must preserve Couch's design system and prefer shadcn. Reuse existing components and consult the official catalog for suitable additions before building custom UI. Customize only for a demonstrated gap, and record why.
 - Before PR operations, read `gh-stack` and `unslop` if available. Open PRs ready for review.
 - GitHub Actions is enabled: use it only for PR checks, builds and releases. The pinned Debian builder container replaced the Mac delivery path; the T480 only installs and runs Couch, never builds it.
+- Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`. A green local suite is not proof: the Mac skips container-only checks such as the minisign-gated tests.
