@@ -24,6 +24,7 @@ describe("hosted versions and promotion", () => {
     }
     expect(channelArgs("stable")).toEqual([]);
     expect(channelArgs("preview")).toEqual(["--channel", "preview"]);
+    expect(releaseVersion("0.1.0-preview.0")).toBe("0.1.0-preview.0");
     for (const version of ["01.0.0", "0.1.0+build.1.1", "0.1.0-preview.01", "0.1.0-beta.1"]) expect(() => releaseVersion(version)).toThrow();
   });
   test("a newer Preview waits for Stable, equal versions do not reinstall, and skips order normally", async () => {

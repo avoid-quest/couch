@@ -1,0 +1,26 @@
+name: Changesets
+"on":
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: couch-changesets
+  cancel-in-progress: false
+jobs:
+  version:
+    if: "${{ vars.COUCH_RELEASES_ENABLED == 'true' }}"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - uses: changesets/action@66d7d1ddafddf1ef45f98ee51a7496f9cdadb2f4
+        with:
+          version-script: bun run changeset:version
+          github-token: "${{ secrets.GITHUB_TOKEN }}"

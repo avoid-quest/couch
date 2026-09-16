@@ -82,6 +82,30 @@ changing that budget.
 
 ## Build and retry
 
+## Automated releases (changesets)
+
+Versioning and changelogs run on [changesets](https://changesets.dev). Every
+PR that should ship adds a changeset file (`bunx changeset add`), carrying a
+bump type and a user-facing summary; stacks add one per layer. The Changesets
+workflow keeps an automatic "Version Packages" PR that bumps
+`package.json`, `src-tauri/tauri.conf.json` and the Cargo files through
+`bun run changeset:version`, and writes `CHANGELOG.md` with PR links and
+authors. Merging that PR is the release action: the Release workflow sees the
+unreleased version, takes the matching `CHANGELOG.md` section as the notes,
+and dispatches Package with `publish=true`, which runs the full pipeline and
+creates the GitHub Release. Re-pushes and retries stay safe: once `v<version>`
+exists, the Release workflow skips.
+
+The repo lives in changesets prerelease mode with tag `preview`
+(`.changeset/pre.json`), so version PRs produce `0.1.6-preview.N` and the
+feed accumulates previews as before. For a final release run
+`bunx changeset pre exit` and merge the next Version PR; the final
+`0.1.6` publishes to Preview, and the existing Stable promotion dispatch
+remains the single human gate for the Stable feed and the release flip.
+
+The dispatch commands below stay valid as the manual fallback (and for the
+Mac fallback path).
+
 A fresh build defaults to a Preview draft. Publication is explicit:
 
 ```sh

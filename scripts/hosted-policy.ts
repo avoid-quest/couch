@@ -5,7 +5,7 @@ export const cdn = `https://cdn.crabnebula.app`;
 export const updaterEndpoint = `${cdn}/update/${application}/linux-x86_64-deb/{{current_version}}`;
 
 export function releaseVersion(version: string) {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-preview\.[1-9]\d*)?$/.test(version)) throw new Error("Use X.Y.Z or X.Y.Z-preview.N, without build metadata.");
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-preview\.(?:0|[1-9]\d*))?$/.test(version)) throw new Error("Use X.Y.Z or X.Y.Z-preview.N, without build metadata.");
   return version;
 }
 
