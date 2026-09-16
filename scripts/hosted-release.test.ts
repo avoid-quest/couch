@@ -190,7 +190,8 @@ describe("native package delivery", () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-native-cloud-"));
     // The child's publish rechecks the live feed; stage a version newer than whatever it serves.
     const feed = await fetch(`${cdn}/update/${application}/linux-x86_64-deb/0.0.0?channel=preview`).then(response => response.ok ? response.json() as Promise<{ version: string }> : null).catch(() => null);
-    const [major, minor, patch] = (feed?.version ?? "0.1.2").split(".").map(Number);
+    const [base] = (feed?.version ?? "0.1.2").split("-");
+    const [major, minor, patch] = base.split(".").map(Number);
     const manifest = nativeFixture(`${major}.${minor}.${patch + 1}`);
     const execute = async (args: string[], env?: Record<string, string>) => {
       const child = Bun.spawn(args, { env: env ?? process.env, stdout: "pipe", stderr: "pipe" });
