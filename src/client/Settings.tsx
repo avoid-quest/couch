@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -298,7 +299,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
             <p id="sharing-help" className="text-muted-foreground">{identity?.authority === "host" ? "Remotes connect on your local network. Turning this off disconnects them and keeps their pairings." : "Only the playback computer can change this setting."}</p>
           </div>
           {remoteControlEnabled && <>{addresses}
-            {host && <div className="rounded-lg border bg-muted/30 p-3"><p className="font-medium">Pairing code</p><p className="my-2 font-mono text-2xl tracking-wider" data-pairing-code>{host.pairingCode}</p><p className="text-muted-foreground">{devices?.length ? "New remotes join as Controllers." : "The first remote joins as Administrator."}</p></div>}
+            {host && <Card className="min-w-0 gap-1 p-4 text-sm"><p className="font-medium">Pairing code</p><p className="my-2 font-mono text-2xl tracking-wider" data-pairing-code>{host.pairingCode}</p><p className="text-muted-foreground">{devices?.length ? "New remotes join as Controllers." : "The first remote joins as Administrator."}</p></Card>}
           </>}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="min-h-11" onClick={onReconnect}><RefreshCw aria-hidden="true" />Reconnect</Button>
@@ -306,7 +307,7 @@ export function Settings({ section: routeSection, onSectionChange, videoQualityP
           </div>
           {!host && <p className="text-muted-foreground">Reconnect keeps your pairing. Pair again forgets it in this browser.</p>}
           {administrator && devices && <><Separator /><PairedRemotes devices={devices} currentId={identity?.controller?.id ?? ""} disabled={!canWrite} update={update} /></>}
-          {forgetting && <div role="alert" className="space-y-3 rounded-lg border p-3"><p>Forget this browser's pairing? You will need the code shown on the TV to connect again.{identity?.authority === "administrator" ? " You can manage remote roles on the playback computer." : ""}</p><div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setForgetting(false)}>Cancel</Button><Button className="min-h-11" onClick={pairAgain}>Forget this browser</Button></div></div>}
+          {forgetting && <Card role="alert" className="min-w-0 gap-3 p-4 text-sm"><p>Forget this browser's pairing? You will need the code shown on the TV to connect again.{identity?.authority === "administrator" ? " You can manage remote roles on the playback computer." : ""}</p><div className="flex flex-wrap gap-2"><Button className="min-h-11" variant="outline" onClick={() => setForgetting(false)}>Cancel</Button><Button className="min-h-11" onClick={pairAgain}>Forget this browser</Button></div></Card>}
         </SettingsSection>
       </div>
       {setup && administrator && <Button className="min-h-11" disabled={!canWrite || section === "general" && draftName.trim() !== savedName} onClick={event => void update(event, "/api/settings/setup", { step: setupStep }, "Setup progress saved.")}>
