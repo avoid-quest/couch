@@ -16,7 +16,10 @@ const state: SessionState = {
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
 async function render(value = state, connected = true, active = true, command?: (action: Action) => Promise<boolean>) {
   const { SessionHome } = await import("./SessionHome");
-  await act(async () => root.render(<SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBrowse={name => browsed.push(name)} onPlay={async () => true} run={command ?? (async action => { actions.push(action); return true; })} />));
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  await act(async () => root.render(<QueryClientProvider client={client}><SessionHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBrowse={name => browsed.push(name)} onPlay={async () => true} run={command ?? (async action => { actions.push(action); return true; })} /></QueryClientProvider>));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
 }
 beforeEach(async () => {
   actions.length = 0; browsed.length = 0;

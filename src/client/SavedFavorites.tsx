@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../shared/providers";
 import type { RadioStation } from "../shared/radio";
 import { MediaArtwork } from "./ProviderPanel";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;

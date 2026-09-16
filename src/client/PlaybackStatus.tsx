@@ -6,7 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SoundState } from "../shared/sound";
 import type { BluetoothState } from "../shared/bluetooth";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 
 // Quick check of where playback runs and where its sound comes out.
 // Wi-Fi signal lives in the OS, not here; the LAN address and the audio route are what Couch knows.

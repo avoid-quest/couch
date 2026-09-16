@@ -1,4 +1,4 @@
-import { createId } from "./session";
+import { createId } from "./session/session";
 
 // Preserve legacy retry fields until the server confirms rejection or completion.
 type Request = { candidateId: string; requestId: string; confirmInterrupt: boolean; version: string; revision: string; intent?: "repair-current"; repairRuntime?: boolean };

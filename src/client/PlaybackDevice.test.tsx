@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import * as core from "@tauri-apps/api/core";
-import { isNativeHost } from "./native-context";
+import { isNativeHost } from "./session/native-context";
 
 let root: Root, window: Window, invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
 let choice = { mode: null as "local" | "remote" | null, address: null as string | null, targets: [] as string[], localSetupComplete: false };

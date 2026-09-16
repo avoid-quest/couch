@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "./ProviderPanel";
 import { QualityOptions } from "./QualitySelect";
 import { isYouTubePlaylistUrl } from "../shared/providers";
-import { createId } from "./session";
+import { createId } from "./session/session";
 
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean };
 export type SearchPlaybackProps = {

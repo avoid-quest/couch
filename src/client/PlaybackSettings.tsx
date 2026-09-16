@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { WatchingProfile } from "../shared/library";
 import type { Action, PlaybackPreferences as Preferences, PlayerState, QueueEntry, ReplayGainMode } from "../shared/protocol";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { playbackDefault, type PlaybackDefaultSetting } from "../shared/playback-default";
 import { QualitySelect } from "./QualitySelect";
 import { supportsCurrentVideoQuality } from "../shared/video-quality";

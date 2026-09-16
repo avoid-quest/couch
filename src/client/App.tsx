@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type PropsWithChildren } from "react";
 import { Outlet } from "@tanstack/react-router";
-import { SessionGate } from "./session-gate";
+import { SessionGate } from "./session/session-context";
 import { AppShell } from "./shell";
 import { Button } from "@/components/ui/button";
 

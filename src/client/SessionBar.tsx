@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Action, SessionState } from "../shared/protocol";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Icon } from "./Icon";

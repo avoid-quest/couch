@@ -17,7 +17,7 @@ export function NowPage() {
         <Search aria-hidden="true" /><Input id="now-search" aria-label="Search or paste a link" placeholder="Search or paste a link" maxLength={4096} value={nowDraft} onChange={event => setNowDraft(event.target.value)} />
       </form>
       <NowPlaying embedded state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} active={onStage} />
-      <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.libraryVersion ?? 0} onPlay={playHistory} active={onStage} />
+      <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} />
       <LiveNow rail limit={8} heading="Live radio" origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.radioVersion ?? 0} onEnqueue={enqueueRadio} active={onStage} />
     </section>
   );

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import type { SoundState } from "../shared/sound";
-import { createId } from "./session";
+import { createId } from "./session/session";
 
 type ListedBluetoothState = Omit<BluetoothState, "devices"> & { devices: (BluetoothState["devices"][number] & { available: boolean })[] };
 

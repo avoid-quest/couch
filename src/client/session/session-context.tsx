@@ -2,17 +2,18 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from "react";
-import type { Action, ConnectionInfo, NavigationKey } from "../shared/protocol";
-import { loadedBuild } from "../shared/build";
-import { applyTvNavigation, useNavigation } from "./navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Action, ConnectionInfo, NavigationKey } from "../../shared/protocol";
+import { loadedBuild } from "../../shared/build";
+import { applyTvNavigation, useNavigation } from "../navigation";
 import { isNativeHost } from "./native-context";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
-import { useIdleCursor } from "./useIdleCursor";
-import { useInterfaceSize } from "./interface-size";
-import { useTvPresentation } from "./useTvPresentation";
-import { useUpdateActivity } from "./update-activity";
-import { useVideoQualityPreference } from "./video-quality";
+import { useIdleCursor } from "../useIdleCursor";
+import { useInterfaceSize } from "../interface-size";
+import { useTvPresentation } from "../useTvPresentation";
+import { useUpdateActivity } from "../update-activity";
+import { useVideoQualityPreference } from "../video-quality";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -69,6 +70,7 @@ export function useSessionGate(): SessionGateValue {
 }
 
 export function SessionGate({ children }: PropsWithChildren) {
+  const queryClient = useQueryClient();
   const [credentials, setCredentials] = useState<Credentials | null>(storedCredentials);
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
@@ -107,6 +109,27 @@ export function SessionGate({ children }: PropsWithChildren) {
   const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
   useUpdateActivity(credentials, connected);
   useEffect(() => setRemoteControlEnabled(details?.remoteControlEnabled === true), [details?.remoteControlEnabled]);
+
+  // Socket events replace the old version-prop drilling: when the server
+  // bumps a revision, the matching Query cache is invalidated and readers
+  // refetch. Sections opt in by reading through api/ queryOptions instead of
+  // receiving version props.
+  const revisions = useRef({ library: 0, radio: 0, iptv: 0, recordings: 0, provider: 0, jellyfin: 0, playlist: 0, forLater: 0, controller: 0 });
+  useEffect(() => {
+    if (!state) return;
+    const changed = (current: number | undefined, previous: number) => current !== undefined && current !== previous;
+    const invalidate = (key: string[]) => { void queryClient.invalidateQueries({ queryKey: key }); };
+    if (changed(state.libraryVersion, revisions.current.library)) invalidate(["library"]);
+    if (changed(state.radioVersion, revisions.current.radio)) invalidate(["radio"]);
+    if (changed(state.iptvVersion, revisions.current.iptv)) invalidate(["iptv"]);
+    if (changed(state.recordingsVersion, revisions.current.recordings)) invalidate(["recordings"]);
+    if (changed(state.providerVersion, revisions.current.provider)) invalidate(["providers"]);
+    if (changed(state.jellyfinVersion, revisions.current.jellyfin)) invalidate(["jellyfin"]);
+    if (changed(state.playlistVersion, revisions.current.playlist)) invalidate(["playlists"]);
+    if (changed(state.forLaterVersion, revisions.current.forLater)) invalidate(["for-later"]);
+    if (changed(state.controllerVersion, revisions.current.controller)) invalidate(["controllers"]);
+    revisions.current = { library: state.libraryVersion ?? 0, radio: state.radioVersion ?? 0, iptv: state.iptvVersion ?? 0, recordings: state.recordingsVersion ?? 0, provider: state.providerVersion ?? 0, jellyfin: state.jellyfinVersion ?? 0, playlist: state.playlistVersion ?? 0, forLater: state.forLaterVersion ?? 0, controller: state.controllerVersion ?? 0 };
+  }, [state, queryClient]);
 
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });

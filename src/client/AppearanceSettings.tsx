@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { defaultTvAppearance, interfaceSizes, type InterfaceSize, type TvAppearance } from "../shared/appearance";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import { saveRemoteInterfaceSize, usePreviewSeconds, useRemoteInterfaceSize } from "./interface-size";
 
 export function InterfaceSizeChoices({ label, value, disabled, onChange }: {

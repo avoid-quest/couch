@@ -23,7 +23,7 @@ import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 import { verifyAppearance } from "./appearance";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
-import { preparePublicConnection, verifyConnection, verifyRecovery } from "./connection";
+import { preparePublicConnection, verifyConnection, verifyRecovery } from "./session/connection";
 import { createGuideFixture } from "./iptv-fixture";
 import { verifyGuide } from "./iptv";
 

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 
 export function useUpdateActivity(credentials: Credentials | null, connected: boolean) {
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { isNativeHost } from "./native-context";
+import { isNativeHost } from "./session/native-context";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Music2 } from "lucide-react";
 import { Icon } from "./Icon";

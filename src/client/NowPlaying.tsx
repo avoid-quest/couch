@@ -8,7 +8,7 @@ import { AuthArtwork } from "./AuthArtwork";
 import { PlaybackControls, sourceLabel } from "./PlaybackControls";
 import { playbackCapabilities } from "./PlaybackTransport";
 import { MediaArtwork } from "./ProviderPanel";
-import type { Credentials } from "./session";
+import type { Credentials } from "./session/session";
 import "./session-home.css";
 import "./now-playing.css";
 
