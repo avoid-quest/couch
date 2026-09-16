@@ -25,9 +25,10 @@ present, no TV policy.
 Building the package for the first time since #314 exposed two conflicts on
 main that the paused checks let through: the packaging verify still excluded
 minisign from Depends after #314 added it for the broker, and the TV-policy
-guard rejected the broker's own unit and polkit rule. This branch fixes both
-verify assertions and corrects the doc line that claimed the package needs
-no minisign.
+guard rejected the broker's own unit and polkit rule. A third stale guard in
+the desktop runtime fixture failed the first hosted 0.1.3 build the same way.
+All three assertions are fixed on main, and the doc line that claimed the
+package needs no minisign is corrected.
 
 ## Broker install cycle
 
@@ -51,6 +52,18 @@ identically), and polkit's active-local-session grant needs a real logind
 seat. Unit start through systemd and the polkit authorization are therefore
 hardware work, together with the relaunch observation.
 
+## Hosted release
+
+With #315 and #316 merged, production releases went through package.yml with
+the enrolled key: 0.1.3 built, qualified and published to deb Preview (the
+first build also fixed the receipts test, whose fixture version collided with
+the newly published 0.1.2 preview), then 0.1.4 the same way. Both publishes
+needed one readiness retry each for CDN propagation. See
+[feed-status.txt](feed-status.txt) for runs and live feed responses.
+
+The feed now offers 0.1.4 to any 0.1.2 or 0.1.3 deb install, and the
+production-signed 0.1.3 package is retained for the T480's starting install.
+
 ## What passed locally
 
 - `cargo test --lib`: 35 tests, including receipt parsing (bounded key=value
@@ -65,11 +78,10 @@ hardware work, together with the relaunch observation.
 
 ## Remaining for full acceptance
 
-1. Publish the first deb release to the CDN (the deb update platform answers
-   400 "Unknown update platform" today; see
-   [feed-status.txt](feed-status.txt)) and confirm a real check plus stage
-   against it.
-2. Install the deb on the T480, stage a newer release, trigger install from
-   the paired phone, and record the receipt, restart and post-restart health
-   on real hardware, including the polkit active-session path for the desktop
-   and TV accounts.
+1. Install the retained production 0.1.3 deb on the T480, launch Couch and
+   pair the phone.
+2. Trigger Check, Download and Install from the paired phone, and record the
+   receipt (`/var/lib/couch-package-update/<user>/receipt`), the relaunch and
+   post-restart health on real hardware, including the polkit
+   active-session path for the desktop and TV accounts.
+3. Promote 0.1.4 to Stable after acceptance.
