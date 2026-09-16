@@ -63,14 +63,18 @@ minisign -V -q -p /usr/lib/couch/couch-updater.pub -x "$work/couch.deb.sig" -m "
     || fail 'Signature verification failed. The staged package is not a trusted Couch release.'
 
 version=$(dpkg-deb -f "$work/couch.deb" Version)
-[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'The package version is not a supported release version.'
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$ ]] || fail 'The package version is not a supported release version.'
 [[ $(dpkg-deb -f "$work/couch.deb" Package) = couch ]] || fail 'The staged package is not Couch.'
 [[ $(dpkg-deb -f "$work/couch.deb" Architecture) = amd64 ]] || fail 'The staged package architecture is not amd64.'
 
 installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
 if [[ -n $installed ]]; then
-    dpkg --compare-versions "$installed" lt "$version" \
-        || fail "The staged package $version is not newer than the installed $installed."
+    if ! dpkg --compare-versions "$installed" lt "$version"; then
+        # Debian orders -preview.N above its own final; the accumulating
+        # preview channel relies on SemVer, where the final supersedes.
+        [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $installed =~ ^${version//./\\.}-preview\.[0-9]+$ ]] \
+            || fail "The staged package $version is not newer than the installed $installed."
+    fi
 fi
 
 . /etc/os-release

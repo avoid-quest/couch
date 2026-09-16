@@ -56,12 +56,17 @@ grep -q 'version=0.1.2' "/var/lib/couch-package-update/couchtest/receipt"
 [[ $(dpkg-query -W -f='${Version}' couch) = 0.1.2 ]]
 [[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
 
-# Native releases carry final versions only; Preview is a channel, never a
-# -preview.N suffix, and the root boundary enforces that too.
+# Preview accumulation installs a signed -preview.N over the stable, and the
+# final 0.1.3 supersedes its own previews even though Debian orders the suffix
+# above the final.
 build 0.1.3-preview.1 "$root/pkg"
 sign
 chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
-reject 'not a supported release version' couchtest
+update couchtest >/dev/null
+grep -q 'outcome=installed' "/var/lib/couch-package-update/couchtest/receipt"
+grep -q 'version=0.1.3-preview.1' "/var/lib/couch-package-update/couchtest/receipt"
+[[ $(dpkg-query -W -f='${Version}' couch) = 0.1.3-preview.1 ]]
+[[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
 
 stage 0.1.3
 update couchtest >/dev/null

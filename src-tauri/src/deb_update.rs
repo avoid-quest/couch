@@ -102,14 +102,15 @@ fn update_url(current: &str, channel: Channel) -> Result<reqwest::Url, String> {
     Ok(url)
 }
 
-/// Native debs carry final X.Y.Z versions only, strictly newer than the running
-/// version. Debian and SemVer order prerelease suffixes in opposite directions,
-/// so a `-preview.N` package would block the later stable upgrade.
+/// Native debs accumulate `X.Y.Z-preview.N` versions on the preview channel,
+/// always strictly newer than the running version. Build metadata stays
+/// invalid: SemVer ignores it when ordering, so it cannot prove a newer
+/// release. The stable feed only ever serves final versions.
 fn policy(release: &str, running_version: &str) -> Result<(), String> {
     let release = semver::Version::parse(release).map_err(error)?;
     let running_version = semver::Version::parse(running_version).map_err(error)?;
-    if !release.pre.is_empty() || !release.build.is_empty() {
-        return Err("Native package updates carry final X.Y.Z versions only.".into());
+    if !release.build.is_empty() {
+        return Err("Native package updates cannot carry build metadata.".into());
     }
     if release <= running_version {
         return Err("The hosted package is not newer than the running version.".into());
@@ -252,8 +253,8 @@ fn receipt(bytes: &[u8]) -> Result<Receipt, String> {
             "version" => {
                 let parsed = semver::Version::parse(value)
                     .map_err(|_| "The package update receipt version is invalid.".to_string())?;
-                if !parsed.pre.is_empty() || !parsed.build.is_empty() {
-                    return Err("The package update receipt version is not a final release.".into());
+                if !parsed.build.is_empty() {
+                    return Err("The package update receipt version is not a supported release.".into());
                 }
                 receipt.version = Some(value.to_owned());
             }
@@ -640,13 +641,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn final_versions_must_be_strictly_newer() {
+    fn releases_must_be_strictly_newer() {
         assert!(policy("0.2.0", "0.1.2").is_ok());
+        assert!(policy("0.1.3-preview.1", "0.1.2").is_ok());
+        assert!(policy("0.1.3-preview.2", "0.1.3-preview.1").is_ok());
+        assert!(policy("0.1.3", "0.1.3-preview.1").is_ok());
         for (release, running) in [
             ("0.1.2", "0.1.2"),
             ("0.1.1", "0.1.2"),
             ("0.1.2-preview.1", "0.1.2"),
-            ("0.1.3-preview.1", "0.1.2"),
+            ("0.1.3-preview.1", "0.1.3"),
             ("0.1.2+build.5", "0.1.2"),
         ] {
             assert!(policy(release, running).is_err(), "{release}");
@@ -673,7 +677,7 @@ mod tests {
             b"outcome",
             b"outcome=installed\nsurprise=1\n",
             b"outcome=installed\nsha256=short\n",
-            b"outcome=installed\nversion=0.1.2-preview.1\n",
+            b"outcome=installed\nversion=0.1.2+build.1\n",
             &oversized,
             b"\xff\xfe\n",
         ] {
