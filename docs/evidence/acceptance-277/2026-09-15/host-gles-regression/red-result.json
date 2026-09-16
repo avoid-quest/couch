@@ -1,5 +1,0 @@
-{
-  "exit": 1,
-  "seconds": 44.664,
-  "expected": "missing libGLESv2.so.2 after real APT with original host list"
-}

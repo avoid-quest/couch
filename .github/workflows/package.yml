@@ -144,7 +144,7 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: packaging
-          file: packaging/Dockerfile.mac
+          file: packaging/Dockerfile.builder
           platforms: linux/amd64
           tags: couch-release-builder
           load: true

@@ -1,7 +1,0 @@
-UUID                                 Status   Name
-260B607D-F2E1-488E-82D8-729D39F71F23 stopped  Couch Debian 13 probe minimal
-21D3726B-624A-484F-A87E-39CDE695F095 stopped  Couch Debian 13 minimal pristine
-D91B4BBA-159F-43D4-87F6-1E1C96DE9FB8 stopped  Couch 275 installer diagnostic
-E1EE56A3-232D-4A29-A2CD-CC15CBCD10D4 stopped  Couch 276 signed artifact diagnostic 2026-09-15
-2C85F32E-1DDD-4725-B66E-241AF4B85C78 stopped  Couch Debian 13 probe xfce
-FD89B060-C26A-4DFF-B68F-3FCB203E3516 stopped  Couch Debian 13 xfce pristine

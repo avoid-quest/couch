@@ -1,9 +1,0 @@
-2026-09-15T01:38:01Z
-MainPID=12208
-NRestarts=0
-ExecMainStartTimestamp=Tue 2026-09-15 03:00:05 CEST
-ActiveState=active
-Verified 1 muted sink(s), each at zero volume.
-State  Recv-Q Send-Q Local Address:Port Peer Address:Port
-LISTEN 0      128          0.0.0.0:22        0.0.0.0:*   
-LISTEN 0      128             [::]:22           [::]:*   

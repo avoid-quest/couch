@@ -136,7 +136,7 @@ with delayed CDN readiness needs only another readiness run.
 ## Mac fallback
 
 If Actions cannot build because capacity remains unavailable, use the existing
-[isolated Mac Debian builder](packaging.md#isolated-mac-build) with the exact
+[isolated Mac Debian builder](packaging.md#build) with the exact
 committed source and same build inputs. Do not build on the T480. With the
 owner's signing variables available only to signing commands, the core sequence
 is:

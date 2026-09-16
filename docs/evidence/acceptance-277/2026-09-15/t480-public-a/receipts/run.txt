@@ -1,4 +1,0 @@
-collector_started_at=2026-09-15T00:38:19Z
-version=0.1.0-preview.1
-not_before_epoch=1789432798
-acceptance_operations_started_at=2026-09-15T00:39:58Z

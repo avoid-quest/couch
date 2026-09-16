@@ -1,3 +1,0 @@
-collector_started_at=2026-09-15T01:29:21Z
-version=0.1.0
-acceptance_operations_started_at=2026-09-15T01:29:28Z

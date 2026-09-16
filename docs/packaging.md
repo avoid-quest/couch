@@ -2,7 +2,7 @@
 
 One signed native Debian 13 amd64 package ships Couch and its application
 dependencies. Hosted Actions builds it in the pinned Debian 13 container
-(`packaging/Dockerfile.mac` — historically named, now the standard builder).
+(`packaging/Dockerfile.builder` — historically named, now the standard builder).
 
 ## Build
 

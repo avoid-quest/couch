@@ -1,5 +1,0 @@
-{
-  "requestedAt": "2026-09-15T00:30:33.606940+00:00",
-  "method": "guest systemctl poweroff through sudo stdin",
-  "exit": 0
-}

@@ -71,7 +71,7 @@ inspectable. The package contains no source checkout, compiler or build cache.
 
 ## Reproduce
 
-Use the existing [isolated Mac builder procedure](../packaging.md#isolated-mac-build),
+Use the existing [isolated Mac builder procedure](../packaging.md#build),
 selecting `bun run package:build deb` and copying the `.deb` plus inventory from
 the native paths. Keep the build on the container's Linux filesystem.
 

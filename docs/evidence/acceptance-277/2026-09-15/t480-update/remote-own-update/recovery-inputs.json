@@ -1,7 +1,0 @@
-{
-  "backup": "/home/ISOLATED_USER/backup-A",
-  "Asha256": "d67dab162272ab340d42a6ee70d7a35055696e99be2a8b0cb87edceb60c55ef7",
-  "signatureSha256": "2aa279fbb53ce04e0ff49ee1faf9f08ff975be3e18f7b9590e30c602bd9a2734",
-  "recoveryExecutable": "/home/ISOLATED_USER/.local/bin/couch-recover",
-  "runRecoveryOnlyAs": "ISOLATED_USER"
-}

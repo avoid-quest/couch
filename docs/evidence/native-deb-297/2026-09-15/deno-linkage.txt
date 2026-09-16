@@ -1,7 +1,0 @@
-	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007ffff99e5000)
-	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007ffff99b8000)
-	librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x00007ffff99b3000)
-	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007ffff99ae000)
-	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007ffff98be000)
-	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007ffff96ca000)
-	/lib64/ld-linux-x86-64.so.2 (0x00007ffffffc8000)

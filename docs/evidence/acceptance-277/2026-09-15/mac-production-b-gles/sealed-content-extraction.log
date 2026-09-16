@@ -1,14 +1,0 @@
-
-create_inode: failed to create symlink /output/sealed-AppImage/couch.png, because File exists
-Parallel unsquashfs: Using 2 processors
-2033 inodes (7357 blocks) to write
-
-[==========/                                                   ] 1649/9390  17%[========================/                                     ] 3806/9390  40%[==========================================\                   ] 6583/9390  70%[=====================================================\        ] 8166/9390  86%[===========================================================/  ] 9182/9390  97%[============================================================/ ] 9389/9390  99%
-
-created 1993 files
-created 1155 directories
-created 39 symlinks
-created 0 devices
-created 0 fifos
-created 0 sockets
-created 0 hardlinks

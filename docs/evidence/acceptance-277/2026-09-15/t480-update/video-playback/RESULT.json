@@ -1,8 +1,0 @@
-{
-  "passed": true,
-  "fixtureSha256": "5fc64d1a30f3d7f331b0dd6fd0325f76229b3fb9e33ae94a281f001d336edf1b",
-  "fixtureSource": "tests/fixtures/subtitles/replacement.mkv",
-  "scope": "native decoding/advancing video track through Couch; no separate owner media-image confirmation",
-  "testQueueEntryRemoved": true,
-  "httpFixtureStopped": true
-}

@@ -1,1 +1,0 @@
-PASS: isolated checksum, signature, simulated incompatible-current guard, compatible B-to-A, missing binary, retained file/SQLite bytes. No GUI startup or phone reconnect claimed.

@@ -1,8 +1,0 @@
-{
-  "status": 400,
-  "body": {
-    "error": "The update request did not finish. Refresh status before retrying."
-  },
-  "requestId": "6010c1ae313b4824856e89f50bb1c3ee",
-  "limitation": "Current HTTP handler obscures native verification message; this is pre-acceptance rejection, not terminal failed transaction."
-}

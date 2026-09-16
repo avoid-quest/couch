@@ -1,5 +1,0 @@
-SESSION  UID USER  SEAT LEADER CLASS   TTY IDLE SINCE
-      4 1000 probe -    801    manager -   no   -
-      5 1000 probe -    819    user    -   no   -
-
-2 sessions listed.

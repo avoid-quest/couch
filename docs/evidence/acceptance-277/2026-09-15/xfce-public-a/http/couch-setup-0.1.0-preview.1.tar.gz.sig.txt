@@ -1,5 +1,0 @@
-started_at=2026-09-15T00:36:14Z
-requested_url=https://cdn.crabnebula.app/download/avoid-quest/couch/latest/couch-setup-0.1.0-preview.1.tar.gz.sig?channel=preview
-final_url=https://cdn.crabnebula.app/asset/01M2H73ZCJ36FXZVB9KPF76916?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22couch-setup-0.1.0-preview.1.tar.gz.sig%22%7D
-http_status=200
-finished_at=2026-09-15T00:36:15Z

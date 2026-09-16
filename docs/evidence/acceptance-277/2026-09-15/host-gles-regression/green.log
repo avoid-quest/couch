@@ -1,63 +1,0 @@
-Hit:1 http://deb.debian.org/debian trixie InRelease
-Hit:2 http://deb.debian.org/debian trixie-updates InRelease
-Hit:3 http://deb.debian.org/debian-security trixie-security InRelease
-Reading package lists...
-Reading package lists...
-Building dependency tree...
-Reading state information...
-python3 is already the newest version (3.13.5-1).
-0 upgraded, 0 newly installed, 0 to remove and 8 not upgraded.
-Reading package lists...
-Building dependency tree...
-Reading state information...
-bash is already the newest version (5.2.37-2+b10).
-bash set to manually installed.
-coreutils is already the newest version (9.7-3).
-util-linux is already the newest version (2.41.5-0+deb13u1).
-bsdutils is already the newest version (1:2.41.5-0+deb13u1).
-findutils is already the newest version (4.10.0-3).
-grep is already the newest version (3.11-4).
-sed is already the newest version (4.9-2+deb13u1).
-gawk is already the newest version (1:5.2.1-2+b1).
-libc-bin is already the newest version (2.41-12+deb13u4).
-libc-bin set to manually installed.
-dpkg is already the newest version (1.22.22).
-apt is already the newest version (3.0.3).
-passwd is already the newest version (1:4.17.4-2).
-systemd is already the newest version (257.13-1~deb13u1).
-dbus-bin is already the newest version (1.16.2-2).
-tar is already the newest version (1.35+dfsg-3.1).
-gzip is already the newest version (1.13-1+deb13u1).
-gzip set to manually installed.
-ca-certificates is already the newest version (20250419).
-fonts-dejavu-core is already the newest version (2.37-8).
-fuse3 is already the newest version (3.17.2-3).
-libfuse2t64 is already the newest version (2.9.9-9).
-libgl1 is already the newest version (1.7.0-1+b2).
-libegl1 is already the newest version (1.7.0-1+b2).
-libgl1-mesa-dri is already the newest version (25.0.7-2+deb13u1).
-va-driver-all is already the newest version (2.22.0-3).
-dbus-user-session is already the newest version (1.16.2-2).
-libpam-systemd is already the newest version (257.13-1~deb13u1).
-polkitd is already the newest version (126-2).
-bubblewrap is already the newest version (0.12.0-1~deb13u1).
-xdg-dbus-proxy is already the newest version (0.1.6-1+deb13u2).
-x11-xserver-utils is already the newest version (7.7+11).
-pulseaudio-utils is already the newest version (17.0+dfsg1-2+b1).
-jq is already the newest version (1.7.1-6+deb13u3).
-minisign is already the newest version (0.12-1).
-procps is already the newest version (2:4.0.4-9).
-The following NEW packages will be installed:
-  libgles2
-0 upgraded, 1 newly installed, 0 to remove and 8 not upgraded.
-Need to get 17.3 kB of archives.
-After this operation, 109 kB of additional disk space will be used.
-Get:1 http://deb.debian.org/debian trixie/main amd64 libgles2 amd64 1.7.0-1+b2 [17.3 kB]
-Fetched 17.3 kB in 0s (154 kB/s)
-Selecting previously unselected package libgles2:amd64.
-(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 9154 files and directories currently installed.)
-Preparing to unpack .../libgles2_1.7.0-1+b2_amd64.deb ...
-Unpacking libgles2:amd64 (1.7.0-1+b2) ...
-Setting up libgles2:amd64 (1.7.0-1+b2) ...
-Processing triggers for libc-bin (2.41-12+deb13u4) ...
-PASS: declared host packages provide loadable GLESv2

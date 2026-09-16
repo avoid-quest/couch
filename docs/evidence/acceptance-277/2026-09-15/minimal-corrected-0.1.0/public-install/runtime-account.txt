@@ -1,1 +1,0 @@
-couch-tv:102:106:/var/lib/couch:/bin/sh

@@ -1,1 +1,0 @@
-Unrun: no couch or couch-server process for the runtime account at first collection.

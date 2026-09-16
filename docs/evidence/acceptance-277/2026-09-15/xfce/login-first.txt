@@ -1,4 +1,0 @@
-Sep 14 22:54:49 couch-xfce systemd[1]: Starting lightdm.service - Light Display Manager...
-Sep 14 22:54:52 couch-xfce lightdm[776]: Could not enumerate user data directory /var/lib/lightdm/data: Error opening directory '/var/lib/lightdm/data': No such file or directory
-Sep 14 22:54:52 couch-xfce systemd[1]: Started lightdm.service - Light Display Manager.
-Sep 14 22:55:29 couch-xfce lightdm[896]: pam_unix(lightdm-greeter:session): session opened for user lightdm(uid=106) by (uid=0)

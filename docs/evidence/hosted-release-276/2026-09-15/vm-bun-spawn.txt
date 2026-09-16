@@ -1,5 +1,0 @@
-{
-  message: "ENOENT: no such file or directory, posix_spawn '/missing-couch-test/yt-dlp'",
-  code: "ENOENT",
-  errno: -2,
-}

@@ -1,5 +1,0 @@
-couch-tv:couch-tv 755 /var/lib/couch/application
-couch-tv:couch-tv 700 /var/lib/couch/application/Couch.AppImage
-couch-tv:couch-tv 600 /var/lib/couch/application/Couch.AppImage.sig
-couch-tv:couch-tv 600 /var/lib/couch/application/build.json
-couch-tv:couch-tv 600 /var/lib/couch/application/couch-updater.pub
