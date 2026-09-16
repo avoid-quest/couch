@@ -2,8 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { SessionState } from "../shared/protocol";
-import { applyTvNavigation, useNavigation } from "./navigation";
+import type { SessionState } from "../../../shared/protocol";
+import { applyTvNavigation, useNavigation } from "../../navigation";
 
 let root: Root, window: Window, QueuePanel: typeof import("./QueuePanel").QueuePanel;
 const originals = new Map<string, PropertyDescriptor | undefined>();

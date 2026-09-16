@@ -1,8 +1,8 @@
-import { SaveForLater } from "./SaveForLater";
-import type { Credentials } from "./session/session";
+import { SaveForLater } from "../../SaveForLater";
+import type { Credentials } from "../../session/session";
 import { useState } from "react";
 import { MoreHorizontal, ArrowUp, ArrowDown, X, RotateCcw } from "lucide-react";
-import type { Action, QueueEntry } from "../shared/protocol";
+import type { Action, QueueEntry } from "../../../shared/protocol";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
