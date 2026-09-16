@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { channelArgs, downloadUrl, publicFiles, releaseVersion } from "./hosted-policy";
+import { application, cdn, channelArgs, downloadUrl, publicFiles, releaseVersion } from "./hosted-policy";
 import { assertIncreasing, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
 
 const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()).trim();
@@ -114,8 +114,8 @@ describe("hosted versions and promotion", () => {
 });
 
 describe("native package delivery", () => {
-  function nativeFixture(): Manifest {
-    const manifest = fixture();
+  function nativeFixture(version = "0.1.0"): Manifest {
+    const manifest = fixture(version);
     return { ...manifest, format: "deb", files: { [publicFiles(manifest.version, "deb")[0]!]: { bytes: archive.length, sha256: hash(archive), signature } } };
   }
 
@@ -191,6 +191,10 @@ describe("native package delivery", () => {
 
   test.skipIf(!Bun.which("minisign"))("a qualified native upload and later publication reuse only signed receipts", async () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-native-cloud-"));
+    // The child's publish rechecks the live feed; stage a version newer than whatever it serves.
+    const feed = await fetch(`${cdn}/update/${application}/linux-x86_64-deb/0.0.0?channel=preview`).then(response => response.ok ? response.json() as Promise<{ version: string }> : null).catch(() => null);
+    const [major, minor, patch] = (feed?.version ?? "0.1.2").split(".").map(Number);
+    const manifest = nativeFixture(`${major}.${minor}.${patch + 1}`);
     const execute = async (args: string[], env?: Record<string, string>) => {
       const child = Bun.spawn(args, { env: env ?? process.env, stdout: "pipe", stderr: "pipe" });
       const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
@@ -206,7 +210,7 @@ describe("native package delivery", () => {
         await rm(`${file}.minisig`);
         return signature;
       };
-      const manifest = nativeFixture(), name = Object.keys(manifest.files)[0]!;
+      const name = Object.keys(manifest.files)[0]!;
       const app = join(directory, "public", name);
       await Bun.write(app, archive);
       manifest.publicKey = Buffer.from(await Bun.file(join(directory, "key.pub")).text()).toString("base64");
