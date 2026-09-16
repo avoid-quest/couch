@@ -15,7 +15,7 @@ function fixture(version = "0.1.0"): Manifest {
   })) };
 }
 function cloud(manifest: Manifest): CloudRelease {
-  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: filename.endsWith(".AppImage") ? "appimage-x86_64" : null, updatePlatform: filename.endsWith(".AppImage") ? "linux-x86_64-appimage" : null })) };
+  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: filename.endsWith(".deb") ? "deb-x86_64" : null, updatePlatform: filename.endsWith(".deb") ? "linux-x86_64-deb" : null })) };
 }
 
 describe("hosted versions and promotion", () => {
@@ -49,7 +49,7 @@ describe("hosted versions and promotion", () => {
       (r: CloudRelease) => r.assets.pop(),
       (r: CloudRelease) => r.assets.push({ ...r.assets[0]!, filename: "couch-source.tar.gz" }),
       (r: CloudRelease) => { r.assets[0]!.signature = "changed"; },
-      (r: CloudRelease) => { r.assets[0]!.updatePlatform = "linux-x86_64-deb"; },
+      (r: CloudRelease) => { r.assets[0]!.updatePlatform = "linux-x86_64-appimage"; },
       (r: CloudRelease) => { r.channel = "stable"; },
     ]) { const release = cloud(manifest); mutate(release); expect(() => verifyCloud(release, manifest, "stable")).toThrow(); }
   });
@@ -67,11 +67,11 @@ describe("hosted versions and promotion", () => {
     const manifest = fixture();
     const fetcher = (async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch.AppImage" });
+      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch_0.1.0_amd64.deb" });
       return new Response(url.includes(".sig") ? signature : archive);
     }) as typeof fetch;
-    expect((await verifyPublic(manifest, "preview", fetcher)).checks).toHaveLength(9);
-    expect(downloadUrl("platform/appimage-x86_64", "preview")).toEndWith("?channel=preview");
+    expect((await verifyPublic(manifest, "preview", fetcher)).checks).toHaveLength(4);
+    expect(downloadUrl("platform/deb-x86_64", "preview")).toEndWith("?channel=preview");
     for (const response of [new Response(null, { status: 404 }), new Response("bad"), Response.json({ version: "0.0.1", signature, url: "https://example.com/app" })]) {
       await expect(verifyPublic(manifest, "preview", (async () => response.clone()) as unknown as typeof fetch, async () => {})).rejects.toThrow();
     }
@@ -81,16 +81,16 @@ describe("hosted versions and promotion", () => {
     let limitedBodyCancelled = false;
     const fetcher = (async (input: string | URL | Request) => {
       const url = String(input); calls.push(url);
-      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch.AppImage" });
-      if (url === "https://assets.example/Couch.AppImage" && calls.filter(value => value === url).length === 1) {
+      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch_0.1.0_amd64.deb" });
+      if (url === "https://assets.example/Couch_0.1.0_amd64.deb" && calls.filter(value => value === url).length === 1) {
         return new Response(new ReadableStream({ cancel() { limitedBodyCancelled = true; } }), { status: 429, headers: { "Retry-After": "51" } });
       }
       return new Response(url.includes(".sig") ? signature : archive);
     }) as typeof fetch;
-    expect((await verifyPublic(manifest, "preview", fetcher, async wait => { waits.push(wait); })).checks).toHaveLength(9);
+    expect((await verifyPublic(manifest, "preview", fetcher, async wait => { waits.push(wait); })).checks).toHaveLength(4);
     expect(waits).toEqual([51_000]);
-    expect(calls).toHaveLength(10);
-    expect(calls.slice(-2)).toEqual(["https://assets.example/Couch.AppImage", "https://assets.example/Couch.AppImage"]);
+    expect(calls).toHaveLength(5);
+    expect(calls.slice(-2)).toEqual(["https://assets.example/Couch_0.1.0_amd64.deb", "https://assets.example/Couch_0.1.0_amd64.deb"]);
     expect(limitedBodyCancelled).toBe(true);
   });
   test("rate-limit waits support HTTP dates and fallbacks, stop after two retries, and reject excessive waits", async () => {
@@ -126,7 +126,7 @@ describe("native package delivery", () => {
     expect(() => verifyCloud(release, manifest, "stable")).not.toThrow();
     expect(publicFiles("0.1.1", "deb")).toEqual(["Couch_0.1.1_amd64.deb"]);
     expect(() => publicFiles("0.1.1-preview.1", "deb")).toThrow("final");
-    expect(publicFiles("0.1.0")).toHaveLength(6);
+    expect(publicFiles("0.1.0")).toEqual(["Couch_0.1.0_amd64.deb"]);
     const urls: string[] = [];
     const receipt = await verifyPublic(manifest, "preview", (async input => {
       const url = String(input); urls.push(url);
@@ -139,7 +139,7 @@ describe("native package delivery", () => {
     expect(urls.some(url => url.includes(".sig"))).toBe(false);
     const qualified = { ...manifest, checks: qualificationChecks("deb") };
     expect(() => verifyQualification(qualified, manifest)).not.toThrow();
-    expect(() => verifyQualification({ ...qualified, checks: qualificationChecks("appimage") }, manifest)).toThrow();
+    expect(() => verifyQualification({ ...qualified, checks: [] }, manifest)).toThrow();
   });
 
   test.skipIf(!Bun.which("minisign"))("restore uses the recorded immutable Preview URL, rejects tampering, and needs no public signature file", async () => {

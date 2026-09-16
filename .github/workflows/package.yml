@@ -32,13 +32,6 @@ name: Package
         type: string
         required: true
         description: Release notes
-      format:
-        type: choice
-        options:
-          - deb
-          - appimage
-        default: deb
-        description: Native Debian package or retained AppImage compatibility build
 permissions:
   contents: read
 concurrency:
@@ -46,7 +39,6 @@ concurrency:
   cancel-in-progress: false
 env:
   COUCH_UPDATER_PUBLIC_KEY: "${{ vars.COUCH_UPDATER_PUBLIC_KEY }}"
-  COUCH_PACKAGE_FORMAT: "${{ inputs.format }}"
 jobs:
   release:
     if: "${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}"
@@ -100,7 +92,7 @@ jobs:
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
           else
             bun scripts/hosted-release.ts verify-receipt .artifacts/hosted-release
-            test "$(jq -r '.format // "appimage"' .artifacts/hosted-release/manifest.json)" = "$COUCH_PACKAGE_FORMAT"
+            test "$(jq -r '.format' .artifacts/hosted-release/manifest.json)" = "deb"
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/receipt-run.json
             source_run=$(jq -er '.buildRun.id' .artifacts/hosted-release/manifest.json)
             source_attempt=$(jq -er '.buildRun.attempt' .artifacts/hosted-release/manifest.json)
@@ -197,17 +189,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
         run: |
-          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh "$COUCH_PACKAGE_FORMAT"
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh deb
       - name: Qualify the exact signed bytes
         if: inputs.build-run == 0
         run: |
-          docker exec -w /work -e COUCH_PACKAGE_FORMAT couch-build bash scripts/hosted-qualify.sh
-          if [ "$COUCH_PACKAGE_FORMAT" = deb ]; then
-            mkdir -p .artifacts/native-qualification
-            bash scripts/hosted-desktop.sh couch-build .artifacts/native-qualification
-          else
-            docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo couch-release-builder bash tests/package/installer.sh
-          fi
+          docker exec -w /work couch-build bash scripts/hosted-qualify.sh deb
+          mkdir -p .artifacts/native-qualification
+          bash scripts/hosted-desktop.sh couch-build .artifacts/native-qualification
           docker exec -w /work couch-build bun scripts/hosted-release.ts qualify .artifacts/hosted-release
       - name: Sign the qualification receipt
         if: inputs.build-run == 0

@@ -1,7 +1,7 @@
 # TV session
 
 The supported Debian 13 x86_64 setup uses the explicit `--tv` profile in the
-[installation guide](install-couch.md). It installs the existing Couch session
+[TV setup guide](native-tv.md). It installs the existing Couch session
 and `/usr/lib/systemd/logind.conf.d/50-couch.conf`. Ordinary desktop setup leaves
 login and power policy unchanged. The TV drop-in ignores AC lid closure, retains
 undocked battery lid suspend, and preserves administrator drop-ins and masks under `/etc`.
@@ -25,12 +25,8 @@ before touching application files; recovery requires that setup state.
 
 ## Legacy Ubuntu companion
 
-The following describes the earlier Ubuntu companion packaging and qualification.
-Use the linked Debian installation guide for new installations.
-
-`couch-appliance` supplies the production session for Ubuntu 24.04 x86_64. It
-installs the OS runtime dependencies separately from the Tauri AppImage. Install through the documented `install-couch` entry
-point so APT finishes before LightDM starts.
+`couch-appliance` supplies the production TV session. APT finishes before
+LightDM starts.
 
 By default, LightDM logs the locked `couch-tv` account into the Couch Xorg session on `seat0`.
 Its home is `/var/lib/couch`. It has no sudo access; the existing SSH account and
@@ -145,13 +141,9 @@ and a symlink at that path to `/dev/null` disables it. Package upgrades preserve
 these administrator files. Inspect all contributing files with
 `systemd-analyze cat-config systemd/logind.conf`.
 
-This policy requires a companion upgrade; an in-app AppImage update alone does
-not install it. During an idle maintenance window, run the
-[supported installer](install-couch.md) with the trusted AppImage and new companion
-package. To keep the application version, use a verified copy of the installed
-AppImage outside `/var/lib/couch/application`. The installer preserves data,
-pairings and configuration, then reloads logind with SIGHUP before starting the
-TV session. A direct APT companion upgrade needs a subsequent
+This policy ships inside the native package; installing it applies the drop-in.
+Setup preserves data, pairings and configuration, then reloads logind with
+SIGHUP before starting the TV session. A package upgrade needs a subsequent
 `sudo systemctl kill --kill-whom=main --signal=HUP systemd-logind.service`
 or reboot to activate the policy. `systemctl daemon-reload` alone does not reload
 logind's power settings. See the [lid acceptance procedure](qualification/lid-power.md)

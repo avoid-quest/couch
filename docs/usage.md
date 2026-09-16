@@ -10,9 +10,9 @@ fullscreen Tauri app on Ubuntu 24.04 under Xvfb with basic rendering.
 
 ## Connect a phone and find media
 
-For a real TV, start with the [Ubuntu installer](install-couch.md), using the
-trusted publisher's AppImage and companion package. The current private release
-path builds on the Mac and installs on the TV. Phones need only a browser.
+For a real TV, install the native Debian package from
+[couch.avoid.quest/download](https://couch.avoid.quest/download) and run
+`sudo couch-setup --tv`. Phones need only a browser.
 
 1. Join the TV's local network. A fresh unclaimed TV shows its address, pairing
    QR and controller code on **Claim and name**. Scan that QR or type the address
@@ -431,11 +431,9 @@ bun run test:linux --provider-catalogs
 executable in `src-tauri/binaries/`. Build on the target OS and architecture;
 cross-compiling the Rust media dependencies is not configured.
 
-The supported installation uses the AppImage plus Ubuntu companion. Signed
-updates and recovery are implemented; follow the [installer](install-couch.md)
-and [publication guide](tauri-releases.md). GitHub Actions is paused at repository
-level. Keep validation local using [the check guide](ci.md). The dated baseline's
-shared UI teardown failure belongs to [#247](https://github.com/avoid-quest/couch/issues/247).
+The supported installation is the native Debian package; follow the
+[release guide](hosted-releases.md) and [TV setup](native-tv.md). Keep validation
+local using [the check guide](ci.md).
 
 ### Historical test evidence
 
@@ -585,15 +583,15 @@ Settings > Updates is visible on the TV and remote. Use an administrator remote
 for Check for updates, Download update, and Install update. Other controllers
 and the TV explain where to administer updates without granting update access.
 The page shows the running version/commit and available signed release. Download
-verifies the AppImage before Install update becomes available. Manual installation
+verifies the signed Debian package before Install update becomes available. Manual installation
 works with either Manual or Auto when idle selected.
 
 Install update asks before restarting and offers explicit playback interruption.
 Keep the remote open to reconnect and check the durable result. Success requires
 the requested version and commit to match the running app; an old build reconnecting
-is not success. A failed trial reports the need for SSH recovery. Data is never automatically restored from an older snapshot. The application database backup is consistent; auxiliary browser-profile copies have the documented [WebKit limitation](appimage-updates.md#backup-boundary-and-webkit-exception).
+is not success. A failed trial reports an actionable error. Data is never automatically restored from an older snapshot. The application database backup is consistent; auxiliary browser-profile copies are best-effort.
 
-Installation requires the signed AppImage enrollment and fixed systemd installation. Follow the [installation and operator recovery procedure](update-worker.md). Keep the publishing host reachable for checks and downloads. Ubuntu runtime repair remains a separate fixed systemd operation; it does not upgrade Ubuntu or select arbitrary packages.
+Installation uses the restricted root package-update service. It verifies the enrolled publisher's package before APT installs it; it does not upgrade Ubuntu or select arbitrary packages.
 
 ### Interface size
 

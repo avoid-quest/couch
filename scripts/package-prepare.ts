@@ -1,5 +1,4 @@
-import { chmod, cp, mkdir, readdir, rm, symlink } from "node:fs/promises";
-import { homedir } from "node:os";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { installMediaTools, mediaReleases } from "./setup-media";
 import inputs from "../packaging/inputs.json";
@@ -12,8 +11,6 @@ import { publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
 const staging = ".artifacts/package-tools";
-const format = process.env.COUCH_PACKAGE_FORMAT ?? "appimage";
-if (!["appimage", "deb"].includes(format)) throw new Error("Use appimage or deb packaging");
 const sha256 = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
 function run(command: string[]) {
@@ -37,50 +34,24 @@ if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManag
 if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean committed source revision");
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
-if (format === "deb") {
-  const tv = join(resources, "tv");
-  for (const path of setup.files) {
-    await mkdir(join(tv, path, ".."), { recursive: true });
-    await cp(join("packaging/appliance/root", path), join(tv, path));
-  }
-  const unit = join(tv, "usr/lib/systemd/user/couch-tv.service");
-  await Bun.write(unit, (await Bun.file(unit).text()).replace("ExecStart=/var/lib/couch/application/Couch.AppImage", "ExecStart=/usr/bin/couch"));
-  await Bun.write(join(tv, "files"), setup.files.join("\n") + "\n");
-  await Bun.write(join(tv, "packages"), [...new Set([...setup.audio, ...setup.tv, "dbus-user-session", "libpam-systemd", "procps", "polkitd"])].join("\n") + "\n");
-  await cp("packaging/appliance/root/usr/sbin/couch-recover", join(tv, "couch-recover-appimage"));
-  await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
-  const broker = join(resources, "package-update");
-  await mkdir(broker, { recursive: true });
-  for (const file of ["couch-package-update@.service", "50-couch-package-update.rules"]) await cp(join("packaging/native", file), join(broker, file));
-  await Bun.write(join(broker, "couch-updater.pub"), Buffer.from(publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), "base64"));
+const tv = join(resources, "tv");
+for (const path of setup.files) {
+  await mkdir(join(tv, path, ".."), { recursive: true });
+  await cp(join("packaging/appliance/root", path), join(tv, path));
 }
+const unit = join(tv, "usr/lib/systemd/user/couch-tv.service");
+await Bun.write(unit, (await Bun.file(unit).text()).replace("ExecStart=/var/lib/couch/application/Couch.AppImage", "ExecStart=/usr/bin/couch"));
+await Bun.write(join(tv, "files"), setup.files.join("\n") + "\n");
+await Bun.write(join(tv, "packages"), [...new Set([...setup.audio, ...setup.tv, "dbus-user-session", "libpam-systemd", "procps", "polkitd"])].join("\n") + "\n");
+await cp("packaging/native/check-tv-health.js", join(tv, "check-health.js"));
+const broker = join(resources, "package-update");
+await mkdir(broker, { recursive: true });
+for (const file of ["couch-package-update@.service", "50-couch-package-update.rules"]) await cp(join("packaging/native", file), join(broker, file));
+await Bun.write(join(broker, "couch-updater.pub"), Buffer.from(publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), "base64"));
 await mkdir(staging, { recursive: true });
-await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
-if (format === "appimage") {
-  // Populate Tauri's supported tool cache with verified inputs, before its bundler runs.
-  const cache = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "tauri");
-  await mkdir(cache, { recursive: true });
-  for (const [name, input] of Object.entries(inputs.appimageTools)) {
-    await rm(join(cache, name), { force: true });
-    await download(input, join(cache, name));
-    await chmod(join(cache, name), 0o755);
-  }
-  // Static PIE AppImage runtimes do not execute under Docker's Mac emulation.
-  // Run the verified output plugin's unmodified executable from its extracted AppDir.
-  const plugin = join(cache, "linuxdeploy-plugin-appimage.AppImage");
-  const pluginBytes = new DataView(await Bun.file(plugin).arrayBuffer());
-  const squashfsOffset = Number(pluginBytes.getBigUint64(40, true)) + pluginBytes.getUint16(58, true) * pluginBytes.getUint16(60, true);
-  const extracted = join(cache, "appimage-output-plugin");
-  await rm(extracted, { recursive: true, force: true });
-  run(["unsquashfs", "-o", String(squashfsOffset), "-d", extracted, plugin]);
-  await rm(plugin);
-  await symlink(join(extracted, "AppRun"), plugin);
-  await download(inputs.appimageRuntime, join(cache, "runtime-x86_64"));
-}
+await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: ["deb"], linux: { ...packageConfig.bundle.linux, deb: debian } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
 await cp("/usr/bin/ffprobe", join(resources, "tools", "ffprobe"));
-// linuxdeploy adds this RPATH to resources under usr/lib; hash its final bytes.
-if (format === "appimage") for (const tool of [...mediaReleases(), { name: "ffprobe" }]) run(["/usr/bin/patchelf", "--set-rpath", "$ORIGIN", join(resources, "tools", tool.name)]);
 const helpers = {} as Record<string, { version: string; sha256: string; archiveSha256: string }>;
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
 helpers.ffprobe = { version: run(["/usr/bin/ffprobe", "-version"]).split(" ")[2]!, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", "ffprobe")).arrayBuffer())), archiveSha256: "" };
