@@ -19,6 +19,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
       - run: bun install --frozen-lockfile
       - uses: changesets/action@66d7d1ddafddf1ef45f98ee51a7496f9cdadb2f4
         with:

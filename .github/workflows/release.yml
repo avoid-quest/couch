@@ -3,11 +3,6 @@ name: Release
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      force:
-        type: boolean
-        default: false
-        description: Dispatch the package pipeline even when the tag already exists
 permissions:
   contents: read
   actions: write
@@ -24,25 +19,14 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2
-      - name: Check whether this version is already released
-        id: released
+      - name: Dispatch the package pipeline when the version is unreleased
         env:
           GH_TOKEN: "${{ github.token }}"
-          FORCE: "${{ inputs.force }}"
         run: |
-          version=$(jq -r .version package.json)
-          if [ "$FORCE" != true ] && gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$version" >/dev/null 2>&1; then
-            echo "v$version already has a tag; nothing to release."
-            echo "released=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "v$version is unreleased."
-            echo "released=false" >> "$GITHUB_OUTPUT"
+          if ! bun scripts/release-pending.ts; then
+            echo "Nothing to release."
+            exit 0
           fi
-      - name: Dispatch the package pipeline with the changelog
-        if: steps.released.outputs.released == 'false'
-        env:
-          GH_TOKEN: "${{ github.token }}"
-        run: |
           notes=$(bun scripts/release-notes.ts)
           gh workflow run package.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f channel=preview -f publish=true -f notes="$notes"

@@ -94,7 +94,8 @@ authors. Merging that PR is the release action: the Release workflow sees the
 unreleased version, takes the matching `CHANGELOG.md` section as the notes,
 and dispatches Package with `publish=true`, which runs the full pipeline and
 creates the GitHub Release. Re-pushes and retries stay safe: once `v<version>`
-exists, the Release workflow skips.
+exists or the preview feed already serves that version, the Release workflow
+skips (the feed check covers versions published before tags existed).
 
 The repo lives in changesets prerelease mode with tag `preview`
 (`.changeset/pre.json`), so version PRs produce `0.1.6-preview.N` and the
