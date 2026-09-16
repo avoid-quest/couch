@@ -1,17 +1,18 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { RadioStation } from "../shared/radio";
+import type { RadioStation } from "../../../shared/radio";
 
-let root: Root, window: Window, request: ReturnType<typeof spyOn>;
+let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const station: RadioStation = { id: "station", name: "Evening radio", url: "https://radio.example/stream", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
 let catalogueFailures = 0;
 const flush = () => act(async () => { await Bun.sleep(20); });
 async function render() {
   const { LiveNow } = await import("./LiveNow");
-  await act(async () => root.render(<LiveNow origin="http://localhost" token="paired" connected canPlay version={1} onEnqueue={async () => true} />));
+  await act(async () => root.render(<QueryClientProvider client={client}><LiveNow credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay onEnqueue={async () => true} /></QueryClientProvider>));
   await flush();
 }
 beforeEach(async () => {
@@ -30,6 +31,7 @@ beforeEach(async () => {
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 afterEach(async () => {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { Action, SessionState } from "../shared/protocol";
+import type { Action, SessionState } from "../../../shared/protocol";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();

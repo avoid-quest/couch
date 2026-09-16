@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SessionState } from "../shared/protocol";
+import type { SessionState } from "../../../shared/protocol";
 
 let QueuePanel: typeof import("./QueuePanel").QueuePanel;
 const window = new Window();

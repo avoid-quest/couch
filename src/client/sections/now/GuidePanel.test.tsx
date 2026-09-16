@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, setSystemTime, spyOn, test } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 
-let root: Root, window: Window, tick: () => void;
+let root: Root, window: Window, client: QueryClient, tick: () => void;
 let programGate: ReturnType<typeof Promise.withResolvers<void>> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 let recordingPage: any = null;
@@ -20,6 +21,7 @@ const programs = () => Array.from({ length: 5 }, (_, day) => {
   return { id: `airing-${day}`, channelId: "news", start, end: new Date(2026, 9, 25 + day).getTime(), title: `airing-${day}`, description: "" };
 });
 const flush = () => act(async () => { await Bun.sleep(180); });
+const refreshRecordings = async () => { await act(async () => client.invalidateQueries({ queryKey: ["recordings"] })); await flush(); };
 const titles = () => [...document.querySelectorAll(".guide-program-list li h3")].map(node => node.firstChild?.textContent);
 const heading = () => document.querySelector(".guide-day h3")?.textContent;
 const dateLabel = (date: Date) => date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
@@ -67,8 +69,9 @@ beforeEach(async () => {
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const { GuidePanel } = await import("./GuidePanel");
-  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />));
+  const container = document.createElement("div"); document.body.append(container); client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  root = createRoot(container);
+  await act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "test" }} connected canPlay host={false} onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>));
   await flush();
 });
 
@@ -125,7 +128,7 @@ test("the real group all is distinct from All groups in the rendered Select and 
 test("Go live invokes its explicit current-playback callback without ordinary Play", async () => {
   const { GuidePanel } = await import("./GuidePanel");
   let calls = 0;
-  const render = async (currentSource: string) => act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} controllerVersion={1} currentSource={currentSource} onGoLive={() => calls++} active />));
+  const render = async (currentSource: string) => act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "test" }} connected canPlay host={false} currentSource={currentSource} onGoLive={() => calls++} active run={async () => true} /></QueryClientProvider>));
   await render("iptv:news"); await flush();
   const before = request.mock.calls.length;
   await click("Go live");
@@ -138,8 +141,9 @@ test("Go live invokes its explicit current-playback callback without ordinary Pl
 
 test("Record submits the selected future airing and setup revision, while pending cancel uses its current job revision", async () => {
   recordingPage = { configured: true, revision: 7, checkedAt: null, error: null, jobs: [{ id: "pending", programId: "saved", channelId: "news", channelName: "News", title: "Saved recording", start: Date.now() + 60_000, end: Date.now() + 120_000, status: "pending", cause: null, revision: 4, cancelRequested: false }] };
+  await refreshRecordings();
   const { GuidePanel } = await import("./GuidePanel");
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host={false} version={1} recordingsVersion={2} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  await act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "test" }} connected canPlay host={false} onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>)); await flush();
   await click("Programs");
   expect([...document.querySelectorAll("button")].some(node => node.textContent === "Record programme")).toBe(false);
   await click("Next day"); await click("Record programme");
@@ -155,8 +159,8 @@ test("Record submits the selected future airing and setup revision, while pendin
 test("offline recording snapshots retain their status with disabled play, cancellation and refresh controls", async () => {
   recordingPage = { configured: true, revision: 1, checkedAt: Date.now(), error: "Backend unavailable", jobs: ["pending", "completed"].map((status, index) => ({ id: String(index), programId: "saved", channelId: "news", channelName: "News", title: status, start: Date.now(), end: Date.now() + 60_000, status, cause: null, revision: 2, cancelRequested: false })) };
   const { GuidePanel } = await import("./GuidePanel");
-  const render = (connected: boolean) => root.render(<GuidePanel origin="http://localhost" token="test" connected={connected} canPlay host={false} version={1} recordingsVersion={3} controllerVersion={1} onGoLive={() => {}} active />);
-  await act(async () => render(true)); await flush(); await click("Recordings");
+  const render = (connected: boolean) => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "test" }} connected={connected} canPlay host={false} onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>);
+  await act(async () => render(true)); await refreshRecordings(); await click("Recordings");
   await act(async () => render(false)); await flush();
   for (const label of ["Refresh status", "Cancel pending recording", "Play on TV"]) expect(button(label).disabled).toBe(true);
   expect(document.body.textContent).toContain("This remote is offline");
@@ -167,8 +171,8 @@ test("offline recording snapshots retain their status with disabled play, cancel
 test("paired navigation cannot select a portalled recording setup option on the host", async () => {
   authority = "host";
   const { GuidePanel } = await import("./GuidePanel");
-  const { applyTvNavigation } = await import("./navigation");
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="test" connected canPlay host version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  const { applyTvNavigation } = await import("../../navigation");
+  await act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "test" }} connected canPlay host onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>)); await flush();
   await click("Recordings"); await click("Recording setup");
   const trigger = document.querySelector<HTMLElement>("#recording-guide-channel")!;
   await act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerType: "mouse" }))); await flush();
@@ -195,8 +199,9 @@ test("paired navigation cannot select a portalled recording setup option on the 
 
 test("an initial recordings load failure can be retried without a backend refresh or version update", async () => {
   recordingFailure = true;
+  await refreshRecordings();
   const { GuidePanel } = await import("./GuidePanel");
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="retry" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush();
+  await act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "retry" }} connected canPlay host={false} onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>)); await flush();
   await click("Recordings");
   expect(button("Retry recordings").disabled).toBe(false);
   expect(document.body.textContent).toContain("Temporary recordings failure");
@@ -210,8 +215,9 @@ test("an initial recordings load failure can be retried without a backend refres
 test("recordings crossing midnight include the end date", async () => {
   const start = new Date(2026, 9, 24, 23, 45), end = new Date(2026, 9, 25, 0, 15);
   recordingPage = { configured: true, revision: 1, checkedAt: Date.now(), error: null, jobs: [{ id: "overnight", programId: "saved", channelId: "news", channelName: "News", title: "Overnight", start: +start, end: +end, status: "pending", cause: null, revision: 2, cancelRequested: false }] };
+  await refreshRecordings();
   const { GuidePanel } = await import("./GuidePanel");
-  await act(async () => root.render(<GuidePanel origin="http://localhost" token="dates" connected canPlay host={false} version={1} controllerVersion={1} onGoLive={() => {}} active />)); await flush(); await click("Recordings");
+  await act(async () => root.render(<QueryClientProvider client={client}><GuidePanel credentials={{ origin: "http://localhost", token: "dates" }} connected canPlay host={false} onGoLive={() => {}} active run={async () => true} /></QueryClientProvider>)); await flush(); await click("Recordings");
   expect(document.querySelector('[data-recording-id="overnight"]')!.textContent).toContain(end.toLocaleString([], { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }));
 });
 
@@ -239,7 +245,7 @@ test("recovered setup reload clears its error and invalid backend selection", as
 });
 
 test("recording requests permit multi-step workflows and still honor caller cancellation", async () => {
-  const { useRecordings } = await import("./RecordingsPanel");
+  const { useRecordings } = await import("../../RecordingsPanel");
   let call: ReturnType<typeof useRecordings>["request"];
   function Probe() { call = useRecordings({ origin: "http://localhost", token: "long", connected: true, active: false, version: 0 }).request; return null; }
   await act(async () => root.render(<Probe />));
