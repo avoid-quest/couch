@@ -4,6 +4,7 @@ import { version } from "../package.json";
 import tauri from "../src-tauri/tauri.conf.json";
 import { releaseVersion } from "./hosted-policy";
 import debian from "../packaging/debian.json";
+import { build as viteBuild } from "vite";
 
 const targets: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
@@ -25,18 +26,10 @@ if (helpers) {
   await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, host: { os: "debian", version: "13", architecture: "amd64", session: "x11", packages: host } }));
 }
 
-await rm("dist", { recursive: true, force: true });
 await mkdir("src-tauri/binaries", { recursive: true });
 
-const frontend = await Bun.build({
-  entrypoints: ["src/client/index.html"],
-  outdir: "dist",
-  target: "browser",
-  define: { "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
-  minify: true,
-  plugins: [tailwind],
-});
-if (!frontend.success) throw new AggregateError(frontend.logs, "Frontend build failed");
+// vite.config.ts builds src/client into dist with the build-info define above.
+await viteBuild();
 
 const server = await Bun.build({
   entrypoints: ["src/main.ts"],
@@ -50,4 +43,4 @@ const server = await Bun.build({
   define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
-console.log(`Built frontend and Bun sidecar for ${target}`);
+console.log(`Built frontend (Vite) and Bun sidecar for ${target}`);

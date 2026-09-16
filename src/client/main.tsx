@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { NativeModeGate } from "./PlaybackDevice";
 import { App } from "./App";
 import { CouchRouter } from "./routes";
+import "./index.css";
 import "./theme.css";
 import "./styles.css";
 import "./tv-mode.css";
