@@ -156,9 +156,9 @@ export async function githubRelease(directory: string, manifest: Manifest, chann
   const notes = await Bun.file(join(directory, "notes.md")).text();
   // Dispatch concurrency serializes publications, so check-then-write cannot race another run.
   const existing = await api(["repos/" + repository + "/releases/tags/" + tag]);
-  // A promotion dispatch carries only promote remarks, so a flip keeps the changelog already on the release.
+  // Notes belong to creation only: retries and flips keep the changelog already on the release.
   const release: Record<string, unknown> = { tag_name: tag, target_commitish: manifest.revision, name: tag, prerelease: channel === "preview" };
-  if (channel === "preview" || !existing) release.body = notes;
+  if (!existing) release.body = notes;
   const written = existing
     ? await api(["-X", "PATCH", `repos/${repository}/releases/${existing.id}`], JSON.stringify(release))
     : await api(["-X", "POST", `repos/${repository}/releases`], JSON.stringify(release));
