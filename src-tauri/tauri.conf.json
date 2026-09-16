@@ -5,9 +5,10 @@
   "identifier": "quest.avoid.couch",
   "build": {
     "beforeDevCommand": {
-      "script": "bun run build",
+      "script": "bun run client:dev",
       "wait": true
     },
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },

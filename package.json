@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
+    "client:dev": "vite",
     "build": "bun scripts/build.ts",
     "desktop": "bun scripts/desktop.ts dev --no-dev-server",
     "desktop:build": "bun scripts/desktop.ts build",
@@ -32,6 +33,7 @@
     "@gplane/cue": "0.2.0",
     "@iptv/playlist": "1.2.1",
     "@jellyfin/sdk": "0.13.0",
+    "@tanstack/react-router": "^1.170.36",
     "@tauri-apps/api": "2.11.1",
     "axios": "1.20.0",
     "class-variance-authority": "0.7.1",
@@ -52,15 +54,19 @@
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "3.0.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/router-plugin": "^1.168.38",
     "@tauri-apps/cli": "2.11.4",
     "@types/bun": "1.4.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
     "bun": "1.4.2",
     "bun-plugin-tailwind": "0.1.2",
     "happy-dom": "20.14.0",
     "shadcn": "4.21.0",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vite": "^8.3.0"
   },
   "workspaces": [
     ".",
