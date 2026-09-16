@@ -30,6 +30,7 @@ import { LibraryPanel } from "./LibraryPanel";
 import { PlaybackControls } from "./PlaybackControls";
 import { RemotePad } from "./RemotePad";
 import { useTvPresentation } from "./useTvPresentation";
+import { useIdleCursor } from "./useIdleCursor";
 import { RadioPanel } from "./RadioPanel";
 import { GuidePanel } from "./GuidePanel";
 import { MediaArtwork, ProviderPanel } from "./ProviderPanel";
@@ -149,6 +150,7 @@ export function App() {
   }, [credentials]);
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
+  useIdleCursor(nativeHost);
   function handleNavigation(key: NavigationKey) {
     if (!nativeHost) return;
     document.documentElement.setAttribute("data-keyboard", "");

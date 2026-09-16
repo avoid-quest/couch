@@ -15,6 +15,7 @@
     "allow-complete-local-setup",
     "allow-show-playback-device",
     "core:window:allow-is-fullscreen",
-    "core:window:allow-set-fullscreen"
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-cursor-visible"
   ]
 }
