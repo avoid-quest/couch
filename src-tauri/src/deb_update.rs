@@ -63,6 +63,8 @@ pub struct Request {
 const ENDPOINT: &str = "https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/";
 const BROKER: &str = "/usr/lib/couch/package-update";
 const APPLICATION: &str = "/usr/bin/couch";
+const STAGED_VERIFICATION_FAILED: &str = "The staged package failed verification. Download it again.";
+const INSTALLED_DIGEST_MISMATCH: &str = "The installed package digest does not match the staged package.";
 const RECEIPT_CEILING: Duration = Duration::from_secs(600);
 // A just-published release takes minutes to reach every CDN region; the release
 // scripts ride out the same staleness with bounded rechecks.
@@ -483,7 +485,7 @@ pub async fn run(
                         .filter(|(_, _, c)| &c.id == candidate_id)
                         .ok_or("Use a current verified download.")?;
                     if !retained(&inbox, update, &trust) {
-                        return Err("The staged package failed verification. Download it again.".into());
+                        return Err(STAGED_VERIFICATION_FAILED.into());
                     }
                     let digest = package_digest(&inbox)?;
                     let mut transaction = serde_json::json!({"updateId":request_id,"requestId":request_id,"candidateId":candidate_id,"version":summary.version,"revision":"","createdAt":now(),"repairRuntime":false,"intent":"install"});
@@ -528,7 +530,7 @@ pub async fn run(
                             return Err(message);
                         }
                         if outcome.sha256.as_deref() != Some(digest.as_str()) {
-                            return Err("The installed package digest does not match the staged package.".into());
+                            return Err(INSTALLED_DIGEST_MISMATCH.into());
                         }
                         if outcome.version.as_deref() != Some(summary.version.as_str()) {
                             return Err("The installed version does not match the requested update.".into());
@@ -639,6 +641,13 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The shared/updates.ts and client mappings match these exact messages.
+    #[test]
+    fn verification_messages_state_their_recovery_action() {
+        assert_eq!(STAGED_VERIFICATION_FAILED, "The staged package failed verification. Download it again.");
+        assert_eq!(INSTALLED_DIGEST_MISMATCH, "The installed package digest does not match the staged package.");
+    }
 
     #[test]
     fn releases_must_be_strictly_newer() {

@@ -256,6 +256,32 @@ test("definitive pre-acceptance expiry clears the saved request so checks and do
   expect(button("Download update").disabled).toBe(false);
 });
 
+test("a rejected corrupt download names the cause and downloads the same release again", async () => {
+  report.status = "ready";
+  report.installation = { enabled: true, transaction: null };
+  request.mockImplementation((async (input, init) => {
+    calls.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined, signal: init?.signal as AbortSignal });
+    if (String(input).endsWith("/api/tools")) return Response.json({}, { status: 503 });
+    if (String(input).endsWith("/install")) return Response.json({ accepted: false, error: "The staged package failed verification. Download it again." }, { status: 409 });
+    return Response.json(report);
+  }) as typeof fetch);
+  await render();
+  await act(async () => button("Install update").click());
+  await act(async () => button("Install and restart").click());
+  expect(document.body.textContent).toContain("The staged package failed verification. Download it again.");
+  expect(window.localStorage.getItem("couch.update-request:http://localhost")).toBeNull();
+  await act(async () => button("Download again").click());
+  expect(calls.find(call => call.url.endsWith("/stage"))?.body).toEqual({ candidateId: report.candidate!.id });
+});
+
+test("a digest-mismatch transaction names the cause and offers the same fresh download", async () => {
+  report.installation = { enabled: true, transaction: { updateId: "c".repeat(32), requestId: "b".repeat(32), candidateId: report.candidate!.id, version: report.candidate!.version, revision: report.candidate!.revision, phase: "operator-required", error: "The installed package digest does not match the staged package.", createdAt: 1, updatedAt: 2 } };
+  await render();
+  expect(document.body.textContent).toContain("The installed package digest does not match the staged package.");
+  await act(async () => button("Download again").click());
+  expect(calls.find(call => call.url.endsWith("/stage"))?.body).toEqual({ candidateId: report.candidate!.id });
+});
+
 test("request-specific completion clears a saved request superseded by another remote", async () => {
   const saved = { candidateId: report.candidate!.id, requestId: "b".repeat(32), confirmInterrupt: false, version: report.candidate!.version, revision: report.candidate!.revision };
   window.localStorage.setItem("couch.update-request:http://localhost", JSON.stringify(saved));

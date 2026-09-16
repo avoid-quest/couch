@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createManualUpdate } from "./manual-update";
+import { NativeUpdateError } from "./deb-update-native";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { UpdateTransaction } from "../shared/updates";
 
@@ -54,6 +55,13 @@ test("expired unaccepted candidates are distinguished from ambiguous worker fail
   expect(await (await stale.install(request(), admin)).json()).toMatchObject({ accepted: false });
   const ambiguous = createManualUpdate({ request: async value => { if (value.op === "install") throw new Error("lost reply"); return { ok: true, repairCurrent: true, transaction: null }; } }, () => true, () => true);
   expect(await (await ambiguous.install(request(), admin)).json()).not.toHaveProperty("accepted");
+});
+
+test("a native verification rejection keeps its cause while lost replies stay generic", async () => {
+  const manual = createManualUpdate({ request: async value => value.op === "install" ? Promise.reject(new NativeUpdateError("The staged package failed verification. Download it again.")) : { ok: true, repairCurrent: true, transaction: null } }, () => true, () => true);
+  const rejected = await manual.install(request(), admin);
+  expect(rejected.status).toBe(409);
+  expect(await rejected.json()).toEqual({ error: "The staged package failed verification. Download it again.", accepted: false });
 });
 
 test("request-specific status retains a completed receipt superseded by another remote", async () => {

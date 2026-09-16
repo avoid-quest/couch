@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { createNativeDebUpdates } from "./deb-update-native";
+import { createNativeDebUpdates, NativeUpdateError } from "./deb-update-native";
+import { UpdateError } from "./update-feed";
 import type { DebUpdateAction } from "../shared/updates";
 const candidate = { summary: { id: "a".repeat(64), releaseId: "2.1", version: "0.2.0", revision: "", notes: "new", bytes: 50, publishedAt: 1, expiresAt: Date.now() + 60_000 }, staged: true };
 test("deb feed correlates check and stage over its own channel and forwards progress", async () => {
@@ -35,4 +36,19 @@ test("deb install keeps idle intent and maps repair to a rejected native action"
   native.receive({ requestId: sent[2]!.id, ok: true, transaction: null });
   await status;
   native.close();
+});
+
+test("native reply errors carry the deb cause while transport faults stay generic", async () => {
+  const sent: { id: string; action: DebUpdateAction }[] = [];
+  const native = createNativeDebUpdates((id, action) => sent.push({ id, action }));
+  const install = () => native.request({ op: "install", candidateId: candidate.summary.id, requestId: "c".repeat(32), confirmInterrupt: false });
+  const rejected = install();
+  native.receive({ requestId: sent[0]!.id, error: "The staged package failed verification. Download it again." });
+  await expect(rejected).rejects.toThrow("The staged package failed verification. Download it again.");
+  await expect(rejected).rejects.toBeInstanceOf(NativeUpdateError);
+  const closing = install();
+  native.close();
+  const fault = await closing.then(() => null, (error: unknown) => error);
+  expect(fault).toBeInstanceOf(UpdateError);
+  expect(fault).not.toBeInstanceOf(NativeUpdateError);
 });
