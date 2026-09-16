@@ -1,15 +1,17 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
+import type { PlaylistLoadMode, PlaylistSource, SavedPlaylist, SavedPlaylistSummary } from "../shared/playlists";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
+import { ProviderError } from "./providers/http";
 
 type Options = {
   databasePath: string;
   onChange: () => void;
   queue: () => QueueEntry[];
   loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor) => void;
+  resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
 type Row = Omit<SavedPlaylist, "entries"> & { entries: string };
 
@@ -21,6 +23,7 @@ const identifier = (value: unknown): value is string => typeof value === "string
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const methods = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
 const columns = "id, name, revision, updatedAt, entries";
+const sourceProviders = ["youtube", "raiplay", "bandcamp"];
 
 function playlistName(value: unknown) {
   if (typeof value !== "string" || /[\u0000-\u001f\u007f]/.test(value)) throw new PlaylistError("Use a playlist name with 1 to 80 characters.");
@@ -58,6 +61,23 @@ function originalSource(value: unknown): value is string {
   try { const url = new URL(value); return url.protocol === "file:" && !url.username && !url.password && !decodeURIComponent(url.pathname).includes("\0"); } catch { return false; }
 }
 
+function playlistSource(value: unknown): PlaylistSource {
+  if (!object(value) || !sourceProviders.includes(String(value.provider)) || typeof value.url !== "string" || !value.url || value.url.length > 2048) {
+    throw new PlaylistError("Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save.");
+  }
+  fields(value, ["provider", "url"]);
+  return { provider: value.provider as PlaylistSource["provider"], url: value.url };
+}
+
+function resolvedSource(resolve: Options["resolveSource"], source: PlaylistSource): Promise<{ name: string; entries: QueueEntry[] }> {
+  if (!resolve) return Promise.reject(new PlaylistError("Saving from sources is not available on this TV.", 503));
+  return resolve(source).catch(reason => {
+    if (reason instanceof PlaylistError) throw reason;
+    if (reason instanceof ProviderError) throw new PlaylistError(reason.message, reason.status);
+    throw new PlaylistError(reason instanceof Error && reason.message ? reason.message : "Could not read this source list. Try again.", 502);
+  });
+}
+
 // Queue sources are original catalog references or user-selected URLs. Resolved
 // provider streams and headers belong to native loads and never enter this table.
 export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
@@ -85,7 +105,7 @@ function view(row: Row): SavedPlaylist {
   return { ...row, entries: entries.map(({ source: _source, automaticTitle: _automaticTitle, ...entry }) => entry) };
 }
 
-export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Options) {
+export function createPlaylists({ databasePath, onChange, queue, loadQueue, resolveSource }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -118,12 +138,17 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue }: Op
           if (request.method !== "POST") return methods("GET, POST");
           const input = await body(request);
           authorize();
-          fields(input, ["name"]);
-          const name = playlistName(input.name);
+          const source = input.source === undefined ? undefined : playlistSource(input.source);
+          fields(input, source ? ["source"] : ["name"]);
+          // Resolve source lists before opening the write transaction so a vanished
+          // playlist or a failed resolver leaves no partial save behind.
+          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: queue() };
+          const name = playlistName(resolution.name);
+          const entries = capturePlaylistEntries(resolution.entries);
           const row = db.transaction(() => {
             if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM saved_playlists").get()!.count >= 100) throw new PlaylistError("You can save up to 100 playlists.");
             uniqueName(name);
-            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(capturePlaylistEntries(queue())) };
+            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(entries) };
             db.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?)").run(saved.id, name, name.toLowerCase(), saved.revision, saved.updatedAt, saved.entries);
             return saved;
           })();

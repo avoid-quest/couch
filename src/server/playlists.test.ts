@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SavedPlaylist } from "../shared/playlists";
 import type { QueueEntry } from "../shared/protocol";
+import { ProviderError } from "./providers/http";
 import { createPlaylists } from "./playlists";
 
 const opened = new Set<ReturnType<typeof createPlaylists>>();
@@ -98,6 +99,70 @@ test("saving and loading a radio queue preserves its reconnect policy across res
   expect((await detail(second.service, saved.id)).entries[0]).toEqual({ id: "station", title: "Station", kind: "radio", live: true });
   expect((await request(second.service, "POST", `/${saved.id}/load`, { revision: 1, mode: "play" })).status).toBe(200);
   expect(second.loaded.mock.calls[0]![0][0]).toMatchObject({ source: "https://radio.example/stream", kind: "radio" });
+});
+
+test("saves a source list through the shared entry point without touching the queue", async () => {
+  const { service, changed, loaded } = fixture({ resolveSource: async source => {
+    expect(source).toEqual({ provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" });
+    return { name: "  Evening videos  ", entries: [
+      { id: "yt-one", title: "First video", source: "web:https://www.youtube.com/watch?v=one", thumbnail: "https://i.ytimg.com/vi/one/hqdefault.jpg", duration: 90, headers: { Authorization: "secret" }, quality: "1080p" },
+      { id: "yt-two", title: "Second video", source: "web:https://www.youtube.com/watch?v=two" },
+    ] };
+  } });
+  const response = await request(service, "POST", "", { source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" } });
+  expect(response.status).toBe(201);
+  const { playlist } = await response.json() as { playlist: SavedPlaylist };
+  // The snapshot reuses the queue-save validation: unsupported fields are stripped.
+  expect(playlist.name).toBe("Evening videos");
+  expect(playlist.entries).toEqual([
+    { id: "yt-one", title: "First video", thumbnail: "https://i.ytimg.com/vi/one/hqdefault.jpg", duration: 90, quality: "1080p" },
+    { id: "yt-two", title: "Second video" },
+  ]);
+  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, entryCount: 2 }] });
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(loaded).not.toHaveBeenCalled();
+});
+
+test.each([
+  [{ provider: "twitch", url: "https://twitch.tv/x" }, "Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save."],
+  [{ provider: "youtube", url: "" }, "Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save."],
+  [{ provider: "raiplay", url: "https://www.raiplay.it/programmi/report", extra: true }, "Invalid playlist command."],
+])("rejects malformed source commands with an actionable message", async (source, error) => {
+  const { service } = fixture({ resolveSource: async () => ({ name: "Unused", entries: [track] }) });
+  const response = await request(service, "POST", "", { source });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error });
+  expect(await (await request(service)).json()).toEqual({ playlists: [] });
+});
+
+test("a vanished source list fails without saving anything", async () => {
+  const { service, changed } = fixture({ resolveSource: async () => { throw new ProviderError("This playlist is no longer available.", 404); } });
+  const response = await request(service, "POST", "", { source: { provider: "bandcamp", url: "https://artist.bandcamp.com/album/gone" } });
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: "This playlist is no longer available." });
+  expect(changed).not.toHaveBeenCalled();
+  expect(await (await request(service)).json()).toEqual({ playlists: [] });
+});
+
+test("resolver breakdowns surface their message instead of a generic error", async () => {
+  const { service } = fixture({ resolveSource: async () => { throw new Error("yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported."); } });
+  const response = await request(service, "POST", "", { source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" } });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({ error: "yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported." });
+});
+
+test("source saves honor the playlist count and name limits", async () => {
+  const { service } = fixture({ resolveSource: async () => ({ name: "Same name", entries: [track] }) });
+  const first = await request(service, "POST", "", { source: { provider: "bandcamp", url: "https://artist.bandcamp.com/album/first" } });
+  expect(first.status).toBe(201);
+  const second = await request(service, "POST", "", { source: { provider: "bandcamp", url: "https://artist.bandcamp.com/album/second" } });
+  expect(second.status).toBe(409);
+  expect(await second.json()).toEqual({ error: "A playlist already has that name." });
+  const entries = Array.from({ length: 501 }, (_, index) => ({ ...track, id: `entry-${index}` }));
+  const tooMany = fixture({ resolveSource: async () => ({ name: "Big", entries }) });
+  const response = await request(tooMany.service, "POST", "", { source: { provider: "raiplay", url: "https://www.raiplay.it/programmi/report" } });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: "A playlist can contain up to 500 entries." });
 });
 
 test("edits duplicate source occurrences by entry identity and preserves order", async () => {

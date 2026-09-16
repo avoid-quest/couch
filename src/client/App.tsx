@@ -245,6 +245,20 @@ export function App() {
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
     run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
+  const saveProviderPlaylist = async (provider: "youtube" | "raiplay" | "bandcamp", url: string) => {
+    if (!credentials) throw new Error("Could not save the playlist. Check the TV connection.");
+    const response = await fetch(`${credentials.origin}/api/playlists`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ source: { provider, url } }),
+      signal: AbortSignal.timeout(90_000),
+    }).catch(() => { throw new Error("Could not save the playlist. Check the TV connection."); });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error || "Could not save the playlist.");
+    }
+    return true;
+  };
   const enqueueRadio = (station: RadioStation, playNow: boolean) => {
     const result = run(station.sourceId
       ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
@@ -417,7 +431,7 @@ export function App() {
             <Dialog open={onlineRequest !== null} onOpenChange={open => { if (!open) setOnlineRequest(null); }}>
               <DialogContent className="max-w-3xl">
                 <DialogHeader><DialogTitle>{onlineRequest?.item.title ?? "Saved source"}</DialogTitle><DialogDescription>Browse this saved source.</DialogDescription></DialogHeader>
-                {onlineRequest && <ProviderPanel key={onlineRequest.revision} showHeading={false} active initialItem={onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={playHistory} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} />}
+                {onlineRequest && <ProviderPanel key={onlineRequest.revision} showHeading={false} active initialItem={onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={playHistory} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} onSavePlaylist={saveProviderPlaylist} />}
               </DialogContent>
             </Dialog>
             <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} /></DialogContent></Dialog>

@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Plus, Star } from "lucide-react";
+import { ListMusic, Play, Plus, Star } from "lucide-react";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../shared/providers";
 import { isYouTubePlaylistUrl } from "../shared/providers";
 import { QualityOptions } from "./QualitySelect";
@@ -28,6 +28,7 @@ type Props = {
   onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueuePlaylist: (url: string, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueueAlbum: (provider: "bandcamp", url: string, playNow: boolean) => Promise<boolean>;
+  onSavePlaylist?: (provider: "youtube" | "raiplay" | "bandcamp", url: string) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
 const providers: Record<ProviderId, { name: string; placeholder: string }> = {
@@ -79,7 +80,7 @@ export function ProviderPanel(props: Props) {
   </section>;
 }
 
-function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
+function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onEnqueueAlbum, onEnqueuePlaylist, onSavePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
   const qualityId = useId();
   const [input, setInput] = useState("");
@@ -271,10 +272,27 @@ function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, ini
     }
   }
 
+  async function saveAsPlaylist(url: string) {
+    if (busy || !connected || !lifetime.current || !onSavePlaylist || provider === "twitch") return;
+    const controller = lifetime.current;
+    setBusy(url);
+    setActionError(null);
+    setNotice("");
+    try {
+      const ok = await onSavePlaylist(provider, url);
+      if (ok && !controller.signal.aborted) setNotice("Saved as a playlist. Find it under Saved playlists.");
+    } catch (reason) {
+      if (!controller.signal.aborted) setActionError(message(reason));
+    } finally {
+      if (!controller.signal.aborted) setBusy(null);
+    }
+  }
+
   const savedItems = favorites.filter(item => item.provider === provider);
   const items = view === "saved" ? savedItems : page?.items ?? [];
   const pending = view === "saved" ? favoritesLoading : loading;
   const playlistUrl = provider === "youtube" && view === "browse" && isYouTubePlaylistUrl(location.request.url ?? location.request.query ?? "") ? location.request.url ?? location.request.query : undefined;
+  const raiListUrl = provider === "raiplay" && view === "browse" && /^https:\/\/www\.raiplay\.it\/(?:programmi|collezioni)\/[a-z0-9_%.-]+(?:\/ContentSet-[a-f0-9-]+\.json)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
   const albumUrl = provider === "bandcamp" && view === "browse" && /^https?:\/\/[^/]+\.bandcamp\.com\/album\/[^/?#]+\/?(?:[?#].*)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
   const album = albumUrl && page && !pending && !browseError && items.length > 0 && items.every(item => item.kind === "media");
   return <div ref={browserRef} className="space-y-4" onKeyDown={event => {
@@ -311,7 +329,11 @@ function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, ini
         {playlistUrl && page && !pending && !browseError && !!items.length && <div className="flex flex-wrap items-center gap-2">
           <Button disabled={!canPlay || !connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, true, true)}><Play aria-hidden="true" />Play playlist</Button>
           <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void enqueueCollection(playlistUrl, false, true)}><Plus aria-hidden="true" />Up next</Button>
+          {onSavePlaylist && <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(playlistUrl)}><ListMusic aria-hidden="true" />Save as playlist</Button>}
           <QualityOptions id={`${qualityId}-playlist`} label={`Video quality for ${page.title || "playlist"}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />
+        </div>}
+        {raiListUrl && page && !pending && !browseError && onSavePlaylist && <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(raiListUrl)}><ListMusic aria-hidden="true" />Save as playlist</Button>
         </div>}
         {album && <div className="provider-album">
           <MediaArtwork key={items[0]!.thumbnail || albumUrl} thumbnail={items[0]!.thumbnail} title={page.title || "Album"} className="provider-album-artwork" />
@@ -321,6 +343,7 @@ function ProviderBrowser({ active = true, historyVersion = 0, onPlayHistory, ini
             <div className="provider-album-actions">
               <Button disabled={!canPlay || busy !== null} onClick={() => void enqueueCollection(albumUrl, true)}><Play aria-hidden="true" />Play album</Button>
               <Button variant="outline" disabled={!connected || busy !== null} onClick={() => void enqueueCollection(albumUrl, false)}><Plus aria-hidden="true" />Add album to queue</Button>
+              {onSavePlaylist && <Button variant="outline" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(albumUrl)}><ListMusic aria-hidden="true" />Save as playlist</Button>}
             </div>
           </div>
         </div>}
