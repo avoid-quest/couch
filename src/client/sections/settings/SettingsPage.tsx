@@ -1,13 +1,20 @@
-import { Settings } from "../../Settings";
+import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { useShell } from "../../shell";
-import type { SettingsPage } from "../../../shared/settings-pages";
+import { SettingsLayout } from "./SettingsLayout";
+import { PlaceholderSettings } from "./PlaceholderSettings";
+import { SettingsSources } from "./SettingsSources";
+import type { SourceKind } from "./sources/sourceTypes";
 
 export function SettingsPage({ section }: { section: SettingsPage }) {
   const shell = useShell();
-  const { state, credentials, connected, statusLabel, identity, details, playerStatus, pairingRequired, reachable, host, run, reconnect, unpair, videoQualityPreference, section: active, setRemoteControlEnabled, changeSettingsSection, changeSection } = shell;
+  const { credentials, connected, host, identity } = shell;
+  const source = section.startsWith("source-") ? section.slice(7) : undefined;
+
   return (
-    <section data-page="Settings">
-      <Settings onRemoteControlChange={setRemoteControlEnabled} inline section={section} onSectionChange={changeSettingsSection} active={active === "Settings"} onOpenRequest={() => changeSection("Settings")} libraryVersion={state?.libraryVersion ?? 0} jellyfinVersion={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} videoQualityPreference={videoQualityPreference} credentials={credentials} connected={connected} status={statusLabel} identity={identity} details={details} playerStatus={playerStatus} pairingRequired={pairingRequired} reachable={reachable} host={host} name={state?.installationName ?? details?.name ?? "Couch"} version={state?.controllerVersion ?? 0} appearance={state?.appearance} administratorClaimed={state?.administratorClaimed === true} onReconnect={reconnect} onPairAgain={unpair} profile={state?.activeProfile} preferences={state?.preferences} onCommand={run} />
-    </section>
+    <SettingsLayout section={section}>
+      {source ? <SettingsSources canManage={!!host || identity?.authority === "administrator"} connected={connected} credentials={credentials} source={source as SourceKind} />
+        : section === "sources" ? <SettingsSources canManage={!!host || identity?.authority === "administrator"} connected={connected} credentials={credentials} />
+        : <PlaceholderSettings page={settingsPages[section].label} />}
+    </SettingsLayout>
   );
 }
