@@ -9,10 +9,7 @@ const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()
 const signature = (await Bun.file("src-tauri/tests/fixtures/update/archive.sig").text()).trim();
 const archive = new Uint8Array(await Bun.file("src-tauri/tests/fixtures/update/archive").arrayBuffer());
 function fixture(version = "0.1.0"): Manifest {
-  return { schemaVersion: 1, version, revision: "a".repeat(40), publicKey: key, inventorySha256: "b".repeat(64), files: Object.fromEntries(publicFiles(version).map(name => {
-    const bytes = name.endsWith(".sig") ? new TextEncoder().encode(signature) : archive;
-    return [name, { bytes: bytes.length, sha256: hash(bytes), ...(!name.endsWith(".sig") ? { signature } : {}) }];
-  })) };
+  return { schemaVersion: 1, format: "deb", version, revision: "a".repeat(40), publicKey: key, inventorySha256: "b".repeat(64), files: Object.fromEntries(publicFiles(version).map(name => [name, { bytes: archive.length, sha256: hash(archive), signature }])) };
 }
 function cloud(manifest: Manifest): CloudRelease {
   return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: filename.endsWith(".deb") ? "deb-x86_64" : null, updatePlatform: filename.endsWith(".deb") ? "linux-x86_64-deb" : null })) };
