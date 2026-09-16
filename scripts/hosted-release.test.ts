@@ -125,7 +125,7 @@ describe("native package delivery", () => {
     release.assets[0]!.updatePlatform = "linux-x86_64-deb";
     expect(() => verifyCloud(release, manifest, "stable")).not.toThrow();
     expect(publicFiles("0.1.1", "deb")).toEqual(["Couch_0.1.1_amd64.deb"]);
-    expect(() => publicFiles("0.1.1-preview.1", "deb")).toThrow("final");
+    expect(publicFiles("0.1.1-preview.1", "deb")).toEqual(["Couch_0.1.1-preview.1_amd64.deb"]);
     expect(publicFiles("0.1.0")).toEqual(["Couch_0.1.0_amd64.deb"]);
     const urls: string[] = [];
     const receipt = await verifyPublic(manifest, "preview", (async input => {

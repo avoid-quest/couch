@@ -17,11 +17,14 @@ supported `--signature` metadata, using public platform `deb-x86_64` and update
 platform `linux-x86_64-deb`. Dependency material is inside the package. Users do
 not download a setup archive or signature file.
 
-Native Preview uses a final SemVer version such as `0.1.1` in channel `preview`.
-Tauri's Debian bundler writes the version unchanged, and Debian orders
-`0.1.1-preview.1` after `0.1.1`. Native publication therefore rejects prerelease
-suffixes. Stable promotion copies the tested final-version Preview bytes and
-signatures unchanged. Stable is CrabNebula's unnamed channel, with no `--channel`
+Native Preview accumulates prerelease versions such as `0.1.5-preview.1` in
+channel `preview`, the way nightly channels work: each deployment increments the
+numeric suffix and the feed offers the newest one. Tauri's Debian bundler writes
+the version unchanged. Final versions such as `0.1.5` land on Preview only when
+it is time to release; SemVer orders every `0.1.5-preview.N` below `0.1.5`, so
+the final supersedes the accumulated previews. Stable promotion copies the
+tested final-version Preview bytes and signatures unchanged, and requires the
+final version. Stable is CrabNebula's unnamed channel, with no `--channel`
 argument. Each channel rejects a version equal to or below one already published.
 
 `format=appimage` retains the existing six-file AppImage/setup/dependency-material

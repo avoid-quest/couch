@@ -16,7 +16,6 @@ export function packageFormat(value: string | undefined): PackageFormat {
 
 export function publicFiles(version: string, format: PackageFormat = "deb") {
   releaseVersion(version);
-  if (version.includes("-")) throw new Error("Use a final X.Y.Z version in the native Preview channel.");
   return [`Couch_${version}_amd64.deb`];
 }
 
