@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { HistoryItem, LibraryItem } from "../shared/library";
-import type { SessionState } from "../shared/protocol";
-import * as session from "./session/session";
+import type { HistoryItem, LibraryItem } from "../../../shared/library";
+import type { SessionState } from "../../../shared/protocol";
+import * as session from "../../session/session";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -100,7 +100,7 @@ test("online album tracks and Jellyfin remain playable in the same history after
   request.mockImplementation((async input => String(input).includes("/api/library/items") ? Response.json({ items: [] }) : Response.json({ profile, items })) as typeof fetch);
   await renderHome();
   expect(button("Resume Album track").disabled).toBe(false);
-  expect(document.querySelector<HTMLImageElement>(".browse-hero img")?.src).toBe("https://example.com/album.jpg");
+  expect(document.querySelector<HTMLImageElement>('section[aria-label="Continue watching"] img')?.src).toBe("https://example.com/album.jpg");
   await act(async () => button("Resume Album track").click());
   expect(played).toEqual([[items[0], { fromStart: false }]]);
   await act(async () => button("Details for Server movie").click());
@@ -117,7 +117,7 @@ test("an empty TV home offers catalog browsing without a local-file placeholder"
   await renderHome();
   expect(document.body.textContent).not.toContain("From your library");
   expect(document.body.textContent).not.toContain("Library folders are managed");
-  expect(document.querySelector(".browse-empty, .browse-hero")).toBeNull();
+  expect(document.querySelector('section[aria-label="Continue watching"]')).toBeNull();
   expect(button("Add source")).toBeDefined();
   expect(played).toEqual([]);
 });

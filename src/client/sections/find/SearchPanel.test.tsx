@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
-import type { Action } from "../shared/protocol";
-import type { ProviderItem } from "../shared/providers";
-import type { RadioStation } from "../shared/radio";
-let root: Root, window: Window, request: ReturnType<typeof spyOn>;
+import type { Action } from "../../../shared/protocol";
+import type { ProviderItem } from "../../../shared/providers";
+import type { RadioStation } from "../../../shared/radio";
+let root: Root, window: Window, request: ReturnType<typeof spyOn>, queryClient: QueryClient;
+let revisions = { providers: 0, radio: 0 };
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const paths: string[] = [], queued: unknown[] = [], browsed: string[] = [];
 let release: (() => void) | undefined, jellyfinError = false, delayedQuery = "", unavailable = false, connectedJellyfin = true, empty = false;
@@ -31,12 +33,20 @@ async function search(query: string) {
 }
 async function render(active = true, connected = true, canPlay = true, libraryVersion = 1, providerVersion = 1, origin = "http://localhost", defaultQuality: "auto" | "1080p" = "1080p") {
   const { SearchPanel } = await import("./SearchPanel");
-  await act(async () => root.render(<SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} libraryVersion={libraryVersion} jellyfinVersion={1} providerVersion={providerVersion} radioVersion={providerVersion} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} />));
+  const invalidated: string[] = [];
+  if (providerVersion > revisions.providers) invalidated.push("providers");
+  if (providerVersion > revisions.radio) invalidated.push("radio");
+  revisions = { providers: providerVersion, radio: providerVersion };
+  await act(async () => {
+    for (const rootKey of invalidated) await queryClient.invalidateQueries({ queryKey: [rootKey] });
+    root.render(<QueryClientProvider client={queryClient}><SearchPanel onManageSources={administrator ? source => { browsed.push("Source settings"); setupSources.push(source); } : undefined} origin={origin} token="paired" connected={connected} canPlay={canPlay} active={active} defaultQuality={defaultQuality} onCommand={async command => { commands.push(command); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { queued.push(args); return true; }} /></QueryClientProvider>);
+  });
   await flush();
 }
 beforeEach(async () => {
   setupSources.length = 0; commands.length = 0; integrated = youtubeError = administrator = false; onlineFavorites = []; radioFavorites = [];
   paths.length = 0; queued.length = 0; browsed.length = 0; release = undefined; jellyfinError = unavailable = empty = false; delayedQuery = ""; connectedJellyfin = true;
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }); revisions = { providers: 0, radio: 0 };
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLSelectElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -289,7 +299,7 @@ test("RaiPlay searches include matching live channels even when the programme ca
 test("the empty discovery field has no filters, heading or premature requests", async () => {
   await render(true, true, true, 1, 1, "http://localhost", "auto");
   expect(document.querySelector("h1")).toBeNull();
-  expect(document.querySelector(".search-scopes")).toBeNull();
+  expect(document.querySelector("[data-search-scopes]")).toBeNull();
   expect(document.querySelector<HTMLInputElement>("#media-search")?.placeholder).toBe("Search or paste a link");
   expect(paths).toEqual([]);
 });
@@ -302,7 +312,7 @@ for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} sear
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
     return Response.json(url.pathname.endsWith("/favorites") ? { favorites: [] } : { items: url.searchParams.has("url") ? [channel, archive] : [channel] });
   }) as typeof fetch);
-  await act(async () => root.render(<SearchOnlineResults provider="twitch" query="Evening" version={1} quality="auto" onEnqueued={() => {}} origin="http://localhost" token="paired" connected canPlay active onCommand={async action => { commands.push(action); return true; }} />)); await flush();
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SearchOnlineResults provider="twitch" query="Evening" quality="auto" onEnqueued={() => {}} origin="http://localhost" token="paired" connected canPlay active onCommand={async action => { commands.push(action); return true; }} /></QueryClientProvider>)); await flush();
   const label = live ? "Past broadcasts from Evening channel" : "Open Evening channel";
   await click(label);
   expect(paths).toContain("/api/providers/twitch/items?url=https%3A%2F%2Fwww.twitch.tv%2Fevening");
@@ -349,7 +359,7 @@ test("typing searches in place after debounce and keeps input focus", async () =
   expect(button("Radio playlists").textContent).toBe("Radio playlists 1");
   await click("Clear search");
   expect(input.value).toBe(""); expect(document.activeElement === input).toBe(true);
-  expect(document.querySelector(".search-scopes")).toBeNull();
+  expect(document.querySelector("[data-search-scopes]")).toBeNull();
 });
 
 for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchronous"} route updates focus the newly selected source after recovery`, async () => {
@@ -359,7 +369,7 @@ for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchrono
   let updateRoute: (() => void) | undefined;
   function RoutedSearch() {
     const [searchState, setSearchState] = useState({ query: "Evening", source: "Jellyfin" });
-    return <SearchPanel origin="http://localhost" token="paired" connected canPlay active libraryVersion={1} jellyfinVersion={1} searchState={searchState} onSearchChange={value => { if (deferred) updateRoute = () => setSearchState(value); else flushSync(() => setSearchState(value)); }} onBrowse={() => {}} onEnqueue={async () => true} />;
+    return <SearchPanel origin="http://localhost" token="paired" connected canPlay active searchState={searchState} onSearchChange={value => { if (deferred) updateRoute = () => setSearchState(value); else flushSync(() => setSearchState(value)); }} onBrowse={() => {}} onEnqueue={async () => true} />;
   }
   await act(async () => root.render(<RoutedSearch />)); await flush();
   await click("Search YouTube", document.querySelector('[aria-label="Jellyfin search results"]')!);
@@ -384,7 +394,7 @@ for (const label of ["Evening video", "Evening radio"]) test(`${label} details p
 });
 
 test("avoid radio has its own matching group and retries a stale catalog without reloading other sources", async () => {
-  const { avoidRadioPlaylistId } = await import("../shared/radio");
+  const { avoidRadioPlaylistId } = await import("../../../shared/radio");
   integrated = true;
   const own = { ...station, id: "avoid-one", sourceId: avoidRadioPlaylistId, name: "Evening avoid" };
   const original = request.getMockImplementation()!;
@@ -547,7 +557,7 @@ for (const label of ["Evening video", "Evening radio"]) {
 test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
   const edits: string[] = [];
-  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />));
+  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} />));
   await draw("Owner draft", "route"); await flush();
   const input = document.querySelector<HTMLInputElement>("#media-search")!;
   expect(input.value).toBe("Owner draft"); expect(edits).toEqual([]);
@@ -562,7 +572,7 @@ test("controlled search drafts change only through the owner and never report ro
 test("standalone drafts follow route updates without reporting synthetic edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
   const edits: string[] = [];
-  const draw = async (query: string) => act(async () => root.render(<SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />));
+  const draw = async (query: string) => act(async () => root.render(<SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} />));
   await draw("first route"); await flush(); await draw("second route"); await flush();
   expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("second route");
   expect(edits).toEqual([]);
@@ -575,7 +585,7 @@ test("debounced drafts survive frequent parent renders, use the latest callback 
   function Controlled({ latest }: { latest: boolean }) {
     const [draftQuery, updateDraft] = useState(""); setDraft = updateDraft;
     const [searchState, setRoute] = useState({ query: "", source: "All" });
-    return <SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active libraryVersion={1} jellyfinVersion={1} onBrowse={() => {}} onEnqueue={async () => true} />;
+    return <SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onBrowse={() => {}} onEnqueue={async () => true} />;
   }
   await act(async () => root.render(<Controlled latest={false} />));
   await act(async () => setDraft("Evening"));

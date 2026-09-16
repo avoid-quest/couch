@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioStation } from "../shared/radio";
+import { useInvalidation } from "./useInvalidation";
+import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioStation } from "../../../shared/radio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "./ProviderPanel";
-import { createId } from "./session/session";
-import type { SourceSetupKind } from "./SourceSetupDialog";
+import { MediaArtwork } from "../../ProviderPanel";
+import { createId } from "../../session/session";
+import type { SourceSetupKind } from "../../SourceSetupDialog";
 import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
 
-type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; version: number; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
+type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
   return <RadioResults key={`${props.origin}:${props.token}`} {...props} />;
 }
@@ -24,6 +25,7 @@ function RadioResults(props: Props) {
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const revision = useInvalidation("radio");
   const forceRefresh = useRef(false);
   const [visible, setVisible] = useState(6);
   const lifetime = useRef<AbortController | null>(null);
@@ -36,7 +38,7 @@ function RadioResults(props: Props) {
     const controller = new AbortController(); setSaveError("");
     void readSearch<{ favorites: RadioStation[] }>(props, "/api/radio/favorites", controller.signal).then(body => { if (!controller.signal.aborted) setFavorites(body.favorites); }).catch(reason => { if (!controller.signal.aborted) { setFavorites(null); setSaveError(searchError(reason)); } });
     return () => controller.abort();
-  }, [props.origin, props.token, props.connected, props.version, retry]);
+  }, [props.origin, props.token, props.connected, revision, retry]);
   useEffect(() => {
     if (!props.connected) { setLoading(false); return; }
     const controller = new AbortController(); setLoading(true); setError("");
@@ -71,7 +73,7 @@ function RadioResults(props: Props) {
     }
     void load().then(result => { if (!controller.signal.aborted) setStations(result); }).catch(reason => { if (!controller.signal.aborted) setError(searchError(reason)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [props.origin, props.token, props.connected, props.query, title, directory ? 0 : props.version, retry]);
+  }, [props.origin, props.token, props.connected, props.query, title, directory ? 0 : revision, retry]);
   async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done: string) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal; setBusy(true); setActionError(""); setNotice("");
@@ -108,16 +110,16 @@ function RadioResults(props: Props) {
   }, [props.active, detail]);
   const itemActions = (station: RadioStation) => {
     const saved = !!favorites?.some(item => item.id === station.id);
-    return <div className="search-item-actions"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add to queue: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add to queue</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div>;
+    return <div className="flex flex-wrap items-center gap-1"><Button aria-label={`Play now: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play now</Button><Button variant="secondary" aria-label={`Add to queue: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Add to queue</Button><Button variant="ghost" aria-label={saved ? `Remove ${station.name} from saved` : `Save ${station.name}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Saved" : "Save"}</Button></div>;
   };
-  return <section aria-label={`${title} search results`} aria-busy={loading} className="search-source"><div className="search-source-heading"><h2>{title}</h2></div>
+  return <section aria-label={`${title} search results`} aria-busy={loading} className="grid gap-3.5 border-t py-6 first:border-t-0 first:pt-3"><div className="flex items-baseline justify-between gap-3"><h2 className="text-[13px] font-semibold tracking-[.01em] text-muted-foreground">{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
     {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => { forceRefresh.current = avoid; setRetry(value => value + 1); }}>Retry {title}</Button></p>}
     {error && !directory && !avoid && (props.onManageSources ? <Button variant="outline" onClick={() => props.onManageSources?.("radio")}>Source settings</Button> : <p className="text-sm text-muted-foreground">Ask an administrator to manage this source.</p>)}
     {saveError && <p role="status">Saved status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry saved status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
-    <ul className="search-results">{results.slice(0, visible).map(station => <li key={station.id} className="search-result-row"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="search-result-art" /><Button variant="ghost" className="search-result-title" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong>{station.name}</strong><small>{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>{itemActions(station)}</li>)}</ul>
+    <ul className="m-0 list-none space-y-0.5 p-0">{results.slice(0, visible).map(station => <li key={station.id} className="-mx-2 flex items-center gap-3.5 rounded-[10px] px-2 py-2.5 hover:bg-muted/55"><MediaArtwork thumbnail={station.logoUrl} title={station.name} className="h-[54px] w-[46px] rounded-md" /><Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong className="text-[15px] font-semibold break-words">{station.name}</strong><small className="text-xs text-muted-foreground break-words">{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>{itemActions(station)}</li>)}</ul>
     <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;
