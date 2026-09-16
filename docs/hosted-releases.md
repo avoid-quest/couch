@@ -174,15 +174,15 @@ first appears as a prerelease and the promotion flips that same tag to a full
 release, matching how the feeds treat prerelease and final versions.
 
 [scripts/hosted-release.ts](../scripts/hosted-release.ts) implements the mirror
-as a `github-release` operation: it looks the release up by tag, creates it when
-missing, and patches notes, title and prerelease flag when present. Re-running a
+as a `github-release` operation: it looks the release up by tag, creates it with
+the changelog notes when missing, and patches title and prerelease flag when
+present. Updates never rewrite the body: the changelog belongs to creation, and
+retry notes are operation remarks, not changelog. Correct a shipped changelog by
+editing the release in the UI or the `CHANGELOG.md` history. Re-running a
 publication therefore updates one release instead of duplicating it. The mirror
 runs whenever the retained receipts show a completed publication, so a
 `readiness-only` recheck after delayed CDN readiness still creates the release
-the original publish earned. Preview publication
-always carries the dispatch notes; a Stable promotion flip keeps the changelog
-already on the release and only changes the prerelease flag, because the
-promotion dispatch notes are promote remarks, not changelog.
+the original publish earned.
 
 ## Mac fallback
 
