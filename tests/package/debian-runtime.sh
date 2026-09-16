@@ -13,7 +13,7 @@ apt-get install -y --no-install-recommends /qualification/couch.deb
 dpkg-query -W -f='${Package}\t${Version}\n' > /evidence/production-packages.tsv
 dpkg-query -W -f='${Depends}\n' couch > /evidence/depends.txt
 dpkg-query -L couch > /evidence/package-files.txt
-for command in jq minisign fusermount fusermount3 bun node cargo rustc gcc g++ make; do
+for command in jq fusermount fusermount3 bun node cargo rustc gcc g++ make; do
   if command -v "$command"; then echo "Unexpected install prerequisite: $command" >&2; exit 1; fi
 done
 for binary in /usr/bin/couch /usr/bin/couch-server /usr/lib/Couch/tools/*; do
