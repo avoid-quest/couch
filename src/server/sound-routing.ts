@@ -1,6 +1,6 @@
 import type { SavedSoundProfile, SoundInventory, SoundRouteState } from "../shared/sound";
 import { ControllerError } from "./controllers";
-import { pulseRouting } from "./sound-pulse";
+import { environment, pulseRouting } from "./sound-pulse";
 
 type Options = {
   saved: () => string | null;
@@ -11,7 +11,36 @@ type Options = {
   lost: (error: string) => void;
   changed: (state: SoundRouteState) => void;
   backend?: ReturnType<typeof pulseRouting>;
+  subscribe?: (onEvent: () => void) => { stop: () => void };
 };
+
+// One long-lived `pactl subscribe` replaces the 500ms poll that spawned 3-5
+// processes ten times a second around the clock. PipeWire-Pulse understands
+// the PulseAudio event subscription protocol.
+function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => void } {
+  try {
+    const child = Bun.spawn(["/usr/bin/pactl", "subscribe"], { env: environment(), stdout: "pipe", stderr: "ignore" });
+    void (async () => {
+      const reader = child.stdout.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          for (let newline = buffer.indexOf("\n"); newline >= 0; newline = buffer.indexOf("\n")) {
+            const line = buffer.slice(0, newline);
+            buffer = buffer.slice(newline + 1);
+            if (/on (sink|source|card|server) #/.test(line)) onEvent();
+          }
+        }
+      } catch { /* onExit below covers the audio service restarting. */ }
+      onExit();
+    })();
+    return { stop: () => child.kill() };
+  } catch { onExit(); return { stop: () => {} }; }
+}
 
 export function createSoundRouting(options: Options) {
   const backend = options.backend ?? pulseRouting();
@@ -63,6 +92,7 @@ export function createSoundRouting(options: Options) {
     publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null });
   };
   const check = async () => {
+    pollWhileActive();
     if (busy || closed) return;
     busy = true;
     try { await refresh(); }
@@ -101,8 +131,30 @@ export function createSoundRouting(options: Options) {
       throw error;
     } finally { changing = false; }
   };
-  const timer = setInterval(() => void check(), 500);
+  let fallback: ReturnType<typeof setInterval> | undefined;
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  let subscription: { stop: () => void } | undefined;
+  let respawn: ReturnType<typeof setTimeout> | undefined;
+  const pollWhileActive = () => {
+    const wanted = !closed && options.active();
+    if (!!fallback === wanted) return;
+    if (wanted) { fallback = setInterval(() => void check(), 5_000); fallback.unref?.(); }
+    else { clearInterval(fallback); fallback = undefined; }
+  };
+  const wake = () => {
+    if (closed || debounce) return;
+    debounce = setTimeout(() => { debounce = undefined; void check(); }, 250);
+    debounce.unref?.();
+  };
+  const listen = () => {
+    if (closed) return;
+    subscription = options.subscribe?.(wake) ?? pactlSubscribe(wake, () => {
+      subscription = undefined;
+      if (!closed) { respawn = setTimeout(listen, 1_000); respawn.unref?.(); }
+    });
+  };
   void check();
+  listen();
   return {
     get state() { const address = options.savedProfile?.()?.bluetoothAddress; return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) }; },
     check,
@@ -156,6 +208,10 @@ export function createSoundRouting(options: Options) {
         await backend.mute(selected, muted);
       });
     },
-    close() { closed = true; clearInterval(timer); },
+    close() {
+      closed = true;
+      clearInterval(fallback); clearTimeout(debounce); clearTimeout(respawn);
+      subscription?.stop(); subscription = undefined;
+    },
   };
 }

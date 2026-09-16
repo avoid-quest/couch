@@ -31,7 +31,6 @@ export function createRadioProgramme({ station, publish, fetch: request = global
     finally {
       if (valid()) timer = schedule(() => {
         timer = undefined;
-        publish(current.playbackId, null);
         void refresh(current);
       }, Math.max(1, delay));
     }

@@ -5,7 +5,7 @@ type Card = { index: number; name: string; active_profile?: string; properties?:
 type Sink = { card?: number; properties?: Record<string, string>; flags?: string[]; index: number; name: string; description?: string; state?: string; mute?: boolean; volume?: Record<string, { value: number }>; active_port?: string; ports?: { name: string; availability?: string }[] };
 export type SoundProcess = { pid: number; exited: Promise<number>; stop: () => void };
 export type SoundBackend = { inventory: () => Promise<SoundInventory>; start: (output: string) => SoundProcess; route: (pid: number) => Promise<string | null> };
-const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
+export const environment = () => Object.fromEntries(["HOME", "USER", "PATH", "XDG_RUNTIME_DIR", "PULSE_SERVER", "PULSE_COOKIE", "DBUS_SESSION_BUS_ADDRESS"].flatMap(name => process.env[name] ? [[name, process.env[name]!]] : []).concat([["LC_ALL", "C"]]));
 export const querySound = (args: string[]): Promise<string> => new Promise((resolve, reject) => {
   execFile("/usr/bin/pactl", args, { env: environment(), encoding: "utf8", timeout: 1_000, maxBuffer: 256 * 1024, killSignal: "SIGKILL" }, (error, stdout) => error ? reject(new Error("The TV audio session did not answer. Check PipeWire/PulseAudio and pulseaudio-utils.")) : resolve(stdout.trim()));
 });
