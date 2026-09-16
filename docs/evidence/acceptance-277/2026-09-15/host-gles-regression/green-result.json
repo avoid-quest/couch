@@ -1,5 +1,0 @@
-{
-  "exit": 0,
-  "seconds": 3.286,
-  "expected": "GLESv2 loads after adding libgles2 to common host packages"
-}

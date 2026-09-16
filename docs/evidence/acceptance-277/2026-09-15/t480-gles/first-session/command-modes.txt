@@ -1,4 +1,0 @@
-755 root:root /usr/lib/couch-appliance/session
-755 root:root /usr/lib/couch-appliance/initialize-audio
-755 root:root /usr/lib/couch-appliance/set-autostart
-755 root:root /usr/sbin/couch-session

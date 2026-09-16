@@ -1,8 +1,0 @@
-Failed to reset failed state of unit couch-tv.service: Unit couch-tv.service not loaded.
-Restored the retained AppImage service selection. Current data was not replaced.
-exit=0
-active
-/var/lib/couch/application/Couch.AppImage
-{"mode":"local","address":null,"targets":[],"localSetupComplete":true}
-/var/lib/couch/.local/share/quest.avoid.couch/couch.sqlite
-dd50813112c9643f

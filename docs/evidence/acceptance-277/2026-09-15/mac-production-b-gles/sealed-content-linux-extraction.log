@@ -1,5 +1,0 @@
-
-FATAL ERROR: dir_scan: failed to make directory /audit/sealed-AppImage, because No such file or directory
-Parallel unsquashfs: Using 2 processors
-2033 inodes (7357 blocks) to write
-

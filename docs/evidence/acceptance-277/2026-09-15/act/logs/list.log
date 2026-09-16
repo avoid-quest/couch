@@ -1,9 +1,0 @@
-time="2026-09-15T01:02:19+02:00" level=info msg="Using docker host 'unix:///Users/devit/.docker/run/docker.sock', and daemon socket 'unix:///Users/devit/.docker/run/docker.sock'"
-level=warning msg= ⚠ You are using Apple M-series chip and you have not specified container architecture, you might encounter issues while running act. If so, try running it with '--container-architecture linux/amd64'. ⚠ 
-
-Stage  Job ID     Job name   Workflow name  Workflow file         Events           
-0      draft      draft      Package        package.original.yml  workflow_dispatch
-1      candidate  candidate  Package        package.original.yml  workflow_dispatch
-2      upload     upload     Package        package.original.yml  workflow_dispatch
-3      publish    publish    Package        package.original.yml  workflow_dispatch
-4      readiness  readiness  Package        package.original.yml  workflow_dispatch

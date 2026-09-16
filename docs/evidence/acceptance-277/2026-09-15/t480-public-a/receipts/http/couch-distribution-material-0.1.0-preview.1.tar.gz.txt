@@ -1,8 +1,0 @@
-started_at=2026-09-15T00:40:06Z
-requested_url=https://cdn.crabnebula.app/download/avoid-quest/couch/latest/couch-distribution-material-0.1.0-preview.1.tar.gz?channel=preview
-http_status=200
-final_url=https://cdn.crabnebula.app/asset/01M2H742D3NJEFB4HTVM73BPJE?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22couch-distribution-material-0.1.0-preview.1.tar.gz%22%7D
-redirect_count=1
-size_download=3159850
-time_total=0.332577
-finished_at=2026-09-15T00:40:07Z

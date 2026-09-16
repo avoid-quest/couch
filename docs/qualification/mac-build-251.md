@@ -10,11 +10,11 @@ historical observations and pending physical acceptance.
 
 - [Mac acceptance, r4003938134](https://github.com/avoid-quest/couch/pull/255#discussion_r4003938134): corrected the controller guide, capability checkpoint and status table. Completed Safari/website-app checks used a loopback coordinator with no native player. LAN access, populated Search, commands reaching the installed Ubuntu TV and physical playback from the Mac remain pending. Windows/Edge verification remains deferred.
 - [Fresh-install QR, r4003938149](https://github.com/avoid-quest/couch/pull/255#discussion_r4003938149): the README, usage and controller instructions now distinguish fresh Claim and name from configured-TV Connections. Source inspection of `Settings.tsx` and `SetupProgress.tsx` confirms that setup hides navigation and displays the QR in its claim step. No fresh-device or physical scan test was performed.
-- [Executable Mac build, r4003938143](https://github.com/avoid-quest/couch/pull/255#discussion_r4003938143): added [compiler environment](../../packaging/Dockerfile.mac) and [executable build/qualification commands](../tauri-releases.md#build-and-qualify-on-the-mac). They read existing pins, create a clean source clone, build through `package:build` and `build-appliance.sh`, run the existing AppImage and companion fixtures, preserve evidence, and assemble publisher inputs only after successful qualification. No alternate package implementation or T480 build was added.
+- [Executable Mac build, r4003938143](https://github.com/avoid-quest/couch/pull/255#discussion_r4003938143): added [compiler environment](../../packaging/Dockerfile.builder) and [executable build/qualification commands](../tauri-releases.md#build-and-qualify). They read existing pins, create a clean source clone, build through `package:build` and `build-appliance.sh`, run the existing AppImage and companion fixtures, preserve evidence, and assemble publisher inputs only after successful qualification. No alternate package implementation or T480 build was added.
 
 ## Executed checks
 
-`docker build --check --platform linux/amd64 -f packaging/Dockerfile.mac
+`docker build --check --platform linux/amd64 -f packaging/Dockerfile.builder
 --build-arg UBUNTU_SNAPSHOT=20260905T000000Z --build-arg BUN_VERSION=1.4.2
 --build-arg RUST_VERSION=1.98.1 packaging` passed with no warnings. This parses and
 checks the Dockerfile; it does not execute its APT, Bun, Rust or driver install

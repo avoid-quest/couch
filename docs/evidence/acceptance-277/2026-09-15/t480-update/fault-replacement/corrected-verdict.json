@@ -1,7 +1,0 @@
-{
-  "passed": true,
-  "correction": "Original assertion expected only one of two valid automatic-suppression messages; original captured run and error retained.",
-  "partialReplacementBytes": 52789248,
-  "suppression": "This release already had an automatic attempt. Review its result or use Install now.",
-  "newerWriteRetained": true
-}

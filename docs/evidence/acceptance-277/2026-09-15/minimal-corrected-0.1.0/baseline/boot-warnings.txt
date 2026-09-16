@@ -1,7 +1,0 @@
-Sep 15 01:10:13 couch-minimal kernel: RETBleed: WARNING: Spectre v2 mitigation leaves CPU vulnerable to RETBleed attacks, data leaks possible!
-Sep 15 01:10:14 couch-minimal kernel: ata1.00: Model 'QEMU HARDDISK', rev '2.5+', applying quirks: bridgeok
-Sep 15 01:10:14 couch-minimal kernel: ata1.00: LPM support broken, forcing max_power
-Sep 15 01:10:14 couch-minimal kernel: ata1.00: LPM support broken, forcing max_power
-Sep 15 01:10:14 couch-minimal systemd-ssh-generator[258]: Failed to query local AF_VSOCK CID: Cannot assign requested address
-Sep 15 01:10:14 couch-minimal (sd-exec-[250]: /usr/lib/systemd/system-generators/systemd-ssh-generator failed with exit status 1.
-Sep 15 01:10:28 couch-minimal kernel: kauditd_printk_skb: 53 callbacks suppressed

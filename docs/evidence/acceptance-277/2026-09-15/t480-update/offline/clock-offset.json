@@ -1,8 +1,0 @@
-{
-  "macBeforeEpoch": 1789463069.491981,
-  "targetEpoch": 1789463069.9342763,
-  "macAfterEpoch": 1789463069.824445,
-  "offsetEstimateSeconds": 0.2760632038116455,
-  "uncertaintySeconds": 0.16623198986053467,
-  "measurement": "After update, not a pre-run clock measurement"
-}

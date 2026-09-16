@@ -7,7 +7,7 @@ on the Mac. The T480 only installs and runs Couch.
 
 ## Build and qualify
 
-The [isolated Mac recipe](packaging.md#isolated-mac-build) supplies the pinned
+The [isolated Mac recipe](packaging.md#build) supplies the pinned
 builder and source checkout. Run `bash scripts/hosted-build.sh deb` inside the
 builder with the enrolled release credentials, followed by the qualification
 steps from the release guide. `scripts/hosted-desktop.sh` runs on the Docker host

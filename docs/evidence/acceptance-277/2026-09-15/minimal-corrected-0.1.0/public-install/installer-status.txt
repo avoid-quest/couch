@@ -1,3 +1,0 @@
-installer_started_at=2026-09-15T01:30:16Z
-installer_finished_at=2026-09-15T01:34:33Z
-installer_exit_status=0

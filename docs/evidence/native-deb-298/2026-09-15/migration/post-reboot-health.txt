@@ -1,5 +1,0 @@
-active
-926
-    926 /usr/bin/couch
-   1113 /usr/bin/couch-server
-{"version":"0.1.0","revision":"344bd6092ab189994f723fad4084b1479bf7e187","dataFormat":1,"mode":"local","nativePid":926,"backendPid":1113}

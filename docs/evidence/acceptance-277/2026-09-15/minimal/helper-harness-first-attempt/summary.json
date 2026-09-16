@@ -1,7 +1,0 @@
-{
-  "exit": 2,
-  "stage": "harness entry before probe execution",
-  "command": "sudo runuser -u couch-tv -- env HOME=/var/lib/couch python3 /home/probe/couch-277/helper-probe.py /var/lib/couch/application/Couch.AppImage /tmp/couch-277-helper-minimal",
-  "result": "couch-tv could not traverse the probe home directory; no AppImage mount or helper command ran",
-  "followUp": "Retain this failure and put the identical probe script in /tmp. Change no installed artifact, package or guest permissions."
-}

@@ -1,6 +1,0 @@
-/usr/lib/x86_64-linux-gnu/libdrm.so.2.124.0
-/usr/lib/x86_64-linux-gnu/libEGL.so.1.1.0
-/usr/lib/x86_64-linux-gnu/libgbm.so.1.0.0
-/usr/lib/x86_64-linux-gnu/libGLdispatch.so.0.0.0
-/usr/lib/x86_64-linux-gnu/libGL.so.1.7.0
-/usr/lib/x86_64-linux-gnu/libGLX.so.0.0.0

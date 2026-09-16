@@ -1,8 +1,0 @@
-started_at=2026-09-15T00:40:01Z
-requested_url=https://couch.avoid.quest/couch-updater.pub
-http_status=200
-final_url=https://couch.avoid.quest/couch-updater.pub
-redirect_count=0
-size_download=153
-time_total=0.191722
-finished_at=2026-09-15T00:40:01Z

@@ -1,7 +1,0 @@
-{
-  "status": "failed-or-unrun",
-  "error": "Command '['runuser', '-u', 'ISOLATED_USER', '--', 'env', 'XDG_RUNTIME_DIR=/run/user/1001', 'DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus', 'systemctl', '--user', 'reset-failed', 'couch-277-idle.service']' returned non-zero exit status 1.",
-  "mounted": true,
-  "savedOriginal": "/home/ISOLATED_USER/.local/lib/couch-before-storage-20260915T091855Z",
-  "instruction": "Inspect isolated processes and retained mount before manual cleanup. No automatic destructive rollback."
-}

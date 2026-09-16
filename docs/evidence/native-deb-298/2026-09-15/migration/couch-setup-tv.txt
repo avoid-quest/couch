@@ -1,9 +1,0 @@
-    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mstat[0m[0m[2m[38;5;245m ([0m[0m[2m[38;5;245mext:deno_node/internal/util.mjs[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1713[0m[0m[2m[38;5;245m)[0m
-    [0m[2m[38;5;245mat [0m[0m[2m[38;5;245mext:deno_node/internal/fs/promises.ts[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1[0m[0m[2m[38;5;245m:[0m[0m[2m[38;5;245m1431[0m
-    at [0m[36mfile:///usr/share/couch/tv/check-health.js[0m:[0m[33m7[0m:[0m[33m12[0m
-Native startup failed. Restoring the retained AppImage selection.
-Failed to reset failed state of unit couch-tv.service: Unit couch-tv.service not loaded.
-Restored the retained AppImage service selection. Current data was not replaced.
-couch-setup: Native migration did not complete. Inspect couch-session logs; retained app files and current data remain available.
-Setup did not complete. Existing data and AppImage files were retained. Inspect sudo couch-session logs; rerun couch-setup, or use sudo couch-setup --tv --restore-appimage after a recorded migration.
-exit=0

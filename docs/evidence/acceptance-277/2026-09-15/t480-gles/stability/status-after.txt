@@ -1,6 +1,0 @@
-MainPID=12208
-NRestarts=0
-ExecMainStartTimestamp=Tue 2026-09-15 03:00:05 CEST
-MemoryCurrent=570839040
-CPUUsageNSec=2538805000
-ActiveState=active
