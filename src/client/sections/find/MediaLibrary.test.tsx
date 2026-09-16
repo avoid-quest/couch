@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { ProviderItem } from "../shared/providers";
+import type { ProviderItem } from "../../../shared/providers";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -14,7 +14,7 @@ async function renderLibrary(connected = true) {
   const { MediaLibrary } = await import("./MediaLibrary");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} version={0} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} /></QueryClientProvider>));
 }
 beforeEach(async () => {
   requests.length = 0; browsed.length = 0; played.length = 0;
