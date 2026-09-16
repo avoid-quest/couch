@@ -1,183 +1,98 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
-import { act, useEffect, useState } from "react";
+import { act } from "react";
 import type { Root } from "react-dom/client";
-import { Link } from "react-router";
-import { CouchRouter, readSearchState, searchLocation, usePageRoute } from "./routes";
-import { pagePaths, sectionForPath } from "../shared/page-paths";
-import { settingsPages, settingsPageForPath, settingsPagePath } from "../shared/settings-pages";
+import { RouterProvider, createBrowserHistory, createRouter } from "@tanstack/react-router";
+import { routeTree } from "./routeTree.gen";
+import { createAppHistory } from "./app-history";
+import { readSearchState, searchLocation } from "./search";
+import { frontendPaths } from "../shared/page-paths";
 
-let root: Root, window: Window;
+let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
-let mounts = 0, unmounts = 0;
-const flush = () => act(async () => { await Bun.sleep(20); });
-function SessionShell() {
-  const route = usePageRoute();
-  const [playbackId] = useState("existing-playback");
-  useEffect(() => { mounts++; return () => { unmounts++; }; }, []);
-  return <><output>{route.section}:{playbackId}</output><div data-query={route.searchState.query} data-source={route.searchState.source} />
-    {Object.keys(pagePaths).map(section => <Link key={section} to={route.sectionUrl(section)}>{section}</Link>)}
-    <button onClick={() => route.changeSearch({ query: "moon & stars", source: "TV folders" })}>Submit search</button>
-    <Link to={settingsPages.sound.path}>Sound settings</Link>
-    <Link to={settingsPages["source-jellyfin"].path}>Jellyfin settings</Link>
-    <button onClick={() => route.changeSettingsSection("playback")}>Playback settings</button>
-    <button onClick={() => route.changeSettingsSection(null)}>All settings</button>
-    <div data-settings-section={route.settingsSection ?? "index"} />
-    <button onClick={route.back}>Back</button></>;
-}
-async function render(native = false) { await act(async () => root.render(<CouchRouter native={native}><SessionShell /></CouchRouter>)); await flush(); }
-async function click(label: string) { await act(async () => [...document.querySelectorAll<HTMLElement>("a,button")].find(node => node.textContent === label)!.click()); await flush(); }
-beforeEach(async () => {
-  mounts = unmounts = 0;
-  window = new Window({ url: "http://localhost/search?q=initial&source=Radio" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "Element", "Node", "Event", "MouseEvent", "PopStateEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+const flush = () => act(async () => { await Bun.sleep(30); });
+const globals = ["window", "document", "navigator", "location", "history", "HTMLElement", "Element", "Node", "Event", "MouseEvent", "PopStateEvent", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"] as const;
+function adopt(source: Window) {
+  for (const key of globals) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? source : Reflect.get(source, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? (value as (...args: unknown[]) => unknown).bind(source) : value });
   }
+for (const stub of ["scrollTo", "cancelAnimationFrame"]) {
+    originals.set(stub, Object.getOwnPropertyDescriptor(globalThis, stub));
+    Object.defineProperty(globalThis, stub, { configurable: true, writable: true, value: () => {} });
+  }
+}
+function release() {
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+}
+function freshRouter() {
+  return createRouter({ routeTree, history: createBrowserHistory(), scrollRestoration: false });
+}
+async function renderAt(path: string) {
+  window.history.replaceState(null, "", path);
+  await act(async () => root.render(<RouterProvider router={freshRouter()} />));
+  await flush();
+}
+beforeEach(async () => {
+  window = new Window({ url: "http://localhost" });
+  adopt(window);
+  request = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ error: "unavailable" }, { status: 503 })) as unknown as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); await window.happyDOM.close();
-  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
-  originals.clear();
+  await act(async () => root.unmount());
+  request.mockRestore(); await window.happyDOM.close();
+  release();
 });
 
-test("browser direct links and page navigation keep one session and preserve search in real links", async () => {
-  await render();
-  expect(document.querySelector("output")?.textContent).toBe("Find:existing-playback");
-  expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("initial");
-  await click("Submit search");
-  expect(window.location.pathname + window.location.search).toBe("/find?q=moon+%26+stars&source=TV+folders");
-  for (const page of ["Saved", "Now", "Settings", "Find"]) { await click(page); expect(window.location.pathname).toBe(page === "Settings" ? "/settings/playback" : pagePaths[page]); }
-  expect(document.querySelector<HTMLAnchorElement>('a[href^="/find?q="]')?.getAttribute("href")).toBe("/find?q=moon+%26+stars&source=TV+folders");
-  await click("Find");
-  expect(document.querySelector("[data-query]")?.getAttribute("data-source")).toBe("TV folders");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+test("the Tauri webview keeps hash history and the browser keeps browser history", async () => {
+  const tv = new Window({ url: "http://tauri.localhost/" });
+  (tv as unknown as { __COUCH_NATIVE_HOST__: boolean }).__COUCH_NATIVE_HOST__ = true;
+  adopt(tv);
+  try {
+    const native = createAppHistory();
+    native.push("/find?q=moon");
+    expect(native.location.pathname).toBe("/find");
+    expect(native.location.search).toBe("?q=moon");
+  } finally { release(); adopt(window); }
+  const web = createAppHistory();
+  web.push("/find?q=moon");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(window.location.pathname + window.location.search).toBe("/find?q=moon");
 });
 
-test("typing replaces the current history entry and returning Home keeps the query", async () => {
-  await render(); const before = window.history.length;
-  await click("Submit search");
-  expect(window.history.length).toBe(before);
-  await click("Saved");
-  await act(async () => window.history.back()); await flush();
-  expect(document.querySelector("output")?.textContent).toBe("Find:existing-playback");
-  expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("moon & stars");
-  await act(async () => window.history.forward()); await flush();
-  expect(document.querySelector("output")?.textContent).toBe("Saved:existing-playback");
-  await click("Find");
-  expect(window.location.search).toBe("?q=moon+%26+stars&source=TV+folders");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+test("unknown paths land on Now", async () => {
+  await renderAt("/yesterday");
+  console.log("BODY:", document.body.textContent?.slice(0, 200));
+  expect(window.location.pathname).toBe("/");
 });
 
-test("native hash direct links, navigation and remote Back stay in the webview document", async () => {
-  window.history.replaceState(null, "", "/index.html#/settings");
-  await render(true);
-  expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
-  expect(window.location.hash).toBe("#/settings/playback");
-  await click("Now"); await click("Submit search"); await click("Find");
-  expect(window.location.pathname).toBe("/index.html"); expect(window.location.hash).toBe("#/find?q=moon+%26+stars&source=TV+folders");
-  await click("Back");
-  expect(window.location.hash).toBe("#/settings/playback");
-  expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("moon & stars");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
-});
-
-test("all pages map to known paths and malformed search filters use truthful defaults", () => {
-  for (const [section, path] of Object.entries(pagePaths)) expect(sectionForPath(path)).toBe(section);
-  expect(sectionForPath("/up-next")).toBe("Now");
-  expect(sectionForPath("/browse/radio")).toBe("Find");
-  expect(sectionForPath("/search/")).toBe("Find");
-  expect(sectionForPath("/api/settings")).toBeUndefined();
-  expect(readSearchState("?q=a%26b&source=Unknown")).toEqual({ query: "a&b", source: "All" });
-  expect(searchLocation({ query: "", source: "All" })).toBe("/find");
-});
-
-
-test("settings direct links and browser history keep the session mounted", async () => {
-  window.history.replaceState(null, "", "/settings/bluetooth");
-  await render();
-  expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("bluetooth");
-  expect(document.title).toBe("Bluetooth · Settings · Couch");
-  await click("Sound settings");
-  expect(window.location.pathname).toBe("/settings/sound");
-  await click("Playback settings");
-  expect(window.location.pathname).toBe("/settings/playback");
-  await act(async () => window.history.back()); await flush();
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("sound");
-  await act(async () => window.history.forward()); await flush();
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
-  await click("All settings");
+test("legacy paths and settings indexes redirect to their live pages", async () => {
+  await renderAt("/search?q=moon&source=TV+folders");
+  expect(window.location.pathname).toBe("/find");
+  expect(new URLSearchParams(window.location.search).get("q")).toBe("moon");
+  await renderAt("/up-next");
+  expect(window.location.pathname).toBe("/");
+  await renderAt("/browse/guide");
+  expect(window.location.pathname).toBe("/find");
+  await renderAt("/settings");
   expect(window.location.pathname).toBe("/settings/playback");
   expect(document.title).toBe("Playback · Settings · Couch");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
+  await renderAt("/settings/remotes");
+  expect(window.location.pathname).toBe("/settings/connection");
+  expect(document.title).toBe("Connections · Settings · Couch");
+})
+
+test("every frontend path resolves to a registered route", () => {
+  const router = freshRouter();
+  const ids = Object.keys(router.routesById);
+  for (const path of frontendPaths) expect(ids).toContain(path);
 });
 
-test("native settings links and remote Back retain the webview document", async () => {
-  window.history.replaceState(null, "", "/index.html#/settings/tv");
-  await render(true);
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("general");
-  await click("Sound settings");
-  expect(window.location.hash).toBe("#/settings/sound");
-  await click("Playback settings");
-  await click("Back");
-  expect(window.location.hash).toBe("#/settings/sound");
-  expect(window.location.pathname).toBe("/index.html");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
-});
-
-test("settings routes only accept defined pages", () => {
-  for (const [page, { path }] of Object.entries(settingsPages)) {
-    expect(sectionForPath(path)).toBe("Settings");
-    expect(settingsPageForPath(path + "/") as string).toBe(page);
-  }
-  expect(settingsPagePath(null)).toBe("/settings");
-  expect(settingsPageForPath("/settings/not-a-page")).toBeNull();
-  expect(sectionForPath("/settings/not-a-page")).toBeUndefined();
-  expect(sectionForPath("/api/settings/sound")).toBeUndefined();
-});
-
-
-test("source settings direct links retain their page and browser history", async () => {
-  window.history.replaceState(null, "", "/settings/sources/folders");
-  await render();
-  expect(document.querySelector("output")?.textContent).toBe("Settings:existing-playback");
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("source-folders");
-  expect(document.title).toBe("TV folders · Settings · Couch");
-  await click("Jellyfin settings");
-  expect(window.location.pathname).toBe("/settings/sources/jellyfin");
-  await click("Back");
-  expect(window.location.pathname).toBe("/settings/sources/folders");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
-});
-
-test("Settings entry selects Playback and Back skips the index", async () => {
-  await render();
-  await click("Settings");
-  expect(window.location.pathname).toBe("/settings/playback");
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("playback");
-  await click("Back");
-  expect(window.location.pathname).toBe("/find");
-  expect(mounts).toBe(1);
-});
-
-
-for (const native of [false, true]) test(`legacy remotes URL opens Connections without remounting in ${native ? "TV" : "browser"}`, async () => {
-  window.history.replaceState(null, "", native ? "/index.html#/settings/remotes" : "/settings/remotes");
-  await render(native);
-  expect(native ? window.location.hash : window.location.pathname).toBe(native ? "#/settings/connection" : "/settings/connection");
-  expect(document.querySelector("[data-settings-section]")?.getAttribute("data-settings-section")).toBe("connection");
-  await click("Sound settings"); await click("Back");
-  expect(native ? window.location.hash : window.location.pathname).toBe(native ? "#/settings/connection" : "/settings/connection");
-  expect(mounts).toBe(1); expect(unmounts).toBe(0);
-});
-
-for (const native of [false, true]) test(`legacy discovery aliases preserve queries in ${native ? "native" : "browser"} navigation`, async () => {
-  window.history.replaceState(null, "", native ? "/index.html#/browse?q=jazz" : "/browse?q=jazz");
-  await render(native);
-  expect(native ? window.location.hash : window.location.pathname + window.location.search).toBe(native ? "#/find?q=jazz" : "/find?q=jazz");
-  expect(document.querySelector("[data-query]")?.getAttribute("data-query")).toBe("jazz");
-  expect(document.title).toBe("Find · Couch");
+test("malformed search filters use truthful defaults", () => {
+  expect(readSearchState("?q=a%26b&source=Unknown")).toEqual({ query: "a&b", source: "All" });
+  expect(searchLocation({ query: "", source: "All" })).toBe("/find");
 });

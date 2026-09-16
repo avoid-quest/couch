@@ -1,4 +1,4 @@
-import { searchSources, type SearchRouteState } from "./routes";
+import { searchSources, type SearchRouteState } from "./search";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Play, Plus, Search, X } from "lucide-react";
 import { AuthArtwork } from "./AuthArtwork";

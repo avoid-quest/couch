@@ -17,7 +17,7 @@ async function renderDialog(connected = true, info = host) {
 }
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
-  for (const key of ["CSS", "window", "document", "navigator", "location", "history", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["CSS", "window", "document", "navigator", "location", "history", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "scrollTo", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -113,8 +113,11 @@ async function renderPhone(token?: string) {
     playerStatus: undefined, pairingRequired: !credentials, reachable: true, connected: !!credentials, command: async () => {}, reconnect: () => {},
   }));
   const { App } = await import("./App");
-  const { CouchRouter } = await import("./routes");
-  await act(async () => root.render(<CouchRouter native={false}><App /></CouchRouter>));
+  const { RouterProvider, createBrowserHistory, createRouter } = await import("@tanstack/react-router");
+  const { routeTree } = await import("./routeTree.gen");
+  const router = createRouter({ routeTree, history: createBrowserHistory(), scrollRestoration: false });
+  await act(async () => root.render(<RouterProvider router={router} />));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
 }
 const submit = () => act(async () => { document.querySelector("form.pair-form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
 const input = (id: string, value: string) => act(async () => {
