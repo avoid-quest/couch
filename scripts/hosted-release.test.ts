@@ -279,10 +279,11 @@ describe("github release mirror", () => {
         { args: ["-X", "POST", `repos/${repository}/releases`], payload: expected },
       ]);
       const retried = fakeApi({ id: 7, tag_name: "v0.1.5-preview.2" });
-      expect(await githubRelease(directory, manifest, "preview", retried.api)).toMatchObject(expected);
+      const flipped = { tag_name: "v0.1.5-preview.2", target_commitish: manifest.revision, name: "v0.1.5-preview.2", prerelease: true };
+      expect(await githubRelease(directory, manifest, "preview", retried.api)).toMatchObject(flipped);
       expect(retried.calls.map((call): any => ({ ...call, payload: call.payload && JSON.parse(call.payload) }))).toEqual([
         { args: [`repos/${repository}/releases/tags/v0.1.5-preview.2`] },
-        { args: ["-X", "PATCH", `repos/${repository}/releases/7`], payload: expected },
+        { args: ["-X", "PATCH", `repos/${repository}/releases/7`], payload: { tag_name: "v0.1.5-preview.2", target_commitish: manifest.revision, name: "v0.1.5-preview.2", prerelease: true } },
       ]);
     } finally {
       if (previous === undefined) delete process.env.GITHUB_REPOSITORY; else process.env.GITHUB_REPOSITORY = previous;
