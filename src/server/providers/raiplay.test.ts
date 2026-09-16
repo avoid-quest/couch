@@ -1,5 +1,5 @@
 import { expect, setSystemTime, test, afterEach } from "bun:test";
-import { browseRaiPlay } from "./raiplay";
+import { browseRaiPlay, createRaiPlayProgrammeLoader } from "./raiplay";
 
 const origin = "https://www.raiplay.it";
 const episode = {
@@ -129,6 +129,42 @@ test("long media and collection titles fit the queue and favorites contract", as
   const items = (await api.browse({ url: group.url })).items;
   expect(items.map(item => item.kind)).toEqual(["media", "collection"]);
   expect(items.map(item => item.title)).toEqual([title.slice(0, 200), title.slice(0, 200)]);
+});
+
+test("programme loading flattens season sets into one deduplicated episode list", async () => {
+  const api = fixture(url => url.pathname === "/programmi/report.json" ? {
+    name: "Report", program_info: { ...program }, first_item_path: "/video/2026/05/Report-0.json",
+    blocks: [{ name: "Puntate", sets: [{ name: "Stagione 2025-2026", path_id: setPath }] }],
+  } : { name: "Stagione 2025-2026", items: Array.from({ length: 30 }, (_, index) => ({ ...episode, path_id: `/video/2026/05/Report-${index}.json` })) });
+  const page = await createRaiPlayProgrammeLoader(api.browse)(`${origin}/programmi/report`);
+  expect(page.title).toBe("Report");
+  expect(page.items).toHaveLength(30);
+  expect(page.items[0]).toMatchObject({ kind: "media", url: `${origin}/video/2026/05/Report-0.html` });
+  expect(new Set(page.items.map(item => item.id)).size).toBe(30);
+  // One fetch per catalogue page: the programme, then both season pages.
+  expect(api.calls.map(call => call.url.pathname)).toEqual(["/programmi/report.json", setPath, setPath]);
+});
+
+test("season set links save their flat episode list directly", async () => {
+  const api = fixture(() => ({ name: "Stagione 2025-2026", items: [episode] }));
+  const page = await createRaiPlayProgrammeLoader(api.browse)(origin + setPath);
+  expect(page.title).toBe("Stagione 2025-2026");
+  expect(page.items.map(item => item.url)).toEqual([`${origin}${episode.path_id.replace(/\.json$/, ".html")}`]);
+});
+
+test("programme saving rejects live, guide, and video links before fetching", async () => {
+  const api = fixture(() => { throw new Error("Must not fetch"); });
+  for (const url of [`${origin}/dirette/rainews24`, `${origin}/video/2026/05/Report-x.html`, `${origin}/guidatv`, `${origin}/tipologia/documentari`, `${origin}/programmi/report/ContentSet-nope.json`]) {
+    await expect(createRaiPlayProgrammeLoader(api.browse)(url)).rejects.toMatchObject({ status: 400 });
+  }
+  expect(api.calls).toHaveLength(0);
+});
+
+test("programme saving reports vanished lists and empty catalogues without partial results", async () => {
+  const gone = fixture(() => new Response("not found", { status: 404 }));
+  await expect(createRaiPlayProgrammeLoader(gone.browse)(`${origin}/programmi/gone`)).rejects.toMatchObject({ status: 502, message: "The provider returned HTTP 404. Try again shortly." });
+  const empty = fixture(() => ({ name: "Empty", items: [] }));
+  await expect(createRaiPlayProgrammeLoader(empty.browse)(`${origin}/programmi/empty`)).rejects.toMatchObject({ status: 404, message: "This RaiPlay programme has no playable episodes. Open it in RaiPlay to check availability." });
 });
 
 test("reports upstream schema failures and cancels oversized response bodies", async () => {

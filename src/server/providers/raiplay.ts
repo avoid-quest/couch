@@ -188,3 +188,39 @@ export async function browseRaiPlay(request: BrowseRequest, signal?: AbortSignal
   if (data.video) return page(cards([{ ...data, path_id: url.href }]), offset, title);
   throw new ProviderError("RaiPlay returned an unsupported catalog response.");
 }
+
+export function createRaiPlayProgrammeLoader(browse: typeof browseRaiPlay = browseRaiPlay) {
+  const allItems = async (url: string, signal?: AbortSignal) => {
+    let title = "RaiPlay";
+    const items: ProviderItem[] = [];
+    for (let offset = 0;; offset += pageSize) {
+      const result = await browse({ url, ...(offset ? { cursor: String(offset) } : {}) }, signal);
+      if (result.title) title = result.title;
+      items.push(...result.items);
+      if (!result.nextCursor) return { title, items };
+      if (items.length > 500) throw new ProviderError("This RaiPlay programme has more than 500 episodes. Save individual episodes instead.", 400);
+    }
+  };
+  return async function loadRaiPlayProgramme(url: string, signal?: AbortSignal): Promise<ProviderPage> {
+    signal?.throwIfAborted();
+    const source = catalogUrl(url);
+    source.hash = "";
+    // Only programmes and their season sets are lists of episodes; other catalog
+    // pages mix live channels, guides, and genres that do not belong in a playlist.
+    if (!/^\/(?:programmi|collezioni)\/[a-z0-9_%.-]+(?:\/ContentSet-[a-f0-9-]+\.json)?$/i.test(source.pathname)) {
+      throw new ProviderError("Choose a RaiPlay programme or collection link to save it as a playlist.", 400);
+    }
+    const { title, items } = await allItems(source.href, signal);
+    const episodes = items.filter(item => item.kind === "media");
+    for (const item of items) {
+      if (item.kind !== "collection" || !/\/ContentSet-[a-f0-9-]+\.json$/i.test(new URL(item.url).pathname)) continue;
+      episodes.push(...(await allItems(item.url, signal)).items);
+    }
+    // The programme's own first item also appears inside its newest season set.
+    const unique = [...new Map(episodes.map(item => [item.id, item])).values()];
+    if (!unique.length) throw new ProviderError("This RaiPlay programme has no playable episodes. Open it in RaiPlay to check availability.", 404);
+    return { title, items: unique };
+  };
+}
+
+export const loadRaiPlayProgramme = createRaiPlayProgrammeLoader();
