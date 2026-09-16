@@ -23,7 +23,7 @@ const all = () => act(async () => { document.querySelector<HTMLElement>("[data-b
 beforeEach(async () => {
   calls.length = 0;
   window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "location", "localStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "HTMLSelectElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "location", "localStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "HTMLSelectElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "scrollTo", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -157,15 +157,28 @@ test("setup keeps its required screen step without settings navigation", async (
 });
 
 
-test("linked settings pages preserve URLs, Back focus and hidden-page focus", async () => {
-  const { BrowserRouter, useLocation, useNavigate } = await import("react-router");
-  const { settingsPageForPath, settingsPagePath } = await import("../shared/settings-pages");
-  function Pages({ active = true }: { active?: boolean }) {
-    const location = useLocation();
-    const navigate = useNavigate();
-    return <Settings {...props} inline active={active} section={settingsPageForPath(location.pathname)} onSectionChange={section => void navigate(settingsPagePath(section))} />;
+
+  async function renderPages(active: { value: boolean }, useMemory = false) {
+    const { createRootRoute, createRoute, createRouter, RouterProvider, useLocation, createBrowserHistory, createMemoryHistory } = await import("@tanstack/react-router");
+    const { settingsPages, settingsPageForPath, settingsPagePath } = await import("../shared/settings-pages");
+    let navigate: (path: string) => void = () => {};
+    const rootRoute = createRootRoute({
+      component: () => {
+        const location = useLocation();
+        return <Settings {...props} inline active={active.value} section={settingsPageForPath(location.pathname)} onSectionChange={section => navigate(settingsPagePath(section))} />;
+      },
+    });
+    const leaves = Object.values(settingsPages).map(item => createRoute({ getParentRoute: () => rootRoute, path: item.path, component: () => null }));
+    const router = createRouter({ routeTree: rootRoute.addChildren(leaves), history: useMemory ? createMemoryHistory({ initialEntries: ["/settings/bluetooth"] }) : createBrowserHistory(), scrollRestoration: false });
+    navigate = path => router.history.push(path);
+    await act(async () => root.render(<RouterProvider router={router} />));
+    return { router, rerender: () => act(async () => root.render(<RouterProvider router={router} />)) };
   }
-  await act(async () => root.render(<BrowserRouter><Pages /></BrowserRouter>));
+
+test("linked settings pages preserve URLs, Back focus and hidden-page focus", async () => {
+  const { settingsPages } = await import("../shared/settings-pages");
+  const active = { value: true };
+  const { rerender } = await renderPages(active);
   expect(page("playback")?.tagName).toBe("A");
   expect(page("playback")?.getAttribute("href")).toBe("/settings/playback");
   await select("playback");
@@ -187,16 +200,22 @@ test("linked settings pages preserve URLs, Back focus and hidden-page focus", as
   expect(page("source-jellyfin")?.tagName).toBe("A");
   expect(page("source-jellyfin")!.tabIndex).toBeGreaterThanOrEqual(0);
   const outside = document.body.appendChild(document.createElement("button"));
-  await act(async () => { outside.focus(); root.render(<BrowserRouter><Pages active={false} /></BrowserRouter>); });
+  await act(async () => { outside.focus(); active.value = false; await rerender(); });
   expect(document.activeElement).toBe(outside);
 });
 
 test("direct protected pages wait for identity before redirecting", async () => {
   const navigate = spyOn({ navigate: (_section: string | null) => {} }, "navigate");
-  const { MemoryRouter } = await import("react-router");
-  await act(async () => root.render(<MemoryRouter><Settings {...props} section="bluetooth" identity={null} connected={false} onSectionChange={navigate} /></MemoryRouter>));
+  const { createRootRoute, createRouter, createMemoryHistory } = await import("@tanstack/react-router");
+  const renderAt = async (identity: typeof props.identity) => {
+    const { RouterContextProvider } = await import("@tanstack/react-router");
+    const rootRoute = createRootRoute({});
+    const router = createRouter({ routeTree: rootRoute, history: createMemoryHistory({ initialEntries: ["/"] }), scrollRestoration: false });
+    await act(async () => root.render(<RouterContextProvider router={router}><Settings {...props} section="bluetooth" identity={identity} connected={false} onSectionChange={navigate} /></RouterContextProvider>));
+  };
+  await renderAt(null);
   expect(navigate).not.toHaveBeenCalled();
-  await act(async () => root.render(<MemoryRouter><Settings {...props} section="bluetooth" identity={{ ...admin, authority: "controller" }} onSectionChange={navigate} /></MemoryRouter>));
+  await renderAt({ ...admin, authority: "controller" });
   expect(navigate).toHaveBeenCalledWith("general");
 });
 
@@ -246,13 +265,9 @@ test("a failed pairing code request never shows an address-only QR", async () =>
 
 test("native qualification navigates current Settings links and the phone category select", async () => {
   const { UiDriver } = await import("../../tests/linux/ui");
-  const { BrowserRouter, useLocation, useNavigate } = await import("react-router");
-  const { settingsPageForPath, settingsPagePath } = await import("../shared/settings-pages");
-  function Pages() {
-    const location = useLocation(), navigate = useNavigate();
-    return <Settings {...props} inline section={settingsPageForPath(location.pathname)} onSectionChange={section => void navigate(settingsPagePath(section))} />;
-  }
-  await act(async () => root.render(<BrowserRouter><Pages /></BrowserRouter>));
+  const { settingsPages } = await import("../shared/settings-pages");
+  void settingsPages;
+  await renderPages({ value: true });
   const nativeClicks: string[] = [];
   const ui = new UiDriver(async path => {
     const selector = path.slice("/session/dom/element/".length, -"/click".length);

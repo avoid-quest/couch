@@ -6,7 +6,7 @@ export const pagePaths: Record<string, string> = {
 };
 
 // Old links keep working: sources became filters, the queue moved onto Now.
-const legacyPaths: Record<string, string> = {
+export const legacyPaths: Record<string, string> = {
   "/search": "/find", "/up-next": "/", "/browse": "/find", "/browse/library": "/find",
   "/browse/files": "/find", "/browse/online": "/find", "/browse/guide": "/find",
   "/browse/radio": "/find", "/browse/jellyfin": "/find",

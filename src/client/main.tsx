@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { RouterProvider } from "@tanstack/react-router";
 import { NativeModeGate } from "./PlaybackDevice";
-import { App } from "./App";
-import { CouchRouter } from "./routes";
+import { router } from "./router";
 import "./index.css";
 import "./theme.css";
 import "./styles.css";
@@ -14,6 +14,6 @@ document.documentElement.classList.add("dark");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <NativeModeGate><CouchRouter><App /></CouchRouter></NativeModeGate>
+    <NativeModeGate><RouterProvider router={router} /></NativeModeGate>
   </StrictMode>,
 );

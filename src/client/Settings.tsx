@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Link } from "react-router";
+import { Link } from "@tanstack/react-router";
 import { settingsPages, type SettingsPage } from "../shared/settings-pages";
 import "./settings-page.css";
 import type { ConnectionDetails, Controller, ControllerIdentity } from "../shared/controllers";

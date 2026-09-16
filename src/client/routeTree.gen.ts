@@ -9,27 +9,735 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as SplatRouteImport } from './routes/$'
+import { Route as BrowseRouteImport } from './routes/browse'
+import { Route as FindRouteImport } from './routes/find'
+import { Route as SavedRouteImport } from './routes/saved'
+import { Route as SearchRouteImport } from './routes/search'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as UpNextRouteImport } from './routes/up-next'
+import { Route as BrowseFilesRouteImport } from './routes/browse/files'
+import { Route as BrowseGuideRouteImport } from './routes/browse/guide'
+import { Route as BrowseJellyfinRouteImport } from './routes/browse/jellyfin'
+import { Route as BrowseLibraryRouteImport } from './routes/browse/library'
+import { Route as BrowseOnlineRouteImport } from './routes/browse/online'
+import { Route as BrowseRadioRouteImport } from './routes/browse/radio'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as SettingsAdvancedRouteImport } from './routes/settings/advanced'
+import { Route as SettingsAppearanceRouteImport } from './routes/settings/appearance'
+import { Route as SettingsBluetoothRouteImport } from './routes/settings/bluetooth'
+import { Route as SettingsConnectionRouteImport } from './routes/settings/connection'
+import { Route as SettingsDisplayRouteImport } from './routes/settings/display'
+import { Route as SettingsPlaybackRouteImport } from './routes/settings/playback'
+import { Route as SettingsRemotesRouteImport } from './routes/settings/remotes'
+import { Route as SettingsSoundRouteImport } from './routes/settings/sound'
+import { Route as SettingsSourcesRouteImport } from './routes/settings/sources'
+import { Route as SettingsTvRouteImport } from './routes/settings/tv'
+import { Route as SettingsTvAppearanceRouteImport } from './routes/settings/tv-appearance'
+import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
+import { Route as SettingsSourcesFoldersRouteImport } from './routes/settings/sources/folders'
+import { Route as SettingsSourcesJellyfinRouteImport } from './routes/settings/sources/jellyfin'
+import { Route as SettingsSourcesMetadataRouteImport } from './routes/settings/sources/metadata'
+import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
+import { Route as SettingsSourcesStreamingCommunityRouteImport } from './routes/settings/sources/streaming-community'
 
-export interface FileRoutesByFullPath {}
-export interface FileRoutesByTo {}
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplatRoute = SplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrowseRoute = BrowseRouteImport.update({
+  id: '/browse',
+  path: '/browse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FindRoute = FindRouteImport.update({
+  id: '/find',
+  path: '/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SavedRoute = SavedRouteImport.update({
+  id: '/saved',
+  path: '/saved',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpNextRoute = UpNextRouteImport.update({
+  id: '/up-next',
+  path: '/up-next',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BrowseFilesRoute = BrowseFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const BrowseGuideRoute = BrowseGuideRouteImport.update({
+  id: '/guide',
+  path: '/guide',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const BrowseJellyfinRoute = BrowseJellyfinRouteImport.update({
+  id: '/jellyfin',
+  path: '/jellyfin',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const BrowseLibraryRoute = BrowseLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const BrowseOnlineRoute = BrowseOnlineRouteImport.update({
+  id: '/online',
+  path: '/online',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const BrowseRadioRoute = BrowseRadioRouteImport.update({
+  id: '/radio',
+  path: '/radio',
+  getParentRoute: () => BrowseRoute,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsAdvancedRoute = SettingsAdvancedRouteImport.update({
+  id: '/advanced',
+  path: '/advanced',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsBluetoothRoute = SettingsBluetoothRouteImport.update({
+  id: '/bluetooth',
+  path: '/bluetooth',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsConnectionRoute = SettingsConnectionRouteImport.update({
+  id: '/connection',
+  path: '/connection',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsDisplayRoute = SettingsDisplayRouteImport.update({
+  id: '/display',
+  path: '/display',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsPlaybackRoute = SettingsPlaybackRouteImport.update({
+  id: '/playback',
+  path: '/playback',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsRemotesRoute = SettingsRemotesRouteImport.update({
+  id: '/remotes',
+  path: '/remotes',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSoundRoute = SettingsSoundRouteImport.update({
+  id: '/sound',
+  path: '/sound',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSourcesRoute = SettingsSourcesRouteImport.update({
+  id: '/sources',
+  path: '/sources',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsTvRoute = SettingsTvRouteImport.update({
+  id: '/tv',
+  path: '/tv',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsTvAppearanceRoute = SettingsTvAppearanceRouteImport.update({
+  id: '/tv-appearance',
+  path: '/tv-appearance',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsUpdatesRoute = SettingsUpdatesRouteImport.update({
+  id: '/updates',
+  path: '/updates',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSourcesFoldersRoute = SettingsSourcesFoldersRouteImport.update({
+  id: '/folders',
+  path: '/folders',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
+const SettingsSourcesJellyfinRoute = SettingsSourcesJellyfinRouteImport.update({
+  id: '/jellyfin',
+  path: '/jellyfin',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
+const SettingsSourcesMetadataRoute = SettingsSourcesMetadataRouteImport.update({
+  id: '/metadata',
+  path: '/metadata',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
+const SettingsSourcesRadioRoute = SettingsSourcesRadioRouteImport.update({
+  id: '/radio',
+  path: '/radio',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
+const SettingsSourcesStreamingCommunityRoute =
+  SettingsSourcesStreamingCommunityRouteImport.update({
+    id: '/streaming-community',
+    path: '/streaming-community',
+    getParentRoute: () => SettingsSourcesRoute,
+  } as any)
+
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/browse': typeof BrowseRouteWithChildren
+  '/find': typeof FindRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/up-next': typeof UpNextRoute
+  '/browse/files': typeof BrowseFilesRoute
+  '/browse/guide': typeof BrowseGuideRoute
+  '/browse/jellyfin': typeof BrowseJellyfinRoute
+  '/browse/library': typeof BrowseLibraryRoute
+  '/browse/online': typeof BrowseOnlineRoute
+  '/browse/radio': typeof BrowseRadioRoute
+  '/settings/advanced': typeof SettingsAdvancedRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/bluetooth': typeof SettingsBluetoothRoute
+  '/settings/connection': typeof SettingsConnectionRoute
+  '/settings/display': typeof SettingsDisplayRoute
+  '/settings/playback': typeof SettingsPlaybackRoute
+  '/settings/remotes': typeof SettingsRemotesRoute
+  '/settings/sound': typeof SettingsSoundRoute
+  '/settings/sources': typeof SettingsSourcesRouteWithChildren
+  '/settings/tv': typeof SettingsTvRoute
+  '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
+  '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
+  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
+  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/browse': typeof BrowseRouteWithChildren
+  '/find': typeof FindRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/up-next': typeof UpNextRoute
+  '/browse/files': typeof BrowseFilesRoute
+  '/browse/guide': typeof BrowseGuideRoute
+  '/browse/jellyfin': typeof BrowseJellyfinRoute
+  '/browse/library': typeof BrowseLibraryRoute
+  '/browse/online': typeof BrowseOnlineRoute
+  '/browse/radio': typeof BrowseRadioRoute
+  '/settings/advanced': typeof SettingsAdvancedRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/bluetooth': typeof SettingsBluetoothRoute
+  '/settings/connection': typeof SettingsConnectionRoute
+  '/settings/display': typeof SettingsDisplayRoute
+  '/settings/playback': typeof SettingsPlaybackRoute
+  '/settings/remotes': typeof SettingsRemotesRoute
+  '/settings/sound': typeof SettingsSoundRoute
+  '/settings/sources': typeof SettingsSourcesRouteWithChildren
+  '/settings/tv': typeof SettingsTvRoute
+  '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
+  '/settings': typeof SettingsIndexRoute
+  '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
+  '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
+  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
+  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
+}
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/$': typeof SplatRoute
+  '/browse': typeof BrowseRouteWithChildren
+  '/find': typeof FindRoute
+  '/saved': typeof SavedRoute
+  '/search': typeof SearchRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/up-next': typeof UpNextRoute
+  '/browse/files': typeof BrowseFilesRoute
+  '/browse/guide': typeof BrowseGuideRoute
+  '/browse/jellyfin': typeof BrowseJellyfinRoute
+  '/browse/library': typeof BrowseLibraryRoute
+  '/browse/online': typeof BrowseOnlineRoute
+  '/browse/radio': typeof BrowseRadioRoute
+  '/settings/advanced': typeof SettingsAdvancedRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/bluetooth': typeof SettingsBluetoothRoute
+  '/settings/connection': typeof SettingsConnectionRoute
+  '/settings/display': typeof SettingsDisplayRoute
+  '/settings/playback': typeof SettingsPlaybackRoute
+  '/settings/remotes': typeof SettingsRemotesRoute
+  '/settings/sound': typeof SettingsSoundRoute
+  '/settings/sources': typeof SettingsSourcesRouteWithChildren
+  '/settings/tv': typeof SettingsTvRoute
+  '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
+  '/settings/updates': typeof SettingsUpdatesRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
+  '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
+  '/settings/sources/radio': typeof SettingsSourcesRadioRoute
+  '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: never
+  fullPaths:
+    | '/'
+    | '/$'
+    | '/browse'
+    | '/find'
+    | '/saved'
+    | '/search'
+    | '/settings'
+    | '/up-next'
+    | '/browse/files'
+    | '/browse/guide'
+    | '/browse/jellyfin'
+    | '/browse/library'
+    | '/browse/online'
+    | '/browse/radio'
+    | '/settings/advanced'
+    | '/settings/appearance'
+    | '/settings/bluetooth'
+    | '/settings/connection'
+    | '/settings/display'
+    | '/settings/playback'
+    | '/settings/remotes'
+    | '/settings/sound'
+    | '/settings/sources'
+    | '/settings/tv'
+    | '/settings/tv-appearance'
+    | '/settings/updates'
+    | '/settings/'
+    | '/settings/sources/folders'
+    | '/settings/sources/jellyfin'
+    | '/settings/sources/metadata'
+    | '/settings/sources/radio'
+    | '/settings/sources/streaming-community'
   fileRoutesByTo: FileRoutesByTo
-  to: never
-  id: '__root__'
+  to:
+    | '/'
+    | '/$'
+    | '/browse'
+    | '/find'
+    | '/saved'
+    | '/search'
+    | '/up-next'
+    | '/browse/files'
+    | '/browse/guide'
+    | '/browse/jellyfin'
+    | '/browse/library'
+    | '/browse/online'
+    | '/browse/radio'
+    | '/settings/advanced'
+    | '/settings/appearance'
+    | '/settings/bluetooth'
+    | '/settings/connection'
+    | '/settings/display'
+    | '/settings/playback'
+    | '/settings/remotes'
+    | '/settings/sound'
+    | '/settings/sources'
+    | '/settings/tv'
+    | '/settings/tv-appearance'
+    | '/settings/updates'
+    | '/settings'
+    | '/settings/sources/folders'
+    | '/settings/sources/jellyfin'
+    | '/settings/sources/metadata'
+    | '/settings/sources/radio'
+    | '/settings/sources/streaming-community'
+  id:
+    | '__root__'
+    | '/'
+    | '/$'
+    | '/browse'
+    | '/find'
+    | '/saved'
+    | '/search'
+    | '/settings'
+    | '/up-next'
+    | '/browse/files'
+    | '/browse/guide'
+    | '/browse/jellyfin'
+    | '/browse/library'
+    | '/browse/online'
+    | '/browse/radio'
+    | '/settings/advanced'
+    | '/settings/appearance'
+    | '/settings/bluetooth'
+    | '/settings/connection'
+    | '/settings/display'
+    | '/settings/playback'
+    | '/settings/remotes'
+    | '/settings/sound'
+    | '/settings/sources'
+    | '/settings/tv'
+    | '/settings/tv-appearance'
+    | '/settings/updates'
+    | '/settings/'
+    | '/settings/sources/folders'
+    | '/settings/sources/jellyfin'
+    | '/settings/sources/metadata'
+    | '/settings/sources/radio'
+    | '/settings/sources/streaming-community'
   fileRoutesById: FileRoutesById
 }
-export interface RootRouteChildren {}
-
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  SplatRoute: typeof SplatRoute
+  BrowseRoute: typeof BrowseRouteWithChildren
+  FindRoute: typeof FindRoute
+  SavedRoute: typeof SavedRoute
+  SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
+  UpNextRoute: typeof UpNextRoute
 }
 
-const rootRouteChildren: RootRouteChildren = {}
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$': {
+      id: '/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/browse': {
+      id: '/browse'
+      path: '/browse'
+      fullPath: '/browse'
+      preLoaderRoute: typeof BrowseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/find': {
+      id: '/find'
+      path: '/find'
+      fullPath: '/find'
+      preLoaderRoute: typeof FindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/saved': {
+      id: '/saved'
+      path: '/saved'
+      fullPath: '/saved'
+      preLoaderRoute: typeof SavedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/up-next': {
+      id: '/up-next'
+      path: '/up-next'
+      fullPath: '/up-next'
+      preLoaderRoute: typeof UpNextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/browse/files': {
+      id: '/browse/files'
+      path: '/files'
+      fullPath: '/browse/files'
+      preLoaderRoute: typeof BrowseFilesRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/browse/guide': {
+      id: '/browse/guide'
+      path: '/guide'
+      fullPath: '/browse/guide'
+      preLoaderRoute: typeof BrowseGuideRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/browse/jellyfin': {
+      id: '/browse/jellyfin'
+      path: '/jellyfin'
+      fullPath: '/browse/jellyfin'
+      preLoaderRoute: typeof BrowseJellyfinRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/browse/library': {
+      id: '/browse/library'
+      path: '/library'
+      fullPath: '/browse/library'
+      preLoaderRoute: typeof BrowseLibraryRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/browse/online': {
+      id: '/browse/online'
+      path: '/online'
+      fullPath: '/browse/online'
+      preLoaderRoute: typeof BrowseOnlineRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/browse/radio': {
+      id: '/browse/radio'
+      path: '/radio'
+      fullPath: '/browse/radio'
+      preLoaderRoute: typeof BrowseRadioRouteImport
+      parentRoute: typeof BrowseRoute
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/advanced': {
+      id: '/settings/advanced'
+      path: '/advanced'
+      fullPath: '/settings/advanced'
+      preLoaderRoute: typeof SettingsAdvancedRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/appearance': {
+      id: '/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof SettingsAppearanceRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/bluetooth': {
+      id: '/settings/bluetooth'
+      path: '/bluetooth'
+      fullPath: '/settings/bluetooth'
+      preLoaderRoute: typeof SettingsBluetoothRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/connection': {
+      id: '/settings/connection'
+      path: '/connection'
+      fullPath: '/settings/connection'
+      preLoaderRoute: typeof SettingsConnectionRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/display': {
+      id: '/settings/display'
+      path: '/display'
+      fullPath: '/settings/display'
+      preLoaderRoute: typeof SettingsDisplayRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/playback': {
+      id: '/settings/playback'
+      path: '/playback'
+      fullPath: '/settings/playback'
+      preLoaderRoute: typeof SettingsPlaybackRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/remotes': {
+      id: '/settings/remotes'
+      path: '/remotes'
+      fullPath: '/settings/remotes'
+      preLoaderRoute: typeof SettingsRemotesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/sound': {
+      id: '/settings/sound'
+      path: '/sound'
+      fullPath: '/settings/sound'
+      preLoaderRoute: typeof SettingsSoundRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/sources': {
+      id: '/settings/sources'
+      path: '/sources'
+      fullPath: '/settings/sources'
+      preLoaderRoute: typeof SettingsSourcesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/tv': {
+      id: '/settings/tv'
+      path: '/tv'
+      fullPath: '/settings/tv'
+      preLoaderRoute: typeof SettingsTvRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/tv-appearance': {
+      id: '/settings/tv-appearance'
+      path: '/tv-appearance'
+      fullPath: '/settings/tv-appearance'
+      preLoaderRoute: typeof SettingsTvAppearanceRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/updates': {
+      id: '/settings/updates'
+      path: '/updates'
+      fullPath: '/settings/updates'
+      preLoaderRoute: typeof SettingsUpdatesRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/sources/folders': {
+      id: '/settings/sources/folders'
+      path: '/folders'
+      fullPath: '/settings/sources/folders'
+      preLoaderRoute: typeof SettingsSourcesFoldersRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
+    '/settings/sources/jellyfin': {
+      id: '/settings/sources/jellyfin'
+      path: '/jellyfin'
+      fullPath: '/settings/sources/jellyfin'
+      preLoaderRoute: typeof SettingsSourcesJellyfinRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
+    '/settings/sources/metadata': {
+      id: '/settings/sources/metadata'
+      path: '/metadata'
+      fullPath: '/settings/sources/metadata'
+      preLoaderRoute: typeof SettingsSourcesMetadataRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
+    '/settings/sources/radio': {
+      id: '/settings/sources/radio'
+      path: '/radio'
+      fullPath: '/settings/sources/radio'
+      preLoaderRoute: typeof SettingsSourcesRadioRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
+    '/settings/sources/streaming-community': {
+      id: '/settings/sources/streaming-community'
+      path: '/streaming-community'
+      fullPath: '/settings/sources/streaming-community'
+      preLoaderRoute: typeof SettingsSourcesStreamingCommunityRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
+  }
+}
+
+interface BrowseRouteChildren {
+  BrowseFilesRoute: typeof BrowseFilesRoute
+  BrowseGuideRoute: typeof BrowseGuideRoute
+  BrowseJellyfinRoute: typeof BrowseJellyfinRoute
+  BrowseLibraryRoute: typeof BrowseLibraryRoute
+  BrowseOnlineRoute: typeof BrowseOnlineRoute
+  BrowseRadioRoute: typeof BrowseRadioRoute
+}
+
+const BrowseRouteChildren: BrowseRouteChildren = {
+  BrowseFilesRoute: BrowseFilesRoute,
+  BrowseGuideRoute: BrowseGuideRoute,
+  BrowseJellyfinRoute: BrowseJellyfinRoute,
+  BrowseLibraryRoute: BrowseLibraryRoute,
+  BrowseOnlineRoute: BrowseOnlineRoute,
+  BrowseRadioRoute: BrowseRadioRoute,
+}
+
+const BrowseRouteWithChildren =
+  BrowseRoute._addFileChildren(BrowseRouteChildren)
+
+interface SettingsSourcesRouteChildren {
+  SettingsSourcesFoldersRoute: typeof SettingsSourcesFoldersRoute
+  SettingsSourcesJellyfinRoute: typeof SettingsSourcesJellyfinRoute
+  SettingsSourcesMetadataRoute: typeof SettingsSourcesMetadataRoute
+  SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
+  SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
+}
+
+const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
+  SettingsSourcesFoldersRoute: SettingsSourcesFoldersRoute,
+  SettingsSourcesJellyfinRoute: SettingsSourcesJellyfinRoute,
+  SettingsSourcesMetadataRoute: SettingsSourcesMetadataRoute,
+  SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
+  SettingsSourcesStreamingCommunityRoute:
+    SettingsSourcesStreamingCommunityRoute,
+}
+
+const SettingsSourcesRouteWithChildren = SettingsSourcesRoute._addFileChildren(
+  SettingsSourcesRouteChildren,
+)
+
+interface SettingsRouteChildren {
+  SettingsAdvancedRoute: typeof SettingsAdvancedRoute
+  SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsBluetoothRoute: typeof SettingsBluetoothRoute
+  SettingsConnectionRoute: typeof SettingsConnectionRoute
+  SettingsDisplayRoute: typeof SettingsDisplayRoute
+  SettingsPlaybackRoute: typeof SettingsPlaybackRoute
+  SettingsRemotesRoute: typeof SettingsRemotesRoute
+  SettingsSoundRoute: typeof SettingsSoundRoute
+  SettingsSourcesRoute: typeof SettingsSourcesRouteWithChildren
+  SettingsTvRoute: typeof SettingsTvRoute
+  SettingsTvAppearanceRoute: typeof SettingsTvAppearanceRoute
+  SettingsUpdatesRoute: typeof SettingsUpdatesRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAdvancedRoute: SettingsAdvancedRoute,
+  SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsBluetoothRoute: SettingsBluetoothRoute,
+  SettingsConnectionRoute: SettingsConnectionRoute,
+  SettingsDisplayRoute: SettingsDisplayRoute,
+  SettingsPlaybackRoute: SettingsPlaybackRoute,
+  SettingsRemotesRoute: SettingsRemotesRoute,
+  SettingsSoundRoute: SettingsSoundRoute,
+  SettingsSourcesRoute: SettingsSourcesRouteWithChildren,
+  SettingsTvRoute: SettingsTvRoute,
+  SettingsTvAppearanceRoute: SettingsTvAppearanceRoute,
+  SettingsUpdatesRoute: SettingsUpdatesRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  SplatRoute: SplatRoute,
+  BrowseRoute: BrowseRouteWithChildren,
+  FindRoute: FindRoute,
+  SavedRoute: SavedRoute,
+  SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRouteWithChildren,
+  UpNextRoute: UpNextRoute,
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
