@@ -176,8 +176,10 @@ release, matching how the feeds treat prerelease and final versions.
 [scripts/hosted-release.ts](../scripts/hosted-release.ts) implements the mirror
 as a `github-release` operation: it looks the release up by tag, creates it when
 missing, and patches notes, title and prerelease flag when present. Re-running a
-publication therefore updates one release instead of duplicating it. A
-`readiness-only` recheck never touches GitHub Releases. Preview publication
+publication therefore updates one release instead of duplicating it. The mirror
+runs whenever the retained receipts show a completed publication, so a
+`readiness-only` recheck after delayed CDN readiness still creates the release
+the original publish earned. Preview publication
 always carries the dispatch notes; a Stable promotion flip keeps the changelog
 already on the release and only changes the prerelease flag, because the
 promotion dispatch notes are promote remarks, not changelog.
