@@ -3,7 +3,7 @@ import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { application, cdn, channelArgs, downloadUrl, publicFiles, releaseVersion } from "./hosted-policy";
-import { assertIncreasing, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
+import { assertIncreasing, githubRelease, githubTag, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
 
 const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()).trim();
 const signature = (await Bun.file("src-tauri/tests/fixtures/update/archive.sig").text()).trim();
@@ -249,5 +249,67 @@ console.log(JSON.stringify(operation === "list" ? [] : state));
       expect((await Bun.file(stateFile).json()).status).toBe("Published");
       expect(await Bun.file(join(directory, "public", name)).exists()).toBe(false);
     } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+});
+
+describe("github release mirror", () => {
+  const repository = "avoid-quest/couch";
+  function fakeApi(existing: { id: number; tag_name: string } | null) {
+    const calls: { args: string[]; payload?: string }[] = [];
+    const api = async (args: string[], payload?: string) => {
+      calls.push(payload === undefined ? { args } : { args, payload });
+      return args.length === 1 ? existing : JSON.parse(payload!);
+    };
+    return { calls, api };
+  }
+
+  test("Preview publishes a v-tagged prerelease and retries update one release in place", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-github-mirror-"));
+    const previous = process.env.GITHUB_REPOSITORY;
+    process.env.GITHUB_REPOSITORY = repository;
+    try {
+      const manifest = fixture("0.1.5-preview.2");
+      await Bun.write(join(directory, "notes.md"), "Preview notes\n");
+      const expected = { tag_name: "v0.1.5-preview.2", target_commitish: manifest.revision, name: "v0.1.5-preview.2", body: "Preview notes\n", prerelease: true };
+      const created = fakeApi(null);
+      expect(await githubRelease(directory, manifest, "preview", created.api)).toMatchObject(expected);
+      expect(created.calls.map((call): any => ({ ...call, payload: call.payload && JSON.parse(call.payload) }))).toEqual([
+        { args: [`repos/${repository}/releases/tags/v0.1.5-preview.2`] },
+        { args: ["-X", "POST", `repos/${repository}/releases`], payload: expected },
+      ]);
+      const retried = fakeApi({ id: 7, tag_name: "v0.1.5-preview.2" });
+      expect(await githubRelease(directory, manifest, "preview", retried.api)).toMatchObject(expected);
+      expect(retried.calls.map((call): any => ({ ...call, payload: call.payload && JSON.parse(call.payload) }))).toEqual([
+        { args: [`repos/${repository}/releases/tags/v0.1.5-preview.2`] },
+        { args: ["-X", "PATCH", `repos/${repository}/releases/7`], payload: expected },
+      ]);
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_REPOSITORY; else process.env.GITHUB_REPOSITORY = previous;
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("Stable promotion needs the final version and marks the release full", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-github-promote-"));
+    const previous = process.env.GITHUB_REPOSITORY;
+    process.env.GITHUB_REPOSITORY = repository;
+    try {
+      await Bun.write(join(directory, "notes.md"), "Final notes\n");
+      const final = fixture("0.1.5");
+      const flipped = fakeApi({ id: 7, tag_name: "v0.1.5" });
+      expect(await githubRelease(directory, final, "stable", flipped.api)).toMatchObject({ tag_name: "v0.1.5", prerelease: false });
+      expect(JSON.parse(flipped.calls[1]!.payload!)).toEqual({ tag_name: "v0.1.5", target_commitish: final.revision, name: "v0.1.5", prerelease: false });
+      const fresh = fakeApi(null);
+      expect(await githubRelease(directory, final, "stable", fresh.api)).toMatchObject({ tag_name: "v0.1.5", prerelease: false });
+      expect(JSON.parse(fresh.calls[1]!.payload!)).toMatchObject({ tag_name: "v0.1.5", body: "Final notes\n", prerelease: false });
+      await expect(githubRelease(directory, fixture("0.1.5-preview.2"), "stable", flipped.api)).rejects.toThrow("final version");
+      expect(flipped.calls).toHaveLength(2);
+      expect(githubTag("0.1.5")).toBe("v0.1.5");
+      expect(githubTag("0.1.5-preview.10")).toBe("v0.1.5-preview.10");
+      expect(() => githubTag("0.1.5+build.1.1")).toThrow();
+    } finally {
+      if (previous === undefined) delete process.env.GITHUB_REPOSITORY; else process.env.GITHUB_REPOSITORY = previous;
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

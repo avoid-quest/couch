@@ -128,6 +128,44 @@ export async function restorePublic(directory: string, manifest: Manifest, fetch
   await verifyFiles(directory, manifest);
 }
 
+async function ghApi(args: string[], payload?: string): Promise<{ id: number; tag_name: string } | null> {
+  const temporary = payload ? join(tmpdir(), `couch-ghapi-${crypto.randomUUID()}.json`) : undefined;
+  try {
+    if (payload && temporary) await Bun.write(temporary, payload);
+    const result = Bun.spawnSync(["gh", "api", ...args, ...(temporary ? ["--input", temporary] : [])], { stderr: "pipe", env: { ...process.env, CI: "true" }, maxBuffer: 16 * 1024 * 1024 });
+    const stderr = result.stderr.toString().trim();
+    if (result.exitCode !== 0) {
+      if (stderr.endsWith("(HTTP 404)")) return null;
+      throw new Error(stderr || `gh api ${args.join(" ")} failed.`);
+    }
+    return JSON.parse(result.stdout.toString());
+  } finally {
+    if (temporary) await rm(temporary, { force: true });
+  }
+}
+
+// The mirror carries only changelog notes; bytes stay on CrabNebula. Preview publishes
+// prereleases, Stable promotion requires the final version and publishes the full release.
+export const githubTag = (version: string) => `v${releaseVersion(version)}`;
+export async function githubRelease(directory: string, manifest: Manifest, channel: Channel, api: typeof ghApi = ghApi) {
+  validateManifest(manifest);
+  const repository = process.env.GITHUB_REPOSITORY;
+  assert.ok(repository && repository.includes("/"), "GitHub Releases require GITHUB_REPOSITORY.");
+  if (channel === "stable") assert.ok(!manifest.version.includes("-"), "Stable promotion requires the final version qualified in Preview.");
+  const tag = githubTag(manifest.version);
+  const notes = await Bun.file(join(directory, "notes.md")).text();
+  // Dispatch concurrency serializes publications, so check-then-write cannot race another run.
+  const existing = await api(["repos/" + repository + "/releases/tags/" + tag]);
+  // A promotion dispatch carries only promote remarks, so a flip keeps the changelog already on the release.
+  const release: Record<string, unknown> = { tag_name: tag, target_commitish: manifest.revision, name: tag, prerelease: channel === "preview" };
+  if (channel === "preview" || !existing) release.body = notes;
+  const written = existing
+    ? await api(["-X", "PATCH", `repos/${repository}/releases/${existing.id}`], JSON.stringify(release))
+    : await api(["-X", "POST", `repos/${repository}/releases`], JSON.stringify(release));
+  assert.equal(written?.tag_name, tag, "The GitHub Release write did not stick.");
+  return written;
+}
+
 // Each package format keeps its own version history. The public updater endpoint serves the
 // newest published release per update platform and channel, or rejects the platform when empty.
 export async function assertIncreasing(version: string, channel: Channel, updatePlatform: string, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
@@ -268,7 +306,8 @@ if (import.meta.main) {
       if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${uploaded.id}\n`);
     } else if (operation === "readiness") {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
-    } else if (operation === "draft") {
+    } else if (operation === "github-release") await githubRelease(directory, manifest, channel);
+    else if (operation === "draft") {
       await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
       if (channel === "stable") {
         const receipt = await Bun.file(join(directory, "readiness-preview.json")).json();
@@ -320,6 +359,6 @@ if (import.meta.main) {
       }
       await mkdir(join(directory, "receipts"), { recursive: true });
       await Bun.write(join(directory, "receipts", `${operation}-${channel}.json`), JSON.stringify(release, null, 2) + "\n");
-    } else throw new Error("Use draft-source, seal, verify, qualify, verify-receipt, restore, resume, draft, upload, publish or readiness.");
+    } else throw new Error("Use draft-source, seal, verify, qualify, verify-receipt, restore, resume, draft, upload, publish, readiness or github-release.");
   }
 }
