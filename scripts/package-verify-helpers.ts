@@ -7,5 +7,3 @@ export async function verifyPackageHelpers(directory: string, helpers: Record<st
     assert.equal(new Bun.CryptoHasher("sha256").update(bytes).digest("hex"), helpers[name]?.sha256, `${name} must retain the release helper hash after bundling`);
   }
 }
-
-if (import.meta.main) await verifyPackageHelpers("src-tauri/target/release/bundle/appimage/Couch.AppDir/usr/lib/Couch/tools", (await Bun.file("src-tauri/build-info.json").json()).helpers);

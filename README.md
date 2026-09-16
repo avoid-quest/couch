@@ -64,8 +64,7 @@ license notices are included in the installation path.
 
 For a dedicated TV, run `sudo couch-setup --tv` after installing the package.
 This explicitly enables the dedicated account and TV login/power configuration.
-Existing TV migration preserves application data and paired devices. See
-[installation and recovery](docs/install-couch.md).
+See [TV setup](docs/native-tv.md).
 
 Paired Administrators can install signed native updates remotely. Manual updates
 are the default; automatic updates wait for ten continuous idle minutes. A

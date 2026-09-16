@@ -13,12 +13,6 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked --release
 version=$(bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
 inspection=$(mktemp -d)
 trap 'rm -rf "$inspection"' EXIT
-if [ "${COUCH_PACKAGE_FORMAT:-appimage}" = deb ]; then
-  dpkg-deb --extract ".artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$inspection"
-  cmp src-tauri/resources/release.json "$inspection/usr/lib/Couch/release.json"
-else
-  app=$(realpath ".artifacts/hosted-release/public/Couch_${version}_amd64.AppImage")
-  (cd "$inspection" && "$app" --appimage-extract usr/lib/Couch/release.json)
-  cmp src-tauri/resources/release.json "$inspection/squashfs-root/usr/lib/Couch/release.json"
-fi
+dpkg-deb --extract ".artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$inspection"
+cmp src-tauri/resources/release.json "$inspection/usr/lib/Couch/release.json"
 # The workflow writes qualified.json only after the separate installer fixture passes.

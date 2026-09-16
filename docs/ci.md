@@ -22,15 +22,6 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
 ```
 
-The following appliance commands exercise the retained Ubuntu POC. For the
-current Debian package and the upper installer layer, use the
-[Mac package and installer checks](packaging.md#isolated-mac-build).
-Run `sudo "$(command -v bun)" scripts/test-publish-release.ts` and
-`sudo bash scripts/test-appliance.sh` only in disposable Ubuntu environments.
-They install packages and change system files. For real systemd/APT lifecycle
-checks, `bash scripts/test-appliance-systemd.sh` creates its own privileged Docker
-fixture on an amd64 Linux host.
-
 GitHub Actions is enabled. Use it for PR checks, builds and releases. Local checks
 remain the quickest way to iterate. A passing assertion count with unhandled
 errors or a nonzero exit is a failed run.
