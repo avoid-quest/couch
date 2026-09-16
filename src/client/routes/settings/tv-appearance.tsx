@@ -1,8 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SettingsPage } from "../../sections/settings/SettingsPage";
-import { settingsPageForPath } from "../../../shared/settings-pages";
+import { TvAppearancePage } from "../../sections/settings/device/TvAppearancePage";
 
-// /settings/tv-appearance comes from settings-pages, the single path truth.
-export const Route = createFileRoute("/settings/tv-appearance")({
-  component: () => <SettingsPage section={settingsPageForPath("/settings/tv-appearance")!} />,
-});
+export const Route = createFileRoute("/settings/tv-appearance")({ component: TvAppearancePage });
