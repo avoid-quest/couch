@@ -236,11 +236,13 @@ jobs:
           CHANNEL: "${{ inputs.channel }}"
         run: "bun scripts/hosted-release.ts readiness .artifacts/hosted-release \"$CHANNEL\""
       - name: Mirror the published version to GitHub Releases
-        if: inputs.publish && !inputs.readiness-only
         env:
           GH_TOKEN: "${{ github.token }}"
           CHANNEL: "${{ inputs.channel }}"
-        run: "bun scripts/hosted-release.ts github-release .artifacts/hosted-release \"$CHANNEL\""
+        run: |
+          receipt=".artifacts/hosted-release/receipts/publish-$CHANNEL.json"
+          test -f "$receipt" || { echo "No publish receipt for $CHANNEL; nothing to mirror."; exit 0; }
+          bun scripts/hosted-release.ts github-release .artifacts/hosted-release "$CHANNEL"
       - name: Retain compiler and dependency caches after any build outcome
         if: "${{ always() && inputs.build-run == 0 }}"
         run: |
