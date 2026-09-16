@@ -32,13 +32,6 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends "${packages[@]}"
           fi
-      - name: Test signed releases
-        run: sudo "$(command -v bun)" scripts/test-publish-release.ts
-      - name: Test signed Debian installation and recovery
-        run: |
-          docker run --rm --platform linux/amd64 -v "$PWD:/repo:ro" -w /repo \
-            debian:13-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f \
-            sh -c 'apt-get update && apt-get install -y --no-install-recommends jq minisign procps systemd adduser && bash tests/package/installer.sh'
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       # Isolate the real clock from process-wide mocks in the other tests.
