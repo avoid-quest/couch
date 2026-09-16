@@ -35,7 +35,7 @@ around playback.
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
 The name must work from the TV and each phone that will use it. Add its HTTP
-origin using the same port as Couch:
+origin using Couch's port:
 
 ```sh
 COUCH_ADVERTISE_URLS=http://couch.home:4100
@@ -43,16 +43,41 @@ COUCH_ADVERTISE_URLS=http://couch.home:4100
 
 Set this in the same launching environment or TV environment file and restart
 Couch. Multiple names can be comma-separated. Origins cannot contain credentials,
-paths, queries or fragments. HTTPS and names on a different port are unsupported
+paths, queries or fragments. HTTPS and names on any other port are unsupported
 by this listener. Setting an origin does not create a DNS or mDNS record.
+
+### Port 80
+
+A name without a port, such as `http://couch.home`, reaches port 80. When such
+an alias validates, Couch opens an extra listener on port 80 of the same
+selected address itself. There is still no proxy and no daemon of Couch's own.
+The operating system must permit the bind:
+
+- On the Debian TV, `couch-tv.service` runs as the unprivileged `couch-tv`
+  user, so allow low ports for unprivileged processes and apply it once:
+
+  ```sh
+  echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-couch-port80.conf
+  sysctl --system
+  ```
+
+  If you run Couch under your own system-managed service instead, grant that
+  unit `AmbientCapabilities=CAP_NET_BIND_SERVICE` and leave the sysctl alone.
+- Desktop installs (macOS, Windows) cannot take port 80 without privileges.
+  Include Couch's port in the name there, for example
+  `http://couch.home:4100`.
+
+When port 80 cannot be bound, the bare name is ignored with a warning and the
+direct port keeps working. The sysctl change is the administrator's decision;
+Couch never asks for privileges or installs it.
 
 Couch checks each name before admitting its Host and Origin or adding it to
 Connection links and QR codes. A failed lookup, timeout, wrong address or invalid
-origin omits that alias and displays a warning. The direct IP listener and
-recovery URL remain available. Valid aliases continue working, and a repaired
-alias returns after a successful refresh. Couch never forwards an existing
-pairing credential to an advertised alias; a browser opening a new origin may
-need pairing again.
+origin, or an unbindable port, omits that alias and displays a warning. The
+direct IP listener and recovery URL remain available. Valid aliases continue
+working, and a repaired alias returns after a successful refresh. Couch never
+forwards an existing pairing credential to an advertised alias; a browser
+opening a new origin may need pairing again.
 
 After configuration, open the named URL from the intended phone network, pair,
 open Settings and reconnect after a Couch restart. Keep the IP URL shown in

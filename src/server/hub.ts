@@ -539,7 +539,7 @@ export function createHub(options: HubOptions) {
   if (options.managedLan) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS, advertised: options.advertisedUrls ?? [],
-      start: network => Bun.serve({ ...serveOptions, hostname: network.address, port }),
+      start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;
         urls.splice(0, urls.length, ...next);
