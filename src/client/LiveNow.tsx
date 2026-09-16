@@ -30,6 +30,7 @@ export function LiveNow({ origin, token, connected, canPlay, version, onEnqueue,
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(active && connected);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const lifetime = useRef(new AbortController());
 
   useEffect(() => {
@@ -56,7 +57,7 @@ export function LiveNow({ origin, token, connected, canPlay, version, onEnqueue,
       .then(body => { if (!controller.signal.aborted) { setCatalog(body); setError(body.playlist.error ?? ""); } })
       .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load the radio catalogue."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-  }, [request, connected, active, version]);
+  }, [request, connected, active, version, attempt]);
 
   useEffect(() => {
     if (!connected || !active) return;
@@ -105,7 +106,7 @@ export function LiveNow({ origin, token, connected, canPlay, version, onEnqueue,
     {!connected && <p role="status" className="text-sm text-muted-foreground">Connect to see what is live.</p>}
     {connected && loading && !catalog && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Checking what is on…</p>}
     {connected && loading && !catalog && <ul className={rail ? "live-cards live-cards-rail" : "live-cards"} aria-hidden="true">{Array.from({ length: rail ? 4 : 8 }, (_, index) => <li key={index}><Card className="catalog-card h-full gap-3 p-3"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-2/5" /></Card></li>)}</ul>}
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{error}</span><Button variant="outline" size="sm" onClick={() => setAttempt(value => value + 1)}>Retry</Button></AlertDescription></Alert>}
     {connected && catalog && shown.length > 0 && <ul className={rail ? "live-cards live-cards-rail" : "live-cards"}>
       {shown.map(({ station, programme }) => <li key={station.id}>
         <Card className="catalog-card live-card h-full gap-2 p-3">

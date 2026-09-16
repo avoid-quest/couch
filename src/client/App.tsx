@@ -244,14 +244,19 @@ export function App() {
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
     run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
   const enqueueRadio = (station: RadioStation, playNow: boolean) => {
-    setRecentRadio(current => {
-      const next = [station, ...current.filter(entry => entry.id !== station.id)].slice(0, 8);
-      try { localStorage.setItem(radioHistoryKey, JSON.stringify(next)); } catch { /* Recents are best-effort. */ }
-      return next;
-    });
-    return run(station.sourceId
+    const result = run(station.sourceId
       ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
       : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow });
+    // Recents record what actually played, not what was queued or attempted.
+    if (playNow) void result.then(ok => {
+      if (!ok) return;
+      setRecentRadio(current => {
+        const next = [station, ...current.filter(entry => entry.id !== station.id)].slice(0, 8);
+        try { localStorage.setItem(radioHistoryKey, JSON.stringify(next)); } catch { /* Recents are best-effort. */ }
+        return next;
+      });
+    });
+    return result;
   };
   const openProvider = (item: ProviderItem) => {
     setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1 }));
@@ -405,6 +410,14 @@ export function App() {
             </div>
             <SourceSetupDialog iptvVersion={state?.iptvVersion ?? 0} controllerVersion={state?.controllerVersion ?? 0} localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} version={state?.jellyfinVersion ?? 0} radioVersion={state?.radioVersion ?? 0} libraryVersion={state?.libraryVersion ?? 0} />
             {current && (active || player?.status === "error") && section !== "Now" && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => changeSection("Now")} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} />}
+            {/* Saved provider collections open here: Find stays search-first, and
+                Open gives the collection its own browsable trail. */}
+            <Dialog open={onlineRequest !== null} onOpenChange={open => { if (!open) setOnlineRequest(null); }}>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader><DialogTitle>{onlineRequest?.item.title ?? "Saved source"}</DialogTitle><DialogDescription>Browse this saved source.</DialogDescription></DialogHeader>
+                {onlineRequest && <ProviderPanel key={onlineRequest.revision} showHeading={false} active initialItem={onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={playHistory} onEnqueue={enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} />}
+              </DialogContent>
+            </Dialog>
             <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} /></DialogContent></Dialog>
           </>
         )}
