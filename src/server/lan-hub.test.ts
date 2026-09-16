@@ -5,6 +5,8 @@ import { createHub } from "./hub";
 import { selectLan } from "./lan-listener";
 let available = false;
 try { selectLan(networkInterfaces()); available = true; } catch {}
+let port80 = false;
+try { const probe = Bun.serve({ hostname: "127.0.0.1", port: 80, fetch: () => new Response() }); probe.stop(true); port80 = true; } catch {}
 
 test.skipIf(!available)("the native hub keeps loopback while sharing opens and closes a separate LAN listener", async () => {
   const token = "local-host-token-with-at-least-32-characters";
@@ -76,4 +78,25 @@ test.skipIf(!available)("a malformed optional alias cannot prevent the managed h
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ urls: [ip], lanError: expect.stringContaining("was ignored") });
   } finally { await hub.close(); }
+});
+
+test.skipIf(!available || !port80)("a port 80 alias serves navigation and pairing from its own listener and rejects unrelated hosts", async () => {
+  const network = selectLan(networkInterfaces());
+  const token = "local-host-token-with-at-least-32-characters";
+  const alias = "http://couch.home";
+  const lookup = spyOn(dns, "lookup").mockImplementation((async () => [{ address: network.address, family: 4 }]) as never);
+  const addresses = Promise.withResolvers<string[]>();
+  const hub = createHub({ managedLan: true, remoteControlEnabled: true, port: 0, databasePath: ":memory:", hostToken: token, advertisedUrls: [alias], sendPlayer: () => {}, onAddresses: urls => { if (urls.includes(alias)) addresses.resolve(urls); } });
+  try {
+    const urls = await addresses.promise;
+    expect(urls).toContain(alias);
+    expect(urls).toContain(`http://${network.address}:${new URL(hub.origin).port}`);
+    const connection = await fetch(`http://${network.address}/api/connection`, { headers: { Host: "couch.home" } });
+    expect(connection.status).toBe(200);
+    expect((await connection.json()).urls).toContain(alias);
+    expect((await fetch(`http://${network.address}/api/pair`, { method: "POST", headers: { Host: "couch.home", Origin: alias, "Content-Type": "application/json" }, body: JSON.stringify({ code: hub.pairingCode, name: "Phone" }) })).status).toBe(200);
+    for (const origin of ["http://unrelated.home", "null"]) expect((await fetch(`http://${network.address}/api/connection`, { headers: { Host: "couch.home", Origin: origin } })).status).toBe(403);
+    expect((await fetch(`http://${network.address}/api/connection`, { headers: { Host: "unrelated.home" } })).status).toBe(403);
+  } finally { await hub.close(); lookup.mockRestore(); }
+  await expect(fetch(`http://${network.address}/api/connection`, { headers: { Host: "couch.home" } })).rejects.toThrow();
 });

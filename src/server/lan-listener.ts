@@ -17,13 +17,15 @@ export function selectLan(interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>, selec
   if (networks.length !== 1) throw new Error("Several LAN addresses are available. Select a network with COUCH_LAN_INTERFACE; if it has multiple addresses, also set COUCH_LAN_ADDRESS to one of its private IPv4 addresses and restart Couch.");
   return networks[0]!;
 }
-export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup) {
+export async function lanUrls(network: LanNetwork, port: number, advertised: string[], resolve = lookup, port80 = false) {
   const ip = `http://${network.address}:${port}`;
   const results = await Promise.all(advertised.map(async (value, index) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const url = new URL(value);
-      if (url.protocol !== "http:" || Number(url.port || 80) !== port || url.pathname !== "/" || url.username || url.password || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Use HTTP and Couch's port, without credentials, a proxy or a path.");
+      const aliasPort = Number(url.port || 80);
+      if (url.protocol !== "http:" || (aliasPort !== port && aliasPort !== 80) || url.pathname !== "/" || url.username || url.password || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Use HTTP and Couch's port, without credentials, a proxy or a path.");
+      if (aliasPort === 80 && port !== 80 && !port80) throw new Error("Couch cannot listen on port 80. Include Couch's port in the name or grant the listener the capability.");
       const answers = await Promise.race([
         resolve(url.hostname, { all: true }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("LAN DNS lookup timed out.")), 5_000); }),
@@ -40,14 +42,16 @@ export async function lanUrls(network: LanNetwork, port: number, advertised: str
 
 export function createLanListener<T extends { stop(close: boolean): Promise<void> }>(options: {
   port: number; enabled: boolean; selected?: string; address?: string; advertised: string[];
-  start: (network: LanNetwork) => T;
+  start: (network: LanNetwork, port: number) => T;
   changed: (urls: string[], error: string | null) => void;
   interfaces?: typeof networkInterfaces;
   resolve?: typeof lookup;
 }) {
-  let enabled = options.enabled, closed = false, active: T | null = null, network: LanNetwork | null = null;
+  let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
+  const wantsPort80 = options.port !== 80 && options.advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
   let pending: Promise<void> = Promise.resolve();
   let last = "";
+  const stopAll = async () => { await Promise.all([active?.stop(true), port80?.stop(true)]); active = port80 = null; };
   const changed = (urls: string[], error: string | null) => {
     const state = JSON.stringify([urls, error]);
     if (last !== state) { last = state; options.changed(urls, error); }
@@ -57,19 +61,22 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     try {
       const next = selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
       const moved = JSON.stringify(next) !== JSON.stringify(network);
-      if (active && (!enabled || moved)) { await active.stop(true); active = null; }
+      if ((active || port80) && (!enabled || moved)) await stopAll();
       if (closed) return;
       network = next;
       if (enabled && !active) {
-        try { active = options.start(next); }
+        try { active = options.start(next, options.port); }
         catch { throw new Error(`Couch cannot listen on ${next.address}:${options.port}. Another process may be using the port.`); }
       }
+      // Port 80 is a best-effort extra listener: platforms that refuse the bind
+      // keep the direct port and drop only the bare-name aliases.
+      if (enabled && wantsPort80 && !port80) { try { port80 = options.start(next, 80); } catch { port80 = null; } }
       if (moved) changed([`http://${next.address}:${options.port}`], null);
-      const { urls, error } = await lanUrls(next, options.port, options.advertised, options.resolve);
+      const { urls, error } = await lanUrls(next, options.port, options.advertised, options.resolve, !!port80);
       if (!closed) changed(urls, error);
     } catch (error) {
-      if (active) await active.stop(true);
-      active = null; network = null;
+      await stopAll().catch(() => {});
+      network = null;
       const message = error instanceof Error ? error.message : "Could not refresh the LAN address.";
       if (!closed) changed([], message);
       throw error;
@@ -84,12 +91,12 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     refresh,
     async setEnabled(value: boolean) {
       enabled = value;
-      if (!value && active) { await active.stop(true); active = null; }
+      if (!value && (active || port80)) await stopAll();
       if (value) {
         try { await refresh(); }
         catch (error) { enabled = false; throw error; }
       }
     },
-    async close() { closed = true; clearInterval(timer); await pending.catch(() => {}); await active?.stop(true); active = null; },
+    async close() { closed = true; clearInterval(timer); await pending.catch(() => {}); await stopAll(); },
   };
 }

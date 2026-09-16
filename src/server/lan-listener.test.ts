@@ -37,6 +37,13 @@ test("custom names must resolve only to this installation and preserve its direc
     expect(result.error).not.toContain("secret");
   }
 });
+test("a bare-name alias on port 80 is admitted only while the listener holds the port", async () => {
+  const resolve = (async () => [{ address: network.address, family: 4 }]) as never;
+  expect(await lanUrls(network, 4100, ["http://couch.home", "http://couch.home:80"], resolve, true)).toEqual({ urls: ["http://couch.home", "http://192.168.1.20:4100"], error: null });
+  const rejected = await lanUrls(network, 4100, ["http://couch.home"], resolve);
+  expect(rejected.urls).toEqual(["http://192.168.1.20:4100"]);
+  expect(rejected.error).toContain("cannot listen on port 80");
+});
 test("failed or mixed DNS answers omit only invalid aliases and preserve the recovery IP", async () => {
   const result = await lanUrls(network, 4100, ["http://good.home:4100", "http://missing.home:4100", "http://mixed.home:4100", "http://empty.home:4100"], (async (name: string) => {
     if (name === "missing.home") throw new Error("ENOTFOUND");
@@ -152,4 +159,39 @@ test("port conflicts reject enabling and cannot silently enable sharing on a lat
     await expect(listener.setEnabled(true)).rejects.toThrow("using the port");
     const attempts = starts; conflict = false; await listener.refresh(); expect(starts).toBe(attempts); expect(listener.server).toBeNull();
   } finally { await listener.close(); }
+});
+test("port 80 aliases get their own best-effort listener, drop out when the bind fails and recover with it", async () => {
+  let refuse80 = true;
+  const ports: number[] = [], stops: number[] = [];
+  const changes: { urls: string[]; error: string | null }[] = [];
+  const listener = createLanListener({
+    port: 4100, enabled: true, advertised: ["http://couch.home"],
+    interfaces: () => ({ eth0: [entry(network.address)] }),
+    resolve: (async () => [{ address: network.address, family: 4 }]) as never,
+    start: (_network, port) => { ports.push(port); if (port === 80 && refuse80) throw new Error("EACCES"); return { stop: async () => { stops.push(port); } }; },
+    changed: (urls, error) => changes.push({ urls, error }),
+  });
+  try {
+    await listener.refresh();
+    expect(ports.filter(port => port === 4100)).toEqual([4100]);
+    expect(listener.server).not.toBeNull();
+    expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: expect.stringContaining("cannot listen on port 80") });
+    refuse80 = false; await listener.refresh();
+    expect(ports).toContain(80);
+    expect(changes.at(-1)).toEqual({ urls: ["http://couch.home", "http://192.168.1.20:4100"], error: null });
+    await listener.setEnabled(false);
+    expect([...stops].sort((a, b) => a - b)).toEqual([80, 4100]);
+    expect(listener.server).toBeNull();
+  } finally { await listener.close(); }
+});
+test("a listener that already owns port 80 does not start a second one", async () => {
+  const ports: number[] = [];
+  const listener = createLanListener({
+    port: 80, enabled: true, advertised: ["http://couch.home"],
+    interfaces: () => ({ eth0: [entry(network.address)] }),
+    resolve: (async () => [{ address: network.address, family: 4 }]) as never,
+    start: (_network, port) => { ports.push(port); return { stop: async () => {} }; },
+    changed: () => {},
+  });
+  try { await listener.refresh(); expect(ports).toEqual([80]); } finally { await listener.close(); }
 });
