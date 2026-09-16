@@ -33,7 +33,7 @@ describe("hosted versions and promotion", () => {
     expect(Bun.semver.order("0.2.0-preview.1", "0.1.0")).toBe(1);
     expect(Bun.semver.order("0.2.0", "0.2.0")).toBe(0);
     expect(Bun.semver.order("0.1.0-preview.1", "0.3.0")).toBe(-1);
-    const feed = (status: number, body: string) => (async () => new Response(body, { status })) as typeof fetch;
+    const feed = (status: number, body: string) => (async () => new Response(body, { status })) as unknown as typeof fetch;
     const published = (version: string) => feed(200, JSON.stringify({ version }));
     const empty = feed(400, '"Unknown update platform"');
     await expect(assertIncreasing("0.1.0", "stable", "linux-x86_64-deb", published("0.2.0"))).rejects.toThrow();

@@ -12,15 +12,16 @@ import type { Credentials } from "./session";
 import "./session-home.css";
 import "./now-playing.css";
 
-export function NowPlaying({ state, credentials, connected, run, onBack, onBrowse, onRemote, active = true }: {
+export function NowPlaying({ state, credentials, connected, run, onBack, onBrowse, onRemote, active = true, embedded = false }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
   run: (action: Action) => Promise<boolean>;
-  onBack: () => void;
+  onBack?: () => void;
   onBrowse?: (section: string) => void;
   onRemote?: () => void;
   active?: boolean;
+  embedded?: boolean;
 }) {
   const panel = useRef<HTMLElement | null>(null);
   const back = useRef<HTMLButtonElement | null>(null);
@@ -53,16 +54,16 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
   }} onBlurCapture={event => {
     if (event.target.isConnected && !event.target.matches(":disabled") && !event.currentTarget.contains(event.relatedTarget as Node | null)) focused.current = null;
   }}>
-    <Button ref={back} variant="ghost" className="browse-back" onClick={onBack}><ArrowLeft aria-hidden="true" />Back to browsing</Button>
+    {!embedded && <Button ref={back} variant="ghost" className="browse-back" onClick={onBack}><ArrowLeft aria-hidden="true" />Back to browsing</Button>}
     <div className="session-home">
       <div className="session-current">
         {current ? <><p className="eyebrow">Now playing{state?.installationName && ` · ${state.installationName}`}</p><PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" onRemote={onRemote} /></> : <Empty>
-          <EmptyHeader><EmptyTitle><h1>Nothing playing</h1></EmptyTitle><EmptyDescription>Choose something from Home or your queue.</EmptyDescription></EmptyHeader>
-          <EmptyContent><Button onClick={() => onBrowse ? onBrowse("Home") : onBack()}><Search aria-hidden="true" />Find something to play</Button></EmptyContent>
+          <EmptyHeader><EmptyTitle><h1>Nothing playing</h1></EmptyTitle><EmptyDescription>Search or paste a link above, or browse Find.</EmptyDescription></EmptyHeader>
+          <EmptyContent><Button onClick={() => onBrowse ? onBrowse(embedded ? "Find" : "Home") : onBack?.()}><Search aria-hidden="true" />Find something to play</Button></EmptyContent>
         </Empty>}
       </div>
       <section className="session-next" aria-labelledby="now-playing-next-title">
-        <div className="session-section-heading"><h2 id="now-playing-next-title">Up next <span className="count">{upcoming.length}</span></h2>{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Queue")}>Manage queue<ChevronRight aria-hidden="true" /></Button>}</div>
+        <div className="session-section-heading"><h2 id="now-playing-next-title">Up next <span className="count">{upcoming.length}</span></h2>{onBrowse && !embedded && <Button variant="ghost" onClick={() => onBrowse("Queue")}>Manage queue<ChevronRight aria-hidden="true" /></Button>}</div>
         {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
         {upcoming.length ? <ol className="session-next-list">{upcoming.map((entry, index) => <li key={entry.id} data-upcoming-entry={index}>
           {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="session-next-art" video={entry.kind !== "radio"} /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="session-next-art" />}

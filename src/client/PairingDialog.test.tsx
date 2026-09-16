@@ -141,7 +141,7 @@ test("the QR opens the actual phone form with its code, then device submission r
   expect(localStorage.getItem("couch.remote-installation-id")).toBe("living-room");
   expect(sessionMock?.mock.calls.at(-1)?.[0]).toEqual({ origin: "http://localhost", token: "new-controller", installationId: "living-room" });
   expect(document.querySelector(".pair-form")).toBeNull();
-  expect(document.querySelector('[data-page="Home"]')).not.toBeNull();
+  expect(document.querySelector('[data-page="Now"]')).not.toBeNull();
   expect(document.querySelector(".controller-name")?.textContent).toBe("Guest phone");
 });
 

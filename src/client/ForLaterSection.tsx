@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import type { ForLaterItem } from "../shared/for-later";
 
 export function ForLaterSection({ origin, token, connected, canPlay, version, inspect = false, onFind }: {
@@ -62,7 +63,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, version, in
   return <section className="catalog-panel space-y-4" aria-labelledby="for-later-title">
     <div><h2 ref={heading} tabIndex={-1} id="for-later-title" className="text-xl font-semibold">For later</h2></div>
     {!connected && <p role="status">Reconnect to see your saved items.</p>}
-    {loading && <p role="status">Loading saved items…</p>}
+    {loading && <p className="flex items-center gap-2" role="status"><Spinner className="size-3.5" />Loading saved items…</p>}
     {error && <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => setRefresh(value => value + 1)}>Refresh For later</Button></div>}
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !items.length && <div className="space-y-2"><p>No saved titles.</p>{onFind && <Button variant="outline" onClick={onFind}>Search</Button>}</div>}

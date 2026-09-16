@@ -2,7 +2,7 @@ export const settingsPages = {
   playback: { label: "Playback", path: "/settings/playback" },
   appearance: { label: "Appearance", path: "/settings/appearance" },
   connection: { label: "Connections", path: "/settings/connection" },
-  general: { label: "TV", path: "/settings/tv" },
+  general: { label: "General", path: "/settings/tv" },
   sources: { label: "Sources", path: "/settings/sources" },
   "source-folders": { label: "TV folders", path: "/settings/sources/folders" },
   "source-jellyfin": { label: "Jellyfin", path: "/settings/sources/jellyfin" },

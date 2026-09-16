@@ -3,6 +3,9 @@
 .settings-header h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 650; }
 .settings-layout { display: grid; gap: 1.5rem; align-items: start; }
 .settings-nav { display: grid; gap: .25rem; min-width: 0; }
+.settings-nav-group { display: grid; gap: .25rem; }
+.settings-nav-label { padding: 1rem .75rem .25rem; color: var(--muted-foreground); font-size: .72rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.settings-nav-group:first-child .settings-nav-label { padding-top: 0; }
 .settings-link { min-height: 44px; height: auto; width: 100%; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; text-align: left; white-space: normal; }
 .settings-link[aria-current="page"] { background: var(--muted); color: var(--foreground); }
 .settings-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

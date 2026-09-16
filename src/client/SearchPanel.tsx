@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { Label } from "@/components/ui/label";
 import { SaveForLater } from "./SaveForLater";
 import { progressTime } from "./HistoryPanel";
@@ -107,6 +108,7 @@ export function SearchPanel(props: Props) {
       <Search aria-hidden="true" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search or paste a link</Label><Input ref={input} id="media-search" type="search" maxLength={4096} value={draft} onChange={event => changeDraft(event.target.value)} placeholder="Search or paste a link" /></div>
       {draft && <Button variant="ghost" type="button" aria-label="Clear search" onClick={() => { changeDraft(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button>}
     </form>
+    {!search.query && props.connected && <p className="search-hint">One search across YouTube, Twitch, RaiPlay, Bandcamp, radio and your library. Paste a link to play it directly.</p>}
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
     {search.query && <>
       {!url && filter !== "All" && !summaries[filter]?.count && <Button variant="outline" onClick={() => setFilter("All")}>Show all sources</Button>}
@@ -204,8 +206,8 @@ function SearchSource({ source, query, attempt, ...props }: Props & { source: So
     <Button variant="secondary" aria-label={`Add to queue: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>Add to queue</Button>
   </div>;
   return <section className="space-y-3" aria-label={`${source} search results`} aria-busy={loading}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xl font-semibold">{source === "Library" ? "TV folders" : source}</h3><Button variant="outline" onClick={() => props.onBrowse(source === "Library" ? "Files" : source)}>Browse {source === "Library" ? "TV folders" : source}</Button></div>
-    <p className="text-sm text-muted-foreground" role="status">{loading ? `Searching ${source}…` : page ? `${page.total} result${page.total === 1 ? "" : "s"}` : ""}</p>
+    <div className="search-source-heading"><h2>{source === "Library" ? "TV folders" : source}</h2>{page && !loading && <span className="search-source-count">{page.total} result{page.total === 1 ? "" : "s"}</span>}</div>
+    {loading && <p className="text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Searching {source}…</p>}
     {error && <Alert variant="destructive"><AlertDescription><p>{error}</p><Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Retry {source}</Button></AlertDescription></Alert>}
     {page?.warning && <div className="space-y-2"><p className="text-sm text-muted-foreground" role="status">{page.warning}</p><Button variant="outline" onClick={() => props.onChooseSource("YouTube")}>Search YouTube</Button><Button variant="outline" disabled={!props.connected || loading} onClick={() => setRetry(value => value + 1)}>Refresh {source}</Button></div>}
     {(error || page?.warning) && <div>{props.onManageSources ? <Button variant="outline" onClick={() => props.onManageSources?.(source === "Library" ? "folders" : "jellyfin")}>Source settings</Button> : <p className="text-sm text-muted-foreground">Ask an administrator to manage this source.</p>}</div>}

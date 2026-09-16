@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Film, Play, Plus, RotateCcw } from "lucide-react";
+import { ChevronRight, Film, Play, Plus, Radio, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { HistoryItem, LibraryItem } from "../shared/library";
 import type { ProviderId } from "../shared/providers";
+import type { RadioStation } from "../shared/radio";
 import type { SessionState } from "../shared/protocol";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./ProviderPanel";
@@ -20,7 +22,7 @@ const asHistory = (item: LibraryItem): HistoryItem => ({
   watched: item.progress?.watched ?? false, lastPlayedAt: item.progress?.lastPlayedAt ?? null,
 });
 
-export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd }: {
+export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
@@ -32,6 +34,8 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   onAddSource?: () => void;
   onPlay: HistoryPlayback;
   onAdd: (item: HistoryItem) => Promise<boolean>;
+  recentRadio?: RadioStation[];
+  onRadio?: (station: RadioStation) => Promise<boolean>;
 }) {
   const { origin, token } = credentials;
   const profileId = state?.activeProfile.id;
@@ -105,16 +109,22 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Add to queue: ${item.title}`} onClick={() => void add(item)}><Plus aria-hidden="true" />Add to queue</Button>}
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
+  const radioArt = (station: RadioStation) => <span className="browse-art">
+    {station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="browse-image" /> : <><Radio aria-hidden="true" /><span>{station.name}</span></>}
+  </span>;
+  const radioCards = !!recentRadio?.length && onRadio && <>{recentRadio.map(station => <li key={`radio:${station.id}`}>
+    <button type="button" className="browse-media-card" aria-label={`Play now: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
+      {radioArt(station)}<strong>{station.name}</strong><small>Radio station</small>
+    </button>
+  </li>)}</>;
   const detailLibrary = library.find(item => `library:${item.id}` === detailId);
   const detail = currentProfile ? history.find(item => item.mediaId === detailId) ?? (detailLibrary ? asHistory(detailLibrary) : null) : null;
   const selected = detail && metadata(detail);
 
   return <section className="browse-home" aria-label="Browse and resume">
-    <div className="browse-section-heading"><h2>Sources</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}</div>
-    <nav className="browse-sources" aria-label="Browse sources"><div>{([['youtube', 'YouTube'], ['twitch', 'Twitch'], ['raiplay', 'RaiPlay'], ['bandcamp', 'Bandcamp']] as const).map(([provider, label]) => <Button key={provider} variant="outline" onClick={() => onProvider ? onProvider(provider) : onBrowse("Online")}>{label}</Button>)}{sources.map(({ section, label }) => <Button key={section} variant="outline" onClick={() => onBrowse(section)}>{label}</Button>)}</div></nav>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
     {notice && <p role="status" className="browse-notice">{notice}</p>}
-    {loading && connected && <p role="status" className="browse-quiet">Loading your media…</p>}
+    {loading && connected && <p role="status" className="browse-quiet flex items-center gap-2"><Spinner className="size-3.5" />Loading your media…</p>}
     {hero && <div className="browse-section-heading"><h2>Continue playing</h2></div>}
     {hero ? <section className="browse-hero" aria-label="Continue watching">
       {artwork(hero, "browse-hero-art")}
@@ -122,19 +132,20 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
         <div className="browse-actions"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
       </div>
     </section> : null}
-    {currentProfile && history.some(item => item.mediaId !== hero?.mediaId) && <section aria-label="Recently played">
+    {currentProfile && (history.some(item => item.mediaId !== hero?.mediaId) || !!recentRadio?.length) && <section aria-label="Recently played">
       <div className="browse-section-heading"><h2>Recently played</h2></div>
-      <ul className="browse-media-grid">{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
+      <ul className="browse-media-grid">{radioCards}{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
         <button type="button" className="browse-media-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
           {artwork(item)}<strong>{item.title}</strong><small>{item.position > 0 ? `Continue at ${progressTime(item.position)}` : item.watched ? "Finished" : item.sourceLabel || "Played"}</small>
         </button>{playbackActions(item)}
       </li>)}</ul>
     </section>}
-    {!!cards.length && <div className="browse-section-heading"><h2>TV folders</h2><Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button></div>}
+    {!!cards.length && <div className="browse-section-heading"><h2>TV folders</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button>}</div>}
     {!!cards.length && <ul className="browse-media-grid">{cards.map(item => {
       const entry = asHistory(item);
       return <li key={item.id}><button type="button" className="browse-media-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong>{item.title}</strong><small>{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
     })}</ul>}
+    {onAddSource && <div className="browse-section-heading"><h2>Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div>}
     <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="browse-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}
