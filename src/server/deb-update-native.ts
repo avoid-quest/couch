@@ -1,6 +1,10 @@
 import type { DebUpdateAction, DebUpdateReply, UpdateRequest } from "../shared/updates";
 import { UpdateError, type UpdateFeed, type UpdateRelease } from "./update-feed";
 
+// A reply-carried native rejection (the deb sidecar's own message), as opposed
+// to a transport fault on the channel itself.
+export class NativeUpdateError extends UpdateError {}
+
 // Mirrors the AppImage worker over the deb sidecar channel; the native side
 // rejects AppImage-only actions such as checkRepair and repair-current.
 export function createNativeDebUpdates(send: (requestId: string, action: DebUpdateAction) => void) {
@@ -43,7 +47,7 @@ export function createNativeDebUpdates(send: (requestId: string, action: DebUpda
       if (!current) { if (mutation === reply.requestId && !reply.accepted && !reply.progress) mutation = undefined; return; }
       if (reply.progress) { current.progress?.(reply.progress); return; }
       if (reply.accepted) { current.resolve(reply); mutation = reply.requestId; return; }
-      if (reply.error) current.reject(new UpdateError(reply.error)); else current.resolve(reply);
+      if (reply.error) current.reject(new NativeUpdateError(reply.error)); else current.resolve(reply);
     },
     close() { for (const current of pending.values()) current.reject(new UpdateError("The native connection closed.")); },
   };

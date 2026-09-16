@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "./update-request";
-import type { UpdateState } from "../shared/updates";
+import { verificationFailure, type UpdateState } from "../shared/updates";
 import { ToolsSettings } from "./ToolsSettings";
 
 type Props = { credentials: { origin: string; token: string }; connected: boolean; showTools?: boolean };
@@ -77,6 +77,10 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       else await update("install", { install: { candidateId, requestId, confirmInterrupt } });
     } catch { setError("Could not save this update's retry identity. Allow local storage before installing."); }
   };
+  const downloadAgain = async () => {
+    clearUpdateRequest(credentials.origin); setRetry(null);
+    if (state?.candidate) await update("stage", { candidateId: state.candidate.id });
+  };
   if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to the app to check updates.</p>;
   const problem = error ?? loadError;
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
@@ -96,6 +100,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       {transaction?.error && <p>{transaction.error}</p>}
       {!connected && <p>Couch is restarting or offline. This page will reconnect; keep it open.</p>}
       {transaction?.phase === "operator-required" && <p className="text-muted-foreground">The update did not finish its verification. From the administrator's SSH account, inspect the Couch journal, keep the data directory, and retry only after the journal looks clean.</p>}
+      {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button></div>}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button></div>}
     </Card>}
     {state && <Card className="min-w-0 gap-3 p-4 text-sm">
@@ -132,7 +137,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
         {candidate && state.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update</Button>}
       </div>
     </Card>}
-    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span><Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Refresh status</Button></AlertDescription></Alert>}
+    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Refresh status</Button>}</AlertDescription></Alert>}
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <Card className="min-w-0 gap-2 p-4 text-sm">
       <p className="font-medium">Manual installation is not enabled on this installation.</p>

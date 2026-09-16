@@ -1,6 +1,7 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { UpdateState, UpdateTransaction } from "../shared/updates";
 import { ControllerError, settingField } from "./controllers";
+import { NativeUpdateError } from "./deb-update-native";
 import type { UpdateRequest } from "../shared/updates";
 
 type Install = { candidateId: string; requestId: string; confirmInterrupt: boolean };
@@ -65,7 +66,8 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });
       return json({ transaction }, 202);
     } catch (error) {
-      return json({ error: error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying.", ...(unaccepted ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : 400);
+      const native = error instanceof NativeUpdateError ? error.message : null;
+      return json({ error: native ?? (error instanceof ControllerError ? error.message : "The update request did not finish. Refresh status before retrying."), ...(unaccepted || native ? { accepted: false } : {}) }, error instanceof ControllerError ? error.status : native ? 409 : 400);
     }
   }
 
