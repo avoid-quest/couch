@@ -83,7 +83,7 @@ async function renderApp(value = state, administrator = false) {
     requests.push(String(input));
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     if (path === "/api/radio/avoid") return Response.json({ playlist: { id: "avoid", error: null }, stations: [] });
-    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.taxi" });
+    if (path === "/api/settings/streamingcommunity") return Response.json({ origin: "https://streamingcommunityz.academy" });
     if (path === "/api/for-later") return Response.json({ items: [{ id: "saved", title: "Saved evening film" }] });
     return Response.json({ profile, items: [], favorites: [], playlists: [], sources: [], stations: [], total: 0, offset: 0, limit: 24, configured: false });
   }) as typeof fetch);
@@ -187,13 +187,13 @@ test("a terminal radio failure keeps Now playing and its retry reachable", async
 
 test("source setup opens directly from a pasted link and restores its search and trigger", async () => {
   await renderApp(state, true);
-  const query = "https://streamingcommunityz.taxi/watch/evening";
+  const query = "https://streamingcommunityz.academy/watch/evening";
   await searchHome(query);
   const trigger = button("StreamingCommunity settings");
   await act(async () => { trigger.focus(); trigger.click(); });
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("Add source");
-  expect(dialog.querySelector<HTMLInputElement>("#streamingcommunity-origin")?.value).toBe("https://streamingcommunityz.taxi");
+  expect(dialog.querySelector<HTMLInputElement>("#streamingcommunity-origin")?.value).toBe("https://streamingcommunityz.academy");
   expect(dialog.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("StreamingCommunity");
   await act(async () => button("Close", dialog).click());
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });

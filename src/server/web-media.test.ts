@@ -336,7 +336,7 @@ test("other providers, formats and deceptive hosts cannot enable Bandcamp recove
 
 test("loads only the embedded extractor for the configured StreamingCommunity origin and removes its directory", async () => {
   const { directory, resolve, inspect } = await fixture(`const args = process.argv.slice(2); const dir = args[args.indexOf('--plugin-dirs') + 1]; const source = await Bun.file(dir + '/bundled/yt_dlp_plugins/extractor/streamingcommunity.py').text(); await Bun.write(import.meta.dir + '/args.json', JSON.stringify(args)); if (!source.includes('class StreamingCommunityIE')) process.exit(1); ${output({ ...combined, title: "Episode" })}`);
-  const page = "https://streamingcommunityz.taxi/it/watch/7989?e=1";
+  const page = "https://streamingcommunityz.academy/it/watch/7989?e=1";
   expect((await resolve(page)).metadata?.title).toBe("Episode");
   const args = await Bun.file(join(directory, "args.json")).json() as string[];
   expect(args.indexOf("--no-plugin-dirs")).toBeLessThan(args.indexOf("--plugin-dirs"));
@@ -347,7 +347,7 @@ test("loads only the embedded extractor for the configured StreamingCommunity or
   expect(await inspect(page)).toEqual({ title: "Episode" });
   await expect(resolve(page, undefined, "auto", "https://streamingcommunity.example")).rejects.toThrow("Saved links are not retargeted");
   expect((await resolve("https://streamingcommunity.example/it/watch/7989", undefined, "auto", "https://streamingcommunity.example")).metadata?.title).toBe("Episode");
-  for (const invalid of ["https://streamingcommunityz.taxi/", "https://streamingcommunityz.taxi/it/titles/7989-show/season-1", `${page}&url=https://private.example`, `${page}#private`, "https://streamingcommunityz.taxi.evil.com/it/watch/7989", "http://streamingcommunityz.taxi/it/watch/7989"]) await expect(resolve(invalid)).rejects.toThrow(/StreamingCommunity/);
+  for (const invalid of ["https://streamingcommunityz.academy/", "https://streamingcommunityz.academy/it/titles/7989-show/season-1", `${page}&url=https://private.example`, `${page}#private`, "https://streamingcommunityz.academy.evil.com/it/watch/7989", "http://streamingcommunityz.academy/it/watch/7989"]) await expect(resolve(invalid)).rejects.toThrow(/StreamingCommunity/);
 });
 
 test("normal webpage sources never load plugins, and embedded extraction cleans up on cancellation and failure", async () => {
@@ -356,13 +356,13 @@ test("normal webpage sources never load plugins, and embedded extraction cleans 
   expect(await Bun.file(join(normal.directory, "args.json")).json()).not.toContain("--plugin-dirs");
   const delayed = await fixture("const args = process.argv.slice(2); await Bun.write(import.meta.dir + '/plugin', args[args.indexOf('--plugin-dirs') + 1]); await Bun.sleep(60000);", 4000);
   const controller = new AbortController();
-  const pending = delayed.resolve("https://streamingcommunityz.taxi/it/watch/7989", controller.signal);
+  const pending = delayed.resolve("https://streamingcommunityz.academy/it/watch/7989", controller.signal);
   const limit = Date.now() + 2000;
   try { while (!existsSync(join(delayed.directory, "plugin"))) { if (Date.now() > limit) throw new Error("Extractor did not start"); await Bun.sleep(10); } }
   finally { controller.abort(); }
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   expect(existsSync(await Bun.file(join(delayed.directory, "plugin")).text())).toBeFalse();
   const failure = await fixture("const args = process.argv.slice(2); await Bun.write(import.meta.dir + '/plugin', args[args.indexOf('--plugin-dirs') + 1]); console.error('https://private.example/?token=secret'); process.exit(1);");
-  await expect(failure.resolve("https://streamingcommunityz.taxi/it/watch/7989")).rejects.toThrow("could not open");
+  await expect(failure.resolve("https://streamingcommunityz.academy/it/watch/7989")).rejects.toThrow("could not open");
   expect(existsSync(await Bun.file(join(failure.directory, "plugin")).text())).toBeFalse();
 });

@@ -208,7 +208,7 @@ test("provider URL opens its existing catalogue, Bandcamp album commands remain 
   expect(paths.some(path => path.includes("youtube/items") || path.includes("library/items"))).toBe(false);
   await click("Play album"); expect(commands.at(-1)).toEqual({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/public", playNow: true });
   await click("Play now: Album track"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://artist.bandcamp.com/track/one" }); expect(commands.at(-1)).not.toHaveProperty("quality");
-  await search("https://streamingcommunityz.taxi/watch/public"); await click("Play now"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.taxi/watch/public", playNow: true });
+  await search("https://streamingcommunityz.academy/watch/public"); await click("Play now"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.academy/watch/public", playNow: true });
 });
 test("filters retain query and source results, and broadcasts refresh saved state without repeating online searches", async () => {
   integrated = true; await render(); await search("Evening");
