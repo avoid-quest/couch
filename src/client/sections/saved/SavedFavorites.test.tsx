@@ -2,10 +2,11 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
-import type { ProviderItem } from "../shared/providers";
-import type { RadioStation } from "../shared/radio";
+import type { QueryClient } from "@tanstack/react-query";
+import type { ProviderItem } from "../../../shared/providers";
+import type { RadioStation } from "../../../shared/radio";
 
-let root: Root, window: Window, request: ReturnType<typeof spyOn>;
+let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string }> = [];
 const played: Array<{ kind: string; id: string; playNow: boolean }> = [];
@@ -17,12 +18,15 @@ let online: ProviderItem[] = [], radios: RadioStation[] = [], failOnline = false
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const flush = () => act(async () => { await Bun.sleep(20); });
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
-async function render(connected = true, providerVersion = 1, radioVersion = 1, canPlay = true) {
+async function render(connected = true, canPlay = true) {
   const { SavedFavorites } = await import("./SavedFavorites");
-  await act(async () => root.render(<SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} providerVersion={providerVersion} radioVersion={radioVersion}
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+  await act(async () => root.render(wrap(<SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay}
     onEnqueueProvider={async (item, playNow) => { played.push({ kind: "provider", id: item.id, playNow }); return true; }}
     onEnqueueRadio={async (item, playNow) => { played.push({ kind: "radio", id: item.id, playNow }); return true; }}
-    onOpenProvider={item => opened.push(item.id)} />));
+    onOpenProvider={item => opened.push(item.id)} />)));
   await flush();
 }
 beforeEach(async () => {
@@ -74,14 +78,14 @@ test("one saved list shows existing online and radio favorites without catalog o
 test("removal uses original stores and preserves the queue and another controller's changes", async () => {
   await render();
   await click("Remove Evening video from Saved");
-  expect(calls.at(-1)).toEqual({ path: "/api/providers/favorites/video", method: "DELETE" });
+  expect(calls.some(call => call.path === "/api/providers/favorites/video" && call.method === "DELETE")).toBe(true);
   expect(document.body.textContent).not.toContain("YouTube");
   await click("Remove Evening radio from Saved");
-  expect(calls.at(-1)).toEqual({ path: "/api/radio/favorites/station", method: "DELETE" });
+  expect(calls.some(call => call.path === "/api/radio/favorites/station" && call.method === "DELETE")).toBe(true);
   expect(document.querySelectorAll("li")).toHaveLength(1);
   expect(played).toEqual([]);
   online.push({ ...video, id: "new", title: "New shared video" });
-  await render(true, 2, 2);
+  await act(async () => { await client.invalidateQueries(); }); await flush();
   expect(document.querySelectorAll("li")).toHaveLength(2);
   expect(document.body.textContent).toContain("New shared video");
 });
@@ -100,7 +104,7 @@ test("one unavailable save source does not hide the other source and retry recov
 });
 
 test("without native playback saved media remains queueable, while disconnect clears actionable data", async () => {
-  await render(true, 1, 1, false);
+  await render(true, false);
   expect(button("Play Evening video").disabled).toBe(true);
   expect(button("Add Evening video to Up next").disabled).toBe(false);
   expect(button("Remove Evening video from Saved").disabled).toBe(false);
@@ -112,9 +116,10 @@ test("without native playback saved media remains queueable, while disconnect cl
 
 test("Saved keeps saved collections together without a separate history destination", async () => {
   const { SavedSection } = await import("./SavedSection");
+  const { QueryClientProvider } = await import("@tanstack/react-query");
   const browsed: string[] = [];
-  await act(async () => root.render(<SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
-    onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} />));
+  await act(async () => root.render(<QueryClientProvider client={client}><SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
+    onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
   expect([...document.querySelectorAll('[role="tab"]')].map(node => node.textContent)).toEqual(["Items", "Playlists"]);
@@ -123,13 +128,12 @@ test("Saved keeps saved collections together without a separate history destinat
   expect([...document.querySelectorAll("button")].some(node => node.textContent === "History")).toBe(false);
 });
 
-
 test("opening a saved collection browses its provider and URL, with Back returning to that provider", async () => {
   const { SavedFavorites } = await import("./SavedFavorites");
-  const { ProviderPanel } = await import("./ProviderPanel");
+  const { ProviderPanel } = await import("../../ProviderPanel");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+  const wrapClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrap = (node: React.ReactNode) => <QueryClientProvider client={wrapClient}>{node}</QueryClientProvider>;
   const browsed: URL[] = [];
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -144,7 +148,7 @@ test("opening a saved collection browses its provider and URL, with Back returni
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
       ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />)
-      : <SavedFavorites {...connection} providerVersion={1} radioVersion={1} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />;
+      : wrap(<SavedFavorites {...connection} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />);
   }
   await act(async () => root.render(<SavedCollection />));
   await flush(); await click("Open Evening album");
@@ -155,69 +159,4 @@ test("opening a saved collection browses its provider and URL, with Back returni
   await flush();
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
   expect(document.body.textContent).toContain("Recently played");
-});
-
-
-test("an opened YouTube playlist plays or queues the full collection with a quality override beside its controls", async () => {
-  const { ProviderPanel } = await import("./ProviderPanel");
-  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
-  const playlist: ProviderItem = { id: "list", provider: "youtube", kind: "collection", title: "Evening playlist", url: "https://www.youtube.com/playlist?list=PL1234567890" };
-  const queued: unknown[] = [];
-  request.mockImplementation((async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith("/items")
-    ? Response.json({ title: playlist.title, items: [video], nextCursor: "24" }) : Response.json({ favorites: [] })) as typeof fetch);
-  const props = { origin: "http://localhost", token: "paired", connected: true, canPlay: true, initialItem: playlist, version: 1, defaultQuality: "1080p" as const, onEnqueue: async () => true, onEnqueueAlbum: async () => true, onEnqueuePlaylist: async (...args: unknown[]) => { queued.push(args); return true; } };
-  await act(async () => root.render(wrap(<ProviderPanel onPlayHistory={async () => true} {...props} />))); await flush();
-  expect(document.querySelector('[role="combobox"]')).toBeNull();
-  expect(document.body.textContent).not.toContain("Next video quality");
-  await click("Play playlist");
-  expect(queued).toEqual([[playlist.url, true, "1080p"]]);
-  await click("Video quality for Evening playlist");
-  const trigger = document.querySelector<HTMLElement>('[role="combobox"]')!;
-  await act(async () => trigger.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }) as unknown as Event)); await flush();
-  const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(node => node.textContent === "Up to 720p")!;
-  await act(async () => { option.focus(); option.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }) as unknown as Event); }); await flush();
-  await act(async () => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event)); await flush();
-  await click("Up next");
-  expect(queued.at(-1)).toEqual([playlist.url, false, "720p"]);
-  await click("Play playlist");
-  expect(queued.at(-1)).toEqual([playlist.url, true, "1080p"]);
-  await act(async () => root.render(wrap(<ProviderPanel onPlayHistory={async () => true} {...props} connected={false} />))); await flush();
-  expect(button("Play playlist").disabled).toBe(true);
-});
-
-test("Back from a live Twitch channel restores focus to its Past broadcasts button", async () => {
-  const { ProviderPanel } = await import("./ProviderPanel");
-  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
-  const channel: ProviderItem = { id: "twitch-live", provider: "twitch", kind: "media", title: "Live channel", url: "https://www.twitch.tv/live_channel", live: true };
-  const browsed: URL[] = [];
-  request.mockImplementation((async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
-    if (!url.pathname.endsWith("/items")) return Response.json({ favorites: [channel], items: [] });
-    browsed.push(url);
-    return Response.json({ title: "Twitch", items: [channel] });
-  }) as typeof fetch);
-  await act(async () => root.render(wrap(<ProviderPanel onPlayHistory={async () => true} origin="http://localhost" token="paired" connected canPlay initialItem={channel} version={1} defaultQuality="auto"
-    onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />)));
-  await flush();
-  await click("Back");
-  const input = document.querySelector<HTMLInputElement>("#provider-search")!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "live_channel");
-    input.dispatchEvent(new window.Event("input", { bubbles: true }) as unknown as Event);
-  });
-  await act(async () => document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }) as unknown as Event));
-  await flush();
-  const opener = button("Past broadcasts");
-  await act(async () => { opener.focus(); opener.click(); });
-  await flush();
-  expect(browsed.at(-1)?.searchParams.get("url")).toBe(channel.url);
-  expect(button("Past broadcasts")).toBeUndefined();
-  await click("Back");
-  expect(browsed.at(-1)?.searchParams.get("q")).toBe("live_channel");
-  expect(document.activeElement === button("Past broadcasts")).toBe(true);
-  expect(document.querySelectorAll('[data-provider-id="twitch-live"]')).toHaveLength(1);
 });

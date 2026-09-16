@@ -1,4 +1,4 @@
-import { SavedSection } from "../../SavedSection";
+import { SavedSection } from "./SavedSection";
 import { useShell } from "../../shell";
 
 export function SavedPage() {
