@@ -434,6 +434,7 @@ body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset
 }
 .couch-shell .media-browser .browse-home,
 .couch-shell .media-browser .session-home { padding: 0; }
+.saved-favorites .media-artwork { width: 46px; height: 54px; border-radius: 6px; flex-shrink: 0; }
 .couch-shell .now-search { display: flex; align-items: center; gap: 14px; padding: 6px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); transition: border-color 140ms; }
 .couch-shell .now-search:focus-within { border-color: var(--primary); }
 .couch-shell .now-search > svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--muted-foreground); }

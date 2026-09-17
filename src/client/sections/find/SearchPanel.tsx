@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SaveForLater } from "@/components/SaveForLater";
 import { SearchBar } from "@/components/SearchBar";
 import type { Action } from "../../../shared/protocol";
+import type { PlaylistSource } from "../../../shared/playlists";
 import type { ProviderId, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchSource } from "./SearchSource";
@@ -29,6 +30,7 @@ export type Props = {
   draftQuery?: string;
   searchState?: SearchRouteState;
   onSearchChange?: (state: SearchRouteState) => void;
+  onSavePlaylist?: (provider: PlaylistSource["provider"], url: string) => Promise<boolean>;
 };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 

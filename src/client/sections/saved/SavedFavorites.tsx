@@ -112,7 +112,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">No favorites yet.</p>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-    <ul ref={list} className="grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
+    <ul ref={list} className="saved-favorites grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
       <SortableContext items={favorites.filter(favorite => favorite.kind === "provider").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
         {favorites.filter(favorite => favorite.kind === "provider").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`} editing>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
       </SortableContext>

@@ -324,6 +324,20 @@ for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} sear
   expect(commands).toEqual([]);
 });
 
+test("collection results save through the centralized playlists", async () => {
+  const { SearchOnlineResults } = await import("./SearchOnlineResults");
+  const collection: ProviderItem = { id: "series", provider: "streamingcommunity", kind: "collection", title: "South Park", url: "https://streamingcommunityz.academy/it/titles/4800-south-park" };
+  request.mockImplementation((async (input: RequestInfo | URL) => {
+    const url = new URL(String(input)); paths.push(url.pathname + url.search);
+    return Response.json(url.pathname.endsWith("/favorites") ? { favorites: [] } : { items: [collection] });
+  }) as typeof fetch);
+  const saved: Array<[string, string]> = [];
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SearchOnlineResults provider="streamingcommunity" query="South Park" quality="auto" onEnqueued={() => {}} onSavePlaylist={async (provider, url) => { saved.push([provider, url]); return true; }} origin="http://localhost" token="paired" connected canPlay active onCommand={async () => true} /></QueryClientProvider>)); await flush();
+  await click("Save playlist: South Park");
+  expect(saved).toEqual([["streamingcommunity", collection.url]]);
+  expect(document.body.textContent).toContain("Saved as a playlist");
+});
+
 for (const manage of [false, true]) test(`${manage ? "administrator" : "guest"} can recover from an unconfigured source without losing their query`, async () => {
   integrated = true; administrator = manage; connectedJellyfin = false;
   await render(); await search("Evening");

@@ -134,13 +134,14 @@ test("without native playback saved media remains queueable, while disconnect cl
 
 test("Saved keeps saved collections together without a separate history destination", async () => {
   const { SavedSection } = await import("./SavedSection");
-  const { QueryClientProvider } = await import("@tanstack/react-query");
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const browsed: string[] = [];
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => root.render(<QueryClientProvider client={client}><SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect(screen.getAllByRole("tab").map((node: HTMLElement) => node.textContent)).toEqual(["Items", "Playlists"]);
+  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toContain("Saved");
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();

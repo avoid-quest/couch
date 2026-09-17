@@ -84,7 +84,7 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
           <div className="session-next-copy gap-2"><strong>{entry.title}</strong><small>{sourceLabel(entry.source)}{entry.live || entry.kind === "radio" ? " · Live" : ""}</small></div>
           <Button variant="secondary" size="icon" className="session-next-play" aria-label={`Play ${entry.title}`} title="Play now" disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><Play aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from Up next`} disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}><X aria-hidden="true" /></Button>
-        </li>}</SortableRow>)}</ol></SortableContext></DndContext> : <Empty className="now-playing-queue-empty items-start px-0 text-left"><EmptyHeader><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Add to queue from Home or Saved.</EmptyDescription></EmptyHeader></Empty>}
+        </li>}</SortableRow>)}</ol></SortableContext></DndContext> : <Empty className="now-playing-queue-empty text-center"><EmptyHeader><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Add to queue from Home or Saved.</EmptyDescription></EmptyHeader></Empty>}
       </section>}
     </div>
   </section>;
