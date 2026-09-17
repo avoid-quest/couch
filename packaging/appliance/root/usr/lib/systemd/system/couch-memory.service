@@ -1,0 +1,6 @@
+[Unit]
+Description=Couch memory sample for journal observability
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/couch-appliance/memory-sample

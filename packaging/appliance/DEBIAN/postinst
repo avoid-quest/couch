@@ -18,4 +18,5 @@ if $created; then
 fi
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
+    systemctl enable --now couch-memory.timer 2>/dev/null || true
 fi
