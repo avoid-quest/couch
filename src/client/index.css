@@ -883,3 +883,4 @@ body { min-width: 0; }
   button, [role="button"] { touch-action: manipulation; }
   :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
 }
+.remote-pad-playback { display: grid; gap: 12px; }

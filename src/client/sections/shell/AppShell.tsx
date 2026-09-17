@@ -296,7 +296,7 @@ function ShellChrome({ children }: PropsWithChildren) {
                 {shell.onlineRequest && <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={shell.playHistory} onEnqueue={shell.enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} onSavePlaylist={shell.saveProviderPlaylist} />}
               </DialogContent>
             </Dialog>
-            <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} run={run} player={state?.player ?? null} /></DialogContent></Dialog>
+            <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>
         )}
         </div>
