@@ -71,7 +71,7 @@ On a Linux mini PC, Tauri displays the app and embedded video directly. Phones
 and laptops use the web remote in both setups. The Docker preview has silent
 audio and software video rendering.
 
-Select **Library** to browse YouTube, Twitch, RaiPlay or Bandcamp, then **Play on TV**.
+Select **Library** to browse YouTube, Twitch, RaiPlay, StreamingCommunity or Bandcamp, then **Play on TV**.
 The launcher also prints a LAN URL for your phone. It keeps running after you
 close the browser; `bun run preview:linux stop` stops it. Restart after source
 changes to rebuild. See [preview options](../tests/preview/README.md) for mounting
@@ -130,7 +130,8 @@ and is not available.
 
 **Library** provides YouTube search, channel sections and playlists; Twitch live
 channels, categories and search; RaiPlay live TV, programs, episodes, search
-and recent replays; and public Bandcamp albums and tracks. Save media, channels
+and recent replays; StreamingCommunity catalogue browsing, search, seasons,
+episodes and recent plays; and public Bandcamp albums and tracks. Save media, channels
 and collections for every paired remote. Browsing remains local to each screen; queue changes and saved items
 are shared. **Play** adds the selected item and starts it on the TV.
 
@@ -337,6 +338,22 @@ links. Account libraries, full-text search, artist discographies and custom
 domains are not implemented. The displayed album contains the tracks returned
 by yt-dlp; its extractor omits entries without duration, and later tracks can
 still fail when playback checks their current availability.
+
+### StreamingCommunity
+
+**Find > StreamingCommunity** browses the catalogue of the website source that
+an administrator configures in **Settings > Sources**. The catalogue, a search
+or a pasted title link loads sixty titles at a time. Films play directly; series
+open into seasons and then episodes. A title's details show plot, year, quality,
+runtime and genres without leaving the page. Episodes, films and seasons have
+Play and Queue controls, and **Save as playlist** stores a film, a season or a
+whole series in Saved playlists. Titles that match a search also appear in the
+regular Find results.
+
+The site publishes no API, so Couch reads the pages a browser would load and
+updates ship when the site changes its layout. If the site moves domains, an
+administrator updates the origin in **Settings > Sources**; saved playlists keep
+the links they were saved with.
 
 ## Resume, watched state and history
 

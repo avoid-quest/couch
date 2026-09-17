@@ -4,6 +4,7 @@ import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/components/HistoryPanel";
 import type { Action } from "../../../shared/protocol";
+import type { PlaylistSource } from "../../../shared/playlists";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { DigitalClock } from "@/components/DigitalClock";
 import { Icon } from "@/components/Icon";
@@ -115,7 +116,7 @@ function useShellValue() {
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
     run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
-  const saveProviderPlaylist = async (provider: "youtube" | "raiplay" | "bandcamp", url: string) => {
+  const saveProviderPlaylist = async (provider: PlaylistSource["provider"], url: string) => {
     if (!credentials) throw new Error("Could not save the playlist. Check the TV connection.");
     const response = await fetch(`${credentials.origin}/api/playlists`, {
       method: "POST",

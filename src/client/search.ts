@@ -1,4 +1,4 @@
-export const searchSources = ["All", "YouTube", "RaiPlay", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
+export const searchSources = ["All", "YouTube", "RaiPlay", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin", "Twitch", "Bandcamp"];
 export type SearchRouteState = { query: string; source: string };
 export function readSearchState(search: string | Record<string, string | string[] | undefined>): SearchRouteState {
   const params = typeof search === "string" ? new URLSearchParams(search) : new URLSearchParams(Object.entries(search).flatMap(([key, value]) => value === undefined ? [] : [[key, Array.isArray(value) ? value[0] ?? "" : value]] as [string, string][]));

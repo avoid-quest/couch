@@ -30,6 +30,7 @@ import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
 import { loadYouTubePlaylist } from "./providers/youtube";
 import { loadRaiPlayProgramme } from "./providers/raiplay";
+import { loadStreamingCommunityList } from "./providers/streamingcommunity";
 import { loadBandcampAlbum } from "./providers/bandcamp";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
@@ -157,7 +158,7 @@ export function createHub(options: HubOptions) {
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
     resolveSource: async source => {
-      const page = await (source.provider === "youtube" ? loadYouTubePlaylist : source.provider === "raiplay" ? loadRaiPlayProgramme : loadBandcampAlbum)(source.url, shutdown.signal);
+      const page = await (source.provider === "youtube" ? loadYouTubePlaylist : source.provider === "raiplay" ? loadRaiPlayProgramme : source.provider === "streamingcommunity" ? loadStreamingCommunityList : loadBandcampAlbum)(source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })) };
     } });
   const folders = createMediaFolders();
@@ -188,7 +189,7 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider") });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
   const forLater = createForLater({
     databasePath: options.databasePath, onChange: () => session.invalidate("forLater"),
     lookup: async reference => {

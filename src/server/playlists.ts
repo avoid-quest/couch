@@ -23,7 +23,7 @@ const identifier = (value: unknown): value is string => typeof value === "string
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const methods = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
 const columns = "id, name, revision, updatedAt, entries";
-const sourceProviders = ["youtube", "raiplay", "bandcamp"];
+const sourceProviders = ["youtube", "raiplay", "bandcamp", "streamingcommunity"];
 
 function playlistName(value: unknown) {
   if (typeof value !== "string" || /[\u0000-\u001f\u007f]/.test(value)) throw new PlaylistError("Use a playlist name with 1 to 80 characters.");
@@ -63,7 +63,7 @@ function originalSource(value: unknown): value is string {
 
 function playlistSource(value: unknown): PlaylistSource {
   if (!object(value) || !sourceProviders.includes(String(value.provider)) || typeof value.url !== "string" || !value.url || value.url.length > 2048) {
-    throw new PlaylistError("Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save.");
+    throw new PlaylistError("Choose a YouTube playlist, RaiPlay programme, StreamingCommunity film or series, or Bandcamp album to save.");
   }
   fields(value, ["provider", "url"]);
   return { provider: value.provider as PlaylistSource["provider"], url: value.url };

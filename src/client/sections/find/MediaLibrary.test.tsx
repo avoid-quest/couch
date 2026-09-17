@@ -50,7 +50,7 @@ test("Library opens playable online media without a folder or an owned collectio
   expect(button("Home")).toBeUndefined();
   expect(button("Back to recent")).toBeUndefined();
   expect(requests.some(url => url.includes("/api/library"))).toBe(false);
-  expect([...document.querySelectorAll('[aria-label="Online providers"] [role="tab"]')].map(node => node.textContent)).toEqual(["YouTube", "Twitch", "RaiPlay", "Bandcamp"]);
+  expect([...document.querySelectorAll('[aria-label="Online providers"] [role="tab"]')].map(node => node.textContent)).toEqual(["YouTube", "Twitch", "RaiPlay", "StreamingCommunity", "Bandcamp"]);
   expect(button("Resume A public video").disabled).toBe(false);
   await act(async () => button("Resume A public video").click());
   expect(played).toEqual([[recent, { fromStart: false }]]);

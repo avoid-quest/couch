@@ -124,8 +124,8 @@ test("saves a source list through the shared entry point without touching the qu
 });
 
 test.each([
-  [{ provider: "twitch", url: "https://twitch.tv/x" }, "Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save."],
-  [{ provider: "youtube", url: "" }, "Choose a YouTube playlist, RaiPlay programme, or Bandcamp album to save."],
+  [{ provider: "twitch", url: "https://twitch.tv/x" }, "Choose a YouTube playlist, RaiPlay programme, StreamingCommunity film or series, or Bandcamp album to save."],
+  [{ provider: "youtube", url: "" }, "Choose a YouTube playlist, RaiPlay programme, StreamingCommunity film or series, or Bandcamp album to save."],
   [{ provider: "raiplay", url: "https://www.raiplay.it/programmi/report", extra: true }, "Invalid playlist command."],
 ])("rejects malformed source commands with an actionable message", async (source, error) => {
   const { service } = fixture({ resolveSource: async () => ({ name: "Unused", entries: [track] }) });
