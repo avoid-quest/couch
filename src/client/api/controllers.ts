@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { ControllerIdentity } from "../../shared/controllers";
+import type { Controller, ControllerIdentity } from "../../shared/controllers";
 import { apiFetch, type ApiCredentials } from "./client";
 
 // Remotes keep their credentials in storage; the TV itself has none and is
@@ -19,6 +19,17 @@ export function identityQuery() {
       if (!credentials) return null;
       const response = await apiFetch(credentials, "/api/controllers/me", { signal });
       return await response.json() as ControllerIdentity;
+    },
+    retry: false,
+  });
+}
+
+export function controllersQuery(credentials: ApiCredentials) {
+  return queryOptions({
+    queryKey: ["controllers", "list", credentials.origin, credentials.token] as const,
+    queryFn: async ({ signal }): Promise<Controller[]> => {
+      const response = await apiFetch(credentials, "/api/controllers", { signal });
+      return (await response.json() as { controllers: Controller[] }).controllers;
     },
     retry: false,
   });
