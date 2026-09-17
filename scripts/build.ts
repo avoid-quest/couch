@@ -40,7 +40,7 @@ const server = await Bun.build({
   },
   minify: true,
   plugins: [tailwind],
-  define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
+  define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo), "import.meta.env.DEV": "false" },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
 console.log(`Built frontend (Vite) and Bun sidecar for ${target}`);
