@@ -38,6 +38,7 @@ import { Route as SettingsSourcesRouteImport } from './routes/settings/sources'
 import { Route as SettingsTvRouteImport } from './routes/settings/tv'
 import { Route as SettingsTvAppearanceRouteImport } from './routes/settings/tv-appearance'
 import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
+import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
 import { Route as SettingsSourcesFoldersRouteImport } from './routes/settings/sources/folders'
 import { Route as SettingsSourcesJellyfinRouteImport } from './routes/settings/sources/jellyfin'
 import { Route as SettingsSourcesMetadataRouteImport } from './routes/settings/sources/metadata'
@@ -189,6 +190,11 @@ const SettingsUpdatesRoute = SettingsUpdatesRouteImport.update({
   path: '/updates',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsSourcesIndexRoute = SettingsSourcesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
 const SettingsSourcesFoldersRoute = SettingsSourcesFoldersRouteImport.update({
   id: '/folders',
   path: '/folders',
@@ -251,6 +257,7 @@ export interface FileRoutesByFullPath {
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
+  '/settings/sources/': typeof SettingsSourcesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -276,7 +283,6 @@ export interface FileRoutesByTo {
   '/settings/playback': typeof SettingsPlaybackRoute
   '/settings/remotes': typeof SettingsRemotesRoute
   '/settings/sound': typeof SettingsSoundRoute
-  '/settings/sources': typeof SettingsSourcesRouteWithChildren
   '/settings/tv': typeof SettingsTvRoute
   '/settings/tv-appearance': typeof SettingsTvAppearanceRoute
   '/settings/updates': typeof SettingsUpdatesRoute
@@ -286,6 +292,7 @@ export interface FileRoutesByTo {
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
+  '/settings/sources': typeof SettingsSourcesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -323,6 +330,7 @@ export interface FileRoutesById {
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
+  '/settings/sources/': typeof SettingsSourcesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -361,6 +369,7 @@ export interface FileRouteTypes {
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
+    | '/settings/sources/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -386,7 +395,6 @@ export interface FileRouteTypes {
     | '/settings/playback'
     | '/settings/remotes'
     | '/settings/sound'
-    | '/settings/sources'
     | '/settings/tv'
     | '/settings/tv-appearance'
     | '/settings/updates'
@@ -396,6 +404,7 @@ export interface FileRouteTypes {
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
+    | '/settings/sources'
   id:
     | '__root__'
     | '/'
@@ -432,6 +441,7 @@ export interface FileRouteTypes {
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
+    | '/settings/sources/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -652,6 +662,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsUpdatesRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/sources/': {
+      id: '/settings/sources/'
+      path: '/'
+      fullPath: '/settings/sources/'
+      preLoaderRoute: typeof SettingsSourcesIndexRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
     '/settings/sources/folders': {
       id: '/settings/sources/folders'
       path: '/folders'
@@ -717,6 +734,7 @@ interface SettingsSourcesRouteChildren {
   SettingsSourcesMetadataRoute: typeof SettingsSourcesMetadataRoute
   SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
   SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
+  SettingsSourcesIndexRoute: typeof SettingsSourcesIndexRoute
 }
 
 const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
@@ -726,6 +744,7 @@ const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
   SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
   SettingsSourcesStreamingCommunityRoute:
     SettingsSourcesStreamingCommunityRoute,
+  SettingsSourcesIndexRoute: SettingsSourcesIndexRoute,
 }
 
 const SettingsSourcesRouteWithChildren = SettingsSourcesRoute._addFileChildren(

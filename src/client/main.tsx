@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NativeModeGate } from "@/sections/shell/PlaybackDevice";
 import { registerAppShellWorker } from "./register-sw";
 import { router } from "./router";
+import "./index.css";
 
 document.documentElement.classList.add("dark");
 registerAppShellWorker();

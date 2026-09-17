@@ -1,4 +1,4 @@
-import { Link, useLocation, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, createContext, useContext, useEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode } from "react";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
@@ -213,9 +213,9 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
   }
 }
 
-export function AppShell({ children }: PropsWithChildren) {
+export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome>{children}</ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
 function ShellChrome({ children }: PropsWithChildren) {

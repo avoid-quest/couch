@@ -1,5 +1,6 @@
 import { createRootRoute, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { SessionGate } from "@/session/session-context";
 import { AppShell } from "../sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +21,7 @@ function NotFound() {
 }
 
 export const Route = createRootRoute({
-  component: AppShell,
+  component: () => <SessionGate><AppShell /></SessionGate>,
   errorComponent: RootError,
   notFoundComponent: NotFound,
 });
