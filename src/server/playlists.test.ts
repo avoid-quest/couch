@@ -51,13 +51,13 @@ test("saves named household playlists, lists summaries, and restores them after 
   const path = databasePath();
   const first = fixture({ databasePath: path });
   const saved = await create(first.service, "  Evening music  ");
-  expect(saved).toEqual({ id: expect.any(String), name: "Evening music", revision: 1, updatedAt: expect.any(Number), entries: [{ id: track.id, title: track.title }] });
+  expect(saved).toEqual({ id: expect.any(String), name: "Evening music", revision: 1, updatedAt: expect.any(Number), source: null, entries: [{ id: track.id, title: track.title }] });
   expect(first.changed).toHaveBeenCalledTimes(1);
   first.service.close();
   opened.delete(first.service);
   const second = fixture({ databasePath: path });
   expect(await detail(second.service, saved.id)).toEqual(saved);
-  expect(await (await request(second.service)).json()).toEqual({ playlists: [{ id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, entryCount: 1 }] });
+  expect(await (await request(second.service)).json()).toEqual({ playlists: [{ id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source: null, entryCount: 1 }] });
   expect(second.loaded).not.toHaveBeenCalled();
   expect(second.changed).not.toHaveBeenCalled();
 });
@@ -118,9 +118,50 @@ test("saves a source list through the shared entry point without touching the qu
     { id: "yt-one", title: "First video", thumbnail: "https://i.ytimg.com/vi/one/hqdefault.jpg", duration: 90, quality: "1080p" },
     { id: "yt-two", title: "Second video" },
   ]);
-  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, entryCount: 2 }] });
+  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" }, entryCount: 2 }] });
   expect(changed).toHaveBeenCalledTimes(1);
   expect(loaded).not.toHaveBeenCalled();
+});
+
+test("keeps the source hint on the summary across restart and migrates databases saved before sources", async () => {
+  const path = databasePath();
+  const before = new Database(path, { create: true, strict: true });
+  before.run(`CREATE TABLE saved_playlists (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE,
+    revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, entries TEXT NOT NULL
+  )`);
+  before.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?)").run("old", "Old queue save", "old queue save", 1, 1, JSON.stringify([{ id: track.id, title: track.title }]));
+  before.close();
+  const first = fixture({ databasePath: path, resolveSource: async () => ({ name: "Resolved title", entries: [track] }) });
+  const source = { provider: "streamingcommunity", url: "https://streamingcommunityz.academy/title/1234" } as const;
+  const response = await request(first.service, "POST", "", { source });
+  expect(response.status).toBe(201);
+  const saved = (await response.json() as { playlist: SavedPlaylist }).playlist;
+  expect(await (await request(first.service)).json()).toEqual({ playlists: [
+    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1 },
+    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1 },
+  ] });
+  first.service.close();
+  opened.delete(first.service);
+  const second = fixture({ databasePath: path });
+  expect(await (await request(second.service)).json()).toEqual({ playlists: [
+    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1 },
+    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1 },
+  ] });
+});
+
+test.each(["youtube", "raiplay", "bandcamp", "streamingcommunity"] as const)("keeps the %s source on the saved playlist so summaries distinguish it from queue saves", async provider => {
+  const source = { provider, url: `https://www.${provider === "raiplay" ? "raiplay.it/programmi/report" : provider === "streamingcommunity" ? "streamingcommunityz.academy/title/1234" : `${provider}.example/list`}` };
+  const { service } = fixture({ resolveSource: async resolved => {
+    expect(resolved).toEqual(source);
+    return { name: "Resolved list", entries: [track] };
+  } });
+  const response = await request(service, "POST", "", { source });
+  expect(response.status).toBe(201);
+  const { playlist } = await response.json() as { playlist: SavedPlaylist };
+  expect(playlist.source).toEqual(source);
+  expect(await detail(service, playlist.id)).toEqual(playlist);
+  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source, entryCount: 1 }] });
 });
 
 test.each([

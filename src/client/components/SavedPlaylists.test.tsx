@@ -6,7 +6,7 @@ import type { Root } from "react-dom/client";
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const writes: Array<{ path: string; method: string; body: unknown }> = [];
-const playlist = { id: "friday", name: "Friday night", revision: 3, updatedAt: 1, entries: [{ id: "movie", title: "Evening movie" }] };
+const playlist = { id: "friday", name: "Friday night", revision: 3, updatedAt: 1, source: null, entries: [{ id: "movie", title: "Evening movie" }] };
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const flush = () => act(async () => { await Bun.sleep(15); });
 const click = async (node: HTMLElement) => { await act(async () => node.click()); await flush(); };
@@ -41,6 +41,7 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
   else { expect(request).not.toHaveBeenCalled(); await click(button("Saved playlists")); }
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
+  expect(document.querySelector('[data-slot="badge"]')).toBeNull();
   expect(writes).toEqual([]);
   await click(button("Add to queue"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
@@ -50,4 +51,34 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   expect(writes).toHaveLength(1);
   await click(button("Delete playlist")); await click(button("Confirm delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
+});
+
+const sources = {
+  youtube: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" },
+  raiplay: { provider: "raiplay", url: "https://www.raiplay.it/programmi/report" },
+  bandcamp: { provider: "bandcamp", url: "https://artist.bandcamp.com/album/public" },
+  // Shaped like the StreamingCommunity title saves from #345: the resolved
+  // title name with capturePlaylistEntries-shaped entries.
+  streamingcommunity: { provider: "streamingcommunity", url: "https://streamingcommunityz.academy/title/1234" },
+} as const;
+const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
+
+for (const [provider, source] of Object.entries(sources)) test(`${provider} source-saved playlists show the provider badge and load and remove like queue saves`, async () => {
+  const saved = { id: "source-list", name: "Evening list", revision: 2, updatedAt: 1, source, entries: [{ id: "ep-1", title: "Pilot", duration: 2700 }] };
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
+    return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1 }] } : { playlist: saved });
+  }) as typeof fetch);
+  const { SavedPlaylists } = await import("./SavedPlaylists");
+  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} />));
+  await click(button("Saved playlists"));
+  expect(document.querySelector('[data-slot="badge"]')?.textContent).toBe(providerLabels[provider as keyof typeof sources]);
+  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="source-list"]')!);
+  expect(writes).toEqual([]);
+  await click(button("Add to queue"));
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list/load", method: "POST", body: { revision: 2, mode: "append" } });
+  await click(button("Delete playlist")); await click(button("Confirm delete"));
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list", method: "DELETE", body: { revision: 2 } });
 });
