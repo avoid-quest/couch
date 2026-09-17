@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Action, VideoQuality } from "../../../shared/protocol";
-import { QualitySelect } from "../../QualitySelect";
+import { QualitySelect } from "@/components/QualitySelect";
 import { supportsWebVideoQuality, useEnqueueVideoQuality } from "../../video-quality";
 import { createId, type Credentials } from "../../session/session";
 

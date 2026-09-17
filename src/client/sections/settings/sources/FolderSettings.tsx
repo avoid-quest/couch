@@ -8,7 +8,7 @@ import { apiFetch } from "@/api/client";
 import type { ManagedFolder } from "../../../../shared/folders";
 import type { LibrarySource } from "../../../../shared/library";
 import { FolderBrowser } from "./FolderBrowser";
-import type { SourceCredentials } from "./sourceTypes";
+import type { SourceCredentials } from "@/components/sourceTypes";
 
 type FolderView = LibrarySource & Partial<Pick<ManagedFolder, "verified" | "scannedItems">>;
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };

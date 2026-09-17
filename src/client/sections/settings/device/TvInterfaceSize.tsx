@@ -5,8 +5,8 @@ import type { Credentials } from "../../../session/session";
 import { usePreviewSeconds } from "../../../interface-size";
 import { InterfaceSizeChoices } from "./InterfaceSizeChoices";
 
-export function TvInterfaceSize({ appearance, credentials, connected, administrator, native }: {
-  appearance: TvAppearance; credentials: Credentials | null; connected: boolean; administrator: boolean; native: boolean;
+export function TvInterfaceSize({ appearance, credentials, connected, administrator, native, previewOnly = false }: {
+  appearance: TvAppearance; credentials: Credentials | null; connected: boolean; administrator: boolean; native: boolean; previewOnly?: boolean;
 }) {
   const seconds = usePreviewSeconds(appearance);
   const [pending, setPending] = useState(false);
@@ -33,9 +33,11 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
 
   const canWrite = administrator && connected && !pending;
   return (
-    <section className="space-y-3" aria-labelledby="tv-interface-size" data-tv-local-only={native ? "" : undefined}>
-      <h3 id="tv-interface-size">TV interface size</h3>
-      <p className="text-muted-foreground">Shared by everyone watching this TV. Try a size, check the TV, then confirm it within 20 seconds.</p>
+    <section className="space-y-3" aria-labelledby={previewOnly ? undefined : "tv-interface-size"} data-tv-local-only={native ? "" : undefined}>
+      {!previewOnly && <>
+        <h3 id="tv-interface-size">TV interface size</h3>
+        <p className="text-muted-foreground">Shared by everyone watching this TV. Try a size, check the TV, then confirm it within 20 seconds.</p>
+      </>}
       {administrator
         ? <InterfaceSizeChoices label="TV interface size" value={seconds || !appearance.preview ? appearance.size : appearance.confirmedSize} disabled={!canWrite} onChange={size => void change("", { size })} />
         : <p className="text-muted-foreground">{interfaceSizes.find(size => size.value === appearance.confirmedSize)?.label}. An administrator can change this TV's interface size.</p>}

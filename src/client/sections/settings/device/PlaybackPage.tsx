@@ -1,8 +1,8 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { useShell } from "../../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "../SettingsLayout";
-import { QualitySelect } from "../../../QualitySelect";
+import { QualitySelect } from "@/components/QualitySelect";
 import { PlaybackPreferences } from "./PlaybackPreferences";
 
 // Route composition only; playback changes remain socket commands.

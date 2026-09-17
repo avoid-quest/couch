@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import { ToolsSettings } from "./ToolsSettings";
 type Props = { credentials: ApiCredentials; connected: boolean; showTools?: boolean };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
 export function UpdatesSettings({ credentials, connected, showTools = true }: Props) {
-  const queryClient = useQueryClient();
   const [state, setState] = useState<UpdateState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -59,7 +58,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
         setState(current => current ? { ...current, installation: { enabled: true, transaction: transaction ?? null } } : current);
       }
       else setState(result as UpdateState);
-      await queryClient.invalidateQueries({ queryKey });
+      await updates.refetch();
     } catch { setError("The request did not finish. Reconnect to see whether the app accepted it."); }
     finally { setPending(false); }
   }
@@ -101,7 +100,7 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button></div>}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button></div>}
     </Card>}
-    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void queryClient.invalidateQueries({ queryKey }); }}>Refresh status</Button>}</AlertDescription></Alert>}
+    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void updates.refetch(); }}>Refresh status</Button>}</AlertDescription></Alert>}
     {!state && !problem && <Card className="min-w-0 gap-3 p-4 text-sm"><p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading update status…</p></Card>}
     {state && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p role="status" className={waitingStatus ? "flex items-center gap-2" : undefined}>{waitingStatus && <Spinner className="size-3.5" />}{statusText}</p>

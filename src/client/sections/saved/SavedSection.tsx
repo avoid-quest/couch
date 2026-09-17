@@ -4,7 +4,7 @@ import type { SessionState } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { ForLaterSection } from "./ForLaterSection";
 import { SavedFavorites, type SavedFavoriteActions } from "./SavedFavorites";
-import { SavedPlaylists } from "../../SavedPlaylists";
+import { SavedPlaylists } from "@/components/SavedPlaylists";
 
 export function SavedSection({ state, credentials, connected, canPlay, active, onBrowse, ...favoriteActions }: SavedFavoriteActions & {
   state: SessionState | null;

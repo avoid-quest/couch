@@ -85,7 +85,7 @@ test("another controller's socket revision refreshes shared saved items", async 
 });
 
 test("saving a library result posts only its catalog identity and never a queue operation", async () => {
-  const { SaveForLater } = await import("../../SaveForLater");
+  const { SaveForLater } = await import("@/components/SaveForLater");
   const { QueryClientProvider } = await import("@tanstack/react-query");
   await act(async () => root.render(<QueryClientProvider client={client}><SaveForLater origin="http://localhost" token="paired" connected reference={{ kind: "library", id: "movie" }} title="Evening movie" /></QueryClientProvider>));
   await click("Save Evening movie for later");

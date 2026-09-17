@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GuideSources, type GuideRequest } from "../../GuideSources";
-import { RecordingsPanel } from "../../RecordingsPanel";
-import { recordingsQuery } from "../../api/recordings";
+import { GuideSources, type GuideRequest } from "@/components/GuideSources";
+import { RecordingsPanel } from "@/components/RecordingsPanel";
+import { guidePageQuery, iptvLiveEdgeQuery } from "@/api/iptv";
 import { apiFetch } from "../../api/client";
+import { recordingsQuery } from "../../api/recordings";
 import { createId, type Credentials } from "../../session/session";
 import { GuideLogo } from "./GuideLogo";
 import { GuideProgramDialog } from "./GuideProgramDialog";
@@ -28,18 +29,10 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
   const [playError, setPlayError] = useState<string | null>(null);
   const returnFocus = useRef<HTMLButtonElement | null>(null);
   const request = useCallback<GuideRequest>(async (path, init = {}) => apiFetch(credentials, `/api/iptv/${path}`, init), [credentials]);
-  const guide = useQuery({
-    queryKey: ["iptv", "guide", { query, group, offset }],
-    enabled: connected && active,
-    queryFn: () => request(`guide?${new URLSearchParams({ q: query, group, offset: String(offset) })}`).then(r => r.json() as Promise<GuidePage>),
-  });
+  const guide = useQuery({ ...guidePageQuery(credentials, { query, group, offset }), enabled: connected && active });
   const page = guide.data;
   const liveChannelId = active && connected && currentSource?.startsWith("iptv:") ? currentSource.slice(5) : null;
-  const liveEdge = useQuery({
-    queryKey: ["iptv", "live-edge", liveChannelId],
-    enabled: !!liveChannelId,
-    queryFn: () => request(`channels/${liveChannelId}/capabilities`).then(r => r.json() as Promise<{ liveEdge: "reload" | null }>),
-  });
+  const liveEdge = useQuery(iptvLiveEdgeQuery(credentials, liveChannelId));
   const recordings = useQuery({ ...recordingsQuery(credentials), enabled: connected && active });
   const recordingsRemote = {
     page: recordings.data ?? null,

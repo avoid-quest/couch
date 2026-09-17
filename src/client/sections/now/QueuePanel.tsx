@@ -3,13 +3,13 @@ import { ListMusic, Play } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { Action, QueueEntry, SessionState, VideoQuality } from "../../../shared/protocol";
-import { AuthArtwork } from "../../AuthArtwork";
-import { MediaArtwork } from "../../ProviderPanel";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import { videoQualityLabels } from "../../video-quality";
 import { AddMediaDialog } from "./AddMediaDialog";
 import { OpenFileButton } from "./OpenFileButton";
 import { QueueActions } from "./QueueActions";
-import { SavedPlaylists } from "../../SavedPlaylists";
+import { SavedPlaylists } from "@/components/SavedPlaylists";
 import { type Credentials } from "../../session/session";
 
 type Props = {

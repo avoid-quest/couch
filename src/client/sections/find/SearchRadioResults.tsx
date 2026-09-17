@@ -3,9 +3,9 @@ import { useInvalidation } from "./useInvalidation";
 import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioStation } from "../../../shared/radio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "../../ProviderPanel";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import { createId } from "../../session/session";
-import type { SourceSetupKind } from "../../SourceSetupDialog";
+import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
 
 type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };

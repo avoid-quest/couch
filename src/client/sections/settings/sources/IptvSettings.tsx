@@ -1,10 +1,10 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { GuideSources, type GuideRequest } from "@/GuideSources";
+import { GuideSources, type GuideRequest } from "@/components/GuideSources";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { apiFetch } from "@/api/client";
-import type { SourceSettingsProps } from "./sourceTypes";
+import type { SourceSettingsProps } from "@/components/sourceTypes";
 
 export function IptvSettings({ credentials, connected, canManage }: SourceSettingsProps) {
   const queryClient = useQueryClient();

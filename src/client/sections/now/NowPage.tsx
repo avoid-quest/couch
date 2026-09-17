@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
-import { HistoryPanel } from "../../HistoryPanel";
+import { HistoryPanel } from "@/components/HistoryPanel";
 import { LiveNow } from "./LiveNow";
 import { NowPlaying } from "./NowPlaying";
-import { useShell } from "../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 import { Input } from "@/components/ui/input";
 
 export function NowPage() {

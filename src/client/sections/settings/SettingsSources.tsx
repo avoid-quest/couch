@@ -5,7 +5,7 @@ import { JellyfinSettings } from "./sources/JellyfinSettings";
 import { MetadataSettings } from "./sources/MetadataSettings";
 import { RadioSettings } from "./sources/RadioSettings";
 import { StreamingCommunitySettings } from "./sources/StreamingCommunitySettings";
-import type { SourceKind, SourceSettingsProps } from "./sources/sourceTypes";
+import type { SourceKind, SourceSettingsProps } from "@/components/sourceTypes";
 
 const sourcePages: [SourceKind, string][] = [
   ["folders", "TV folders"],

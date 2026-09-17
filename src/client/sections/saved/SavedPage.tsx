@@ -1,5 +1,5 @@
 import { SavedSection } from "./SavedSection";
-import { useShell } from "../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 
 export function SavedPage() {
   const shell = useShell();

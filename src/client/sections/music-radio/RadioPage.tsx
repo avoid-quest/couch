@@ -1,5 +1,5 @@
 import { RadioPanel } from "./RadioPanel";
-import { useShell } from "../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 
 export function RadioPage() {
   const shell = useShell();

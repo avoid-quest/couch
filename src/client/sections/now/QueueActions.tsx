@@ -1,4 +1,4 @@
-import { SaveForLater } from "../../SaveForLater";
+import { SaveForLater } from "@/components/SaveForLater";
 import type { Credentials } from "../../session/session";
 import { useState } from "react";
 import { MoreHorizontal, ArrowUp, ArrowDown, X, RotateCcw } from "lucide-react";

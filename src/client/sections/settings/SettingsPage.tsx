@@ -1,9 +1,9 @@
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { useShell } from "../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "./SettingsLayout";
 import { PlaceholderSettings } from "./PlaceholderSettings";
 import { SettingsSources } from "./SettingsSources";
-import type { SourceKind } from "./sources/sourceTypes";
+import type { SourceKind } from "@/components/sourceTypes";
 
 export function SettingsPage({ section }: { section: SettingsPage }) {
   const shell = useShell();

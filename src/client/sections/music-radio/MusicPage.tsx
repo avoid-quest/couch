@@ -1,5 +1,5 @@
-import { MusicPanel } from "./MusicPanel";
-import { useShell } from "../../shell";
+import { MusicPanel } from "@/components/MusicPanel";
+import { useShell } from "@/sections/shell/AppShell";
 
 export function MusicPage() {
   const shell = useShell();
