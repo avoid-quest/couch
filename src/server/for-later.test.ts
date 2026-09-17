@@ -30,6 +30,28 @@ async function save(service: ReturnType<typeof createForLater>) {
 }
 const list = async (service: ReturnType<typeof createForLater>) => (await (await request(service)).json() as { items: ForLaterItem[] }).items;
 
+test("drag reordering persists across restarts and rejects malformed or stale orders", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-for-later-"));
+  close.push(() => rmSync(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, "state.sqlite");
+  const f = fixture({ databasePath, lookup: async reference => ({ ...entry, id: reference.id, source: `library:${reference.id}` }) });
+  const ids: string[] = [];
+  for (const label of ["first", "second", "third"]) ids.push(((await (await request(f.service, "POST", "", { reference: { kind: "library", id: label } })).json()) as { item: ForLaterItem }).item.id);
+  // New saves lead the list, so the saved order is third, second, first.
+  expect((await list(f.service)).map(item => item.id)).toEqual([...ids].reverse());
+  expect((await request(f.service, "POST", "/reorder", { order: ids })).status).toBe(200);
+  expect(f.changed).toHaveBeenCalled();
+  expect((await list(f.service)).map(item => item.id)).toEqual(ids);
+  f.service.close(); close.pop();
+  const restarted = fixture({ databasePath });
+  expect((await list(restarted.service)).map(item => item.id)).toEqual(ids);
+  expect((await request(restarted.service, "POST", "/reorder", { order: [ids[0], ids[0]] })).status).toBe(400);
+  expect((await request(restarted.service, "POST", "/reorder", { order: [ids[0], "gone"] })).status).toBe(400);
+  expect((await request(restarted.service, "POST", "/reorder", { order: "first" })).status).toBe(400);
+  expect((await request(restarted.service, "GET", "/reorder")).status).toBe(405);
+  expect((await list(restarted.service)).map(item => item.id)).toEqual(ids);
+});
+
 test("shared saved items survive restart and deduplicate source identity without copying playback credentials", async () => {
   const directory = mkdtempSync(join(tmpdir(), "couch-for-later-"));
   close.push(() => rmSync(directory, { recursive: true, force: true }));

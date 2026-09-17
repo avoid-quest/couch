@@ -81,6 +81,14 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
   db.run("CREATE TABLE IF NOT EXISTS radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(radio_favorites)").all().some(column => column.name === "position")) {
+    db.transaction(() => {
+      db.run("ALTER TABLE radio_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      // Existing installs keep their alphabetical reading order as the start order.
+      const rows = db.query<{ id: string }, []>("SELECT id FROM radio_favorites ORDER BY json_extract(station, '$.name') COLLATE NOCASE").all();
+      for (const [index, row] of rows.entries()) db.query("UPDATE radio_favorites SET position = ? WHERE id = ?").run(index + 1, row.id);
+    })();
+  }
   db.run(`
     CREATE TABLE IF NOT EXISTS radio_playlists (id TEXT PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, updated_at INTEGER, error TEXT);
     CREATE TABLE IF NOT EXISTS radio_playlist_stations (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, position INTEGER NOT NULL, station TEXT NOT NULL);
@@ -238,7 +246,7 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
     },
     favorites(): RadioStation[] {
       assertOpen();
-      return db.query<{ station: string }, []>("SELECT station FROM radio_favorites ORDER BY json_extract(station, '$.name') COLLATE NOCASE").all()
+      return db.query<{ station: string }, []>("SELECT station FROM radio_favorites ORDER BY position, id").all()
         .flatMap(row => { try { return [station(JSON.parse(row.station))]; } catch { return []; } });
     },
     saveFavorite(value: unknown) {
@@ -246,9 +254,19 @@ export function createRadio({ databasePath, fetch: request = globalThis.fetch, d
       let favorite = station(value);
       const current = db.query<{ station: string }, [string]>("SELECT station FROM radio_playlist_stations WHERE id = ?").get(favorite.id);
       if (current) favorite = station(JSON.parse(current.station));
-      db.query("INSERT INTO radio_favorites VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET station = excluded.station").run(favorite.id, JSON.stringify(favorite));
+      db.query("INSERT INTO radio_favorites (id, station, position) VALUES (?, ?, (SELECT COALESCE(MIN(position), 1) - 1 FROM radio_favorites)) ON CONFLICT(id) DO UPDATE SET station = excluded.station").run(favorite.id, JSON.stringify(favorite));
       onChange();
       return favorite;
+    },
+    reorderFavorites(order: unknown) {
+      assertOpen();
+      const ids = Array.isArray(order) && order.length <= 500 && order.every((id): id is string => typeof id === "string" && /^[\w-]{1,80}$/.test(id)) ? order.map(id => id.toLowerCase()) : null;
+      if (!ids || !ids.length || new Set(ids).size !== ids.length) throw new RadioError("Send the saved stations in their new order.");
+      if (ids.some(id => !db.query("SELECT 1 FROM radio_favorites WHERE id = ?").get(id))) throw new RadioError("Saved stations changed. Try the move again.");
+      db.transaction(() => {
+        for (const [index, id] of ids.entries()) db.query("UPDATE radio_favorites SET position = ? WHERE id = ?").run(index + 1, id);
+      })();
+      onChange();
     },
     removeFavorite(id: string) {
       assertOpen();

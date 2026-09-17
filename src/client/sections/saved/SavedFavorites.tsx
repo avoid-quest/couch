@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Play, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
@@ -20,6 +23,13 @@ const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.it
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not use this saved item.";
 
+// The gesture for one drop, per kind: favorites live in the provider and radio
+// stores, so a drop reorders its own kind and a cross-kind drop does nothing.
+export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], activeId: string, overId: string): { kind: Favorite["kind"]; order: string[] } | null {
+  const next = reorderedIds(favorites.filter(favorite => favorite.kind === kind), favorite => favorite.item.id, activeId, overId);
+  return next && { kind, order: next.map(favorite => favorite.item.id) };
+}
+
 export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider }: Credentials & SavedFavoriteActions & {
   connected: boolean; canPlay: boolean;
 }) {
@@ -30,10 +40,13 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   const online = useQuery({ ...providerFavoritesQuery({ origin, token }), enabled: connected });
   const radio = useQuery({ ...radioFavoritesListQuery({ origin, token }), enabled: connected });
   const loading = connected && (online.isPending || radio.isPending);
+  // Each store keeps its own persisted order; the merged list shows online
+  // favorites first, then stations. A drop updates its store optimistically.
+  const [savedOrder, setSavedOrder] = useState<{ provider?: string[]; radio?: string[] }>({});
   const favorites = connected ? [
-    ...(online.data?.favorites ?? []).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
-    ...(radio.data?.favorites ?? []).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
-  ].sort((a, b) => title(a).localeCompare(title(b))) : [];
+    ...applyIdOrder(online.data?.favorites ?? [], savedOrder.provider, item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
+    ...applyIdOrder(radio.data?.favorites ?? [], savedOrder.radio, item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
+  ] : [];
   const error = connected ? [online.error, radio.error].filter(Boolean).map(message).join(" ") : "";
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -41,10 +54,26 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   const mutation = useRef<AbortController | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { setNotice(""); setActionError(""); setPending(false); return () => mutation.current?.abort(); }, [origin, token, connected]);
+  const sensors = useDndSensors();
+  useEffect(() => { setNotice(""); setActionError(""); setPending(false); setSavedOrder({}); return () => mutation.current?.abort(); }, [origin, token, connected]);
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["providers", "favorites"] });
     void queryClient.invalidateQueries({ queryKey: ["radio", "favorites"] });
+  };
+  const saveOrder = async (plan: { kind: Favorite["kind"]; order: string[] }) => {
+    setSavedOrder(previous => ({ ...previous, [plan.kind]: plan.order }));
+    try {
+      const response = await fetch(`${origin}/api/${plan.kind === "provider" ? "providers" : "radio"}/favorites/reorder`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ order: plan.order }), signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Could not save the new order.");
+      await queryClient.invalidateQueries({ queryKey: plan.kind === "provider" ? ["providers", "favorites"] : ["radio", "favorites"] });
+    } catch (reason) { setActionError(message(reason)); }
+    finally { setSavedOrder(({ [plan.kind]: _dropped, ...rest }) => rest); }
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over) return;
+    const favorite = favorites.find(item => item.item.id === active.id);
+    const plan = favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
+    if (plan) void saveOrder(plan);
   };
 
   const update = async (favorite: Favorite, action: "play" | "append" | "remove") => {
@@ -82,11 +111,23 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">No favorites yet.</p>}
-    <ul ref={list} className="grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>{favorites.map(favorite => {
-      const itemTitle = title(favorite);
-      const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
+    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+    <ul ref={list} className="grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
+      <SortableContext items={favorites.filter(favorite => favorite.kind === "provider").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
+        {favorites.filter(favorite => favorite.kind === "provider").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
+      </SortableContext>
+      <SortableContext items={favorites.filter(favorite => favorite.kind === "radio").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
+        {favorites.filter(favorite => favorite.kind === "radio").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
+      </SortableContext>
+    </ul>
+    </DndContext>
+  </section>;
+
+  function row(favorite: Favorite, drag?: RowDrag) {
+    const itemTitle = title(favorite);
+    const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
   const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : favorite.item.provider === "streamingcommunity" ? "Title" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
-      return <li key={key(favorite)} className="flex flex-wrap items-center gap-3 border-b py-3">
+      return <li ref={drag?.setNodeRef} style={drag?.style} className="flex flex-wrap items-center gap-3 border-b py-3">
         <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="h-[54px] w-[46px] rounded-md" />
         <div className="grid min-w-[100px] flex-1 gap-1.5 [overflow-wrap:anywhere]"><strong className="text-sm font-semibold">{itemTitle}</strong><small className="text-xs text-muted-foreground">{detail}</small></div>
         <div className="flex min-h-11 flex-wrap gap-2">
@@ -96,7 +137,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
           </>}
           <Button className="min-h-11" variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle} from Saved`} onClick={() => void update(favorite, "remove")}><X aria-hidden="true" />Remove</Button>
         </div>
+        {drag?.handle}
       </li>;
-    })}</ul>
-  </section>;
+  }
 }

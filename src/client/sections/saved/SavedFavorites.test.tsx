@@ -6,7 +6,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 
-let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
+let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>, reorderFavorites: typeof import("./SavedFavorites").reorderFavorites;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string }> = [];
 const played: Array<{ kind: string; id: string; playNow: boolean }> = [];
@@ -19,7 +19,8 @@ const button = (label: string) => [...document.querySelectorAll("button")].find(
 const flush = () => act(async () => { await Bun.sleep(20); });
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
 async function render(connected = true, canPlay = true) {
-  const { SavedFavorites } = await import("./SavedFavorites");
+  const { SavedFavorites, reorderFavorites: reorder } = await import("./SavedFavorites");
+  reorderFavorites = reorder;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
@@ -73,6 +74,21 @@ test("one saved list shows existing online and radio favorites without catalog o
   await click("Play Evening video"); await click("Add Evening radio to Up next");
   expect(played).toEqual([{ kind: "provider", id: "video", playNow: true }, { kind: "radio", id: "station", playNow: false }]);
   expect(document.querySelectorAll("li")).toHaveLength(3);
+});
+
+test("every favorite exposes a keyboard reorder handle and a drop reorders only its own store", async () => {
+  await render();
+  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening video", "Reorder Evening album", "Reorder Evening radio"]);
+  const favorites = [
+    { kind: "provider" as const, item: video },
+    { kind: "provider" as const, item: album },
+    { kind: "radio" as const, item: station },
+  ];
+  expect(reorderFavorites(favorites, "provider", "album", "video")).toEqual({ kind: "provider", order: [album.id, video.id] });
+  expect(reorderFavorites(favorites, "radio", "station", "station")).toBeNull();
+  // A drop across stores cannot persist, so it is ignored.
+  expect(reorderFavorites(favorites, "radio", "station", "video")).toBeNull();
+  expect(reorderFavorites(favorites, "provider", "album", "station")).toBeNull();
 });
 
 test("removal uses original stores and preserves the queue and another controller's changes", async () => {

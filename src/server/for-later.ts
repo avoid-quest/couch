@@ -22,6 +22,14 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
   db.run("CREATE TABLE IF NOT EXISTS for_later (id TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE, entry TEXT NOT NULL, savedAt INTEGER NOT NULL)");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(for_later)").all().some(column => column.name === "position")) {
+    db.transaction(() => {
+      db.run("ALTER TABLE for_later ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      // Existing installs keep their newest-first reading order as the start order.
+      const rows = db.query<{ id: string }, []>("SELECT id FROM for_later ORDER BY savedAt DESC, id").all();
+      for (const [index, row] of rows.entries()) db.query("UPDATE for_later SET position = ? WHERE id = ?").run(index + 1, row.id);
+    })();
+  }
   const get = (id: string) => {
     const row = db.query<Row, [string]>("SELECT id, entry FROM for_later WHERE id = ?").get(id);
     if (!row) throw new ControllerError("This item is no longer in For later.", 404);
@@ -33,7 +41,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
       try {
         authorize();
         if (path === "/api/for-later") {
-          if (request.method === "GET") return Response.json({ items: db.query<Row, []>("SELECT id, entry FROM for_later ORDER BY savedAt DESC, id").all().map(row => publicItem(JSON.parse(row.entry))) });
+          if (request.method === "GET") return Response.json({ items: db.query<Row, []>("SELECT id, entry FROM for_later ORDER BY position, id").all().map(row => publicItem(JSON.parse(row.entry))) });
           if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
           const reference = await settingField(request, "reference") as ForLaterReference;
           authorize();
@@ -45,11 +53,24 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
             const existing = db.query<Row, [string]>("SELECT id, entry FROM for_later WHERE source = ?").get(entry.source);
             if (existing) return { item: publicItem(JSON.parse(existing.entry)), changed: false };
             if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM for_later").get()!.count >= 500) throw new ControllerError("For later can hold 500 items. Remove something before saving more.");
-            db.query("INSERT INTO for_later VALUES (?, ?, ?, ?)").run(entry.id, entry.source, JSON.stringify(entry), Date.now());
+            db.query("INSERT INTO for_later (id, source, entry, savedAt, position) VALUES (?, ?, ?, ?, (SELECT COALESCE(MIN(position), 1) - 1 FROM for_later))").run(entry.id, entry.source, JSON.stringify(entry), Date.now());
             return { item: publicItem(entry), changed: true };
           })();
           if (result.changed) onChange();
           return Response.json({ item: result.item }, { status: result.changed ? 201 : 200 });
+        }
+        if (path === "/api/for-later/reorder") {
+          if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
+          const body = await settingField(request, "order");
+          authorize();
+          const ids = Array.isArray(body) && body.every((id): id is string => typeof id === "string" && /^[\w-]{1,80}$/.test(id)) ? body : null;
+          if (!ids || !ids.length || ids.length > 500 || new Set(ids).size !== ids.length) throw new ControllerError("Send the saved items in their new order.");
+          if (ids.some(id => !db.query("SELECT 1 FROM for_later WHERE id = ?").get(id))) throw new ControllerError("For later changed. Try the move again.");
+          db.transaction(() => {
+            for (const [index, id] of ids.entries()) db.query("UPDATE for_later SET position = ? WHERE id = ?").run(index + 1, id);
+          })();
+          onChange();
+          return Response.json({ ok: true });
         }
         const match = /^\/api\/for-later\/([\w-]{1,80})(?:\/(load))?$/.exec(path);
         if (!match) throw new ControllerError("For later endpoint not found.", 404);

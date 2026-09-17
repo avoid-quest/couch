@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionState } from "../../../shared/protocol";
 
-let QueuePanel: typeof import("./QueuePanel").QueuePanel;
+let QueuePanel: typeof import("./QueuePanel").QueuePanel, queueMoveAction: typeof import("./QueuePanel").queueMoveAction;
 const window = new Window();
 const originals = new Map<string, PropertyDescriptor | undefined>();
 beforeAll(async () => {
@@ -12,7 +12,7 @@ beforeAll(async () => {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "window" ? window : Reflect.get(window, key) });
   }
   // Radix chooses its layout-effect implementation when first imported.
-  ({ QueuePanel } = await import("./QueuePanel"));
+  ({ QueuePanel, queueMoveAction } = await import("./QueuePanel"));
 });
 afterAll(async () => {
   await window.happyDOM.abort();
@@ -52,4 +52,19 @@ test("an exhausted queue preserves every previous entry and presents an empty Up
   const document = render({ ...state, currentEntryId: null, queueCursorEntryId: "Last" });
   expect(titles(document, "Previously queued")).toEqual(queue.map(entry => entry.title));
   expect(document.querySelector(".queue-group-empty")?.textContent).toContain("Nothing queued next");
+});
+
+test("upcoming rows carry keyboard-reachable reorder handles for the TV remote", () => {
+  const document = render(state);
+  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Next", "Reorder Last"]);
+});
+
+test("a drop becomes one persistent move command ahead of the new follower", () => {
+  const upcoming = [queue[2]!, queue[3]!];
+  expect(queueMoveAction(upcoming, "Last", "Next")).toEqual({ type: "move", entryId: "Last", beforeEntryId: "Next" });
+  expect(queueMoveAction(upcoming, "Next", "Last")).toEqual({ type: "move", entryId: "Next", beforeEntryId: null });
+  expect(queueMoveAction(upcoming, "Next", "Next")).toBeNull();
+  // Current and previously queued entries are outside the sortable list.
+  expect(queueMoveAction(upcoming, "Current", "Next")).toBeNull();
+  expect(queueMoveAction(upcoming, "Next", "First")).toBeNull();
 });

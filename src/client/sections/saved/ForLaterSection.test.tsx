@@ -4,7 +4,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { QueryClient } from "@tanstack/react-query";
 
-let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>;
+let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>, forLaterOrder: typeof import("./ForLaterSection").forLaterOrder;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 let missing = false, canceled = false;
@@ -13,7 +13,8 @@ const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
 async function render(connected = true, canPlay = true, inspect = false) {
-  const { ForLaterSection } = await import("./ForLaterSection");
+  const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
+  forLaterOrder = order;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} /></QueryClientProvider>));
@@ -101,6 +102,14 @@ test("a successful append whose Play was canceled reports that outcome instead o
   expect(document.querySelector('[role="alert"]')).toBeNull();
   expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
   expect(document.querySelectorAll("li")).toHaveLength(2);
+});
+
+test("every saved item exposes a keyboard reorder handle and a drop computes the persisted order", async () => {
+  await render();
+  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening movie", "Reorder Evening song"]);
+  expect(forLaterOrder(items, "second", "saved")).toEqual(["second", "saved"]);
+  expect(forLaterOrder(items, "saved", "saved")).toBeNull();
+  expect(forLaterOrder(items, "elsewhere", "saved")).toBeNull();
 });
 
 test("Saved opens details without playing and also exposes direct playback actions", async () => {

@@ -1,5 +1,6 @@
 import { createMediaFolders } from "./media-folders";
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -125,6 +126,29 @@ test("radio favorites remain usable when the directory fails", async () => {
   expect((await request("/api/radio/favorites", "POST", { station: { ...station, url: "file:///private/media.mp3" } })).status).toBe(400);
   expect((await request(`/api/radio/favorites/${station.id}`, "DELETE")).status).toBe(204);
   expect(await (await request("/api/radio/favorites")).json()).toEqual({ favorites: [] });
+});
+
+test("radio favorites persist drag reordering and legacy installs keep their reading order", async () => {
+  const { request } = fixture();
+  const station = (name: string) => ({ id: name === "First" ? "0bfc2b7f-dee7-477b-a626-d14b7c611d11" : "0bfc2b7f-dee7-477b-a626-d14b7c611d22", name, url: `https://radio.example/${name.toLowerCase()}`, homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 });
+  await request("/api/radio/favorites", "POST", { station: station("First") });
+  await request("/api/radio/favorites", "POST", { station: station("Second") });
+  expect((await (await request("/api/radio/favorites")).json() as { favorites: Array<{ name: string }> }).favorites.map(favorite => favorite.name)).toEqual(["Second", "First"]);
+  expect((await request("/api/radio/favorites/reorder", "POST", { order: [station("First").id, station("Second").id] })).status).toBe(200);
+  expect((await request("/api/radio/favorites/reorder", "POST", { order: [station("First").id, "gone"] })).status).toBe(400);
+  expect((await request("/api/radio/favorites/reorder", "GET")).status).toBe(405);
+  expect((await (await request("/api/radio/favorites")).json() as { favorites: Array<{ name: string }> }).favorites.map(favorite => favorite.name)).toEqual(["First", "Second"]);
+  // A legacy database without saved positions backfills alphabetical order.
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "couch-radio-order-")));
+  cleanup.push(async () => rmSync(directory, { recursive: true, force: true }));
+  const legacyPath = join(directory, "radio.sqlite");
+  const legacy = new Database(legacyPath, { create: true, strict: true });
+  legacy.run("CREATE TABLE radio_favorites (id TEXT PRIMARY KEY, station TEXT NOT NULL)");
+  for (const name of ["Zebra", "Alpha"]) legacy.query("INSERT INTO radio_favorites VALUES (?, ?)").run(crypto.randomUUID(), JSON.stringify(station(name) as unknown));
+  legacy.close();
+  const reopened = createRadio({ databasePath: legacyPath, discover: async () => { throw new Error("private upstream details"); } });
+  cleanup.push(async () => reopened.close());
+  expect(reopened.favorites().map(favorite => favorite.name)).toEqual(["Alpha", "Zebra"]);
 });
 
 test("rejects invalid pagination and reports supported methods without running mutations", async () => {

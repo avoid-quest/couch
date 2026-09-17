@@ -46,6 +46,9 @@ test("directional TV controls can reach and open Previously queued", async () =>
     element.scrollIntoView = () => {};
   }
   await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Queue options for three"]')!.focus(); applyTvNavigation("down"); });
+  // The row's reorder handle sits in the TV focus order before the disclosure.
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("Reorder three");
+  await act(async () => { applyTvNavigation("down"); });
   expect(document.activeElement).toBe(summary);
   await act(async () => { applyTvNavigation("select"); });
   expect(document.querySelector("details")?.open).toBe(true);
