@@ -2,12 +2,15 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
+import { useShell } from "@/sections/shell/AppShell";
 
 type Props = { active: SettingsPage };
 
 export function SettingsNav({ active }: Props) {
+  const { host, identity } = useShell();
   const sourcePage = active.startsWith("source-");
-  const visible = (id: string) => id !== "tv-appearance";
+  const administrator = !!host || identity?.authority === "administrator";
+  const visible = (id: string) => id !== "tv-appearance" && (settingsPages[id as SettingsPage].manage === "always" || administrator);
   const groups = [
     { label: "Playback", pages: ["playback", "appearance"] },
     { label: "Library", pages: ["sources"] },
@@ -17,7 +20,7 @@ export function SettingsNav({ active }: Props) {
   ].map(group => ({
     ...group,
     pages: group.pages.filter(visible).map(id => [id, settingsPages[id as SettingsPage]] as const),
-  }));
+  })).filter(group => group.pages.length);
 
   return (
     <nav aria-label="Settings pages" className="hidden max-w-44 min-w-0 self-start lg:sticky lg:top-6 lg:grid lg:gap-1">

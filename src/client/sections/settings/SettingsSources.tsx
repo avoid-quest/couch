@@ -33,7 +33,7 @@ export function SettingsSources({ source, setupOnly = false, ...props }: SourceS
           </Link>
         </div>
       ))}
-      {!setupOnly && <p className="px-3 text-sm text-muted-foreground">IPTV setup is available from the source dialog in Find and Now.</p>}
+      {!setupOnly && <p className="px-3 text-sm text-muted-foreground">IPTV is set up from the source dialog on Find or Now.</p>}
     </nav>
   );
 }

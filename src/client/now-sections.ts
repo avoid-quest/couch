@@ -3,18 +3,32 @@ import { reorderedIds } from "@/lib/dnd";
 export const nowSectionIds = ["playing", "history", "radio"] as const;
 export type NowSectionId = typeof nowSectionIds[number];
 export const nowSectionLabels: Record<NowSectionId, string> = { playing: "Now playing", history: "History", radio: "Live radio" };
-const storageKey = "couch.now-section-order";
+const orderKey = "couch.now-section-order";
+const sectionsKey = "couch.now-sections";
 
-export function readNowSectionOrder(storage: Pick<Storage, "getItem"> = localStorage): NowSectionId[] {
+export type NowSections = { order: NowSectionId[]; hidden: NowSectionId[] };
+
+const inList = (value: unknown): value is NowSectionId[] => Array.isArray(value) && value.every(id => nowSectionIds.includes(id as NowSectionId));
+
+export function readNowSections(storage: Pick<Storage, "getItem"> = localStorage): NowSections {
+  const validOrder = (value: unknown): NowSectionId[] | null =>
+    inList(value) && value.length === nowSectionIds.length && new Set(value).size === value.length ? value : null;
   try {
-    const value: unknown = JSON.parse(storage.getItem(storageKey) ?? "");
-    return Array.isArray(value) && value.length === nowSectionIds.length && new Set(value).size === value.length
-      && value.every(id => nowSectionIds.includes(id as NowSectionId)) ? value as NowSectionId[] : [...nowSectionIds];
-  } catch { return [...nowSectionIds]; }
+    const parsed: unknown = JSON.parse(storage.getItem(sectionsKey) ?? "");
+    if (parsed && typeof parsed === "object") {
+      const { order, hidden } = parsed as Record<string, unknown>;
+      const knownOrder = validOrder(order);
+      if (knownOrder) return { order: knownOrder, hidden: inList(hidden) ? hidden : [] };
+    }
+  } catch { /* fall through to the pre-customization order. */ }
+  try {
+    const legacy: unknown = JSON.parse(storage.getItem(orderKey) ?? "");
+    return { order: validOrder(legacy) ?? [...nowSectionIds], hidden: [] };
+  } catch { return { order: [...nowSectionIds], hidden: [] }; }
 }
 
-export function saveNowSectionOrder(order: NowSectionId[], storage: Pick<Storage, "setItem"> = localStorage) {
-  storage.setItem(storageKey, JSON.stringify(order));
+export function saveNowSections(sections: NowSections, storage: Pick<Storage, "setItem"> = localStorage) {
+  storage.setItem(sectionsKey, JSON.stringify(sections));
 }
 
 export function moveNowSection(order: NowSectionId[], activeId: string, overId: string): NowSectionId[] | null {

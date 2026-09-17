@@ -1,27 +1,35 @@
 import { expect, test } from "bun:test";
-import { moveNowSection, readNowSectionOrder, saveNowSectionOrder } from "./now-sections";
+import { moveNowSection, readNowSections, saveNowSections } from "./now-sections";
 
-const storage = (initial: string | null) => {
-  let value = initial;
-  return { getItem: () => value, setItem: (_key: string, next: string) => { value = next; } };
+const storage = (initial: Record<string, string | null> = {}) => {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, next: string) => { values.set(key, next); },
+  };
 };
 
-test("section order defaults to the composed page and survives a round trip", () => {
-  expect(readNowSectionOrder(storage(null))).toEqual(["playing", "history", "radio"]);
-  const persisted = storage(null);
-  saveNowSectionOrder(["radio", "playing", "history"], persisted);
-  expect(readNowSectionOrder(persisted)).toEqual(["radio", "playing", "history"]);
+test("sections default to the composed page and survive a round trip", () => {
+  expect(readNowSections(storage())).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+  const persisted = storage();
+  saveNowSections({ order: ["radio", "playing", "history"], hidden: ["history"] }, persisted);
+  expect(readNowSections(persisted)).toEqual({ order: ["radio", "playing", "history"], hidden: ["history"] });
 });
 
-test("corrupt or partial stored orders fall back to the default page", () => {
-  expect(readNowSectionOrder(storage("not json"))).toEqual(["playing", "history", "radio"]);
-  expect(readNowSectionOrder(storage(JSON.stringify(["radio"])))).toEqual(["playing", "history", "radio"]);
-  expect(readNowSectionOrder(storage(JSON.stringify(["radio", "radio", "history"])))).toEqual(["playing", "history", "radio"]);
-  expect(readNowSectionOrder(storage(JSON.stringify(["radio", "stage", "history"])))).toEqual(["playing", "history", "radio"]);
+test("corrupt or partial stored sections fall back to the default page", () => {
+  expect(readNowSections(storage({ "couch.now-sections": "not json" }))).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+  expect(readNowSections(storage({ "couch.now-sections": JSON.stringify({ order: ["radio"], hidden: [] }) }))).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+  expect(readNowSections(storage({ "couch.now-sections": JSON.stringify({ order: ["radio", "radio", "history"], hidden: [] }) }))).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+  expect(readNowSections(storage({ "couch.now-sections": JSON.stringify({ order: ["radio", "stage", "history"], hidden: [] }) }))).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+  expect(readNowSections(storage({ "couch.now-sections": JSON.stringify({ order: ["playing", "history", "radio"], hidden: ["stage"] }) }))).toEqual({ order: ["playing", "history", "radio"], hidden: [] });
+});
+
+test("a stored order from before customization is kept", () => {
+  expect(readNowSections(storage({ "couch.now-section-order": JSON.stringify(["radio", "playing", "history"]) }))).toEqual({ order: ["radio", "playing", "history"], hidden: [] });
 });
 
 test("the drop handler moves a section and ignores idling or foreign drops", () => {
-  const order = readNowSectionOrder(storage(null));
+  const order = readNowSections(storage()).order;
   expect(moveNowSection(order, "radio", "playing")).toEqual(["radio", "playing", "history"]);
   expect(moveNowSection(order, "playing", "playing")).toBeNull();
   expect(moveNowSection(order, "queue", "playing")).toBeNull();

@@ -30,8 +30,8 @@ export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], 
   return next && { kind, order: next.map(favorite => favorite.item.id) };
 }
 
-export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider }: Credentials & SavedFavoriteActions & {
-  connected: boolean; canPlay: boolean;
+export function SavedFavorites({ origin, token, connected, canPlay, editing = false, onEnqueueProvider, onEnqueueRadio, onOpenProvider }: Credentials & SavedFavoriteActions & {
+  connected: boolean; canPlay: boolean; editing?: boolean;
 }) {
   // Saved reads go through Query: the session invalidates ["providers"] and
   // ["radio"] on socket revisions, replacing the version props this panel
@@ -114,10 +114,10 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
     <ul ref={list} className="grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
       <SortableContext items={favorites.filter(favorite => favorite.kind === "provider").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
-        {favorites.filter(favorite => favorite.kind === "provider").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
+        {favorites.filter(favorite => favorite.kind === "provider").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`} editing={editing}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
       </SortableContext>
       <SortableContext items={favorites.filter(favorite => favorite.kind === "radio").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
-        {favorites.filter(favorite => favorite.kind === "radio").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
+        {favorites.filter(favorite => favorite.kind === "radio").map(favorite => <SortableRow key={key(favorite)} id={favorite.item.id} label={`Reorder ${title(favorite)}`} editing={editing}>{(drag: RowDrag) => row(favorite, drag)}</SortableRow>)}
       </SortableContext>
     </ul>
     </DndContext>

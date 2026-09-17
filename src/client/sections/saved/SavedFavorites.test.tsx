@@ -18,13 +18,13 @@ let online: ProviderItem[] = [], radios: RadioStation[] = [], failOnline = false
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const flush = () => act(async () => { await Bun.sleep(20); });
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
-async function render(connected = true, canPlay = true) {
+async function render(connected = true, canPlay = true, editing = true) {
   const { SavedFavorites, reorderFavorites: reorder } = await import("./SavedFavorites");
   reorderFavorites = reorder;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrap = (node: React.ReactNode) => <QueryClientProvider client={client}>{node}</QueryClientProvider>;
-  await act(async () => root.render(wrap(<SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay}
+  await act(async () => root.render(wrap(<SavedFavorites origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} editing={editing}
     onEnqueueProvider={async (item, playNow) => { played.push({ kind: "provider", id: item.id, playNow }); return true; }}
     onEnqueueRadio={async (item, playNow) => { played.push({ kind: "radio", id: item.id, playNow }); return true; }}
     onOpenProvider={item => opened.push(item.id)} />)));
@@ -76,8 +76,11 @@ test("one saved list shows existing online and radio favorites without catalog o
   expect(document.querySelectorAll("li")).toHaveLength(3);
 });
 
-test("every favorite exposes a keyboard reorder handle and a drop reorders only its own store", async () => {
+test("reorder handles appear only in edit mode and a drop reorders only its own store", async () => {
   await render();
+  await render(true, true, false);
+  expect(document.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
+  await render(true, true, true);
   expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening video", "Reorder Evening album", "Reorder Evening radio"]);
   const favorites = [
     { kind: "provider" as const, item: video },

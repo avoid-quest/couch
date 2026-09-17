@@ -25,7 +25,7 @@ const message = (error: unknown) => error instanceof Error ? error.message : "Co
 const previewId = (item: ProviderItem) => Number(/\/titles\/(\d+)-/.exec(item.url)?.[1] ?? 0) || null;
 const isListUrl = (url: string | undefined) => /\/titles\/\d+(?:-[\w-]*)?(?:\/season-\d+)?$/.test(url ?? "");
 
-export function StreamingCommunityExplorer({ credentials, connected, canPlay, active, onEnqueue, onSavePlaylist }: Props) {
+export function StreamingCommunityExplorer({ credentials, connected, canPlay, active, showHeading = true, onEnqueue, onSavePlaylist }: Props & { showHeading?: boolean }) {
   const version = useInvalidation("providers");
   const [trail, setTrail] = useState<Location[]>([{ request: {}, title: "Catalogue" }]);
   const location = trail[trail.length - 1]!;
@@ -74,10 +74,10 @@ export function StreamingCommunityExplorer({ credentials, connected, canPlay, ac
     {isListUrl(item.url) && <Button variant="secondary" aria-label={`Save ${item.title} as playlist`} className="min-h-11" disabled={!connected || busy} onClick={() => void save(item.url)}><ListMusic aria-hidden="true" />Save as playlist</Button>}
   </div>;
   return <section aria-label="StreamingCommunity" className="space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    {showHeading && <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-xl font-semibold tracking-tight">StreamingCommunity</h2>
       <p className="text-[13px] text-muted-foreground">Films and series from the configured website source.</p>
-    </div>
+    </div>}
     <form role="search" className="flex items-end gap-2" onSubmit={search}>
       <div className="grid min-w-0 flex-1 gap-2">
         <Label htmlFor="streamingcommunity-search">Search or open a title link</Label>

@@ -14,14 +14,13 @@ import { ProgressActions, progressTime, type HistoryPlayback } from "@/component
 import type { Credentials } from "../../session/session";
 import { SaveForLater } from "@/components/SaveForLater";
 
-const sources = [{ section: "Radio", label: "Radio directory & playlists" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "Local library" }];
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
   position: item.progress?.position ?? 0, duration: item.progress?.duration ?? item.duration,
   watched: item.progress?.watched ?? false, lastPlayedAt: item.progress?.lastPlayedAt ?? null,
 });
 
-export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio }: {
+export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onOpenStreamingCommunity, onPlay, onAdd, recentRadio, onRadio }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
@@ -31,6 +30,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   onBrowse: (section: string) => void;
   onProvider?: (provider: ProviderId) => void;
   onAddSource?: () => void;
+  onOpenStreamingCommunity?: () => void;
   onPlay: HistoryPlayback;
   onAdd: (item: HistoryItem) => Promise<boolean>;
   recentRadio?: RadioStation[];
@@ -144,7 +144,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
       const entry = asHistory(item);
       return <li key={item.id}><button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
     })}</ul>}
-    {onAddSource && <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div>}
+    {(onAddSource || onOpenStreamingCommunity) && <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><div className="flex items-center gap-1">{onOpenStreamingCommunity && <Button variant="ghost" onClick={onOpenStreamingCommunity}>StreamingCommunity</Button>}{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}</div></div>}
     <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}

@@ -276,8 +276,8 @@ function ShellChrome({ children }: PropsWithChildren) {
           </Card>
         ) : (
           <>
-            {!connected && <p className="notice" role="status">Connecting to the player. Controls will return when the current state arrives.</p>}
-            {player?.status === "unavailable" && <p className="notice">{player.error || "The TV player is unavailable. You can still prepare the queue."}</p>}
+            {!connected && <p className="notice" role="status">Connecting to the player.</p>}
+            {player?.status === "unavailable" && <p className="notice">{player.error || "TV player unavailable. You can still add to the queue."}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
                 {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}

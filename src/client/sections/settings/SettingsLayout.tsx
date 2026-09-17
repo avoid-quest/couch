@@ -13,7 +13,6 @@ export function SettingsLayout({ section, children }: Props) {
 
   return (
     <section aria-label="Settings" className="min-w-0" data-page="Settings" data-tv-local-only={sourcePage ? "" : undefined}>
-      <header className="mb-6"><h1 className="text-2xl font-semibold sm:text-3xl">Settings</h1></header>
       <div className="grid items-start gap-6 lg:grid-cols-[11rem_minmax(0,1fr)] lg:gap-8">
         <SettingsNav active={section} />
         <div className="min-w-0 max-w-3xl">

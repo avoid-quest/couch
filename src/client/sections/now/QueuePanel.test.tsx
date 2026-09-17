@@ -21,9 +21,9 @@ afterAll(async () => {
 
 const queue = ["First", "Current", "Next", "Last"].map(title => ({ id: title, title, source: `https://media.example/${title}` }));
 const state: SessionState = { queue, currentEntryId: "Current", queueCursorEntryId: "Current", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };
-function render(value: SessionState) {
+function render(value: SessionState, editing = true) {
   const window = new Window();
-  window.document.body.innerHTML = renderToStaticMarkup(<QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} />);
+  window.document.body.innerHTML = renderToStaticMarkup(<QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" editing={editing} run={async () => true} />);
   return window.document;
 }
 const titles = (document: Window["document"], label: string) => [...document.querySelectorAll(`ol[aria-label="${label}"] .queue-entry-title`)].map(node => node.textContent);
@@ -54,9 +54,11 @@ test("an exhausted queue preserves every previous entry and presents an empty Up
   expect(document.querySelector(".queue-group-empty")?.textContent).toContain("Nothing queued next");
 });
 
-test("upcoming rows carry keyboard-reachable reorder handles for the TV remote", () => {
-  const document = render(state);
-  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Next", "Reorder Last"]);
+test("upcoming rows carry keyboard-reachable reorder handles only in edit mode", () => {
+  const document = render(state, false);
+  expect(document.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
+  const editing = render(state);
+  expect([...editing.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Next", "Reorder Last"]);
 });
 
 test("a drop becomes one persistent move command ahead of the new follower", () => {

@@ -1,4 +1,5 @@
-import { createRootRoute, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
+import { createRootRouteWithContext, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { SessionGate } from "@/session/session-context";
 import { AppShell } from "../sections/shell/AppShell";
@@ -20,7 +21,7 @@ function NotFound() {
   return null;
 }
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: () => <SessionGate><AppShell /></SessionGate>,
   errorComponent: RootError,
   notFoundComponent: NotFound,
