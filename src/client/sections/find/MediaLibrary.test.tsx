@@ -109,7 +109,7 @@ test("recent history failure leaves saved items usable and recovers when reopene
   }) as typeof fetch);
   await renderLibrary();
   expect(document.body.textContent).toContain("History unavailable");
-  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(node => node.textContent?.startsWith("Saved"))!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(node => node.textContent?.startsWith("Kept"))!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));
   expect(button("Play on TV")).toBeDefined();
   request.mockImplementation((async (_input: RequestInfo | URL) => Response.json({ items: [recent], favorites: [video] })) as typeof fetch);
   await act(async () => button("Browse").dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));

@@ -10,7 +10,7 @@ import { useShell } from "@/sections/shell/AppShell";
 
 export function FindPage() {
   const shell = useShell();
-  const { nativeHost, credentials, state, connected, run, available, active, tv, section, browseSection, changeSearch, openSources, playHistory, enqueueCatalog, enqueueRadio, enqueueProvider, saveProviderPlaylist, recentRadio, videoQualityPreference } = shell;
+  const { nativeHost, credentials, state, connected, run, available, active, tv, section, browseSection, changeSearch, openSources, playHistory, enqueueCatalog, enqueueRadio, enqueueProvider, recentRadio, videoQualityPreference } = shell;
   const location = useLocation();
   const searchState = readSearchState(location.searchStr);
   const [homeQuery, setHomeQuery] = useState(searchState.query);
@@ -37,7 +37,7 @@ export function FindPage() {
   const onStage = section === "Find" && (!nativeHost || tv.browsing);
   return (
     <section data-page="Find">
-      <SearchPanel draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onSavePlaylist={saveProviderPlaylist} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+      <SearchPanel draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
       {!homeQuery.trim() && <div className="flex justify-end"><Button variant="ghost" size="icon" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}</Button></div>}
       <div hidden={!!homeQuery.trim()}>
         <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} playing={active} active={onStage && !homeQuery.trim()} editing={editing} hiddenSections={layout.hidden} order={layout.order} onToggleSection={toggleSection} onMoveSection={moveSection} onBrowse={browseSection} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} recentRadio={recentRadio} onRadio={station => enqueueRadio(station, true)} />

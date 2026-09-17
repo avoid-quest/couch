@@ -6,11 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ListMusic, Play, Plus, Star } from "lucide-react";
+import { Play, Plus, Star } from "lucide-react";
 import { MediaArtwork } from "./MediaArtwork";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../../shared/providers";
 import { isYouTubePlaylistUrl } from "../../shared/providers";
-import type { PlaylistSource } from "../../shared/playlists";
 import { QualityOptions } from "./QualitySelect";
 import { useEnqueueVideoQuality } from "@/video-quality";
 
@@ -27,7 +26,6 @@ type Props = {
   version: number;
   defaultQuality: VideoQuality;
   onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
-  onSavePlaylist?: (provider: PlaylistSource["provider"], url: string) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
 const providers: Record<ProviderId, { name: string; placeholder: string }> = {
@@ -68,7 +66,7 @@ export function ProviderPanel(props: Props) {
   </section>;
 }
 
-function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, onSavePlaylist, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
+function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
   const qualityId = useId();
   const [input, setInput] = useState("");
@@ -219,7 +217,7 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
       if (!controller.signal.aborted) {
         setFavorites(current => saved ? current.filter(entry => entry.id !== item.id) : [...current.filter(entry => entry.id !== item.id), item]);
         setFavoriteRevision(revision => revision + 1);
-        setNotice(`${item.title} ${saved ? "removed from" : "saved to"} favorites.`);
+        setNotice(`${item.title} ${saved ? "removed." : "kept."}`);
       }
     } catch (reason) {
       if (!controller.signal.aborted) setActionError(message(reason));
@@ -236,7 +234,7 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
     setNotice("");
     try {
       const ok = await onEnqueue(item, playNow);
-      if (ok && !controller.signal.aborted) setNotice(playNow ? `${item.title} sent to the TV.` : `${item.title} added to the shared queue.`);
+      if (ok && !controller.signal.aborted) setNotice(playNow ? `${item.title} sent to the TV.` : `${item.title} added to Up next.`);
     } catch (reason) {
       if (!controller.signal.aborted) setActionError(message(reason));
     } finally {
@@ -244,21 +242,6 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
     }
   }
 
-  async function saveAsPlaylist(url: string) {
-    if (busy || !connected || !lifetime.current || !onSavePlaylist || provider === "twitch") return;
-    const controller = lifetime.current;
-    setBusy(url);
-    setActionError(null);
-    setNotice("");
-    try {
-      const ok = await onSavePlaylist(provider, url);
-      if (ok && !controller.signal.aborted) setNotice("Saved as a playlist. Find it under Saved playlists.");
-    } catch (reason) {
-      if (!controller.signal.aborted) setActionError(message(reason));
-    } finally {
-      if (!controller.signal.aborted) setBusy(null);
-    }
-  }
 
   const savedItems = favorites.filter(item => item.provider === provider);
   const items = view === "saved" ? savedItems : page?.items ?? [];
@@ -285,27 +268,26 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
       <div className="provider-toolbar mb-3 flex items-center justify-between gap-3 border-b pb-4">
         <TabsList className="provider-views group-data-horizontal/tabs:h-auto" aria-label="Provider view">
           <TabsTrigger value="browse" className="min-h-11">Browse</TabsTrigger>
-          <TabsTrigger value="saved" className="min-h-11">Saved <Badge variant="secondary">{savedItems.length}</Badge></TabsTrigger>
+          <TabsTrigger value="saved" className="min-h-11">Kept <Badge variant="secondary">{savedItems.length}</Badge></TabsTrigger>
         </TabsList>
         {view === "browse" && !atRecent && <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => { restoreFocus.current = "input"; setInput(""); setTrail([{ request: {}, title: info.name }]); }}>Back to recent</Button>}
       </div>
       <TabsContent value={view} className="space-y-4">
         {actionError && <p className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{actionError}</p>}
         {notice && <p className="provider-notice rounded-lg border bg-muted p-4 text-sm" role="status">{notice}</p>}
-        {favoriteError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">Saved items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
+        {favoriteError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">Kept items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
         {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} onPlay={onPlayHistory} provider={provider} active={active} />}
         {view === "browse" && !atRecent && <div className="provider-location flex items-center gap-3">
           {trail.length > 1 && <Button data-back variant="outline" className="min-h-11 shrink-0" disabled={!connected} onClick={back}>Back</Button>}
           <h3 className="text-lg font-medium wrap-anywhere">{page?.title || location.title}</h3>
         </div>}
         {view === "browse" && browseError && <div className="provider-error rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
-        {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading saved items…" : `Loading ${info.name}…`}</p>}
-        {!(view === "browse" && atRecent) && !pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Save albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Save videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, playlist, or program link."}</p>}
+        {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading kept items…" : `Loading ${info.name}…`}</p>}
+        {!(view === "browse" && atRecent) && !pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Keep albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Keep videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, list, or program link."}</p>}
         {listRef && !pending && !browseError && <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={!canPlay || busy !== null} onClick={() => void enqueue(listRef, true)}><Play aria-hidden="true" />Play {provider === "bandcamp" ? "album" : "playlist"}</Button>
+          <Button disabled={!canPlay || busy !== null} onClick={() => void enqueue(listRef, true)}><Play aria-hidden="true" />Play</Button>
           <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void enqueue(listRef, false)}><Plus aria-hidden="true" />Up next</Button>
-          {onSavePlaylist && <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(listUrl!)}><ListMusic aria-hidden="true" />Save as playlist</Button>}
-          {provider !== "bandcamp" && <QualityOptions id={`${qualityId}-playlist`} label={`Video quality for ${page?.title || "playlist"}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />}
+          {provider !== "bandcamp" && <QualityOptions id={`${qualityId}-playlist`} label={`Video quality for ${page?.title || "list"}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />}
         </div>}
         {album && <div className="provider-album">
           <MediaArtwork key={items[0]!.thumbnail || albumUrl} thumbnail={items[0]!.thumbnail} title={page.title || "Album"} className="provider-album-artwork" />
@@ -321,8 +303,8 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
             <div className="provider-track-copy"><h4 className="text-sm font-medium wrap-anywhere">{item.title}</h4>{item.duration !== undefined && <p className="text-xs text-muted-foreground">{duration(item.duration)}</p>}</div>
             <div className="provider-item-actions provider-media-actions">
               <Button aria-label="Play on TV" disabled={!canPlay || busy !== null} onClick={() => void enqueue(item, true)}><Play aria-hidden="true" />Play</Button>
-              <Button variant="secondary" aria-label="Add to queue" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Queue</Button>
-              <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={`${saved ? "Remove" : "Save"} ${item.title} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
+              <Button variant="secondary" aria-label="Up next" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Up next</Button>
+              <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={saved ? `Remove ${item.title}` : `Keep ${item.title}`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
             </div>
           </li>;
         })}</ol>}
@@ -345,11 +327,11 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
               {item.kind === "media" ? <div className="provider-item-main">{details}</div> : <Button variant="ghost" className="provider-item-main provider-open block h-auto w-full rounded-none p-0 text-left whitespace-normal" data-provider-id={item.id} disabled={!connected} onClick={() => open(item)} aria-label={`Open ${item.title}`}>{details}</Button>}
               <div className={`provider-item-actions mt-auto p-3 ${item.kind === "media" ? "provider-media-actions" : "provider-browse-actions"}`}>
                 <Button aria-label="Play on TV" disabled={!canPlay || busy !== null} onClick={() => void enqueue(item, true)}><Play aria-hidden="true" />Play</Button>
-                <Button variant="secondary" aria-label="Add to queue" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Queue</Button>
+                <Button variant="secondary" aria-label="Up next" disabled={!connected || busy !== null} onClick={() => void enqueue(item, false)}><Plus aria-hidden="true" />Up next</Button>
                 {!channelSummary && <Button variant="secondary" disabled={!connected} onClick={() => open(item)}>{item.provider === "twitch" && item.kind === "channel" ? "Past broadcasts" : "Browse"}</Button>}
                 {item.provider !== "bandcamp" && <QualityOptions id={`${qualityId}-${item.id}`} label={`Video quality for ${item.title}`} value={quality} onChange={onQualityChange} disabled={!connected || busy !== null} />}
                 {item.provider === "twitch" && item.live && !channelSummary && <Button className="provider-broadcasts-link" data-provider-id={item.id} variant="outline" disabled={!connected || busy !== null} onClick={() => open(item)}>Past broadcasts</Button>}
-                <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save shrink-0" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={`${saved ? "Remove" : "Save"} ${item.title} ${saved ? "from" : "to"} favorites`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
+                <Button variant={saved ? "secondary" : "ghost"} size="icon" className="provider-save shrink-0" disabled={!connected || busy !== null || favoritesLoading || !!favoriteError} aria-label={saved ? `Remove ${item.title}` : `Keep ${item.title}`} aria-pressed={saved} onClick={() => void favorite(item, saved)}><Star aria-hidden="true" className={saved ? "fill-current" : ""} /></Button>
               </div>
             </Card>
           </li>;

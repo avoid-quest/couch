@@ -114,16 +114,16 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     </span>;
   };
   const playbackActions = (item: HistoryItem) => <div className="mt-3 flex flex-wrap gap-1">
-    <Button disabled={!playable(item)} aria-label={`${item.position ? "Resume" : item.watched ? "Play again" : "Play now"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending ? "Starting…" : item.position ? "Resume" : item.watched ? "Play again" : "Play now"}</Button>
+    <Button disabled={!playable(item)} aria-label={`${item.position ? "Resume" : item.watched ? "Play again" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending ? "Starting…" : item.position ? "Resume" : item.watched ? "Play again" : "Play"}</Button>
     {item.position > 0 && <Button variant="outline" disabled={!playable(item)} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
-    {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Add to queue: ${item.title}`} onClick={() => void add(item)}><Plus aria-hidden="true" />Add to queue</Button>}
+    {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Up next: ${item.title}`} onClick={() => void add(item)}><Plus aria-hidden="true" />Up next</Button>}
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
   const radioArt = (station: RadioStation) => <span className="relative grid aspect-[.85] place-items-center overflow-hidden rounded-xl bg-muted from-emerald-800 to-slate-900 bg-gradient-to-br p-3.5 text-center text-2xl font-semibold">
     {station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="absolute inset-0 size-full rounded-[inherit] object-cover" /> : <><Radio aria-hidden="true" /><span>{station.name}</span></>}
   </span>;
   const radioCards = !!recentRadio?.length && onRadio && <>{recentRadio.map(station => <li key={`radio:${station.id}`}>
-    <button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play now: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
+    <button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
       {radioArt(station)}<strong className="mt-1.5 text-sm font-semibold break-words">{station.name}</strong><small>Radio station</small>
     </button>
   </li>)}</>;

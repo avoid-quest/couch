@@ -142,7 +142,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
         <div className="flex flex-wrap gap-2">
           <Button className="min-h-11" aria-label={`${item.progress?.position ? "Resume" : "Play"} ${item.title}`} disabled={!connected || !canPlay || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title, { playNow: true })}><Play aria-hidden="true" />{enqueuing?.id === item.id && enqueuing.playNow ? "Starting…" : item.progress?.position ? "Resume" : "Play"}</Button>
           {!!item.progress?.position && <Button variant="outline" className="min-h-11" aria-label={`Play ${item.title} from start`} disabled={!connected || !canPlay || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title, { playNow: true, fromStart: true })}><RotateCcw aria-hidden="true" />From start</Button>}
-          <Button variant="secondary" className="min-h-11" aria-label={`Add ${item.title} to queue`} disabled={!connected || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title)}><Plus aria-hidden="true" />{enqueuing?.id === item.id && !enqueuing.playNow ? "Adding…" : "Queue"}</Button>
+          <Button variant="secondary" className="min-h-11" aria-label={`Up next: ${item.title}`} disabled={!connected || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title)}><Plus aria-hidden="true" />{enqueuing?.id === item.id && !enqueuing.playNow ? "Adding…" : "Up next"}</Button>
         </div>
       </Card>
     </li>)}</ul>

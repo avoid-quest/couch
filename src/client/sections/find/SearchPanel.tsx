@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SaveForLater } from "@/components/SaveForLater";
 import { SearchBar } from "@/components/SearchBar";
 import type { Action } from "../../../shared/protocol";
-import type { PlaylistSource } from "../../../shared/playlists";
 import type { ProviderId, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchSource } from "./SearchSource";
@@ -30,7 +29,6 @@ export type Props = {
   draftQuery?: string;
   searchState?: SearchRouteState;
   onSearchChange?: (state: SearchRouteState) => void;
-  onSavePlaylist?: (provider: PlaylistSource["provider"], url: string) => Promise<boolean>;
 };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
@@ -115,7 +113,7 @@ export function SearchPanel(props: Props) {
         {filter === "Bandcamp" && <p className="text-sm text-muted-foreground">Paste a Bandcamp album or track link.</p>}
       </>}
       {!url && emptySources.length > 0 && <p className="text-muted-foreground">No matches in {emptySources.join(", ")}.</p>}
-      {url && !linkedProvider && <Card className="grid gap-3.5 rounded-[14px] border bg-card p-5"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play now</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Add to queue</Button>{supportsWebVideoQuality(url) && <QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} />}</div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
+      {url && !linkedProvider && <Card className="grid gap-3.5 rounded-[14px] border bg-card p-5"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Up next</Button>{supportsWebVideoQuality(url) && <QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} />}</div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
       {url && /^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && <Button variant="outline" onClick={() => props.onManageSources?.("streaming-community")}>StreamingCommunity settings</Button>}
     </>}
   </section>;

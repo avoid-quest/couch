@@ -42,7 +42,7 @@ export function RadioPanel({ credentials, connected, host, onManage, canPlay, on
   const play = async (station: RadioStation, playNow: boolean) => {
     setBusyId(station.id); setError("");
     try {
-      if (await onEnqueue(station, playNow)) setNotice(playNow ? `Starting ${station.name}.` : `${station.name} added to queue.`);
+      if (await onEnqueue(station, playNow)) setNotice(playNow ? `Starting ${station.name}.` : `${station.name} added to Up next.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The radio request failed.");
     } finally { setBusyId(null); }

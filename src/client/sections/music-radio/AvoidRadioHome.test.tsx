@@ -56,8 +56,8 @@ afterEach(async () => {
 
 test("avoid radio reads through Query and playback stays on the session callback", async () => {
   await render();
-  expect(button("Play now: Station one")).toBeDefined();
-  await click("Play now: Station one");
+  expect(button("Play: Station one")).toBeDefined();
+  await click("Play: Station one");
   expect(queued).toEqual([["one", true]]);
   expect(document.body.textContent).toContain("Starting Station one.");
   expect(request.mock.calls.some(([input]) => String(input).endsWith("/api/radio/avoid"))).toBe(true);
@@ -67,7 +67,7 @@ test("favorite writes invalidate radio queries and identity changes reset detail
   await render();
   await click("Details: Station one");
 expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  await click("Save Station one", document.querySelector('[role="dialog"]')!);
+  await click("Keep Station one", document.querySelector('[role="dialog"]')!);
   const favoriteWrites = request.mock.calls.filter(([input, init]) => new URL(String(input)).pathname === "/api/radio/favorites" && init?.method === "POST");
   expect(favoriteWrites).toHaveLength(1);
   expect(request.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/radio/favorites").length).toBeGreaterThan(1);

@@ -83,7 +83,7 @@ export function AddMediaDialog({ credentials, connected, defaultQuality, run }: 
         </div>
         <div className="grid min-w-0 gap-2"><Label htmlFor="media-title">Title <span className="text-xs text-muted-foreground">optional</span></Label><Input id="media-title" className="min-h-11" placeholder={sourceKind === "webpage" ? "Fetched automatically" : "Give it a name"} maxLength={200} value={title} onChange={event => setTitle(event.target.value)} disabled={!connected || adding} /></div>
         {offersVideoQuality && <QualitySelect id="media-quality" label="This video quality" description="Overrides your default for this video only." value={quality} disabled={!connected || adding} onChange={setQuality} />}
-        <Button type="submit" className="mt-0.5 w-full min-h-11" disabled={!connected || adding || !source.trim()}><Plus aria-hidden="true" />{adding ? "Adding…" : "Add to queue"}</Button>
+        <Button type="submit" className="mt-0.5 w-full min-h-11" disabled={!connected || adding || !source.trim()}><Plus aria-hidden="true" />{adding ? "Adding…" : "Up next"}</Button>
       </form>
     </DialogContent>
   </Dialog>;

@@ -141,7 +141,7 @@ test("Saved keeps saved collections together without a separate history destinat
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toEqual(["For later", "Playlists", "Online and radio"]);
+  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toEqual(["For later", "Lists", "Online and radio"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();

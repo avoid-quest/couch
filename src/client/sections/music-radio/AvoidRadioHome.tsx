@@ -83,8 +83,8 @@ export function AvoidRadioHome(props: Props) {
           <AvoidRadioArtwork key={programme?.artworkUrl || detail.logoUrl || detail.id} station={detail} programme={programme} expanded />
           {programme ? <div className="space-y-2"><h3 className="text-lg font-medium">{programme.title}</h3>{programme.description && <p className="text-sm text-muted-foreground">{programme.description}</p>}{programme.programmeUrl && <a className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a>}</div> : <p className="text-sm text-muted-foreground">Programme information is unavailable. You can still play this station.</p>}
           <div className="flex flex-wrap gap-2">
-            <Button disabled={!props.connected || !props.canPlay || radio.busy} onClick={() => void radio.action(detail, "play")}>Play now</Button>
-            <Button variant="secondary" disabled={!props.connected || radio.busy} onClick={() => void radio.action(detail, "queue")}>Add to queue</Button>
+            <Button disabled={!props.connected || !props.canPlay || radio.busy} onClick={() => void radio.action(detail, "play")}>Play</Button>
+            <Button variant="secondary" disabled={!props.connected || radio.busy} onClick={() => void radio.action(detail, "queue")}>Up next</Button>
             <RadioStationActions station={detail} saved={radio.favorites.some(favorite => favorite.id === detail.id)} connected={props.connected} canPlay={props.canPlay} busy={radio.busy} onPlay={() => void radio.action(detail, "play")} onQueue={() => void radio.action(detail, "queue")} onFavorite={() => void radio.action(detail, "favorite")} />
           </div>
           {radio.actionError && <p role="alert">{radio.actionError}</p>}{radio.notice && <p role="status">{radio.notice}</p>}

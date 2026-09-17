@@ -108,15 +108,15 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
   const search = (event: FormEvent) => { event.preventDefault(); setBrowse(value => ({ ...value, q: draft.trim(), offset: 0 })); setRefresh(value => value + 1); };
   const enqueue = async (item: LibraryItem, options?: { playNow?: boolean; fromStart?: boolean }) => {
     setPending(true); setError(null); setNotice(null);
-    try { if (await onEnqueue(item.id, options)) setNotice(options?.playNow ? `Starting ${item.title} on the TV.` : `Added ${item.title} to the queue.`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not queue this video."); }
+    try { if (await onEnqueue(item.id, options)) setNotice(options?.playNow ? `Starting ${item.title} on the TV.` : `Added ${item.title} to Up next.`); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add this video."); }
     finally { setPending(false); }
   };
   const openDetail = (item: LibraryItem, trigger: HTMLElement) => { detailTrigger.current = trigger; setDetail(item); };
   const actions = (item: LibraryItem) => <div className="video-item-actions flex flex-wrap gap-2">
     <Button aria-label={`${item.progress?.position ? "Resume" : "Play"} ${item.title}`} disabled={!connected || !canPlay || !item.available || busy || loading || pending} onClick={() => void enqueue(item, { playNow: true })}><Play aria-hidden="true" />{item.progress?.position ? "Resume" : "Play"}</Button>
     {!!item.progress?.position && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!connected || !canPlay || !item.available || busy || loading || pending} onClick={() => void enqueue(item, { playNow: true, fromStart: true })}><RotateCcw aria-hidden="true" />From start</Button>}
-    <Button variant="secondary" aria-label={`Add ${item.title} to queue`} disabled={!connected || !item.available || busy || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" />Queue</Button>
+    <Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!connected || !item.available || busy || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" />Up next</Button>
   </div>;
   const progress = (item: LibraryItem) => <ProgressActions origin={origin} token={token} connected={connected} mediaId={`library:${item.id}`} title={item.title} progress={item.progress} onUpdated={() => setRefresh(value => value + 1)} />;
   const summary = (item: LibraryItem) => <>

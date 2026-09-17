@@ -39,17 +39,17 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
   await flush();
   if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
-  else { expect(request).not.toHaveBeenCalled(); await click(button("Saved playlists")); }
+  else { expect(request).not.toHaveBeenCalled(); await click(button("Saved lists")); }
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
   expect(document.querySelector('[data-slot="badge"]')).toBeNull();
   expect(writes).toEqual([]);
-  await click(button("Add to queue"));
+  await click(button("Up next"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
-  await click(button("Delete playlist"));
+  await click(button("Delete list"));
   expect(writes).toHaveLength(1);
   await click(button("Cancel"));
   expect(writes).toHaveLength(1);
-  await click(button("Delete playlist")); await click(button("Confirm delete"));
+  await click(button("Delete list")); await click(button("Confirm delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
 });
 
@@ -73,12 +73,12 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
   }) as typeof fetch);
   const { SavedPlaylists } = await import("./SavedPlaylists");
   await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} />));
-  await click(button("Saved playlists"));
+  await click(button("Saved lists"));
   expect(document.querySelector('[data-slot="badge"]')?.textContent).toBe(providerLabels[provider as keyof typeof sources]);
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="source-list"]')!);
   expect(writes).toEqual([]);
-  await click(button("Add to queue"));
+  await click(button("Up next"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list/load", method: "POST", body: { revision: 2, mode: "append" } });
-  await click(button("Delete playlist")); await click(button("Confirm delete"));
+  await click(button("Delete list")); await click(button("Confirm delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list", method: "DELETE", body: { revision: 2 } });
 });
