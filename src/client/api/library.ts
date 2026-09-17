@@ -36,6 +36,9 @@ export const historyQuery = (credentials: Credentials, provider?: string) =>
     staleTime: 30_000,
   });
 
+export const removeHistory = (credentials: Credentials, mediaId: string) =>
+  apiFetch(credentials, `/api/progress/${encodeURIComponent(mediaId)}`, { method: "DELETE" });
+
 export type MusicBrowse =
   | { kind: "artists" | "albums"; artist?: MusicArtist; q: string; offset: number }
   | { kind: "album"; album: MusicAlbum; q: string; offset: number };
