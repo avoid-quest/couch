@@ -4,3 +4,4 @@
 - Before PR operations, read `gh-stack` and `unslop` if available. Open PRs ready for review.
 - GitHub Actions is enabled: use it only for PR checks, builds and releases. The pinned Debian builder container replaced the Mac delivery path; the T480 only installs and runs Couch, never builds it.
 - Prove workflow and packaging changes with `act` before dispatching (docs/ci.md). Use the `catthehacker/ubuntu:full-latest` image; the default act image lacks `gh`. A green local suite is not proof: the Mac skips container-only checks such as the minisign-gated tests.
+- Tests query by role, label or text through `src/client/testing.ts` (screen/getByRole/within/fireEvent). Never scrape the rendered DOM with querySelector in tests; migrate a file's selectors when you touch it.

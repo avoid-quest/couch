@@ -94,7 +94,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
         <Button variant="outline" data-action="folder-settings" data-tv-local-only={host || undefined} onClick={onManage}>Manage folders in Sources</Button>
         {sources.length > 0 && <Dialog open={foldersOpen} onOpenChange={setFoldersOpen}>
       <DialogTrigger asChild><Button variant="outline" data-action="library-folders" data-tv-local-only={host || undefined} aria-label={`${sources.length} library folder${sources.length === 1 ? "" : "s"}`}><FolderOpen aria-hidden="true" />Folders<Badge variant="secondary">{sources.length}</Badge>{sources.some(source => source.status === "scanning") && <span className="inline-block size-[7px] rounded-full bg-primary" aria-label="Scanning" />}</Button></DialogTrigger>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
+      <DialogContent data-tv-local-only={host || undefined}>
         <DialogHeader><DialogTitle>Library folders</DialogTitle><DialogDescription>{"An administrator manages TV folders in Settings > Sources."}</DialogDescription></DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <ul className="space-y-3">{sources.map(source => <li key={source.id}>

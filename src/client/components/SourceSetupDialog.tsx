@@ -14,7 +14,6 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
         data-tv-local-only={localOnly || undefined}
         onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}
         onOpenAutoFocus={() => { trigger.current = document.activeElement as HTMLElement; }}
@@ -22,7 +21,7 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
         <DialogHeader><DialogTitle>Add source</DialogTitle><DialogDescription>Sources are saved on the selected playback computer.</DialogDescription></DialogHeader>
         {props.canManage ? (
           <Tabs defaultValue={initialSource ?? "jellyfin"} key={initialSource ?? "jellyfin"}>
-            <TabsList aria-label="Source type" className="h-auto w-full flex-wrap">
+            <TabsList aria-label="Source type" className="h-auto w-full flex-wrap justify-start">
               {Object.entries(sources).map(([value, label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}
             </TabsList>
             {Object.keys(sources).map(source => (

@@ -45,10 +45,18 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
           const reference = await settingField(request, "reference") as ForLaterReference;
           authorize();
-          if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || !["queue", "library", "jellyfin"].includes(reference.kind) || typeof reference.id !== "string" || !/^[\w-]{1,80}$/.test(reference.id)) throw new ControllerError("Choose a library or queue item to save.");
-          const found = await lookup(reference);
+          let entry: QueueEntry;
+          if (reference && typeof reference === "object" && "kind" in reference && reference.kind === "web") {
+            if (typeof reference.url !== "string" || typeof reference.title !== "string" || reference.url.length > 2048 || /[\u0000-\u001f\u007f\\]/.test(reference.url)) throw new ControllerError("Choose an item to save.");
+            let parsed: URL; try { parsed = new URL(reference.url); } catch { throw new ControllerError("Choose an item to save."); }
+            if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new ControllerError("Choose an item to save.");
+            entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}` };
+          } else {
+            if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || !["queue", "library", "jellyfin"].includes((reference as ForLaterReference).kind) || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a library or queue item to save.");
+            const found = await lookup(reference);
+            entry = capturePlaylistEntries([{ ...found, id: crypto.randomUUID() }])[0]!;
+          }
           authorize();
-          const entry = capturePlaylistEntries([{ ...found, id: crypto.randomUUID() }])[0]!;
           const result = db.transaction(() => {
             const existing = db.query<Row, [string]>("SELECT id, entry FROM for_later WHERE source = ?").get(entry.source);
             if (existing) return { item: publicItem(JSON.parse(existing.entry)), changed: false };

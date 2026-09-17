@@ -173,7 +173,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
       <Button variant="outline" disabled={!connected || loading || browse.offset + pageSize >= total} onClick={() => setBrowse(value => ({ ...value, offset: value.offset + pageSize }))}>Next</Button>
     </nav>}
     <Dialog open={active && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}>
-      <DialogContent className="video-detail max-h-[85dvh] overflow-y-auto sm:max-w-2xl" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
+      <DialogContent className="video-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
         {detail && <><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[detail.video?.show?.title, detail.video?.year, detail.video?.genres.join(" · ")].filter(Boolean).join(" · ") || "From your library folders"}</DialogDescription></DialogHeader>
           {detail.video?.fanartId && <AuthArtwork origin={origin} token={token} id={detail.video.fanartId} video className="video-fanart" />}
           {detail.video?.originalTitle && detail.video.originalTitle !== detail.title && <p className="break-words text-sm text-muted-foreground">Original title: {detail.video.originalTitle}</p>}

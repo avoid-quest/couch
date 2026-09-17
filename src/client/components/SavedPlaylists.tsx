@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowLeft, ArrowUp, ListMusic, Play, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, ListMusic, Play, Plus, Save, Trash2, X } from "lucide-react";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { SortableRow, useDndSensors } from "@/lib/dnd";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
 
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
@@ -28,6 +31,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   const [name, setName] = useState("");
   const [rename, setRename] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"delete" | "saveQueue" | null>(null);
+  const sensors = useDndSensors();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -69,7 +73,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       selectedId ? read(`/api/playlists/${encodeURIComponent(selectedId)}`) : Promise.resolve(null),
     ]).then(([list, detail]) => {
       if (!controller.signal.aborted) {
-        setPlaylists(list.playlists);
+        setPlaylists(Array.isArray(list.playlists) ? list.playlists : []);
         setPlaylist(detail?.playlist ?? null);
       }
     }).catch(reason => {
@@ -138,8 +142,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
 
   const content = <>
       {inline ? <header className="saved-playlist-heading">
-        <span className="saved-playlist-art" aria-hidden="true"><ListMusic /></span>
-        <div><p className="text-sm text-muted-foreground">Shared on this TV</p><h2>{playlist?.name ?? "Playlists"}</h2><p className="text-sm text-muted-foreground">{selectedId ? "An ordered mix you can play again." : "Keep a queue to play again later."}</p></div>
+        <div><h2 className="text-xl font-semibold tracking-tight">{playlist?.name ?? "Playlists"}</h2><p className="text-sm text-muted-foreground">Shared on this TV · keep a queue to play again later.</p></div>
       </header> : <DialogHeader>
         <DialogTitle className="break-words pr-12">{playlist?.name ?? "Saved playlists"}</DialogTitle>
         <DialogDescription>{selectedId ? "Edit this playlist or load it into the shared TV queue." : "Playlists are shared on this TV and stay available when the watching profile changes. Save the queue to reuse it later."}</DialogDescription>
@@ -151,7 +154,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading playlists…</p>}
       {!selectedId ? <>
         <form className="grid gap-2" onSubmit={event => void create(event)}>
-          <Label htmlFor="saved-playlist-name">Save the current queue</Label>
+          <Label htmlFor="saved-playlist-name" className="sr-only">Save the current queue</Label>
           <div className="flex flex-wrap gap-2">
             <Input ref={nameRef} id="saved-playlist-name" className="min-h-11 min-w-0 flex-1" value={name} onChange={event => setName(event.target.value)} placeholder="Playlist name" maxLength={80} required autoComplete="off" disabled={disabled} />
             <Button type="submit" disabled={disabled || !name.trim() || !queueCount || playlists.length >= 100}><Save aria-hidden="true" />Save queue</Button>
@@ -186,12 +189,19 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
             <Button variant="outline" type="submit" disabled={disabled || !(rename ?? "").trim() || rename?.trim() === playlist.name}>Rename</Button>
           </div>
         </form>
-        <ol ref={entriesRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Playlist items" aria-busy={loading}>{playlist.entries.map((entry, index) => <li key={entry.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+        <DndContext sensors={sensors} onDragEnd={({ active, over }) => {
+          if (!over || active.id === over.id) return;
+          const from = playlist.entries.findIndex(entry => entry.id === String(active.id)), to = playlist.entries.findIndex(entry => entry.id === String(over.id));
+          if (from < 0 || to < 0) return;
+          const beforeEntryId = to > from ? playlist.entries[to + 1]?.id ?? null : playlist.entries[to]!.id;
+          void update(path, { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId }, "Playlist order saved.");
+        }}>
+          <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
+        <ol ref={entriesRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Playlist items" aria-busy={loading}>{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+          {drag.handle}
           <span className="w-6 shrink-0 text-center text-sm text-muted-foreground">{index + 1}</span>
           <span className="min-w-0 flex-1 break-words text-sm">{entry.title}{entry.live && <span className="ml-2 text-xs text-muted-foreground">LIVE</span>}</span>
           <div className="flex shrink-0 gap-1">
-            <Button variant="ghost" size="icon" aria-label={`Move ${entry.title} up`} disabled={disabled || index === 0} onClick={() => void update(path, { revision: playlist.revision, operation: "move", entryId: entry.id, beforeEntryId: playlist.entries[index - 1]!.id }, "Playlist order saved.")}><ArrowUp aria-hidden="true" /></Button>
-            <Button variant="ghost" size="icon" aria-label={`Move ${entry.title} down`} disabled={disabled || index === playlist.entries.length - 1} onClick={() => void update(path, { revision: playlist.revision, operation: "move", entryId: entry.id, beforeEntryId: playlist.entries[index + 2]?.id ?? null }, "Playlist order saved.")}><ArrowDown aria-hidden="true" /></Button>
             <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from playlist`} disabled={disabled} onClick={() => void update(path, { revision: playlist.revision, operation: "remove", entryId: entry.id }, "Item removed from playlist.").then(ok => {
               if (ok) requestAnimationFrame(() => {
                 const rows = entriesRef.current?.children;
@@ -200,7 +210,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
               });
             })}><X aria-hidden="true" /></Button>
           </div>
-        </li>)}</ol>
+        </li>}</SortableRow>)}</ol></SortableContext></DndContext>
         {!playlist.entries.length && <p className="text-sm text-muted-foreground">This playlist is empty. Fill the queue, then save it here.</p>}
         <Separator />
         <div className="flex flex-wrap gap-2">
@@ -219,6 +229,6 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   if (inline) return <section className="saved-playlists saved-playlists-inline" aria-label="Saved playlists">{content}</section>;
   return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); setConfirm(null); }}>
     <DialogTrigger asChild><Button variant="outline" className="min-h-11" disabled={!connected}><ListMusic aria-hidden="true" />Saved playlists</Button></DialogTrigger>
-    <DialogContent className="saved-playlists sm:max-w-2xl">{content}</DialogContent>
+    <DialogContent className="saved-playlists">{content}</DialogContent>
   </Dialog>;
 }

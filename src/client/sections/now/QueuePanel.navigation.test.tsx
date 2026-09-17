@@ -9,11 +9,11 @@ let root: Root, window: Window, QueuePanel: typeof import("./QueuePanel").QueueP
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const queue = ["one", "two", "three"].map(id => ({ id, title: id, source: `https://media.example/${id}` }));
 const state: SessionState = { queue, currentEntryId: "one", queueCursorEntryId: "one", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };
-function Screen({ value }: { value: SessionState }) {
+function Screen({ value, editing = true }: { value: SessionState; editing?: boolean }) {
   useNavigation(() => {});
-  return <QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} />;
+  return <QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" editing={editing} run={async () => true} />;
 }
-const render = (value: SessionState) => act(async () => root.render(<Screen value={value} />));
+const render = (value: SessionState, editing?: boolean) => act(async () => root.render(<Screen value={value} editing={editing} />));
 const play = (id: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="Play ${id}"]`)!;
 
 beforeEach(async () => {
@@ -35,8 +35,7 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("directional TV controls can reach and open Previously queued", async () => {
-  await render({ ...state, currentEntryId: "two", queueCursorEntryId: "two" });
+const measureRows = () => {
   const summary = document.querySelector<HTMLElement>("summary")!;
   const controls = [...document.querySelectorAll<HTMLElement>("button, summary")];
   for (const [index, element] of controls.entries()) {
@@ -45,10 +44,25 @@ test("directional TV controls can reach and open Previously queued", async () =>
     element.getClientRects = () => (element.closest("details:not([open])") && element !== summary ? [] : [rect]) as unknown as DOMRectList;
     element.scrollIntoView = () => {};
   }
+  return summary;
+};
+
+test("in edit mode directional TV controls reach the reorder handle and open Previously queued", async () => {
+  await render({ ...state, currentEntryId: "two", queueCursorEntryId: "two" });
+  const summary = measureRows();
   await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Queue options for three"]')!.focus(); applyTvNavigation("down"); });
   // The row's reorder handle sits in the TV focus order before the disclosure.
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Reorder three");
   await act(async () => { applyTvNavigation("down"); });
+  expect(document.activeElement).toBe(summary);
+  await act(async () => { applyTvNavigation("select"); });
+  expect(document.querySelector("details")?.open).toBe(true);
+});
+
+test("outside edit mode directional TV controls skip the hidden reorder handle", async () => {
+  await render({ ...state, currentEntryId: "two", queueCursorEntryId: "two" }, false);
+  const summary = measureRows();
+  await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Queue options for three"]')!.focus(); applyTvNavigation("down"); });
   expect(document.activeElement).toBe(summary);
   await act(async () => { applyTvNavigation("select"); });
   expect(document.querySelector("details")?.open).toBe(true);

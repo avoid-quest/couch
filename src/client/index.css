@@ -433,8 +433,8 @@ body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset
   .couch-shell.remote-shell .header-status [role="status"] { max-width: 80px; font-size: 10px; }
 }
 .couch-shell .media-browser .browse-home,
-.couch-shell .media-browser > section > .session-home { padding: 0; }
-.couch-shell .media-browser .now-playing .session-home { padding: 0; }
+.couch-shell .media-browser .session-home { padding: 0; }
+.saved-favorites .media-artwork { width: 46px; height: 54px; border-radius: 6px; flex-shrink: 0; }
 .couch-shell .now-search { display: flex; align-items: center; gap: 14px; padding: 6px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); transition: border-color 140ms; }
 .couch-shell .now-search:focus-within { border-color: var(--primary); }
 .couch-shell .now-search > svg { width: 22px; height: 22px; flex-shrink: 0; color: var(--muted-foreground); }
@@ -474,7 +474,6 @@ body { min-width: 0; }
 .history-inspect .history-inspect-title { display: flex; flex: 1; min-width: 0; min-height: 44px; height: auto; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; white-space: normal; text-align: left; }
 .history-inspect-title strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .history-inspect-title small { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
-.history-inspect-detail { max-height: 85dvh; overflow-y: auto; }
 .history-inspect-detail-art { width: 100%; height: auto; aspect-ratio: 1.9; }
 .history-inspect-detail-art svg { width: 48px; height: 48px; }
 
@@ -582,7 +581,7 @@ body { min-width: 0; }
 }
 
 /* session-home.css */
-.session-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 35px; padding: 32px 42px 40px; }
+.session-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; gap: 35px; padding: 32px 42px 40px; }
 .session-home > *, .session-following > * { min-width: 0; }
 .session-current { align-self: start; min-width: 0; }
 .session-home .session-playback { padding: 0; background: transparent; }
@@ -685,12 +684,11 @@ body { min-width: 0; }
 }
 
 /* remote-mode.css */
-.remote-shell { --remote-header-height: 72px; max-width: 1440px; padding: 0 24px; }
+.remote-shell { --remote-header-height: 72px; }
 .remote-shell .app-header { position: sticky; top: 0; z-index: 20; min-height: var(--remote-header-height); gap: 16px; border-bottom: 1px solid var(--border); }
 .remote-shell .brand { font-size: 22px; }
 .remote-shell .header-status { gap: 8px; font-size: 12px; }
 .remote-shell .header-status button { font-size: 12px; }
-.remote-shell .workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); align-items: start; gap: 24px; padding: 20px 0; }
 .remote-shell .player-controls { padding: 16px; min-width: 0; }
 .remote-shell .remote-pad { border-top: 1px solid var(--border); }
 .remote-shell .now-heading { margin-bottom: 8px; gap: 8px; }
@@ -886,3 +884,5 @@ body { min-width: 0; }
   button, [role="button"] { touch-action: manipulation; }
   :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
 }
+.remote-pad-playback { display: grid; gap: 12px; }
+.session-home-single { grid-template-columns: minmax(0, 1fr); }

@@ -1,12 +1,18 @@
 import { useId, useState, type KeyboardEvent } from "react";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { Action, SessionState } from "../../shared/protocol";
+import type { Credentials } from "../session/session";
+import { PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
 
 type RemoteKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
-export function RemotePad({ connected, onNavigate }: {
+export function RemotePad({ connected, onNavigate, run, state, credentials }: {
   connected: boolean;
   onNavigate: (key: RemoteKey) => Promise<boolean>;
+  run: (action: Action) => Promise<boolean>;
+  state: SessionState | null;
+  credentials: Credentials;
 }) {
   const descriptionId = useId();
   const [failed, setFailed] = useState(false);
@@ -58,6 +64,10 @@ export function RemotePad({ connected, onNavigate }: {
         disabled={!connected} onClick={() => void navigate("home")}><House /><span>Home</span></Button>
       <Button type="button" variant="outline" className="remote-pad-tool" aria-label="TV info"
         disabled={!connected} onClick={() => void navigate("info")}><Info /><span>Info</span></Button>
+    </div>
+    <div className="remote-pad-tools" role="group" aria-label="Playback controls">
+      {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} />}
+      {state && <PlaybackVolume state={state} connected={connected} run={run} />}
     </div>
     <p className={`remote-pad-hint${failed && connected ? " is-error" : ""}`} role="status">
       {!connected ? "Connect to your TV to use the remote." : failed

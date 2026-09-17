@@ -46,14 +46,14 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
         <Select value={values.audioLanguage || "automatic"} disabled={!connected || pending} onValueChange={value => change({ audioLanguage: value === "automatic" ? "" : value })}>
-          <SelectTrigger id="preferred-audio-language" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="preferred-audio-language" className="min-h-11 w-full max-w-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{playbackLanguages(values.audioLanguage).map(({ code, name }) => <SelectItem key={code} value={code || "automatic"} className="min-h-11">{name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="preferred-subtitle-language">Preferred subtitle language</Label>
         <Select value={values.subtitleLanguage || "automatic"} disabled={!connected || pending} onValueChange={value => change({ subtitleLanguage: value === "automatic" ? "" : value })}>
-          <SelectTrigger id="preferred-subtitle-language" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="preferred-subtitle-language" className="min-h-11 w-full max-w-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{playbackLanguages(values.subtitleLanguage).map(({ code, name }) => <SelectItem key={code} value={code || "automatic"} className="min-h-11">{name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
@@ -61,21 +61,21 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
       <div className="grid gap-2">
         <Label htmlFor="preferred-subtitle-mode">Default subtitles</Label>
         <Select value={values.subtitles} disabled={!connected || pending} onValueChange={value => change({ subtitles: value as "auto" | "off" })}>
-          <SelectTrigger id="preferred-subtitle-mode" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="preferred-subtitle-mode" className="min-h-11 w-full max-w-sm"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="auto" className="min-h-11">Automatic</SelectItem><SelectItem value="off" className="min-h-11">Off</SelectItem></SelectContent>
         </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="preferred-playback-speed">Default playback speed</Label>
         <Select value={String(values.speed)} disabled={!connected || pending} onValueChange={value => change({ speed: Number(value) })}>
-          <SelectTrigger id="preferred-playback-speed" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="preferred-playback-speed" className="min-h-11 w-full max-w-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{[...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, values.speed])].sort((a, b) => a - b).map(speed => <SelectItem key={speed} value={String(speed)} className="min-h-11">{speed === 1 ? "Normal" : `${speed}×`}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div className="grid gap-2 sm:col-span-2">
         <Label htmlFor="preferred-replaygain">Default music ReplayGain</Label>
         <Select value={values.replayGain} disabled={!connected || pending} onValueChange={value => change({ replayGain: value as ReplayGainMode })}>
-          <SelectTrigger id="preferred-replaygain" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="preferred-replaygain" className="min-h-11 w-full max-w-sm"><SelectValue /></SelectTrigger>
           <SelectContent>{["off", "track", "album"].map(mode => <SelectItem key={mode} value={mode} className="min-h-11">{mode[0]!.toUpperCase() + mode.slice(1)}</SelectItem>)}</SelectContent>
         </Select>
         <p className="text-sm text-muted-foreground">Track balances song volume. Album preserves the album's relative levels. Untagged audio, radio and video stay unchanged.</p>

@@ -50,7 +50,7 @@ export function queueMoveAction(upNext: QueueEntry[], activeId: string, overId: 
   return { type: "move", entryId: activeId, beforeEntryId: after?.id ?? null };
 }
 
-export function QueuePanel({ state, credentials, connected, available, nativeHost, defaultQuality, run }: Props) {
+export function QueuePanel({ state, credentials, connected, available, nativeHost, defaultQuality, editing = false, run }: Props & { editing?: boolean }) {
   const [notice, setNotice] = useState("");
   const panelRef = useRef<HTMLElement>(null);
   const focusedEntry = useRef<{ element: HTMLElement; id: string; label: string | null } | null>(null);
@@ -105,7 +105,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
       {currentIndex >= 0 && <section className="queue-group border-t" aria-labelledby="queue-current-title"><h3 className="px-5 pt-4 pb-2 text-[0.95rem]"><span id="queue-current-title">Current item</span></h3><ol className="queue-list max-h-none overflow-visible p-2" aria-label="Current item">{renderEntry(queue[currentIndex]!, currentIndex)}</ol></section>}
       <section className="queue-group border-t" aria-labelledby="queue-next-title"><h3 className="px-5 pt-4 pb-2 text-[0.95rem]"><span id="queue-next-title">Up next <span className="count">{queue.length - cursorIndex - 1}</span></span></h3>
         {upNext.length ? <ol className="queue-list max-h-none overflow-visible p-2" aria-label="Up next"><SortableContext items={upNext.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-          {upNext.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`}>{drag => renderEntry(entry, cursorIndex + 1 + index, drag)}</SortableRow>)}
+          {upNext.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing={editing}>{drag => renderEntry(entry, cursorIndex + 1 + index, drag)}</SortableRow>)}
         </SortableContext></ol> : <p className="queue-group-empty px-5 pt-2 pb-5 text-sm text-muted-foreground">Nothing queued next. Add something to keep watching or listening.</p>}
       </section>
       {previous.length > 0 && <details className="queue-group queue-previous border-t"><summary tabIndex={0} className="min-h-12 cursor-pointer px-5 pt-4 pb-2 text-[0.95rem] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary">Previously queued <span className="count">{previous.length}</span></summary><ol className="queue-list max-h-none overflow-visible p-2" aria-label="Previously queued">{previous.map(({ entry, index }) => renderEntry(entry, index))}</ol></details>}

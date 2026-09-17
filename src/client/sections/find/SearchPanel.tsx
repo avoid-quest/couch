@@ -1,13 +1,12 @@
 import { searchSources, type SearchRouteState } from "../../search";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SaveForLater } from "@/components/SaveForLater";
+import { SearchBar } from "@/components/SearchBar";
 import type { Action } from "../../../shared/protocol";
+import type { PlaylistSource } from "../../../shared/playlists";
 import type { ProviderId, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchSource } from "./SearchSource";
@@ -31,6 +30,7 @@ export type Props = {
   draftQuery?: string;
   searchState?: SearchRouteState;
   onSearchChange?: (state: SearchRouteState) => void;
+  onSavePlaylist?: (provider: PlaylistSource["provider"], url: string) => Promise<boolean>;
 };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
@@ -48,7 +48,7 @@ export function SearchPanel(props: Props) {
   useEffect(() => { if (props.draftQuery === undefined && props.searchState) setDraft(props.searchState.query); }, [props.draftQuery, props.searchState?.query]);
   const changeDraft = (query: string) => { if (props.draftQuery === undefined) setDraft(query); props.onQueryChange?.(query); };
   const commit = (query: string, submit = false) => {
-    const source = query !== search.query || /^https?:\/\//i.test(query) ? "All" : filter;
+    const source = /^https?:\/\//i.test(query) ? "All" : filter;
     setLinkNotice(""); setLocalFilter(source);
     setSearch(value => ({ query, attempt: value.attempt + Number(submit && query === search.query) }));
     props.onSearchChange?.({ query, source });
@@ -84,8 +84,12 @@ export function SearchPanel(props: Props) {
   const linkedProvider = url ? providerForLink(url) : undefined;
   const providers = linkedProvider ? [linkedProvider] : url ? [] : ["youtube", "raiplay", "twitch", "streamingcommunity"] as ProviderId[];
   const visible = (source: string) => !!url || filter === "All" || filter === source;
+  const searchable = ["YouTube", "RaiPlay", "StreamingCommunity", "Twitch", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin"];
+  const isEmptySource = (source: string) => { const summary = summaries[source]; return !!summary && !summary.loading && !summary.error && summary.count === 0; };
+  const showSource = (source: string) => visible(source) && !isEmptySource(source);
+  const emptySources = searchable.filter(isEmptySource);
   const scopes = searchSources.flatMap(source => summaries[source]?.count ? [[source, summaries[source]] as const] : []);
-  const completed = ["YouTube", "RaiPlay", "Twitch", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin"].every(source => summaries[source] && !summaries[source].loading);
+  const completed = ["YouTube", "RaiPlay", "Twitch", "StreamingCommunity", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin"].every(source => summaries[source] && !summaries[source].loading);
   const total = scopes.reduce((sum, [, summary]) => sum + summary.count, 0);
   async function playLink(playNow: boolean) {
     if (!props.onCommand || !url || linkPending || !linkRequest.current) return;
@@ -96,22 +100,21 @@ export function SearchPanel(props: Props) {
     finally { if (!signal.aborted) setLinkPending(false); }
   }
   return <section ref={panel} className="min-w-0 space-y-3" aria-label="Search media">
-    <form role="search" className="flex items-center gap-3.5 rounded-[14px] border bg-card px-4 py-1.5 shadow-[0_1px_0_rgb(0_0_0/0.2)] transition-colors focus-within:border-primary" onSubmit={event => { event.preventDefault(); commit(draft.trim(), true); }}>
-      <Search aria-hidden="true" className="size-[22px] shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search or paste a link</Label><Input ref={input} id="media-search" type="search" maxLength={4096} value={draft} onChange={event => changeDraft(event.target.value)} placeholder="Search or paste a link" /></div>
-      {draft && <Button variant="ghost" type="button" aria-label="Clear search" onClick={() => { changeDraft(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button>}
-    </form>
-    {!search.query && props.connected && <p className="text-[13px] text-muted-foreground">One search across YouTube, Twitch, RaiPlay, Bandcamp, radio and your library. Paste a link to play it directly.</p>}
+    <SearchBar id="media-search" inputRef={input} className="min-w-0" value={draft} onValueChange={changeDraft} onSubmit={() => commit(draft.trim(), true)} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
+    {!search.query && props.connected && <p className="text-[13px] text-muted-foreground">One search across YouTube, Twitch, RaiPlay, Bandcamp, StreamingCommunity, radio and your library. Paste a link to play it directly.</p>}
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
+    {search.query && !url && !completed && <div className="h-0.5 overflow-hidden rounded bg-muted" role="progressbar" aria-label="Searching sources"><div className="h-full w-1/3 animate-pulse rounded bg-primary/60" /></div>}
+    {!url && props.connected && (search.query ? scopes.length > 0 : true) && <nav data-search-scopes className="sticky top-[var(--shell-header)] z-[5] flex gap-1.5 overflow-x-auto bg-background py-2.5 [scrollbar-width:none]" aria-label="Filter search results"><Button variant={filter === "All" ? "secondary" : "ghost"} aria-label="All sources" aria-pressed={filter === "All"} onClick={() => setFilter("All")}>All sources{search.query ? <span className="text-muted-foreground"> {total}</span> : null}</Button>{(search.query ? scopes.map(([source]) => source) : searchSources.filter(source => source !== "All")).map(source => <Button key={source} aria-label={source} variant={filter === source ? "secondary" : "ghost"} aria-pressed={filter === source} onClick={() => setFilter(source)}>{source}{summaries[source] ? <span className="text-muted-foreground"> {summaries[source]!.count}</span> : null}</Button>)}</nav>}
     {search.query && <>
       {!url && filter !== "All" && !summaries[filter]?.count && <Button variant="outline" onClick={() => setFilter("All")}>Show all sources</Button>}
-      {!url && scopes.length > 0 && <nav data-search-scopes className="sticky top-[var(--shell-header)] z-[5] flex gap-1.5 overflow-x-auto bg-background py-2.5 [scrollbar-width:none]" aria-label="Filter search results"><Button variant={filter === "All" ? "secondary" : "ghost"} aria-label="All sources" aria-pressed={filter === "All"} onClick={() => setFilter("All")}>All sources <span className="text-muted-foreground">{total}</span></Button>{scopes.map(([source, summary]) => <Button key={source} aria-label={source} variant={filter === source ? "secondary" : "ghost"} aria-pressed={filter === source} onClick={() => setFilter(source)}>{source} <span className="text-muted-foreground">{summary.count}</span></Button>)}</nav>}
       {props.connected && !url && completed && total === 0 && !Object.values(summaries).some(summary => summary.error) && <p role="status">No results for "{search.query}". Try a station, title or artist.</p>}
-      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!visible(providerNames[provider])}><SearchOnlineResults {...props} onResults={reportResults} active={props.active && visible(providerNames[provider])} provider={provider} query={search.query} url={url} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
+      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!showSource(providerNames[provider])}><SearchOnlineResults {...props} onResults={reportResults} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} url={url} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
-        {(["avoid radio", "Radio playlists", "Radio directory"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source)}><SearchRadioResults {...props} onResults={reportResults} active={props.active && visible(source)} query={search.query} source={source} /></div>)}
-        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!visible(source === "Library" ? "TV folders" : source)}><SearchSource {...props} onResults={reportResults} onChooseSource={source => { focusSource.current = source; setFilter(source); }} active={props.active && visible(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
+        {(["avoid radio", "Radio playlists", "Radio directory"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source)}><SearchRadioResults {...props} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} /></div>)}
+        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source === "Library" ? "TV folders" : source)}><SearchSource {...props} onResults={reportResults} onChooseSource={source => { focusSource.current = source; setFilter(source); }} active={props.active && showSource(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
         {filter === "Bandcamp" && <p className="text-sm text-muted-foreground">Paste a Bandcamp album or track link.</p>}
       </>}
+      {!url && emptySources.length > 0 && <p className="text-muted-foreground">No matches in {emptySources.join(", ")}.</p>}
       {url && !linkedProvider && <Card className="grid gap-3.5 rounded-[14px] border bg-card p-5"><h2>Media link</h2><p className="break-all text-sm text-muted-foreground">{url}</p><div className="flex flex-wrap gap-2"><Button disabled={!props.connected || !props.canPlay || !props.onCommand || linkPending} onClick={() => void playLink(true)}>Play now</Button><Button variant="secondary" disabled={!props.connected || !props.onCommand || linkPending} onClick={() => void playLink(false)}>Add to queue</Button>{supportsWebVideoQuality(url) && <QualityOptions id="search-link-quality" value={quality} disabled={!props.connected || linkPending} onChange={setQuality} />}</div>{linkNotice && <p role="status">{linkNotice}</p>}</Card>}
       {url && /^https?:\/\/[^/]*streamingcommunity/i.test(url) && props.onManageSources && <Button variant="outline" onClick={() => props.onManageSources?.("streaming-community")}>StreamingCommunity settings</Button>}
     </>}

@@ -59,6 +59,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/router-plugin": "^1.168.38",
     "@tauri-apps/cli": "2.11.4",
+    "@testing-library/dom": "^10.4.2",
     "@types/bun": "1.4.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",

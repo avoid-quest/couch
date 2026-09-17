@@ -199,6 +199,7 @@ export function createHub(options: HubOptions) {
         if (!entry) throw new ControllerError("This item is no longer in the queue.", 404);
         return entry;
       }
+      if (reference.kind !== "library") throw new ControllerError("Choose a library or queue item to save.");
       const item = library.getItem(reference.id);
       if (!item) throw new ControllerError("This item is no longer in the library.", 404);
       return { id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) };

@@ -198,7 +198,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
     <div className="playback-settings">
       <Dialog onOpenChange={open => { if (!open) focusRequest.current?.cancel(); }}>
         <DialogTrigger asChild><Button variant="ghost" size="icon" className="icon-button min-h-11 min-w-11" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
             <DialogDescription className="sr-only">Controls for the current media.</DialogDescription>

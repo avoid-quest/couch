@@ -55,7 +55,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
       {active && audioOnly && !error ? (
         <div className="audio-stage-caption">
           <div className={`audio-stage-artwork${artwork ? "" : " without-artwork"}`} aria-hidden="true">{artwork || <Music2 />}</div>
-          <div className="audio-stage-copy"><p className="eyebrow">Listening now</p><h1>{title}</h1>{subtitle && <p className="audio-stage-track" role="status">{subtitle}</p>}<p className="audio-stage-hint">Use your remote to change the music.</p></div>
+          <div className="audio-stage-copy"><p className="eyebrow">Listening now</p><h1>{title}</h1>{subtitle && <p className="audio-stage-track" role="status">{subtitle}</p>}</div>
         </div>
       ) : (!active || error) && (
         <div className="stage-caption">

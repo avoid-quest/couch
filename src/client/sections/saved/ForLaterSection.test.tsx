@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { QueryClient } from "@tanstack/react-query";
+import { fireEvent, screen } from "../../testing";
 
 let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>, forLaterOrder: typeof import("./ForLaterSection").forLaterOrder;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -10,8 +11,8 @@ const calls: Array<{ path: string; method: string; body: unknown }> = [];
 let missing = false, canceled = false;
 let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
 const flush = () => act(async () => { await Bun.sleep(15); });
-const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
-const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
+const button = (label: string) => screen.getByRole("button", { name: label });
+const click = async (label: string) => { await act(async () => fireEvent.click(button(label))); await flush(); };
 async function render(connected = true, canPlay = true, inspect = false) {
   const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
   forLaterOrder = order;
@@ -53,15 +54,15 @@ test("saved shared items display without queue writes; explicit actions retain t
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
   await click("Add Evening movie to Up next"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
-  expect(document.querySelectorAll("li")).toHaveLength(2);
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("failed source keeps its saved item removable and removal returns focus to the next item", async () => {
   await render(); missing = true; await click("Play Evening movie");
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Source unavailable");
-  expect(document.querySelectorAll("li")).toHaveLength(2);
+  expect(screen.getByRole("alert").textContent).toContain("Source unavailable");
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
   await click("Remove Evening movie from For later");
-  expect(document.querySelectorAll("li")).toHaveLength(1);
+  expect(screen.getAllByRole("listitem")).toHaveLength(1);
   expect(document.activeElement).toBe(button("Play Evening song"));
   await click("Remove Evening song from For later");
   expect(document.activeElement?.id).toBe("for-later-title");
@@ -70,12 +71,12 @@ test("failed source keeps its saved item removable and removal returns focus to 
 
 test("unavailable native playback still allows append and remove; disconnected controllers cannot mutate", async () => {
   await render(true, false);
-  expect(button("Play Evening movie").disabled).toBe(true);
+  expect((button("Play Evening movie") as HTMLButtonElement).disabled).toBe(true);
   expect(button("Add Evening movie to Up next").disabled).toBe(false);
   expect(button("Remove Evening movie from For later").disabled).toBe(false);
   const count = calls.length; await render(false);
   expect(document.body.textContent).toContain("Reconnect to see your saved items");
-  expect(document.querySelectorAll("li")).toHaveLength(0); expect(calls).toHaveLength(count);
+  expect(screen.queryAllByRole("listitem")).toHaveLength(0); expect(calls).toHaveLength(count);
 });
 
 test("another controller's socket revision refreshes shared saved items", async () => {
@@ -99,14 +100,14 @@ test("a successful append whose Play was canceled reports that outcome instead o
   await click("Play Evening movie");
   expect(document.body.textContent).toContain("Added to Up next. Playback was canceled by a newer control.");
   expect(document.body.textContent).not.toContain("Starting Evening movie");
-  expect(document.querySelector('[role="alert"]')).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
-  expect(document.querySelectorAll("li")).toHaveLength(2);
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
-test("every saved item exposes a keyboard reorder handle and a drop computes the persisted order", async () => {
+test("reorder handles are always available and a drop computes the persisted order", async () => {
   await render();
-  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening movie", "Reorder Evening song"]);
+  expect(screen.getAllByRole("button", { name: /^Reorder/ }).map((node: HTMLElement) => node.getAttribute("aria-label"))).toEqual(["Reorder Evening movie", "Reorder Evening song"]);
   expect(forLaterOrder(items, "second", "saved")).toEqual(["second", "saved"]);
   expect(forLaterOrder(items, "saved", "saved")).toBeNull();
   expect(forLaterOrder(items, "elsewhere", "saved")).toBeNull();
@@ -117,7 +118,7 @@ test("Saved opens details without playing and also exposes direct playback actio
   expect(button("Play Evening movie")).toBeDefined();
   await click("Details for Evening movie");
   expect(calls.every(call => call.method === "GET")).toBe(true);
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Saved for later");
+  expect(screen.getByRole("dialog").textContent).toContain("Saved for later");
   await click("Play Evening movie");
   expect(calls.at(-1)?.body).toEqual({ mode: "play" });
   await click("Close");

@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
 import { routeTree } from "./routeTree.gen";
 import { readSearchState, searchLocation } from "./search";
 import { frontendPaths } from "../shared/page-paths";
 
 test("every frontend path resolves to a registered route", () => {
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ["/"] }) });
+  const router = createRouter({ routeTree, context: { queryClient: new QueryClient() }, history: createMemoryHistory({ initialEntries: ["/"] }) });
   const ids = Object.keys(router.routesById);
   for (const path of frontendPaths) expect(ids).toContain(path);
 });
