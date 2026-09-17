@@ -4,7 +4,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { SaveForLater } from "@/components/SaveForLater";
 import type { Action } from "../../../shared/protocol";
@@ -96,9 +96,12 @@ export function SearchPanel(props: Props) {
     finally { if (!signal.aborted) setLinkPending(false); }
   }
   return <section ref={panel} className="min-w-0 space-y-3" aria-label="Search media">
-    <form role="search" className="flex items-center gap-3.5 rounded-[14px] border bg-card px-4 py-1.5 shadow-[0_1px_0_rgb(0_0_0/0.2)] transition-colors focus-within:border-primary" onSubmit={event => { event.preventDefault(); commit(draft.trim(), true); }}>
-      <Search aria-hidden="true" className="size-[22px] shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><Label className="sr-only" htmlFor="media-search">Search or paste a link</Label><Input ref={input} id="media-search" type="search" maxLength={4096} className="[&::-webkit-search-cancel-button]:hidden" value={draft} onChange={event => changeDraft(event.target.value)} placeholder="Search or paste a link" /></div>
-      {draft && <Button variant="ghost" type="button" aria-label="Clear search" onClick={() => { changeDraft(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button>}
+    <form role="search" className="min-w-0" onSubmit={event => { event.preventDefault(); commit(draft.trim(), true); }}>
+      <InputGroup className="rounded-[14px] border bg-card py-1.5 shadow-[0_1px_0_rgb(0_0_0/0.2)] focus-within:border-primary">
+        <InputGroupAddon align="inline-start"><Search aria-hidden="true" className="size-[22px] shrink-0 text-muted-foreground" /></InputGroupAddon>
+        <InputGroupInput ref={input} id="media-search" aria-label="Search or paste a link" type="search" maxLength={4096} className="[&::-webkit-search-cancel-button]:hidden" value={draft} onChange={event => changeDraft(event.target.value)} placeholder="Search or paste a link" />
+        {draft && <InputGroupAddon align="inline-end"><Button variant="ghost" size="icon" type="button" aria-label="Clear search" onClick={() => { changeDraft(""); commit(""); input.current?.focus(); }}><X aria-hidden="true" /></Button></InputGroupAddon>}
+      </InputGroup>
     </form>
     {!search.query && props.connected && <p className="text-[13px] text-muted-foreground">One search across YouTube, Twitch, RaiPlay, Bandcamp, StreamingCommunity, radio and your library. Paste a link to play it directly.</p>}
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}

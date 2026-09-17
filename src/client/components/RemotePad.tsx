@@ -1,12 +1,15 @@
 import { useId, useState, type KeyboardEvent } from "react";
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, House, Info, Pause, Play, Square, Volume1, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { Action, PlayerState } from "../../shared/protocol";
 
 type RemoteKey = "up" | "down" | "left" | "right" | "select" | "back" | "home" | "info";
 
-export function RemotePad({ connected, onNavigate }: {
+export function RemotePad({ connected, onNavigate, run, player }: {
   connected: boolean;
   onNavigate: (key: RemoteKey) => Promise<boolean>;
+  run: (action: Action) => Promise<boolean>;
+  player: PlayerState | null;
 }) {
   const descriptionId = useId();
   const [failed, setFailed] = useState(false);
@@ -58,6 +61,18 @@ export function RemotePad({ connected, onNavigate }: {
         disabled={!connected} onClick={() => void navigate("home")}><House /><span>Home</span></Button>
       <Button type="button" variant="outline" className="remote-pad-tool" aria-label="TV info"
         disabled={!connected} onClick={() => void navigate("info")}><Info /><span>Info</span></Button>
+    </div>
+    <div className="remote-pad-tools" role="group" aria-label="Playback controls">
+      <Button type="button" variant="outline" className="remote-pad-tool" aria-label={player?.status === "playing" ? "Pause" : "Play"} title={player?.status === "playing" ? "Pause" : "Play"}
+        disabled={!connected || !player?.playbackId} onClick={() => void run({ type: "pause", playbackId: player!.playbackId!, paused: player!.status === "playing" })}>
+        {player?.status === "playing" ? <><Pause /><span>Pause</span></> : <><Play /><span>Play</span></>}
+      </Button>
+      <Button type="button" variant="outline" className="remote-pad-tool" aria-label="Stop" title="Stop"
+        disabled={!connected || !player?.playbackId} onClick={() => void run({ type: "stop" })}><Square /><span>Stop</span></Button>
+      <Button type="button" variant="outline" className="remote-pad-tool" aria-label="Volume down" title="Volume down"
+        disabled={!connected || !player?.playbackId} onClick={() => void run({ type: "volume", volume: Math.max(0, player!.volume - 10) })}><Volume1 /><span>Quieter</span></Button>
+      <Button type="button" variant="outline" className="remote-pad-tool" aria-label="Volume up" title="Volume up"
+        disabled={!connected || !player?.playbackId} onClick={() => void run({ type: "volume", volume: Math.min(100, player!.volume + 10) })}><Volume2 /><span>Louder</span></Button>
     </div>
     <p className={`remote-pad-hint${failed && connected ? " is-error" : ""}`} role="status">
       {!connected ? "Connect to your TV to use the remote." : failed

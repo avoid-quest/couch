@@ -12,12 +12,12 @@ let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Ev
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
-async function render(connected = true, canPlay = true, inspect = false, editing = true) {
+async function render(connected = true, canPlay = true, inspect = false) {
   const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
   forLaterOrder = order;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} editing={editing} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} /></QueryClientProvider>));
   await flush();
 }
 beforeEach(async () => {
@@ -104,11 +104,8 @@ test("a successful append whose Play was canceled reports that outcome instead o
   expect(document.querySelectorAll("li")).toHaveLength(2);
 });
 
-test("reorder handles appear only in edit mode and a drop computes the persisted order", async () => {
+test("reorder handles are always available and a drop computes the persisted order", async () => {
   await render();
-  await render(true, true, false, false);
-  expect(document.querySelectorAll('button[aria-label^="Reorder"]')).toHaveLength(0);
-  await render(true, true, false, true);
   expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening movie", "Reorder Evening song"]);
   expect(forLaterOrder(items, "second", "saved")).toEqual(["second", "saved"]);
   expect(forLaterOrder(items, "saved", "saved")).toBeNull();

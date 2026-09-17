@@ -21,7 +21,7 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
         <DialogHeader><DialogTitle>Add source</DialogTitle><DialogDescription>Sources are saved on the selected playback computer.</DialogDescription></DialogHeader>
         {props.canManage ? (
           <Tabs defaultValue={initialSource ?? "jellyfin"} key={initialSource ?? "jellyfin"}>
-            <TabsList aria-label="Source type" className="h-auto w-full flex-wrap">
+            <TabsList aria-label="Source type" className="h-auto w-full flex-wrap justify-start">
               {Object.entries(sources).map(([value, label]) => <TabsTrigger key={value} value={value}>{label}</TabsTrigger>)}
             </TabsList>
             {Object.keys(sources).map(source => (

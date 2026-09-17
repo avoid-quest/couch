@@ -1,8 +1,11 @@
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ArrowLeft, ChevronRight, Play, Search, X } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { reorderedIds, SortableRow, useDndSensors } from "../../lib/dnd";
 import type { Action, SessionState } from "../../../shared/protocol";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { PlaybackControls, sourceLabel } from "@/components/PlaybackControls";
@@ -30,6 +33,14 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
   const upcoming = queue.slice(cursorIndex + 1);
   const current = queue[currentIndex];
   const { available } = playbackCapabilities(state, connected);
+  const sensors = useDndSensors();
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over) return;
+    const next = reorderedIds(upcoming, entry => entry.id, String(active.id), String(over.id));
+    if (!next) return;
+    const position = next.findIndex(entry => entry.id === String(active.id));
+    void run({ type: "move", entryId: String(active.id), beforeEntryId: next[position + 1]?.id ?? null });
+  };
 
   useLayoutEffect(() => { if (active) back.current?.focus({ preventScroll: true }); }, [active]);
   useLayoutEffect(() => {
@@ -40,13 +51,14 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
     focused.current = null;
     const rows = panel.current?.querySelectorAll<HTMLElement>("[data-upcoming-entry]");
     const row = rows?.[Math.min(previous.queueIndex, rows.length - 1)];
-    const replacement = row?.querySelector<HTMLElement>("button:not(:disabled)")
+    const replacement = row?.querySelector<HTMLElement>("button:not([aria-label^='Reorder']):not(:disabled)")
+      ?? row?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panel.current?.querySelector<HTMLElement>(".play-button:not(:disabled), .transport-stop:not(:disabled)")
       ?? back.current;
     replacement?.focus({ preventScroll: true });
   });
 
-  return <section ref={panel} className="pt-5 [&_.radio-programme_a]:underline [underline-offset:3px] [&_.radio-programme-description]:mt-2 [&_.radio-programme-description]:text-[13px] [&_.radio-programme-description]:leading-relaxed [&_.radio-programme-description]:whitespace-pre-line [&_.session-next-copy]:mt-0 [&_[data-slot=empty-header]]:items-start max-md:[&_.session-next]:mt-[26px]" aria-label="Now playing" onFocusCapture={event => {
+  return <section ref={panel} className="pt-5 [&_.radio-programme_a]:underline [underline-offset:3px] [&_.radio-programme-description]:mt-2 [&_.radio-programme-description]:text-[13px] [&_.radio-programme-description]:leading-relaxed [&_.radio-programme-description]:whitespace-pre-line [&_.session-next-copy]:mt-0 max-md:[&_.session-next]:mt-[26px]" aria-label="Now playing" onFocusCapture={event => {
     // Portaled playback settings keep their own focus recovery.
     focused.current = event.currentTarget.contains(event.target) ? { element: event.target, queueIndex: Number(event.target.closest<HTMLElement>("[data-upcoming-entry]")?.dataset.upcomingEntry ?? -1) } : null;
   }} onBlurCapture={event => {
@@ -63,12 +75,13 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
       <section className="session-next" aria-labelledby="now-playing-next-title">
         <div className="session-section-heading"><h2 id="now-playing-next-title">Up next <span className="count text-sm text-muted-foreground">{upcoming.length}</span></h2>{onBrowse && !embedded && <Button variant="ghost" onClick={() => onBrowse("Queue")}>Manage queue<ChevronRight aria-hidden="true" /></Button>}</div>
         {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
-        {upcoming.length ? <ol className="session-next-list">{upcoming.map((entry, index) => <li key={entry.id} data-upcoming-entry={index}>
+        {upcoming.length ? <DndContext sensors={sensors} onDragEnd={onDragEnd}><SortableContext items={upcoming.map(entry => entry.id)} strategy={verticalListSortingStrategy}><ol className="session-next-list">{upcoming.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} data-upcoming-entry={index}>
+          {drag.handle}
           {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="session-next-art" video={entry.kind !== "radio"} /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="session-next-art" />}
           <div className="session-next-copy gap-2"><strong>{entry.title}</strong><small>{sourceLabel(entry.source)}{entry.live || entry.kind === "radio" ? " · Live" : ""}</small></div>
           <Button variant="secondary" size="icon" className="session-next-play" aria-label={`Play ${entry.title}`} title="Play now" disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><Play aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from Up next`} disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}><X aria-hidden="true" /></Button>
-        </li>)}</ol> : <Empty className="now-playing-queue-empty items-start px-0 text-left"><EmptyHeader><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Add to queue from Home or Saved.</EmptyDescription></EmptyHeader></Empty>}
+        </li>}</SortableRow>)}</ol></SortableContext></DndContext> : <Empty className="now-playing-queue-empty items-start px-0 text-left"><EmptyHeader><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Add to queue from Home or Saved.</EmptyDescription></EmptyHeader></Empty>}
       </section>
     </div>
   </section>;

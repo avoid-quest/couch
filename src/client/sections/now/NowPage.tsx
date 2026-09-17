@@ -9,7 +9,7 @@ import { LiveNow } from "./LiveNow";
 import { NowPlaying } from "./NowPlaying";
 import { useShell } from "@/sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
 export function NowPage() {
   const shell = useShell();
@@ -39,10 +39,13 @@ export function NowPage() {
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
         <section data-page="Now" className="space-y-6">
-          <div className="flex items-center gap-2">
-            <form role="search" aria-label="Search or paste a link" className="flex min-w-0 flex-1 items-center gap-3.5 rounded-2xl border bg-card px-4 py-1.5 transition-colors focus-within:border-primary" onSubmit={event => { event.preventDefault(); const query = nowDraft.trim(); if (!query) return; setNowDraft(""); gotoSearch({ query, source: "All" }); }}>
-              <Search aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><Input id="now-search" aria-label="Search or paste a link" placeholder="Search or paste a link" maxLength={4096} className="h-[54px] border-0 bg-transparent px-0 text-lg shadow-none" value={nowDraft} onChange={event => setNowDraft(event.target.value)} />
-            </form>
+          <form role="search" aria-label="Search or paste a link" className="min-w-0" onSubmit={event => { event.preventDefault(); const query = nowDraft.trim(); if (!query) return; setNowDraft(""); gotoSearch({ query, source: "All" }); }}>
+            <InputGroup className="rounded-2xl border bg-card py-1 shadow-[0_1px_0_rgb(0_0_0/0.2)] focus-within:border-primary">
+              <InputGroupAddon align="inline-start"><Search aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /></InputGroupAddon>
+              <InputGroupInput id="now-search" aria-label="Search or paste a link" placeholder="Search or paste a link" maxLength={4096} value={nowDraft} onChange={event => setNowDraft(event.target.value)} />
+            </InputGroup>
+          </form>
+          <div className="flex justify-end">
             <Button variant="ghost" size="icon" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>
               {editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}
             </Button>

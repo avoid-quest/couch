@@ -18,8 +18,8 @@ export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: s
   return next && next.map(item => item.id);
 }
 
-export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, editing = false, onFind }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; editing?: boolean; onFind?: () => void;
+export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind }: {
+  origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void;
 }) {
   // For later reads through Query; the session invalidates ["for-later"] on
   // socket revisions, replacing the version prop this section drilled down.
@@ -92,7 +92,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
     {connected && !loading && !error && !items.length && <div className="space-y-2"><p>No saved titles.</p>{onFind && <Button variant="outline" onClick={onFind}>Search</Button>}</div>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <ul ref={list} className="list-none space-y-2 p-0" aria-label="Saved for later" aria-busy={loading}><SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
-        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`} editing={editing}>{(drag: RowDrag) => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-3 border-b py-3">
+        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`} editing>{(drag: RowDrag) => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-3 border-b py-3">
           {inspect ? <>
             {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="h-[54px] w-[46px] rounded-md" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="h-[54px] w-[46px] rounded-md" />}
             <Button variant="ghost" className="h-auto min-h-11 min-w-0 flex-1 flex-col items-start justify-start gap-1.5 p-0 text-left whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}><strong className="text-sm font-semibold [overflow-wrap:anywhere]">{item.title}</strong>{item.live && <small className="text-[11px] text-muted-foreground">Live</small>}</Button>
