@@ -8,11 +8,11 @@ import type { HistoryItem, LibraryItem } from "../../../shared/library";
 import type { ProviderId } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { SessionState } from "../../../shared/protocol";
-import { AuthArtwork } from "../../AuthArtwork";
-import { MediaArtwork } from "../../ProviderPanel";
-import { ProgressActions, progressTime, type HistoryPlayback } from "../../HistoryPanel";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { MediaArtwork } from "@/components/MediaArtwork";
+import { ProgressActions, progressTime, type HistoryPlayback } from "@/components/HistoryPanel";
 import type { Credentials } from "../../session/session";
-import { SaveForLater } from "../../SaveForLater";
+import { SaveForLater } from "@/components/SaveForLater";
 
 const sources = [{ section: "Radio", label: "Radio directory & playlists" }, { section: "Guide", label: "Live TV" }, { section: "Jellyfin", label: "Jellyfin" }, { section: "Files", label: "Local library" }];
 const asHistory = (item: LibraryItem): HistoryItem => ({

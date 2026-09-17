@@ -3,7 +3,7 @@ import { useLocation } from "@tanstack/react-router";
 import { BrowseHome } from "./BrowseHome";
 import { SearchPanel } from "./SearchPanel";
 import { readSearchState } from "../../search";
-import { useShell } from "../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 
 export function FindPage() {
   const shell = useShell();

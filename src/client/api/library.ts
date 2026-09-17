@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { HistoryItem, LibraryItem, LibrarySearch, LibrarySource } from "../../shared/library";
+import type { HistoryItem, LibraryItem, LibrarySearch, LibrarySource, MusicAlbum, MusicAlbums, MusicArtist, MusicArtists } from "../../shared/library";
 import type { Credentials } from "../session/session";
 import { apiFetch } from "./client";
 
@@ -35,3 +35,22 @@ export const historyQuery = (credentials: Credentials, provider?: string) =>
     queryFn: () => apiFetch(credentials, `/api/progress/history?limit=40${provider ? `&provider=${provider}` : ""}`).then(r => r.json() as Promise<{ items: HistoryItem[] }>),
     staleTime: 30_000,
   });
+
+export type MusicBrowse =
+  | { kind: "artists" | "albums"; artist?: MusicArtist; q: string; offset: number }
+  | { kind: "album"; album: MusicAlbum; q: string; offset: number };
+export type MusicBrowseResult = MusicArtists | MusicAlbums | AlbumTracks;
+export type AlbumTracks = { album: MusicAlbum; items: LibraryItem[] };
+export const musicPageSize = 24;
+
+export const musicBrowseQuery = (credentials: Credentials, browse: MusicBrowse) => {
+  const params = new URLSearchParams({ q: browse.q, offset: String(browse.offset), limit: String(musicPageSize) });
+  if (browse.kind === "albums" && browse.artist) params.set("artistId", browse.artist.id);
+  const path = browse.kind === "album"
+    ? `/api/library/music/albums/${encodeURIComponent(browse.album.id)}`
+    : `/api/library/music/${browse.kind}?${params}`;
+  return queryOptions({
+    queryKey: ["library", "music", credentials.origin, credentials.token, browse] as const,
+    queryFn: () => apiFetch(credentials, path).then(response => response.json() as Promise<MusicBrowseResult>),
+  });
+};

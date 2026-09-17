@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, Disc3, Film, FolderOpen, MicVocal, Music2, Play, Plus, RotateCcw, Search, Tv, Video } from "lucide-react";
-import { ProgressActions, progressTime } from "../../HistoryPanel";
-import { AuthArtwork } from "../../AuthArtwork";
-import { MusicPanel } from "../../MusicPanel";
-import { CollectionsPanel } from "../../CollectionsPanel";
-import { VideoLibraryPanel } from "../../VideoLibraryPanel";
+import { ProgressActions, progressTime } from "@/components/HistoryPanel";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { MusicPanel } from "@/components/MusicPanel";
+import { CollectionsPanel } from "@/components/CollectionsPanel";
+import { VideoLibraryPanel } from "@/components/VideoLibraryPanel";
 
 const pageSize = 30;
 const statusLabels: Record<LibrarySource["status"], string> = {
@@ -116,7 +116,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <Tabs value={view} onValueChange={setView} className="gap-4">
       <TabsList aria-label="Library view" className="grid h-auto w-full grid-cols-3 gap-1 md:grid-cols-6"><TabsTrigger value="all"><FolderOpen aria-hidden="true" />All media</TabsTrigger><TabsTrigger value="movies"><Film aria-hidden="true" />Movies</TabsTrigger><TabsTrigger value="shows"><Tv aria-hidden="true" />Shows</TabsTrigger><TabsTrigger value="artists"><MicVocal aria-hidden="true" />Artists</TabsTrigger><TabsTrigger value="albums"><Disc3 aria-hidden="true" />Albums</TabsTrigger><TabsTrigger value="collections">Collections</TabsTrigger></TabsList>
       {(["movies", "shows"] as const).map(videoView => <TabsContent key={videoView} value={videoView} forceMount hidden={view !== videoView}><VideoLibraryPanel canManage={canManage} origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} view={videoView} active={view === videoView} onEnqueue={onEnqueue} /></TabsContent>)}
-      {(["artists", "albums"] as const).map(musicView => <TabsContent key={musicView} value={musicView} forceMount hidden={view !== musicView}><MusicPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} view={musicView} active={view === musicView} onEnqueue={onEnqueue} onQueueAlbum={onQueueAlbum} onArtistTracks={selected => { setArtist(selected); setDraft(""); setQuery(""); setOffset(0); setView("all"); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }} /></TabsContent>)}
+      {(["artists", "albums"] as const).map(musicView => <TabsContent key={musicView} value={musicView} forceMount hidden={view !== musicView}><MusicPanel origin={origin} token={token} connected={connected} canPlay={canPlay} view={musicView} active={view === musicView} onEnqueue={onEnqueue} onQueueAlbum={onQueueAlbum} onArtistTracks={selected => { setArtist(selected); setDraft(""); setQuery(""); setOffset(0); setView("all"); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }} /></TabsContent>)}
       <TabsContent value="collections" forceMount hidden={view !== "collections"}><CollectionsPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} active={view === "collections"} /></TabsContent>
       <TabsContent value="all" className="space-y-4">
     {artist && <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted p-3"><p className="min-w-0 flex-1 break-words text-sm">Tracks by <strong>{artist.name}</strong>, including singles</p><Button variant="outline" onClick={() => { setArtist(null); setOffset(0); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }}>Show all artists</Button></div>}

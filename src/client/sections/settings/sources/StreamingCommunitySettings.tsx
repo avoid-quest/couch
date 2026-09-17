@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api/client";
 import { validStreamingCommunityOrigin } from "../../../../shared/streamingcommunity";
-import type { SourceCredentials } from "./sourceTypes";
+import type { SourceCredentials } from "@/components/sourceTypes";
 
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
 const empty: SourceCredentials = { origin: "", token: "" };

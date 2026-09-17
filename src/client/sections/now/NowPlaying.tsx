@@ -4,12 +4,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import type { Action, SessionState } from "../../../shared/protocol";
-import { AuthArtwork } from "../../AuthArtwork";
-import { PlaybackControls, sourceLabel } from "../../PlaybackControls";
-import { playbackCapabilities } from "../../PlaybackTransport";
-import { MediaArtwork } from "../../ProviderPanel";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { PlaybackControls, sourceLabel } from "@/components/PlaybackControls";
+import { playbackCapabilities } from "@/components/PlaybackTransport";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import type { Credentials } from "../../session/session";
-import "../../session-home.css";
 
 export function NowPlaying({ state, credentials, connected, run, onBack, onBrowse, onRemote, active = true, embedded = false }: {
   state: SessionState | null;

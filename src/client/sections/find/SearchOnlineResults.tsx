@@ -4,8 +4,8 @@ import type { Action } from "../../../shared/protocol";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../../../shared/providers";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MediaArtwork } from "../../ProviderPanel";
-import { QualityOptions } from "../../QualitySelect";
+import { MediaArtwork } from "@/components/MediaArtwork";
+import { QualityOptions } from "@/components/QualitySelect";
 import { isYouTubePlaylistUrl } from "../../../shared/providers";
 import { createId } from "../../session/session";
 

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
-import { ProviderPanel } from "../../ProviderPanel";
+import { ProviderPanel } from "@/components/ProviderPanel";
 
 export function MediaLibrary({ onBrowse, ...props }: Omit<ComponentProps<typeof ProviderPanel>, "version"> & { onBrowse: (section: string) => void }) {
   return <section className="min-w-0 space-y-5" aria-label="Library">

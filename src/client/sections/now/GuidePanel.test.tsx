@@ -245,7 +245,7 @@ test("recovered setup reload clears its error and invalid backend selection", as
 });
 
 test("recording requests permit multi-step workflows and still honor caller cancellation", async () => {
-  const { useRecordings } = await import("../../RecordingsPanel");
+  const { useRecordings } = await import("@/components/RecordingsPanel");
   let call: ReturnType<typeof useRecordings>["request"];
   function Probe() { call = useRecordings({ origin: "http://localhost", token: "long", connected: true, active: false, version: 0 }).request; return null; }
   await act(async () => root.render(<Probe />));

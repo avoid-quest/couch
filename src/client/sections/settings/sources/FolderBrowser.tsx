@@ -3,7 +3,7 @@ import { ArrowLeft, FolderOpen, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/api/client";
 import type { FolderBrowse } from "../../../../shared/folders";
-import type { SourceCredentials } from "./sourceTypes";
+import type { SourceCredentials } from "@/components/sourceTypes";
 
 type Props = { credentials: SourceCredentials; canWrite: boolean; onAdd: (path: string) => void };
 

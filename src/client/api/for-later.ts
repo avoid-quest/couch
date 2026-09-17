@@ -6,5 +6,5 @@ import { apiFetch } from "./client";
 export const forLaterQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["for-later"],
-    queryFn: () => apiFetch(credentials, "/api/for-later").then(r => r.json() as Promise<ForLaterItem[]>),
+    queryFn: () => apiFetch(credentials, "/api/for-later").then(r => r.json() as Promise<{ items: ForLaterItem[] }>),
   });

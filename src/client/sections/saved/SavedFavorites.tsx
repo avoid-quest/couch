@@ -4,9 +4,10 @@ import { ArrowUpRight, Play, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
-import { MediaArtwork } from "../../ProviderPanel";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import type { Credentials } from "../../session/session";
-import { providerFavoritesListQuery, radioFavoritesListQuery } from "./saved-queries";
+import { providerFavoritesQuery } from "@/api/providers";
+import { radioFavoritesListQuery } from "@/api/radio";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
@@ -26,7 +27,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   // ["radio"] on socket revisions, replacing the version props this panel
   // used to receive. Enqueue and play stay on the WebSocket session.
   const queryClient = useQueryClient();
-  const online = useQuery({ ...providerFavoritesListQuery({ origin, token }), enabled: connected });
+  const online = useQuery({ ...providerFavoritesQuery({ origin, token }), enabled: connected });
   const radio = useQuery({ ...radioFavoritesListQuery({ origin, token }), enabled: connected });
   const loading = connected && (online.isPending || radio.isPending);
   const favorites = connected ? [

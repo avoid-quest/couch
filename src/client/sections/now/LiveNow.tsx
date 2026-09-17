@@ -7,9 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import type { RadioProgrammeDetails, RadioStation } from "../../../shared/radio";
-import { apiFetch } from "../../api/client";
-import { radioCatalogQuery } from "../../api/radio";
-import { MediaArtwork } from "../../ProviderPanel";
+import { radioCatalogQuery, radioProgrammesQuery } from "@/api/radio";
+import { MediaArtwork } from "@/components/MediaArtwork";
 
 type LiveEntry = { station: RadioStation; programme?: RadioProgrammeDetails };
 type Credentials = { origin: string; token: string };
@@ -31,13 +30,7 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
   const [busy, setBusy] = useState(false);
   const enabled = connected && active;
   const { data: catalog, isPending: loading, error: catalogueError } = useQuery({ ...radioCatalogQuery(credentials), enabled });
-  const { data: programmes = {} } = useQuery({
-    queryKey: ["radio", "avoid", "programmes"],
-    queryFn: () => apiFetch(credentials, "/api/radio/avoid/programmes").then(r => r.json() as Promise<Record<string, RadioProgrammeDetails>>),
-    enabled,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
+  const { data: programmes = {} } = useQuery({ ...radioProgrammesQuery(credentials), enabled, refetchInterval: 60_000 });
   const loadError = catalogueError instanceof Error ? catalogueError.message : catalogueError ? "Could not load the radio catalogue." : "";
   const message = loadError || catalog?.playlist.error || error;
 

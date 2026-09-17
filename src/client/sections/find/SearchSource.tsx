@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Plus } from "lucide-react";
-import { AuthArtwork } from "../../AuthArtwork";
+import { AuthArtwork } from "@/components/AuthArtwork";
 import type { JellyfinItems, JellyfinStatus } from "../../../shared/jellyfin";
 import type { LibrarySearch, LibrarySource } from "../../../shared/library";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { progressTime } from "../../HistoryPanel";
-import { SaveForLater } from "../../SaveForLater";
+import { progressTime } from "@/components/HistoryPanel";
+import { SaveForLater } from "@/components/SaveForLater";
 import type { Props } from "./SearchPanel";
 import type { SearchResultSummary } from "./SearchOnlineResults";
 import { useInvalidation } from "./useInvalidation";

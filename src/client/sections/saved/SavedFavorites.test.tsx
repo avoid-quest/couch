@@ -130,7 +130,7 @@ test("Saved keeps saved collections together without a separate history destinat
 
 test("opening a saved collection browses its provider and URL, with Back returning to that provider", async () => {
   const { SavedFavorites } = await import("./SavedFavorites");
-  const { ProviderPanel } = await import("../../ProviderPanel");
+  const { ProviderPanel } = await import("@/components/ProviderPanel");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const wrapClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrap = (node: React.ReactNode) => <QueryClientProvider client={wrapClient}>{node}</QueryClientProvider>;

@@ -1,6 +1,6 @@
 import { createRootRoute, Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { App } from "../App";
+import { AppShell } from "../sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
 
 function RootError({ error }: ErrorComponentProps) {
@@ -20,7 +20,7 @@ function NotFound() {
 }
 
 export const Route = createRootRoute({
-  component: App,
+  component: AppShell,
   errorComponent: RootError,
   notFoundComponent: NotFound,
 });

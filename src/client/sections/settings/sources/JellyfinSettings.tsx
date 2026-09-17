@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api/client";
 import type { JellyfinConnection, JellyfinStatus } from "../../../../shared/jellyfin";
-import type { SourceCredentials } from "./sourceTypes";
+import type { SourceCredentials } from "@/components/sourceTypes";
 
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
 type Connection = JellyfinConnection | JellyfinStatus;

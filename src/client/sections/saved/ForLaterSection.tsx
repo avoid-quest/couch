@@ -4,10 +4,10 @@ import { Play, Plus, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { AuthArtwork } from "../../AuthArtwork";
-import { MediaArtwork } from "../../ProviderPanel";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { MediaArtwork } from "@/components/MediaArtwork";
 import type { ForLaterItem } from "../../../shared/for-later";
-import { forLaterItemsQuery } from "./saved-queries";
+import { forLaterQuery } from "@/api/for-later";
 
 export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind }: {
   origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void;
@@ -15,7 +15,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
   // For later reads through Query; the session invalidates ["for-later"] on
   // socket revisions, replacing the version prop this section drilled down.
   const queryClient = useQueryClient();
-  const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterItemsQuery({ origin, token }), enabled: connected });
+  const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery({ origin, token }), enabled: connected });
   const items = connected ? data?.items ?? [] : [];
   const loading = connected && isPending;
   const error = connected && loadError ? loadError instanceof Error ? loadError.message : "Could not load For later." : "";

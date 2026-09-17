@@ -1,4 +1,4 @@
-import { useShell } from "../../../shell";
+import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "../SettingsLayout";
 import { BluetoothSettings } from "./BluetoothSettings";
 

@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { ProviderId, ProviderPage } from "../../shared/providers";
+import type { ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
 import type { Credentials } from "../session/session";
 import { apiFetch } from "./client";
 
@@ -12,5 +12,5 @@ export const providerItemsQuery = (credentials: Credentials, provider: ProviderI
 export const providerFavoritesQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["providers", "favorites"],
-    queryFn: () => apiFetch(credentials, "/api/providers/favorites").then(r => r.json() as Promise<ProviderPage>),
+    queryFn: () => apiFetch(credentials, "/api/providers/favorites").then(r => r.json() as Promise<{ favorites: ProviderItem[] }>),
   });
