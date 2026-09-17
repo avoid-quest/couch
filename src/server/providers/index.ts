@@ -10,6 +10,10 @@ import { browseYouTube } from "./youtube";
 import { browseTwitch } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
 import { browseBandcamp } from "./bandcamp";
+import { loadBandcampAlbum } from "./bandcamp";
+import { loadRaiPlayProgramme } from "./raiplay";
+import { loadYouTubePlaylist } from "./youtube";
+import { loadStreamingCommunityList } from "./streamingcommunity";
 import { ControllerError } from "../controllers";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
@@ -51,6 +55,18 @@ function savedItem(value: unknown): ProviderItem {
     item.live = value.live;
   }
   return item;
+}
+
+// A saved or browsed list expands at queue time so the queue itself stays flat.
+export async function loadProviderList(provider: ProviderId, url: string, signal?: AbortSignal): Promise<ProviderPage> {
+  if (provider === "youtube") return loadYouTubePlaylist(url, signal);
+  if (provider === "bandcamp") return loadBandcampAlbum(url, signal);
+  if (provider === "raiplay") return loadRaiPlayProgramme(url, signal);
+  if (provider === "streamingcommunity") return loadStreamingCommunityList(url, signal);
+  const page = await browseTwitch({ url }, signal);
+  const items = page.items.filter(item => item.kind === "media");
+  if (!items.length) throw new ProviderError("This Twitch list has no supported media.", 404);
+  return { ...page, items };
 }
 
 export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => "https://streamingcommunityz.academy", browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {

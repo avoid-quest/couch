@@ -90,6 +90,12 @@ test("YouTube playlist commands validate quality and play intent", () => {
   for (const change of [{ provider: "twitch" }, { url: "file:///private" }, { quality: "4k" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
 });
 
+test("provider references validate their atom or playlist shape and preserve public metadata", () => {
+  const action = { type: "enqueueProvider", provider: "raiplay", url: "https://www.raiplay.it/programmi/report", shape: "playlist", title: "Report", playNow: true } as const;
+  expect(parse({ ...action, thumbnail: "https://example.test/poster.jpg", entries: ["injected"] }).action).toEqual({ ...action, thumbnail: "https://example.test/poster.jpg" });
+  for (const change of [{ provider: "unknown" }, { shape: "collection" }, { url: "file:///private" }, { title: "a".repeat(201) }, { thumbnail: "file:///tmp/art" }, { quality: "4k" }]) expect(() => parse({ ...action, ...change })).toThrow();
+});
+
 test("current video quality requires a playback ID and a known quality and strips private fields", () => {
   for (const quality of ["auto", "best", "1080p", "720p", "480p"] as const) {
     const action = { type: "videoQuality", playbackId: "current", quality } as const;

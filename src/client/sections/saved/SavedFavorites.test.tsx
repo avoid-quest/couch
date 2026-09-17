@@ -166,7 +166,7 @@ test("opening a saved collection browses its provider and URL, with Back returni
     const [selected, setSelected] = useState<ProviderItem | null>(null);
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
-      ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />)
+      ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} />)
       : wrap(<SavedFavorites {...connection} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />);
   }
   await act(async () => root.render(<SavedCollection />));

@@ -14,7 +14,7 @@ async function renderLibrary(connected = true) {
   const { MediaLibrary } = await import("./MediaLibrary");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
 }
 beforeEach(async () => {
   requests.length = 0; browsed.length = 0; played.length = 0;

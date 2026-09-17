@@ -28,10 +28,7 @@ import { createJellyfinSettings } from "./jellyfin-settings";
 import { createCatalog } from "./catalog";
 import { inspectWebMedia, resolveWebMedia } from "./web-media";
 import { createProviders } from "./providers";
-import { loadYouTubePlaylist } from "./providers/youtube";
-import { loadRaiPlayProgramme } from "./providers/raiplay";
-import { loadStreamingCommunityList } from "./providers/streamingcommunity";
-import { loadBandcampAlbum } from "./providers/bandcamp";
+import { loadProviderList } from "./providers";
 import { createSubtitles, subtitleSizeLimit } from "./subtitles";
 import { createCollections } from "./collections";
 import { createForLater } from "./for-later";
@@ -158,7 +155,7 @@ export function createHub(options: HubOptions) {
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
     resolveSource: async source => {
-      const page = await (source.provider === "youtube" ? loadYouTubePlaylist : source.provider === "raiplay" ? loadRaiPlayProgramme : source.provider === "streamingcommunity" ? loadStreamingCommunityList : loadBandcampAlbum)(source.url, shutdown.signal);
+      const page = await loadProviderList(source.provider, source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })) };
     } });
   const folders = createMediaFolders();
@@ -467,22 +464,31 @@ export function createHub(options: HubOptions) {
           const playedBy = playbackActor(socket.data.controllerId);
           const authorize = socket.data.authorize;
           const action = command.action;
-          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist" || action.type === "enqueueRadio") && action.playNow
+          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueProvider" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist" || action.type === "enqueueRadio") && action.playNow
             ? session.reservePlay() : undefined;
+          const webCommand = action.type === "enqueueWeb" ? action : action.type === "enqueueProvider" && action.shape === "atom" ? {
+            type: "enqueueWeb" as const, entryId: crypto.randomUUID(), url: action.url, ...(action.title ? { title: action.title } : {}),
+            ...(action.thumbnail ? { thumbnail: action.thumbnail } : {}), ...(action.playNow ? { playNow: action.playNow } : {}),
+            ...(action.quality ? { quality: action.quality } : {}),
+          } : null;
+          const providerList = action.type === "enqueueProvider" && action.shape === "playlist" ? action
+            : action.type === "enqueueProviderAlbum" ? { provider: "bandcamp" as const, url: action.url }
+            : action.type === "enqueueProviderPlaylist" ? { provider: "youtube" as const, url: action.url, quality: action.quality }
+            : null;
           if (action.type === "navigate") {
             if (server.subscriberCount("navigation") === 0) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             server.publish("navigation", JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage));
-          } else if (action.type === "enqueueWeb") {
-            const source = `web:${action.url}`;
-            const title = action.title?.trim();
-            session.command({ type: "enqueue", entry: { id: action.entryId, source, title: title || new URL(action.url).hostname, automaticTitle: !title, ...(action.thumbnail ? { thumbnail: action.thumbnail } : {}), ...(action.quality ? { quality: action.quality } : {}) } });
+          } else if (webCommand) {
+            const source = `web:${webCommand.url}`;
+            const title = webCommand.title?.trim();
+            session.command({ type: "enqueue", entry: { id: webCommand.entryId, source, title: title || new URL(webCommand.url).hostname, automaticTitle: !title, ...(webCommand.thumbnail ? { thumbnail: webCommand.thumbnail } : {}), ...(webCommand.quality ? { quality: webCommand.quality } : {}) } });
             if (!title) {
               const controller = new AbortController();
-              inspections.set(action.entryId, controller);
-              void inspectWebMedia(action.url, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
-                if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(action.entryId, source, metadata); }
+              inspections.set(webCommand.entryId, controller);
+              void inspectWebMedia(webCommand.url, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
+                if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(webCommand.entryId, source, metadata); }
               }).catch(() => {}).finally(() => {
-                if (inspections.get(action.entryId) === controller) { inspections.delete(action.entryId); idle.activity(); }
+                if (inspections.get(webCommand.entryId) === controller) { inspections.delete(webCommand.entryId); idle.activity(); }
               });
             }
           } else if (action.type === "enqueueLibrary") {
@@ -496,11 +502,12 @@ export function createHub(options: HubOptions) {
             if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
             const entries = session.loadQueue(items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })), "append");
             if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
-          } else if (action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist") {
-            const page = await (action.type === "enqueueProviderPlaylist" ? loadYouTubePlaylist : loadBandcampAlbum)(action.url, shutdown.signal);
+          } else if (providerList) {
+            const page = await loadProviderList(providerList.provider, providerList.url, shutdown.signal);
             if (closed) return;
             authorize();
-            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(action.type === "enqueueProviderPlaylist" && action.quality ? { quality: action.quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
+            const quality = action.type === "enqueueProvider" ? action.quality : action.type === "enqueueProviderPlaylist" ? action.quality : undefined;
+            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
             if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
           } else if (action.type === "enqueueRadio") {
             const station = radio.getPlayable(action.stationId);

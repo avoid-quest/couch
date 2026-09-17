@@ -193,8 +193,8 @@ for (const invalidation of ["query", "hidden"] as const) test(`deferred return f
 test("one submitted search integrates online and configured radio with default quality and existing saved stores", async () => {
   integrated = true; await render(); await search("Evening");
   for (const path of ["/api/providers/youtube/items?q=Evening", "/api/providers/raiplay/items?q=Evening", "/api/providers/twitch/items?q=Evening", "/api/radio/stations?q=Evening", "/api/radio/playlists/own/stations?q=Evening"]) expect(paths).toContain(path);
-  await click("Play now: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: video.url, quality: "1080p", playNow: true });
-  await click("Add to queue: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", quality: "1080p", playNow: false });
+  await click("Play now: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", url: video.url, quality: "1080p", playNow: true });
+  await click("Add to queue: Evening video"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", quality: "1080p", playNow: false });
   await click("Play now: Evening radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueueRadio", stationId: station.id, playNow: true });
   await click("Play now: Directory radio"); expect(commands.at(-1)).toMatchObject({ type: "enqueue", entry: { title: "Directory radio", kind: "radio" } });
   await click("Save Evening video"); expect(onlineFavorites).toEqual([video]); expect(button("Remove Evening video from saved").getAttribute("aria-pressed")).toBe("true");
@@ -216,8 +216,8 @@ test("provider URL opens its existing catalogue, Bandcamp album commands remain 
   integrated = true; await render(); await search("https://artist.bandcamp.com/album/public");
   expect(paths).toContain("/api/providers/bandcamp/items?url=https%3A%2F%2Fartist.bandcamp.com%2Falbum%2Fpublic");
   expect(paths.some(path => path.includes("youtube/items") || path.includes("library/items"))).toBe(false);
-  await click("Play album"); expect(commands.at(-1)).toEqual({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/public", playNow: true });
-  await click("Play now: Album track"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://artist.bandcamp.com/track/one" }); expect(commands.at(-1)).not.toHaveProperty("quality");
+  await click("Play album"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/public", playNow: true });
+  await click("Play now: Album track"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", url: "https://artist.bandcamp.com/track/one" }); expect(commands.at(-1)).not.toHaveProperty("quality");
   await search("https://streamingcommunityz.academy/watch/public"); await click("Play now"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://streamingcommunityz.academy/watch/public", playNow: true });
 });
 test("filters retain query and source results, and broadcasts refresh saved state without repeating online searches", async () => {
@@ -293,7 +293,7 @@ test("a new query aborts an in-flight provider pagination request", async () => 
 test("RaiPlay searches include matching live channels even when the programme catalogue has no match", async () => {
   await render(); await search("rai1");
   expect(button("Play now: Rai 1")).toBeDefined();
-  await click("Play now: Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
+  await click("Play now: Rai 1"); expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", url: "https://www.raiplay.it/dirette/rai1", quality: "1080p", playNow: true });
 });
 
 test("the empty discovery field has no filters, heading or premature requests", async () => {
@@ -324,18 +324,19 @@ for (const live of [true, false]) test(`Twitch ${live ? "live" : "offline"} sear
   expect(commands).toEqual([]);
 });
 
-test("collection results save through the centralized playlists", async () => {
+test("collection results save as saved references", async () => {
   const { SearchOnlineResults } = await import("./SearchOnlineResults");
   const collection: ProviderItem = { id: "series", provider: "streamingcommunity", kind: "collection", title: "South Park", url: "https://streamingcommunityz.academy/it/titles/4800-south-park" };
-  request.mockImplementation((async (input: RequestInfo | URL) => {
+  const savedItems: ProviderItem[] = [];
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input)); paths.push(url.pathname + url.search);
-    return Response.json(url.pathname.endsWith("/favorites") ? { favorites: [] } : { items: [collection] });
+    if (url.pathname.endsWith("/favorites") && init?.method === "POST") savedItems.push(JSON.parse(String(init.body)).item);
+    return Response.json(url.pathname.endsWith("/favorites") ? { favorites: savedItems } : { items: [collection] });
   }) as typeof fetch);
-  const saved: Array<[string, string]> = [];
-  await act(async () => root.render(<QueryClientProvider client={queryClient}><SearchOnlineResults provider="streamingcommunity" query="South Park" quality="auto" onEnqueued={() => {}} onSavePlaylist={async (provider, url) => { saved.push([provider, url]); return true; }} origin="http://localhost" token="paired" connected canPlay active onCommand={async () => true} /></QueryClientProvider>)); await flush();
-  await click("Save playlist: South Park");
-  expect(saved).toEqual([["streamingcommunity", collection.url]]);
-  expect(document.body.textContent).toContain("Saved as a playlist");
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SearchOnlineResults provider="streamingcommunity" query="South Park" quality="auto" onEnqueued={() => {}} origin="http://localhost" token="paired" connected canPlay active onCommand={async () => true} /></QueryClientProvider>)); await flush();
+  await click("Save South Park");
+  expect(savedItems).toEqual([collection]);
+  expect(document.body.textContent).toContain("added to Saved");
 });
 
 for (const manage of [false, true]) test(`${manage ? "administrator" : "guest"} can recover from an unconfigured source without losing their query`, async () => {
@@ -353,10 +354,10 @@ for (const manage of [false, true]) test(`${manage ? "administrator" : "guest"} 
   expect(button("Add to queue: Evening video").textContent).toBe("Add to queue");
   expect(commands).toEqual([]);
   await click("Add to queue: Evening video");
-  expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", playNow: false });
+  expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", playNow: false });
   expect(document.body.textContent).toContain("added to the end of Up next. Playback is unchanged.");
   await click("Play now: Evening video");
-  expect(commands.at(-1)).toMatchObject({ type: "enqueueWeb", playNow: true });
+  expect(commands.at(-1)).toMatchObject({ type: "enqueueProvider", shape: "atom", playNow: true });
   expect(document.body.textContent).toContain("Starting Evening video on the playback computer.");
 });
 
