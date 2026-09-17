@@ -299,7 +299,7 @@ test("RaiPlay searches include matching live channels even when the programme ca
 test("the empty discovery field has no filters, heading or premature requests", async () => {
   await render(true, true, true, 1, 1, "http://localhost", "auto");
   expect(document.querySelector("h1")).toBeNull();
-  expect(document.querySelector("[data-search-scopes]")).toBeNull();
+  expect([...document.querySelectorAll("[data-search-scopes] button")].map(node => node.textContent)).toContain("StreamingCommunity");
   expect(document.querySelector<HTMLInputElement>("#media-search")?.placeholder).toBe("Search or paste a link");
   expect(paths).toEqual([]);
 });
@@ -359,7 +359,7 @@ test("typing searches in place after debounce and keeps input focus", async () =
   expect(button("Radio playlists").textContent).toBe("Radio playlists 1");
   await click("Clear search");
   expect(input.value).toBe(""); expect(document.activeElement === input).toBe(true);
-  expect(document.querySelector("[data-search-scopes]")).toBeNull();
+  expect(document.querySelector("[data-search-scopes]")).not.toBeNull();
 });
 
 for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchronous"} route updates focus the newly selected source after recovery`, async () => {
