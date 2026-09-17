@@ -1,5 +1,15 @@
 # couch
 
+## 0.1.5-preview.5
+
+### Patch Changes
+
+- [`7e838ed`](https://github.com/avoid-quest/couch/commit/7e838ed5c5938f34b63470429164a1c6e8dd5f8d) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Replace `import.meta.env.DEV` in the Bun-embedded client build: the server
+  binary's bundled copy of the client crashed with `Cannot read properties of
+  undefined (reading 'DEV')` because Bun.build does not perform Vite's
+  `import.meta.env` substitution. Adding the define to the server build fixes the
+  production client served at the Couch server port.
+
 ## 0.1.5-preview.4
 
 ### Patch Changes
