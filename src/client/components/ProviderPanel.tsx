@@ -10,6 +10,7 @@ import { ListMusic, Play, Plus, Star } from "lucide-react";
 import { MediaArtwork } from "./MediaArtwork";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../../shared/providers";
 import { isYouTubePlaylistUrl } from "../../shared/providers";
+import type { PlaylistSource } from "../../shared/playlists";
 import { QualityOptions } from "./QualitySelect";
 import { useEnqueueVideoQuality } from "@/video-quality";
 
@@ -28,13 +29,14 @@ type Props = {
   onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueuePlaylist: (url: string, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
   onEnqueueAlbum: (provider: "bandcamp", url: string, playNow: boolean) => Promise<boolean>;
-  onSavePlaylist?: (provider: "youtube" | "raiplay" | "bandcamp", url: string) => Promise<boolean>;
+  onSavePlaylist?: (provider: PlaylistSource["provider"], url: string) => Promise<boolean>;
 };
 type Location = { request: BrowseRequest; title: string; openerId?: string };
 const providers: Record<ProviderId, { name: string; placeholder: string }> = {
   youtube: { name: "YouTube", placeholder: "Search YouTube, @channel, or paste a link" },
   twitch: { name: "Twitch", placeholder: "Search channels, categories, or paste a link" },
   raiplay: { name: "RaiPlay", placeholder: "Search programs or paste a RaiPlay link" },
+  streamingcommunity: { name: "StreamingCommunity", placeholder: "Search StreamingCommunity or paste a title link" },
   bandcamp: { name: "Bandcamp", placeholder: "https://artist.bandcamp.com/album/…" },
 };
 const message = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request.";
@@ -281,6 +283,7 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
   const pending = view === "saved" ? favoritesLoading : loading;
   const playlistUrl = provider === "youtube" && view === "browse" && isYouTubePlaylistUrl(location.request.url ?? location.request.query ?? "") ? location.request.url ?? location.request.query : undefined;
   const raiListUrl = provider === "raiplay" && view === "browse" && /^https:\/\/www\.raiplay\.it\/(?:programmi|collezioni)\/[a-z0-9_%.-]+(?:\/ContentSet-[a-f0-9-]+\.json)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
+  const scListUrl = provider === "streamingcommunity" && view === "browse" && /^https:\/\/[a-z0-9.]*stream[a-z0-9]*unity[a-z0-9]*\.[a-z]{2,63}\/(?:[a-z]{2}\/)?titles\/\d+(?:-[\w-]*)?(?:\/season-\d+)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
   const albumUrl = provider === "bandcamp" && view === "browse" && /^https?:\/\/[^/]+\.bandcamp\.com\/album\/[^/?#]+\/?(?:[?#].*)?$/i.test(location.request.url ?? "") ? location.request.url : undefined;
   const album = albumUrl && page && !pending && !browseError && items.length > 0 && items.every(item => item.kind === "media");
   return <div ref={browserRef} className="space-y-4" onKeyDown={event => {
@@ -322,6 +325,9 @@ function ProviderBrowser({ active = true, onPlayHistory, initialItem, provider, 
         </div>}
         {raiListUrl && page && !pending && !browseError && onSavePlaylist && <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(raiListUrl)}><ListMusic aria-hidden="true" />Save as playlist</Button>
+        </div>}
+        {scListUrl && page && !pending && !browseError && onSavePlaylist && <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" disabled={!connected || busy !== null} onClick={() => void saveAsPlaylist(scListUrl)}><ListMusic aria-hidden="true" />Save as playlist</Button>
         </div>}
         {album && <div className="provider-album">
           <MediaArtwork key={items[0]!.thumbnail || albumUrl} thumbnail={items[0]!.thumbnail} title={page.title || "Album"} className="provider-album-artwork" />

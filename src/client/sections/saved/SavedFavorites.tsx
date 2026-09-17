@@ -15,7 +15,7 @@ export type SavedFavoriteActions = {
   onOpenProvider: (item: ProviderItem) => void;
 };
 type Favorite = { kind: "provider"; item: ProviderItem } | { kind: "radio"; item: RadioStation };
-const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp" };
+const providers = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 const title = (favorite: Favorite) => favorite.kind === "provider" ? favorite.item.title : favorite.item.name;
 const key = (favorite: Favorite) => `${favorite.kind}:${favorite.item.id}`;
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not use this saved item.";
@@ -85,7 +85,7 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     <ul ref={list} className="grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>{favorites.map(favorite => {
       const itemTitle = title(favorite);
       const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
-      const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
+  const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : favorite.item.provider === "streamingcommunity" ? "Title" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
       return <li key={key(favorite)} className="flex flex-wrap items-center gap-3 border-b py-3">
         <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="h-[54px] w-[46px] rounded-md" />
         <div className="grid min-w-[100px] flex-1 gap-1.5 [overflow-wrap:anywhere]"><strong className="text-sm font-semibold">{itemTitle}</strong><small className="text-xs text-muted-foreground">{detail}</small></div>

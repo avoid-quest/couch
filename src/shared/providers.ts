@@ -1,4 +1,6 @@
-export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp";
+import { isStreamingCommunityHost } from "./streamingcommunity";
+
+export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "streamingcommunity";
 export type VideoQuality = "auto" | "best" | "1080p" | "720p" | "480p";
 
 export type ProviderItem = {
@@ -16,6 +18,19 @@ export type ProviderItem = {
 
 export type ProviderPage = { items: ProviderItem[]; nextCursor?: string; title?: string };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
+// Lightweight title refresh from StreamingCommunity's preview endpoint. The
+// caller keeps the item's own name and link; the site's preview omits both.
+export type StreamingCommunityPreview = {
+  id: number;
+  kind: "movie" | "series";
+  year?: string;
+  quality?: string;
+  runtime?: number;
+  seasonsCount?: number;
+  plot?: string;
+  genres: string[];
+  thumbnail?: string;
+};
 
 export function isYouTubePlaylistUrl(value: string): boolean {
   try {
@@ -30,7 +45,8 @@ export function providerForUrl(value: string): ProviderId | undefined {
   try {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
-    const domains = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
-    return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
+    if (isStreamingCommunityHost(url.hostname)) return "streamingcommunity";
+    const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
+    return (Object.keys(domains) as ProviderId[]).find(provider => domains[provider]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
   } catch { return; }
 }

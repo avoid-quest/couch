@@ -90,7 +90,7 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           const { activeProfile, queue } = viewing.session.state;
           const queued = new Map(queue.map(entry => [playbackMediaId(entry), entry]));
           const provider = searchParams.get("provider");
-          if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp"].includes(provider)) throw new RequestError("Invalid provider.");
+          if (provider !== null && !["youtube", "twitch", "raiplay", "bandcamp", "streamingcommunity"].includes(provider)) throw new RequestError("Invalid provider.");
           const items = viewing.store.sharedHistory(queryInteger(searchParams, "limit", 40, 1, 100), mediaId => {
             if (!provider) return true;
             const source = queued.get(mediaId) ?? viewing.store.historySource(mediaId);

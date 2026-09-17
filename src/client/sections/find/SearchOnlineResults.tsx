@@ -15,7 +15,7 @@ export type SearchPlaybackProps = {
   origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
   onCommand?: (action: Action) => Promise<boolean>;
 };
-export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp" };
+export const providerNames: Record<ProviderId, string> = { youtube: "YouTube", raiplay: "RaiPlay", twitch: "Twitch", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 export const searchError = (reason: unknown) => reason instanceof Error ? reason.message : "Could not complete this request.";
 export async function readSearch<T>(props: Pick<SearchPlaybackProps, "origin" | "token">, path: string, signal: AbortSignal, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${props.origin}${path}`, { ...init, headers: { Authorization: `Bearer ${props.token}`, "Content-Type": "application/json" }, signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });

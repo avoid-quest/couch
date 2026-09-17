@@ -3,6 +3,9 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
 import { ProviderError, providerItemId } from "./http";
+import { isStreamingCommunityHost } from "../../shared/streamingcommunity";
+import { streamingCommunityPreview } from "../streamingcommunity";
+import { browseStreamingCommunity } from "./streamingcommunity";
 import { browseYouTube } from "./youtube";
 import { browseTwitch } from "./twitch";
 import { browseRaiPlay } from "./raiplay";
@@ -10,16 +13,20 @@ import { browseBandcamp } from "./bandcamp";
 import { ControllerError } from "../controllers";
 
 type Adapter = (request: BrowseRequest, signal?: AbortSignal) => Promise<ProviderPage>;
-const adapters: Record<ProviderId, Adapter> = { youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp };
-const providerIds = new Set(Object.keys(adapters));
+const adapters = (streamingCommunityOrigin: () => string): Record<ProviderId, Adapter> => ({
+  youtube: browseYouTube, twitch: browseTwitch, raiplay: browseRaiPlay, bandcamp: browseBandcamp,
+  streamingcommunity: (request, signal) => browseStreamingCommunity(request, signal, streamingCommunityOrigin()),
+});
+const providerIds = new Set(Object.keys(adapters(() => "")));
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 function publicUrl(value: unknown, provider?: ProviderId): string {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f\\]/.test(value)) throw new ProviderError("Invalid provider URL.", 400);
   let url: URL;
   try { url = new URL(value); } catch { throw new ProviderError("Invalid provider URL.", 400); }
-  const domains = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || provider && !domains[provider].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`))) throw new ProviderError("Use a public URL from this provider.", 400);
+  const domains: Partial<Record<ProviderId, string[]>> = { youtube: ["youtube.com", "youtu.be"], twitch: ["twitch.tv"], raiplay: ["raiplay.it"], bandcamp: ["bandcamp.com"] };
+  const hostAllowed = (candidate: ProviderId) => candidate === "streamingcommunity" ? isStreamingCommunityHost(url.hostname) : domains[candidate]!.some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`));
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || provider && !hostAllowed(provider)) throw new ProviderError("Use a public URL from this provider.", 400);
   return url.href;
 }
 
@@ -46,7 +53,7 @@ function savedItem(value: unknown): ProviderItem {
   return item;
 }
 
-export function createProviders({ databasePath, onChange = () => {}, browse = adapters }: { databasePath: string; onChange?: () => void; browse?: Record<ProviderId, Adapter> }) {
+export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => "https://streamingcommunityz.academy", browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
@@ -82,7 +89,12 @@ export function createProviders({ databasePath, onChange = () => {}, browse = ad
           if (db.query("DELETE FROM provider_favorites WHERE id = ?").run(favorite[1]!).changes) onChange();
           return new Response(null, { status: 204 });
         }
-        const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp)\/items$/.exec(pathname);
+        const preview = /^\/api\/providers\/streamingcommunity\/titles\/(\d{1,8})$/.exec(pathname);
+        if (preview) {
+          if (request.method !== "GET") return wrongMethod("GET");
+          return Response.json(await streamingCommunityPreview(Number(preview[1]), streamingCommunityOrigin(), AbortSignal.any([request.signal, shutdown.signal])));
+        }
+        const match = /^\/api\/providers\/(youtube|twitch|raiplay|bandcamp|streamingcommunity)\/items$/.exec(pathname);
         if (!match) return Response.json({ error: "Not found." }, { status: 404 });
         if (request.method !== "GET") return wrongMethod("GET");
         const provider = match[1] as ProviderId;

@@ -82,7 +82,7 @@ export function SearchPanel(props: Props) {
   }, [props.active]);
   const url = /^https?:\/\//i.test(search.query) ? search.query : undefined;
   const linkedProvider = url ? providerForLink(url) : undefined;
-  const providers = linkedProvider ? [linkedProvider] : url ? [] : ["youtube", "raiplay", "twitch"] as ProviderId[];
+  const providers = linkedProvider ? [linkedProvider] : url ? [] : ["youtube", "raiplay", "twitch", "streamingcommunity"] as ProviderId[];
   const visible = (source: string) => !!url || filter === "All" || filter === source;
   const scopes = searchSources.flatMap(source => summaries[source]?.count ? [[source, summaries[source]] as const] : []);
   const completed = ["YouTube", "RaiPlay", "Twitch", "avoid radio", "Radio playlists", "Radio directory", "TV folders", "Jellyfin"].every(source => summaries[source] && !summaries[source].loading);
