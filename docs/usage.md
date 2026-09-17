@@ -435,8 +435,8 @@ See the [shadcn CLI](https://ui.shadcn.com/docs/cli) and
 
 ```sh
 bun run typecheck
-bun test ./tests/linux/iptv-clock.test.ts
-bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
+bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
+bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
 bun run build
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux

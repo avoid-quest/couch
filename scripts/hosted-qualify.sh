@@ -6,8 +6,8 @@ test -z "${TAURI_SIGNING_PRIVATE_KEY:-}${CN_API_KEY:-}"
 rm -f .artifacts/hosted-release/qualified.json
 bun scripts/hosted-release.ts verify .artifacts/hosted-release
 bun run typecheck
-bun test ./tests/linux/iptv-clock.test.ts
-bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
+bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
+bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
 cargo test --manifest-path src-tauri/Cargo.toml --locked --release
 # Inspect the signed package without running application code as root.
 version=$(bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
