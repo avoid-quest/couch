@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { Action, SessionState } from "../../../shared/protocol";
+import { fireEvent, screen } from "../../testing";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -12,7 +13,7 @@ const state: SessionState = {
   activeProfile: { id: "household", name: "Household" },
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
+const button = (label: string) => screen.getByRole("button", { name: label });
 async function render(value = state, connected = true, active = true) {
   const { NowPlaying } = await import("./NowPlaying");
   await act(async () => root.render(<NowPlaying state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} onBack={() => browsed.push("Back")} onBrowse={section => browsed.push(section)} run={async action => { actions.push(action); return true; }} />));
@@ -89,7 +90,7 @@ test("programme details stay tied to the current playback and live controls omit
   await render(radio);
   expect(document.querySelector(".radio-programme")?.textContent).toContain("A programme from the station.");
   expect(document.querySelector(".radio-programme a")?.getAttribute("href")).toBe("https://radio.avoid.quest/");
-  expect(button("Pause")).toBeUndefined();
+  expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
   expect(button("Stop playback").disabled).toBe(false);
   expect(button("Next in queue").disabled).toBe(false);
   expect(document.querySelector('[aria-label="Playback position"]')).toBeNull();

@@ -5,6 +5,7 @@ import type { Root } from "react-dom/client";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
+import { fireEvent, screen } from "../../testing";
 
 let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>, reorderFavorites: typeof import("./SavedFavorites").reorderFavorites;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -15,9 +16,10 @@ const video: ProviderItem = { id: "video", provider: "youtube", kind: "media", t
 const album: ProviderItem = { id: "album", provider: "bandcamp", kind: "collection", title: "Evening album", url: "https://artist.bandcamp.com/album/evening" };
 const station: RadioStation = { id: "station", name: "Evening radio", url: "https://radio.example/stream", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
 let online: ProviderItem[] = [], radios: RadioStation[] = [], failOnline = false;
-const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
+const button = (label: string) => screen.getByRole("button", { name: label });
+const queryButton = (label: string) => screen.queryByRole("button", { name: label });
 const flush = () => act(async () => { await Bun.sleep(20); });
-const click = async (label: string) => { await act(async () => button(label).click()); await flush(); };
+const click = async (label: string) => { await act(async () => fireEvent.click(button(label))); await flush(); };
 async function render(connected = true, canPlay = true) {
   const { SavedFavorites, reorderFavorites: reorder } = await import("./SavedFavorites");
   reorderFavorites = reorder;
@@ -64,7 +66,7 @@ afterEach(async () => {
 
 test("one saved list shows existing online and radio favorites without catalog or queue writes", async () => {
   await render();
-  expect(document.querySelectorAll("li")).toHaveLength(3);
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
   expect(document.body.textContent).toContain("YouTube");
   expect(document.body.textContent).toContain("Bandcamp");
   expect(document.body.textContent).toContain("Radio");
@@ -73,12 +75,12 @@ test("one saved list shows existing online and radio favorites without catalog o
   expect(opened).toEqual(["album"]); expect(played).toEqual([]);
   await click("Play Evening video"); await click("Add Evening radio to Up next");
   expect(played).toEqual([{ kind: "provider", id: "video", playNow: true }, { kind: "radio", id: "station", playNow: false }]);
-  expect(document.querySelectorAll("li")).toHaveLength(3);
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
 });
 
 test("reorder handles are always available and a drop reorders only its own store", async () => {
   await render();
-  expect([...document.querySelectorAll('button[aria-label^="Reorder"]')].map(node => node.getAttribute("aria-label"))).toEqual(["Reorder Evening video", "Reorder Evening album", "Reorder Evening radio"]);
+  expect(screen.getAllByRole("button", { name: /^Reorder/ }).map((node: HTMLElement) => node.getAttribute("aria-label"))).toEqual(["Reorder Evening video", "Reorder Evening album", "Reorder Evening radio"]);
   const favorites = [
     { kind: "provider" as const, item: video },
     { kind: "provider" as const, item: album },
@@ -98,34 +100,34 @@ test("removal uses original stores and preserves the queue and another controlle
   expect(document.body.textContent).not.toContain("YouTube");
   await click("Remove Evening radio from Saved");
   expect(calls.some(call => call.path === "/api/radio/favorites/station" && call.method === "DELETE")).toBe(true);
-  expect(document.querySelectorAll("li")).toHaveLength(1);
+  expect(screen.getAllByRole("listitem")).toHaveLength(1);
   expect(played).toEqual([]);
   online.push({ ...video, id: "new", title: "New shared video" });
   await act(async () => { await client.invalidateQueries(); }); await flush();
-  expect(document.querySelectorAll("li")).toHaveLength(2);
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
   expect(document.body.textContent).toContain("New shared video");
 });
 
 test("one unavailable save source does not hide the other source and retry recovers", async () => {
   failOnline = true; await render();
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Online saves unavailable");
+  expect(screen.getByRole("alert").textContent).toContain("Online saves unavailable");
   expect(button("Play Evening radio")).toBeDefined();
-  expect(button("Play Evening video")).toBeUndefined();
+  expect(queryButton("Play Evening video")).toBeNull();
   await click("Play Evening radio");
   expect(played).toEqual([{ kind: "radio", id: "station", playNow: true }]);
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Online saves unavailable");
-  expect(button("Retry saved items").disabled).toBe(false);
+  expect(screen.getByRole("alert").textContent).toContain("Online saves unavailable");
+  expect((button("Retry saved items") as HTMLButtonElement).disabled).toBe(false);
   failOnline = false; await click("Retry saved items");
-  expect(document.querySelectorAll("li")).toHaveLength(3);
+  expect(screen.getAllByRole("listitem")).toHaveLength(3);
 });
 
 test("without native playback saved media remains queueable, while disconnect clears actionable data", async () => {
   await render(true, false);
-  expect(button("Play Evening video").disabled).toBe(true);
-  expect(button("Add Evening video to Up next").disabled).toBe(false);
-  expect(button("Remove Evening video from Saved").disabled).toBe(false);
+  expect((button("Play Evening video") as HTMLButtonElement).disabled).toBe(true);
+  expect((button("Add Evening video to Up next") as HTMLButtonElement).disabled).toBe(false);
+  expect((button("Remove Evening video from Saved") as HTMLButtonElement).disabled).toBe(false);
   const count = calls.length; await render(false);
-  expect(document.querySelectorAll("li")).toHaveLength(0);
+  expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   expect(calls).toHaveLength(count);
   expect(document.body.textContent).toContain("Reconnect");
 });
@@ -138,10 +140,10 @@ test("Saved keeps saved collections together without a separate history destinat
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect([...document.querySelectorAll('[role="tab"]')].map(node => node.textContent)).toEqual(["Items", "Playlists"]);
+  expect(screen.getAllByRole("tab").map((node: HTMLElement) => node.textContent)).toEqual(["Items", "Playlists"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
-  expect([...document.querySelectorAll("button")].some(node => node.textContent === "History")).toBe(false);
+  expect(screen.queryByRole("button", { name: "History" })).toBeNull();
 });
 
 test("opening a saved collection browses its provider and URL, with Back returning to that provider", async () => {
@@ -171,7 +173,7 @@ test("opening a saved collection browses its provider and URL, with Back returni
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
   expect(browsed.at(-1)?.searchParams.get("url")).toBe(album.url);
   expect(document.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Bandcamp");
-  await act(async () => document.querySelector<HTMLButtonElement>("[data-back]")!.click());
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Back" })));
   await flush();
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
   expect(document.body.textContent).toContain("Recently played");

@@ -3,13 +3,14 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { Controller } from "../../../../shared/controllers";
+import { fireEvent, screen, within } from "../../../testing";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 const self: Controller = { id: "self", name: "Browser", role: "administrator", createdAt: 1, lastSeenAt: 2 };
 let devices: Controller[];
-const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.textContent === label)!;
+const button = (label: string) => screen.getByRole("button", { name: label });
 const flush = () => act(async () => { await Bun.sleep(20); });
 
 async function render() {
@@ -73,14 +74,13 @@ test("connections shows the pairing code and every device with its role, minus o
   expect(document.body.textContent).toContain("Browser");
   expect(document.body.textContent).toContain("(this device)");
   expect(document.body.textContent).toContain("Phone");
-  expect(button("Remove")!.textContent).toBe("Remove");
-  expect([...document.querySelectorAll("button")].filter(node => node.textContent === "Remove")).toHaveLength(1);
-  expect([...document.querySelectorAll("button")].some(node => /Make/.test(node.textContent ?? "") && node.closest("li")?.textContent?.includes("Browser"))).toBe(false);
+  expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+  expect(within(screen.getByText("(this device)").closest("li")!).queryAllByRole("button")).toHaveLength(0);
 });
 
 test("promoting a controller writes the role and reloads the list", async () => {
   await render();
-  await act(async () => { button("Make administrator").click(); });
+  await act(async () => { fireEvent.click(button("Make administrator")); });
   await flush();
   const write = calls.find(call => call.method === "POST")!;
   expect(write.path).toBe("/api/controllers/other/role");
@@ -90,7 +90,7 @@ test("promoting a controller writes the role and reloads the list", async () => 
 
 test("removing a device deletes it and drops the row", async () => {
   await render();
-  await act(async () => { button("Remove").click(); });
+  await act(async () => { fireEvent.click(button("Remove")); });
   await flush();
   expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(true);
   expect(document.body.textContent).not.toContain("Phone");
