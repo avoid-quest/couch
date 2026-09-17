@@ -9,7 +9,7 @@ export function GeneralPage() {
   return (
     <SettingsLayout section="general">
       <div className="space-y-4">
-        {identity?.authority === "administrator" && credentials && (
+        {(identity?.authority === "administrator" || identity?.authority === "host") && credentials && (
           <>
             <TvNameSettings credentials={credentials} connected={connected} canWrite={connected} host={!!host} />
             <StartupSettings credentials={credentials} connected={connected} />

@@ -6,7 +6,7 @@ export function BluetoothPage() {
   const { credentials, connected, identity } = useShell();
   return (
     <SettingsLayout section="bluetooth">
-      {identity?.authority === "administrator" && credentials
+      {(identity?.authority === "administrator" || identity?.authority === "host") && credentials
         ? <BluetoothSettings credentials={credentials} connected={connected} />
         : <p className="text-muted-foreground">An administrator can manage Bluetooth.</p>}
     </SettingsLayout>
