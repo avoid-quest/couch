@@ -1,5 +1,6 @@
-@import "../../../src/client/theme.css";
+@import "../../../src/client/index.css";
 @source "./";
+@source "../../../src/client";
 
 body { background: #000; }
 main { min-height: 100svh; display: grid; place-items: center; position: relative; }
