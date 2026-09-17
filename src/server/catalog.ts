@@ -11,7 +11,7 @@ import { ControllerError } from "./controllers";
 
 type Services = {
   library: Pick<Library, "listSources" | "search" | "getItem" | "musicArtists" | "musicAlbums" | "albumTracks" | "artwork" | "videoShows" | "videoSeasons">;
-  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "playlistStations">;
+  radio: Pick<ReturnType<typeof createRadio>, "search" | "favorites" | "saveFavorite" | "removeFavorite" | "reorderFavorites" | "playlistStations">;
   jellyfin: Pick<JellyfinSource, "status" | "items">;
   viewing?: { store: Store; session: ReturnType<typeof createSession> };
 };
@@ -213,6 +213,13 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           const input = await body(request);
           authorize();
           return Response.json({ station: radio.saveFavorite(input.station) });
+        }
+        if (pathname === "/api/radio/favorites/reorder") {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const input = await body(request);
+          authorize();
+          radio.reorderFavorites(input.order);
+          return Response.json({ ok: true });
         }
         const favorite = /^\/api\/radio\/favorites\/([\w-]{1,80})$/.exec(pathname);
         if (favorite) {

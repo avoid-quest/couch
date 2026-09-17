@@ -58,6 +58,14 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");
   db.run("CREATE TABLE IF NOT EXISTS provider_favorites (id TEXT PRIMARY KEY, item TEXT NOT NULL)");
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(provider_favorites)").all().some(column => column.name === "position")) {
+    db.transaction(() => {
+      db.run("ALTER TABLE provider_favorites ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+      // Existing installs keep their newest-first reading order as the start order.
+      const rows = db.query<{ id: string }, []>("SELECT id FROM provider_favorites ORDER BY rowid DESC").all();
+      for (const [index, row] of rows.entries()) db.query("UPDATE provider_favorites SET position = ? WHERE id = ?").run(index + 1, row.id);
+    })();
+  }
   const cache = new Map<string, { page: ProviderPage; expires: number }>();
   const shutdown = new AbortController();
   let active = 0;
@@ -70,7 +78,7 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
       try {
         if (closed) throw new ProviderError("The provider catalog is closing.", 503);
         if (pathname === "/api/providers/favorites") {
-          if (request.method === "GET") return Response.json({ favorites: db.query<{ item: string }, []>("SELECT item FROM provider_favorites ORDER BY rowid DESC").all().flatMap(row => { try { return [savedItem(JSON.parse(row.item))]; } catch { return []; } }) });
+          if (request.method === "GET") return Response.json({ favorites: db.query<{ item: string }, []>("SELECT item FROM provider_favorites ORDER BY position, rowid").all().flatMap(row => { try { return [savedItem(JSON.parse(row.item))]; } catch { return []; } }) });
           if (request.method !== "POST") return wrongMethod("GET, POST");
           if (request.headers.get("Content-Type")?.split(";")[0]?.trim() !== "application/json") throw new ProviderError("Send a JSON object.", 400);
           const body: unknown = await request.json().catch(() => { throw new ProviderError("Invalid JSON body.", 400); });
@@ -79,9 +87,24 @@ export function createProviders({ databasePath, onChange = () => {}, streamingCo
           const item = savedItem(body.item);
           if (closed) throw new ProviderError("The provider catalog is closing.", 503);
           if (!db.query("SELECT 1 FROM provider_favorites WHERE id = ?").get(item.id) && db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM provider_favorites").get()!.count >= 500) throw new ProviderError("Remove a saved item before adding more than 500.", 400);
-          db.query("INSERT INTO provider_favorites VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET item = excluded.item").run(item.id, JSON.stringify(item));
+          db.query("INSERT INTO provider_favorites (id, item, position) VALUES (?, ?, (SELECT COALESCE(MIN(position), 1) - 1 FROM provider_favorites)) ON CONFLICT(id) DO UPDATE SET item = excluded.item").run(item.id, JSON.stringify(item));
           onChange();
           return Response.json({ item });
+        }
+        if (pathname === "/api/providers/favorites/reorder") {
+          if (request.method !== "POST") return wrongMethod("POST");
+          if (request.headers.get("Content-Type")?.split(";")[0]?.trim() !== "application/json") throw new ProviderError("Send a JSON object.", 400);
+          const body: unknown = await request.json().catch(() => { throw new ProviderError("Invalid JSON body.", 400); });
+          authorize();
+          const order = object(body) && Array.isArray(body.order) ? body.order : null;
+          const ids = order?.every((id): id is string => typeof id === "string" && id.length <= 100) ? order : null;
+          if (!ids || !ids.length || ids.length > 500 || new Set(ids).size !== ids.length) throw new ProviderError("Send the saved items in their new order.", 400);
+          if (ids.some(id => !db.query("SELECT 1 FROM provider_favorites WHERE id = ?").get(id))) throw new ProviderError("Saved items changed. Try the move again.", 409);
+          db.transaction(() => {
+            for (const [index, id] of ids.entries()) db.query("UPDATE provider_favorites SET position = ? WHERE id = ?").run(index + 1, id);
+          })();
+          onChange();
+          return Response.json({ ok: true });
         }
         const favorite = /^\/api\/providers\/favorites\/([\w-]{1,100})$/.exec(pathname);
         if (favorite) {

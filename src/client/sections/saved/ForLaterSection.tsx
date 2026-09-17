@@ -1,13 +1,22 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Plus, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
+
+// The gesture for one drop, as the ordered ids the server persists.
+export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: string): string[] | null {
+  const next = reorderedIds(items, item => item.id, activeId, overId);
+  return next && next.map(item => item.id);
+}
 
 export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind }: {
   origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void;
@@ -16,7 +25,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
   // socket revisions, replacing the version prop this section drilled down.
   const queryClient = useQueryClient();
   const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery({ origin, token }), enabled: connected });
-  const items = connected ? data?.items ?? [] : [];
+  // The optimistic order shows the drop immediately; the server reply and
+  // refetch take over once the reorder sticks, and a failure reverts it.
+  const [orderIds, setOrderIds] = useState<string[] | null>(null);
+  const items = useMemo(() => applyIdOrder(connected ? data?.items ?? [] : [], orderIds ?? undefined, item => item.id), [data, connected, orderIds]);
   const loading = connected && isPending;
   const error = connected && loadError ? loadError instanceof Error ? loadError.message : "Could not load For later." : "";
   const [detail, setDetail] = useState<ForLaterItem | null>(null);
@@ -27,7 +39,22 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const mutation = useRef<AbortController | null>(null);
-  useEffect(() => { setPending(false); setDetail(null); setNotice(""); setActionError(""); return () => mutation.current?.abort(); }, [origin, token, connected]);
+  const sensors = useDndSensors();
+  useEffect(() => { setPending(false); setDetail(null); setNotice(""); setActionError(""); setOrderIds(null); return () => mutation.current?.abort(); }, [origin, token, connected]);
+  const saveOrder = async (order: string[]) => {
+    setOrderIds(order);
+    try {
+      const response = await fetch(`${origin}/api/for-later/reorder`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ order }), signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Could not save the new order.");
+      await queryClient.invalidateQueries({ queryKey: ["for-later"] });
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not save the new order."); }
+    finally { setOrderIds(null); }
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over) return;
+    const order = forLaterOrder(items, String(active.id), String(over.id));
+    if (order) void saveOrder(order);
+  };
   const update = async (item: ForLaterItem, mode: "play" | "append" | "remove", index: number) => {
     if (!connected || pending) return;
     const controller = new AbortController();
@@ -63,14 +90,18 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !items.length && <div className="space-y-2"><p>No saved titles.</p>{onFind && <Button variant="outline" onClick={onFind}>Search</Button>}</div>}
-    <ul ref={list} className="list-none space-y-2 p-0" aria-label="Saved for later" aria-busy={loading}>{items.map((item, index) => <li key={item.id} className="flex flex-wrap items-center gap-3 border-b py-3">
-      {inspect ? <>
-        {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="h-[54px] w-[46px] rounded-md" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="h-[54px] w-[46px] rounded-md" />}
-        <Button variant="ghost" className="h-auto min-h-11 min-w-0 flex-1 flex-col items-start justify-start gap-1.5 p-0 text-left whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}><strong className="text-sm font-semibold [overflow-wrap:anywhere]">{item.title}</strong>{item.live && <small className="text-[11px] text-muted-foreground">Live</small>}</Button>
-        {actions(item, index)}
-      </> : <><strong className="min-w-0 flex-1 break-words">{item.title}</strong>{actions(item, index)}</>}
-
-    </li>)}</ul>
+    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <ul ref={list} className="list-none space-y-2 p-0" aria-label="Saved for later" aria-busy={loading}><SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
+        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{(drag: RowDrag) => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-3 border-b py-3">
+          {inspect ? <>
+            {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="h-[54px] w-[46px] rounded-md" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="h-[54px] w-[46px] rounded-md" />}
+            <Button variant="ghost" className="h-auto min-h-11 min-w-0 flex-1 flex-col items-start justify-start gap-1.5 p-0 text-left whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}><strong className="text-sm font-semibold [overflow-wrap:anywhere]">{item.title}</strong>{item.live && <small className="text-[11px] text-muted-foreground">Live</small>}</Button>
+            {actions(item, index)}
+          </> : <><strong className="min-w-0 flex-1 break-words">{item.title}</strong>{actions(item, index)}</>}
+          {drag.handle}
+        </li>}</SortableRow>)}
+      </SortableContext></ul>
+    </DndContext>
     {inspect && <Dialog open={detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus(); }}>
       {detail && <>{detail.artworkId ? <AuthArtwork origin={origin} token={token} id={detail.artworkId} video={detail.kind !== "radio"} className="aspect-[1.9] w-full" /> : <MediaArtwork key={detail.thumbnail || detail.id} thumbnail={detail.thumbnail} title={detail.title} className="aspect-[1.9] w-full" />}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Saved for later</DialogDescription></DialogHeader>{actions(detail, items.findIndex(item => item.id === detail.id))}{notice && <p role="status">{notice}</p>}{actionError && <p role="alert">{actionError}</p>}</>}
     </DialogContent></Dialog>}

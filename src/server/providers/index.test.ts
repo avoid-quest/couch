@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +38,41 @@ test("favorites persist multiline descriptions, compute stable IDs, and invalida
   for (let attempt = 0; attempt < 2; attempt++) expect((await restarted.handle(new Request(`http://localhost/api/providers/favorites/${saved.id}`, { method: "DELETE" }))).status).toBe(204);
   expect(changes).toBe(2);
   expect(await (await restarted.handle(api("favorites"))).json()).toEqual({ favorites: [] });
+});
+
+test("drag reordering persists favorite positions across restarts and rejects stale orders", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-providers-order-"));
+  directories.push(directory);
+  const databasePath = join(directory, "state.sqlite");
+  const catalog = fixture({ databasePath });
+  const first = (await (await catalog.handle(api("favorites", { item: { ...item, title: "First", url: "https://www.youtube.com/watch?v=first" } }))).json() as { item: ProviderItem }).item;
+  const second = (await (await catalog.handle(api("favorites", { item: { ...item, title: "Second", url: "https://www.youtube.com/watch?v=second" } }))).json() as { item: ProviderItem }).item;
+  // New saves lead the list, so the saved order is second, first.
+  expect(await (await catalog.handle(api("favorites"))).json()).toEqual({ favorites: [second, first] });
+  expect((await catalog.handle(api("favorites/reorder", { order: [first.id, second.id] }))).status).toBe(200);
+  expect(await (await catalog.handle(api("favorites"))).json()).toEqual({ favorites: [first, second] });
+  catalog.close();
+  const restarted = fixture({ databasePath });
+  expect(await (await restarted.handle(api("favorites"))).json()).toEqual({ favorites: [first, second] });
+  expect((await restarted.handle(api("favorites/reorder", { order: [first.id, first.id] }))).status).toBe(400);
+  expect((await restarted.handle(api("favorites/reorder", { order: [first.id, "gone"] }))).status).toBe(409);
+  expect((await restarted.handle(new Request("http://localhost/api/providers/favorites/reorder"))).status).toBe(405);
+  expect(await (await restarted.handle(api("favorites"))).json()).toEqual({ favorites: [first, second] });
+});
+
+test("favorites installed before reordering keep their newest-first reading order", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-providers-migrate-"));
+  directories.push(directory);
+  const databasePath = join(directory, "state.sqlite");
+  const legacy = new Database(databasePath, { create: true, strict: true });
+  legacy.run("CREATE TABLE provider_favorites (id TEXT PRIMARY KEY, item TEXT NOT NULL)");
+  const older = { ...item, title: "Older", url: "https://www.youtube.com/watch?v=older", id: providerItemId(item.provider, "https://www.youtube.com/watch?v=older") };
+  const newer = { ...item, title: "Newer", url: "https://www.youtube.com/watch?v=newer", id: providerItemId(item.provider, "https://www.youtube.com/watch?v=newer") };
+  legacy.query("INSERT INTO provider_favorites VALUES ('older', ?)").run(JSON.stringify(older));
+  legacy.query("INSERT INTO provider_favorites VALUES ('newer', ?)").run(JSON.stringify(newer));
+  legacy.close();
+  const catalog = fixture({ databasePath });
+  expect(await (await catalog.handle(api("favorites"))).json()).toEqual({ favorites: [newer, older] });
 });
 
 test("favorites reject foreign provider URLs, invalid metadata and wrong methods", async () => {
