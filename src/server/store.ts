@@ -262,6 +262,9 @@ export function openStore(path: string, remoteControlEnabled = false) {
         if (changes.clearResume) db.query("UPDATE viewing_progress SET position = 0 WHERE profileId = ? AND mediaId = ?").run(profileId, mediaId);
       })();
     },
+    removeSharedProgress(mediaId: string) {
+      return db.query("DELETE FROM viewing_progress WHERE mediaId = ?").run(mediaId).changes > 0;
+    },
     saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) {
       db.transaction(() => {
         db.query("UPDATE session SET queue = ? WHERE id = 1").run(JSON.stringify(queue));

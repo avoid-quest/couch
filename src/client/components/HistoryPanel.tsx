@@ -1,7 +1,7 @@
 import type { ProviderId } from "../../shared/providers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Check, History, MoreHorizontal, Play, RotateCcw } from "lucide-react";
+import { Check, History, MoreHorizontal, Play, RotateCcw, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { HistoryItem, ViewingProgress } from "../../shared/library";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./MediaArtwork";
-import { historyQuery } from "@/api/library";
+import { historyQuery, removeHistory } from "@/api/library";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
@@ -49,6 +49,17 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
       setError(reason instanceof Error ? reason.message : "Could not update watched state.");
     } finally { setPending(false); }
   };
+  const remove = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await removeHistory({ origin, token }, mediaId);
+      onUpdated();
+      setOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not remove this history item.");
+    } finally { setPending(false); }
+  };
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={!connected} aria-label={`Watching options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></PopoverTrigger>
     <PopoverContent align="end" className="max-w-[calc(100vw-2rem)] gap-3" aria-label={`Watching options for ${title}`}>
@@ -56,6 +67,7 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ watched: !progress?.watched })}><Check aria-hidden="true" />{progress?.watched ? "Mark unwatched" : "Mark watched"}</Button>
       {!!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
+      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from history</Button>
       {pending && <p className="text-sm text-muted-foreground" role="status">Saving…</p>}
     </PopoverContent>
   </Popover>;

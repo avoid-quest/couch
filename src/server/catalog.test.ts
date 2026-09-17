@@ -259,6 +259,27 @@ test("history replay validates current playback settings and keeps durable sourc
   expect(store.progress("household", mediaId)?.position).toBe(0);
 });
 
+test("history removal clears every profile's row and refuses entries that are playing or unknown", async () => {
+  const { request, session, store } = fixture();
+  const mediaId = `library:${"a".repeat(40)}`;
+  store.saveProgress("household", { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 10, duration: 100, watched: false, lastPlayedAt: 100 });
+  store.saveProgress("guest", { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 20, duration: 100, watched: true, lastPlayedAt: 90 });
+  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [{ mediaId, watched: false }] });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "GET")).status).toBe(405);
+  expect((await request(`/api/progress/${"b".repeat(64)}`, "DELETE")).status).toBe(400);
+  expect((await request("/api/progress/library%3Amissing", "DELETE")).status).toBe(404);
+  session.command({ type: "enqueue", entry: { id: "queued", title: "Shared item", source: mediaId } });
+  session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}/play`, "POST", { profileId: "household" })).status).toBe(200);
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "DELETE")).status).toBe(409);
+  session.command({ type: "stop" });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "DELETE")).status).toBe(200);
+  expect(store.progress("household", mediaId)).toBeNull();
+  expect(store.progress("guest", mediaId)).toBeNull();
+  expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [] });
+  expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "DELETE")).status).toBe(404);
+});
+
 test("person naming requires an explicit valid request and retains generic label API compatibility", async () => {
   const { request, store } = fixture();
   const path = "/api/profiles/household/person-name";

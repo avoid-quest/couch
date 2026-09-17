@@ -122,11 +122,16 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           return Response.json({ ok: true });
         }
         if (viewing && pathname.startsWith("/api/progress/")) {
-          if (request.method !== "POST") return methodNotAllowed("POST");
+          if (request.method !== "POST" && request.method !== "DELETE") return methodNotAllowed("POST, DELETE");
           let mediaId: string;
           try { mediaId = decodeURIComponent(pathname.slice("/api/progress/".length)); }
           catch { throw new RequestError("Invalid media identity."); }
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (request.method === "DELETE") {
+            authorize();
+            viewing.session.removeHistory(mediaId);
+            return Response.json({ ok: true });
+          }
           const changes = await body(request);
           authorize();
           if (Object.keys(changes).some(key => !["watched", "clearResume"].includes(key))
