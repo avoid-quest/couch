@@ -4,6 +4,7 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 
 // scripts/build.ts writes the release identity before the client build runs;
 // a standalone `vite build` or the dev server falls back to the unsigned shape
@@ -19,6 +20,7 @@ const buildInfo = (() => {
 export default defineConfig({
   root: "src/client",
   base: "./",
+  resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
     tanstackRouter({ routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
@@ -53,6 +55,24 @@ export default defineConfig({
     }),
   ],
   define: { "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
-  server: { port: 1420, strictPort: true },
+  // Browser clients are same-origin with couch-server; the dev proxy supplies
+  // that origin so `vite` (and browser-driven loops) pair with `bun src/main.ts`.
+  server: {
+    port: 1420,
+    strictPort: true,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:4100",
+        ws: true,
+        changeOrigin: true,
+        // The server admits its own advertised origins only; present the
+        // proxied loopback requests as the target origin.
+        headers: { origin: "http://127.0.0.1:4100" },
+        // src/client/api/*.ts modules are served from the same URL prefix as
+        // the backend; only forward requests that are not module files.
+        bypass: request => (/\.(ts|tsx|js|jsx|css|png|svg|woff2?)(\?|$)/.test(request.url ?? "") ? request.url : undefined),
+      },
+    },
+  },
   build: { outDir: "../../dist", emptyOutDir: true },
 });
