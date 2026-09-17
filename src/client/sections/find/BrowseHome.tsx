@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { ChevronRight, Film, Play, Plus, Radio, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -11,6 +13,9 @@ import type { SessionState } from "../../../shared/protocol";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { LiveNow } from "../now/LiveNow";
+import { Eye, EyeOff } from "lucide-react";
+import { SortableRow, useDndSensors } from "../../lib/dnd";
+import { findSectionIds, findSectionLabels, type FindSectionId } from "../../find-sections";
 import { ProgressActions, progressTime, type HistoryPlayback } from "@/components/HistoryPanel";
 import type { Credentials } from "../../session/session";
 import { SaveForLater } from "@/components/SaveForLater";
@@ -21,7 +26,7 @@ const asHistory = (item: LibraryItem): HistoryItem => ({
   watched: item.progress?.watched ?? false, lastPlayedAt: item.progress?.lastPlayedAt ?? null,
 });
 
-export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio }: {
+export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio, editing = false, order, hiddenSections = [], onToggleSection, onMoveSection }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
@@ -35,6 +40,11 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   onAdd: (item: HistoryItem) => Promise<boolean>;
   recentRadio?: RadioStation[];
   onRadio?: (station: RadioStation) => Promise<boolean>;
+  editing?: boolean;
+  order?: FindSectionId[];
+  hiddenSections?: FindSectionId[];
+  onToggleSection?: (id: FindSectionId) => void;
+  onMoveSection?: (activeId: string, overId: string) => void;
 }) {
   const { origin, token } = credentials;
   const profileId = state?.activeProfile.id;
@@ -120,32 +130,55 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const detail = currentProfile ? history.find(item => item.mediaId === detailId) ?? (detailLibrary ? asHistory(detailLibrary) : null) : null;
   const selected = detail && metadata(detail);
 
-  return <section className="min-w-0 px-5 pb-8 pt-7 md:px-6" aria-label="Browse and resume">
-    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
-    {notice && <p role="status" className="mb-4 text-[13px] text-[#d3c7a5]">{notice}</p>}
-    {loading && connected && <p role="status" className="flex items-center gap-2 text-xs leading-relaxed text-muted-foreground"><Spinner className="size-3.5" />Loading your media…</p>}
-    {hero && <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Continue playing</h2></div>}
-    {hero ? <section className="relative min-h-[280px] overflow-hidden rounded-2xl bg-card p-6" aria-label="Continue watching">
-      {artwork(hero, "browse-hero-art")}
-      <div className="relative z-[1] max-w-[36rem]"><p className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">{hero.sourceLabel || (hero.libraryItemId ? "TV folders" : "Recently played")}</p><h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight break-words md:text-4xl">{hero.title}</h2><p className="mt-2 text-sm text-muted-foreground">{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
-        <div className="mt-3 flex flex-wrap gap-1"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
-      </div>
-    </section> : null}
-    {currentProfile && (history.some(item => item.mediaId !== hero?.mediaId) || !!recentRadio?.length) && <section aria-label="Recently played">
-      <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Recently played</h2></div>
+  const sectionsById: Partial<Record<FindSectionId, React.ReactNode>> = {
+    continue: hero ? <>{hero && <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Continue playing</h2></div>}
+      <section className="relative min-h-[280px] overflow-hidden rounded-2xl bg-card p-6" aria-label="Continue watching">
+        {artwork(hero, "browse-hero-art")}
+        <div className="relative z-[1] max-w-[36rem]"><p className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">{hero.sourceLabel || (hero.libraryItemId ? "TV folders" : "Recently played")}</p><h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight break-words md:text-4xl">{hero.title}</h2><p className="mt-2 text-sm text-muted-foreground">{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
+          <div className="mt-3 flex flex-wrap gap-1"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
+        </div>
+      </section></> : null,
+    recent: currentProfile && (history.some(item => item.mediaId !== hero?.mediaId) || !!recentRadio?.length) ? <section aria-label="Recently played">
+      <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Recently played</h2></div>
       <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{radioCards}{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
         <button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
           {artwork(item)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{item.position > 0 ? `Continue at ${progressTime(item.position)}` : item.watched ? "Finished" : item.sourceLabel || "Played"}</small>
         </button>{playbackActions(item)}
       </li>)}</ul>
-    </section>}
-    {!!cards.length && <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">TV folders</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button>}</div>}
-    {!!cards.length && <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{cards.map(item => {
-      const entry = asHistory(item);
-      return <li key={item.id}><button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
-    })}</ul>}
-    {onAddSource && <div className="mb-4 mt-7 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div>}
-    {onRadio && <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} />}
+    </section> : null,
+    folders: !!cards.length ? <><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">TV folders</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button>}</div>
+      <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{cards.map(item => {
+        const entry = asHistory(item);
+        return <li key={item.id}><button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
+      })}</ul></> : null,
+    sources: onAddSource ? <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div> : null,
+    radio: onRadio ? <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} /> : null,
+  };
+  const sensors = useDndSensors();
+  const sectionOrder = order ?? [...findSectionIds];
+
+  return <section className="min-w-0" aria-label="Browse and resume">
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
+    {notice && <p role="status" className="mb-4 text-[13px] text-[#d3c7a5]">{notice}</p>}
+    {loading && connected && <p role="status" className="flex items-center gap-2 text-xs leading-relaxed text-muted-foreground"><Spinner className="size-3.5" />Loading your media…</p>}
+    <DndContext sensors={sensors} onDragEnd={event => {
+      if (!event.over) return;
+      onMoveSection?.(String(event.active.id), String(event.over.id));
+    }}>
+      <SortableContext items={sectionOrder}>
+        {sectionOrder.map(id => {
+          const node = sectionsById[id];
+          const isHidden = hiddenSections.includes(id);
+          if (!node && !(isHidden && editing)) return null;
+          if (isHidden && !editing) return null;
+          return <SortableRow key={id} id={id} label={`Reorder ${findSectionLabels[id]}`} editing={editing && !!node}>{drag => <div ref={drag.setNodeRef} style={drag.style} className="relative mb-6">
+            {isHidden || !node
+              ? <div className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border border-dashed p-4 text-muted-foreground"><span>{findSectionLabels[id]}</span>{node && editing && <Button variant="ghost" aria-label={`Show ${findSectionLabels[id]}`} onClick={() => onToggleSection?.(id)}><Eye aria-hidden="true" />Show</Button>}</div>
+              : <>{node}{editing && <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-xl bg-card/80 p-1 backdrop-blur"><Button variant="ghost" size="icon" aria-label={`Hide ${findSectionLabels[id]}`} onClick={() => onToggleSection?.(id)}><EyeOff aria-hidden="true" /></Button>{drag.handle}</div>}</>}
+          </div>}</SortableRow>;
+        })}
+      </SortableContext>
+    </DndContext>
     <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail)}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[selected?.video?.year, selected?.video?.genres.join(" · "), selected?.artist].filter(Boolean).join(" · ") || detail.sourceLabel || (detail.libraryItemId ? "TV folders" : "Recently played")}</DialogDescription></DialogHeader>
         {selected?.video?.plot && <p>{selected.video.plot}</p>}

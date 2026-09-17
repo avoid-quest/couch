@@ -1,7 +1,7 @@
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useState, type ReactNode } from "react";
-import { Check, Eye, EyeOff, PencilLine, Search } from "lucide-react";
+import { Check, Eye, EyeOff, PencilLine } from "lucide-react";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
 import { moveNowSection, nowSectionLabels, readNowSections, saveNowSections, type NowSectionId } from "@/now-sections";
@@ -10,6 +10,7 @@ import { NowPlaying } from "./NowPlaying";
 import { useShell } from "@/sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { SearchBar } from "@/components/SearchBar";
 
 export function NowPage() {
   const shell = useShell();
@@ -19,6 +20,12 @@ export function NowPage() {
   const { order, hidden } = layout;
   const [editing, setEditing] = useState(false);
   const sensors = useDndSensors();
+  const parts = layout.parts ?? {};
+  const togglePart = (part: "current" | "next") => {
+    const nextParts = { ...parts, [part]: !parts[part] };
+    const next = { ...layout, parts: nextParts };
+    setLayout(next); saveNowSections(next);
+  };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
     const next = moveNowSection(order, String(active.id), String(over.id));
@@ -31,7 +38,7 @@ export function NowPage() {
   };
   const onStage = !nativeHost || tv.browsing;
   const sections: Record<NowSectionId, ReactNode> = {
-    playing: <NowPlaying embedded state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} active={onStage} />,
+    playing: <NowPlaying embedded state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} active={onStage} hiddenParts={parts} editing={editing} onHidePart={togglePart} />,
     history: <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} />,
     radio: <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={available} onEnqueue={enqueueRadio} active={onStage} />,
   };
@@ -40,12 +47,7 @@ export function NowPage() {
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
         <section data-page="Now" className="space-y-6">
           <div className="flex items-center gap-2">
-            <form role="search" aria-label="Search or paste a link" className="min-w-0 flex-1" onSubmit={event => { event.preventDefault(); const query = nowDraft.trim(); if (!query) return; setNowDraft(""); gotoSearch({ query, source: "All" }); }}>
-              <InputGroup className="rounded-2xl border bg-card py-1 shadow-[0_1px_0_rgb(0_0_0/0.2)] focus-within:border-primary">
-                <InputGroupAddon align="inline-start"><Search aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /></InputGroupAddon>
-                <InputGroupInput id="now-search" aria-label="Search or paste a link" placeholder="Search or paste a link" maxLength={4096} value={nowDraft} onChange={event => setNowDraft(event.target.value)} />
-              </InputGroup>
-            </form>
+            <SearchBar id="now-search" className="min-w-0 flex-1" value={nowDraft} onValueChange={setNowDraft} onSubmit={() => { const query = nowDraft.trim(); if (!query) return; setNowDraft(""); gotoSearch({ query, source: "All" }); }} />
             <Button variant="ghost" size="icon" className="hidden lg:inline-flex" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>
               {editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}
             </Button>

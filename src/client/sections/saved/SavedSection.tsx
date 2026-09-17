@@ -18,7 +18,7 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   useEffect(() => { setTab("Items"); }, [credentials.origin, credentials.token]);
   // SavedPlaylists stays at the client root: the Now section's queue imports
   // it too, so moving it belongs to the cleanup layer (flagged on #362).
-  return <section className="min-w-0 px-5 pb-8 pt-7 md:px-6" aria-label="Saved media">
+  return <section className="min-w-0 pb-8" aria-label="Saved media">
     <div className="mb-5 flex items-start justify-between gap-3">
       <h1 className="text-[27px] font-semibold leading-[1.15] tracking-[-0.9px] md:text-[34px] md:tracking-[-1.2px]">Saved</h1>
     </div>

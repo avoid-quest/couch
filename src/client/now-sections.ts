@@ -6,7 +6,7 @@ export const nowSectionLabels: Record<NowSectionId, string> = { playing: "Now pl
 const orderKey = "couch.now-section-order";
 const sectionsKey = "couch.now-sections";
 
-export type NowSections = { order: NowSectionId[]; hidden: NowSectionId[] };
+export type NowSections = { order: NowSectionId[]; hidden: NowSectionId[]; parts?: { current?: boolean; next?: boolean } };
 
 const inList = (value: unknown): value is NowSectionId[] => Array.isArray(value) && value.every(id => nowSectionIds.includes(id as NowSectionId));
 
@@ -18,7 +18,10 @@ export function readNowSections(storage: Pick<Storage, "getItem"> = localStorage
     if (parsed && typeof parsed === "object") {
       const { order, hidden } = parsed as Record<string, unknown>;
       const knownOrder = validOrder(order);
-      if (knownOrder) return { order: knownOrder, hidden: inList(hidden) ? hidden : [] };
+      if (knownOrder) {
+        const parts = (parsed as Record<string, unknown>).parts;
+        return { order: knownOrder, hidden: inList(hidden) ? hidden : [], parts: parts && typeof parts === "object" ? parts as NowSections["parts"] : undefined };
+      }
     }
   } catch { /* fall through to the pre-customization order. */ }
   try {

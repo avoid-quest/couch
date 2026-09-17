@@ -884,3 +884,4 @@ body { min-width: 0; }
   :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
 }
 .remote-pad-playback { display: grid; gap: 12px; }
+.session-home-single { grid-template-columns: minmax(0, 1fr); }

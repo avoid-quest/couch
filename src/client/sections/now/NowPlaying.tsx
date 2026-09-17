@@ -1,6 +1,6 @@
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { ArrowLeft, ChevronRight, Play, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Eye, Play, Search, X } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { playbackCapabilities } from "@/components/PlaybackTransport";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import type { Credentials } from "../../session/session";
 
-export function NowPlaying({ state, credentials, connected, run, onBack, onBrowse, onRemote, active = true, embedded = false }: {
+export function NowPlaying({ state, credentials, connected, run, onBack, onBrowse, onRemote, active = true, embedded = false, hiddenParts, editing = false, onHidePart }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
@@ -23,6 +23,9 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
   onRemote?: () => void;
   active?: boolean;
   embedded?: boolean;
+  hiddenParts?: { current?: boolean; next?: boolean };
+  editing?: boolean;
+  onHidePart?: (part: "current" | "next") => void;
 }) {
   const panel = useRef<HTMLElement | null>(null);
   const back = useRef<HTMLButtonElement | null>(null);
@@ -65,14 +68,14 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
     if (event.target.isConnected && !event.target.matches(":disabled") && !event.currentTarget.contains(event.relatedTarget as Node | null)) focused.current = null;
   }}>
     {!embedded && <Button ref={back} variant="ghost" className="browse-back mx-5 mt-4 min-h-11" onClick={onBack}><ArrowLeft aria-hidden="true" />Back to browsing</Button>}
-    <div className="session-home">
-      <div className="session-current">
+    <div className={`session-home${!hiddenParts?.current || !hiddenParts?.next ? " session-home-single" : ""}`}>
+      {hiddenParts?.current ? editing && <div className="flex min-h-14 items-center justify-between gap-3 self-center rounded-2xl border border-dashed p-4 text-muted-foreground"><span>Now playing</span><Button variant="ghost" aria-label="Show Now playing" onClick={() => onHidePart?.("current")}><Eye aria-hidden="true" />Show</Button></div> : <div className="session-current">
         {current ? <><p className="eyebrow mb-3">Now playing{state?.installationName && ` · ${state.installationName}`}</p><PlaybackControls state={state} credentials={credentials} connected={connected} run={run} presentation="session" onRemote={onRemote} /></> : <Empty>
           <EmptyHeader><EmptyTitle><h1>Nothing playing</h1></EmptyTitle><EmptyDescription>Search or paste a link above, or browse Find.</EmptyDescription></EmptyHeader>
           <EmptyContent><Button onClick={() => onBrowse ? onBrowse(embedded ? "Find" : "Home") : onBack?.()}><Search aria-hidden="true" />Find something to play</Button></EmptyContent>
         </Empty>}
-      </div>
-      <section className="session-next" aria-labelledby="now-playing-next-title">
+      </div>}
+      {hiddenParts?.next ? editing && <div className="flex min-h-14 items-center justify-between gap-3 self-center rounded-2xl border border-dashed p-4 text-muted-foreground"><span>Up next</span><Button variant="ghost" aria-label="Show Up next" onClick={() => onHidePart?.("next")}><Eye aria-hidden="true" />Show</Button></div> : <section className="session-next" aria-labelledby="now-playing-next-title">
         <div className="session-section-heading"><h2 id="now-playing-next-title">Up next <span className="count text-sm text-muted-foreground">{upcoming.length}</span></h2>{onBrowse && !embedded && <Button variant="ghost" onClick={() => onBrowse("Queue")}>Manage queue<ChevronRight aria-hidden="true" /></Button>}</div>
         {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
         {upcoming.length ? <DndContext sensors={sensors} onDragEnd={onDragEnd}><SortableContext items={upcoming.map(entry => entry.id)} strategy={verticalListSortingStrategy}><ol className="session-next-list">{upcoming.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} data-upcoming-entry={index}>
@@ -82,7 +85,7 @@ export function NowPlaying({ state, credentials, connected, run, onBack, onBrows
           <Button variant="secondary" size="icon" className="session-next-play" aria-label={`Play ${entry.title}`} title="Play now" disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><Play aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${entry.title} from Up next`} disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}><X aria-hidden="true" /></Button>
         </li>}</SortableRow>)}</ol></SortableContext></DndContext> : <Empty className="now-playing-queue-empty items-start px-0 text-left"><EmptyHeader><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Add to queue from Home or Saved.</EmptyDescription></EmptyHeader></Empty>}
-      </section>
+      </section>}
     </div>
   </section>;
 }
