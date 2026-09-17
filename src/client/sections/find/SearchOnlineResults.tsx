@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useInvalidation } from "./useInvalidation";
 import type { Action } from "../../../shared/protocol";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../../../shared/providers";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { QualityOptions } from "@/components/QualitySelect";
 import { isYouTubePlaylistUrl } from "../../../shared/providers";
+import { streamingCommunityPreviewQuery } from "@/api/streamingcommunity";
 import { createId } from "../../session/session";
 
 export type SearchResultSummary = { count: number; loading: boolean; error: boolean };
@@ -48,6 +50,8 @@ function OnlineResults(props: Props) {
   const revision = useInvalidation("providers");
   const [visible, setVisible] = useState(6);
   const [favorites, setFavorites] = useState<ProviderItem[] | null>(null);
+  const previewId = provider === "streamingcommunity" && detail ? /\/titles\/(\d+)-/.exec(detail.url)?.[1] ?? null : null;
+  const preview = useQuery(streamingCommunityPreviewQuery({ origin: props.origin, token: props.token }, previewId ? Number(previewId) : null, revision));
   const [saveError, setSaveError] = useState("");
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -175,7 +179,7 @@ function OnlineResults(props: Props) {
     {album && <div className="flex flex-wrap gap-2"><Button disabled={!props.canPlay || !props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url!, playNow: true }), "Starting album on the playback computer.")}>Play album</Button><Button variant="secondary" disabled={!props.connected || busy || !props.onCommand} onClick={() => void action(() => props.onCommand!({ type: "enqueueProviderAlbum", provider: "bandcamp", url: location.request.url! }), "Album added to Up next.")}>Add album to queue</Button></div>}
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{page?.items.slice(0, visible).map(item => <li key={item.id} className="flex min-w-0 flex-col"><MediaArtwork thumbnail={item.thumbnail} title={item.title} /><div className="grid gap-1 px-0.5 pb-0 pt-2.5"><Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetail(item); }}><strong className="text-[15px] font-semibold leading-tight break-words">{item.title}</strong><small className="text-xs text-muted-foreground">{[item.subtitle, item.live ? "Live" : item.kind === "media" ? provider === "bandcamp" ? "Track" : "Video" : item.kind === "channel" ? "Channel" : "Collection"].filter(Boolean).join(" · ")}</small></Button></div>{itemActions(item)}</li>)}</ul>
     <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>
-      {detail && <><MediaArtwork thumbnail={detail.thumbnail} title={detail.title} className="h-auto aspect-[1.9] w-full" /><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{providerNames[provider]}{detail.live ? " · Live" : ""}</DialogDescription></DialogHeader>{detail.subtitle && <p>{detail.subtitle}</p>}{itemActions(detail, true)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}
+      {detail && <><MediaArtwork thumbnail={preview.data?.thumbnail ?? detail.thumbnail} title={detail.title} className="h-auto aspect-[1.9] w-full" /><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{providerNames[provider]}{detail.live ? " · Live" : ""}</DialogDescription></DialogHeader>{detail.subtitle && <p>{detail.subtitle}</p>}{provider === "streamingcommunity" && preview.data && <p className="text-xs text-muted-foreground">{[preview.data.year, preview.data.quality, preview.data.genres.join(", "), preview.data.seasonsCount && `${preview.data.seasonsCount} seasons`].filter(Boolean).join(" · ")}</p>}{provider === "streamingcommunity" && preview.data?.plot && <p className="text-sm">{preview.data.plot}</p>}{itemActions(detail, true)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}
     </DialogContent></Dialog>
     {page && (visible < page.items.length || page.nextCursor) && <Button variant="outline" disabled={!props.connected || loading} onClick={() => void more()}>Show more {providerNames[provider]}</Button>}
   </section>;

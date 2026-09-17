@@ -367,9 +367,10 @@ for (const deferred of [false, true]) test(`${deferred ? "deferred" : "synchrono
   const { flushSync } = await import("react-dom");
   connectedJellyfin = false; integrated = true;
   let updateRoute: (() => void) | undefined;
+  const client = new QueryClient();
   function RoutedSearch() {
     const [searchState, setSearchState] = useState({ query: "Evening", source: "Jellyfin" });
-    return <SearchPanel origin="http://localhost" token="paired" connected canPlay active searchState={searchState} onSearchChange={value => { if (deferred) updateRoute = () => setSearchState(value); else flushSync(() => setSearchState(value)); }} onBrowse={() => {}} onEnqueue={async () => true} />;
+    return <QueryClientProvider client={client}><SearchPanel origin="http://localhost" token="paired" connected canPlay active searchState={searchState} onSearchChange={value => { if (deferred) updateRoute = () => setSearchState(value); else flushSync(() => setSearchState(value)); }} onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>;
   }
   await act(async () => root.render(<RoutedSearch />)); await flush();
   await click("Search YouTube", document.querySelector('[aria-label="Jellyfin search results"]')!);
@@ -556,8 +557,9 @@ for (const label of ["Evening video", "Evening radio"]) {
 
 test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
+  const client = new QueryClient();
   const edits: string[] = [];
-  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} />));
+  const draw = async (draftQuery: string, routeQuery: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} searchState={{ query: routeQuery, source: "All" }} onQueryChange={query => edits.push(query)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>));
   await draw("Owner draft", "route"); await flush();
   const input = document.querySelector<HTMLInputElement>("#media-search")!;
   expect(input.value).toBe("Owner draft"); expect(edits).toEqual([]);
@@ -571,8 +573,9 @@ test("controlled search drafts change only through the owner and never report ro
 
 test("standalone drafts follow route updates without reporting synthetic edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
+  const client = new QueryClient();
   const edits: string[] = [];
-  const draw = async (query: string) => act(async () => root.render(<SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} />));
+  const draw = async (query: string) => act(async () => root.render(<QueryClientProvider client={client}><SearchPanel searchState={{ query, source: "All" }} onQueryChange={value => edits.push(value)} origin="http://localhost" token="paired" connected canPlay active={false} onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>));
   await draw("first route"); await flush(); await draw("second route"); await flush();
   expect(document.querySelector<HTMLInputElement>("#media-search")!.value).toBe("second route");
   expect(edits).toEqual([]);
@@ -580,12 +583,13 @@ test("standalone drafts follow route updates without reporting synthetic edits",
 
 test("debounced drafts survive frequent parent renders, use the latest callback and support explicit retry", async () => {
   const { SearchPanel } = await import("./SearchPanel");
+  const client = new QueryClient();
   const oldRoutes: string[] = [], newRoutes: string[] = [];
   let setDraft!: (query: string) => void;
   function Controlled({ latest }: { latest: boolean }) {
     const [draftQuery, updateDraft] = useState(""); setDraft = updateDraft;
     const [searchState, setRoute] = useState({ query: "", source: "All" });
-    return <SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onBrowse={() => {}} onEnqueue={async () => true} />;
+    return <QueryClientProvider client={client}><SearchPanel draftQuery={draftQuery} onQueryChange={updateDraft} searchState={searchState} onSearchChange={value => { (latest ? newRoutes : oldRoutes).push(value.query); setRoute(value); }} origin="http://localhost" token="paired" connected canPlay active onBrowse={() => {}} onEnqueue={async () => true} /></QueryClientProvider>;
   }
   await act(async () => root.render(<Controlled latest={false} />));
   await act(async () => setDraft("Evening"));
