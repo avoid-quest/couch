@@ -13,6 +13,7 @@ import type { SessionState } from "../../../shared/protocol";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { LiveNow } from "../now/LiveNow";
+import { ForLaterSection } from "../saved/ForLaterSection";
 import { Eye, EyeOff } from "lucide-react";
 import { SortableRow, useDndSensors } from "../../lib/dnd";
 import { findSectionIds, findSectionLabels, type FindSectionId } from "../../find-sections";
@@ -153,6 +154,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
       })}</ul></> : null,
     sources: onAddSource ? <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div> : null,
     radio: onRadio ? <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} /> : null,
+    forlater: active ? <ForLaterSection origin={origin} token={token} connected={connected} canPlay={canPlay} onFind={() => onBrowse("Search")} /> : null,
   };
   const sensors = useDndSensors();
   const sectionOrder = order ?? [...findSectionIds];

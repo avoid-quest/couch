@@ -15,7 +15,6 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   // SavedPlaylists stays at the client root: the Now section's queue imports
   // it too, so moving it belongs to the cleanup layer (flagged on #362).
   return <section className="min-w-0 pb-8" aria-label="Saved media">
-    <h1 className="mb-6 text-xl font-semibold tracking-tight">Saved</h1>
     {active && <div className="space-y-10">
       <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} inspect onFind={() => onBrowse("Search")} />
       <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.playlistVersion ?? 0} queueCount={state?.queue.length ?? 0} inline />

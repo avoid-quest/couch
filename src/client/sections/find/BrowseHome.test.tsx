@@ -4,6 +4,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { HistoryItem, LibraryItem } from "../../../shared/library";
 import type { SessionState } from "../../../shared/protocol";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as session from "../../session/session";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
@@ -21,7 +22,9 @@ const state: SessionState = {
 const button = (label: string, scope: ParentNode = document) => [...scope.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 async function renderHome(connected = true, active = true, canPlay = true, value = state) {
   const { BrowseHome } = await import("./BrowseHome");
-  await act(async () => root.render(<BrowseHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} canPlay={canPlay} playing={false} onBrowse={name => browsed.push(name)} onAddSource={() => {}} onAdd={async item => { added.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} />));
+  const { QueryClient: Client } = await import("@tanstack/react-query");
+  const client = new Client({ defaultOptions: { queries: { retry: false } } });
+  await act(async () => root.render(<QueryClientProvider client={client}><BrowseHome state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} active={active} canPlay={canPlay} playing={false} onBrowse={name => browsed.push(name)} onAddSource={() => {}} onAdd={async item => { added.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
 }
 beforeEach(async () => {
   played.length = 0; added.length = 0; browsed.length = 0; requests.length = 0; failed = false;
@@ -35,6 +38,7 @@ beforeEach(async () => {
     requests.push(String(input));
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     if (String(input).includes("/api/library/items")) return Response.json({ items: [libraryItem], total: 1, offset: 0, limit: 24 });
+    if (String(input).includes("/api/for-later")) return Response.json({ items: [] });
     return failed ? Response.json({ error: "History unavailable" }, { status: 503 }) : Response.json({ profile, items: [unfinished, { ...unfinished, mediaId: "finished", title: "Finished film", watched: true }, { ...unfinished, mediaId: "started", title: "No progress", position: 0 }] });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
@@ -72,7 +76,7 @@ test("hidden home does not fetch and unavailable playback does not prevent brows
 test("home history failure has an independent retry", async () => {
   failed = true; await renderHome(); expect(document.body.textContent).toContain("History unavailable");
   failed = false; await act(async () => button("Try again").click());
-  expect(document.body.textContent).toContain("Halfway home"); expect(requests).toHaveLength(4);
+  expect(document.body.textContent).toContain("Halfway home"); expect(requests).toHaveLength(5);
 });
 test("library artwork cards open details without playback and retain actual library identity", async () => {
   await renderHome();
@@ -83,7 +87,7 @@ test("library artwork cards open details without playback and retain actual libr
   expect(added).toEqual([{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }]);
   expect(played).toEqual([]);
   await act(async () => button("Save A library film for later").click());
-  const saved = request.mock.calls.find(([input]: Parameters<typeof fetch>) => String(input).endsWith("/api/for-later"));
+  const saved = request.mock.calls.filter(([input, init]: Parameters<typeof fetch>) => String(input).endsWith("/api/for-later") && (init as RequestInit | undefined)?.method === "POST").at(-1);
   expect(saved?.[1]?.method).toBe("POST");
   expect(JSON.parse(String(saved?.[1]?.body))).toEqual({ reference: { kind: "library", id: "next" } });
   expect(played).toEqual([]);

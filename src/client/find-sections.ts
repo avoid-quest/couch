@@ -1,8 +1,8 @@
 import { reorderedIds } from "@/lib/dnd";
 
-export const findSectionIds = ["continue", "recent", "folders", "sources", "radio"] as const;
+export const findSectionIds = ["continue", "recent", "folders", "forlater", "sources", "radio"] as const;
 export type FindSectionId = typeof findSectionIds[number];
-export const findSectionLabels: Record<FindSectionId, string> = { continue: "Continue playing", recent: "Recently played", folders: "TV folders", sources: "Sources", radio: "Live radio" };
+export const findSectionLabels: Record<FindSectionId, string> = { continue: "Continue playing", recent: "Recently played", folders: "TV folders", forlater: "For later", sources: "Sources", radio: "Live radio" };
 const sectionsKey = "couch.find-sections";
 
 export type FindSections = { order: FindSectionId[]; hidden: FindSectionId[] };

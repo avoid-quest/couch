@@ -5,6 +5,7 @@ import type { Action } from "../../../shared/protocol";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage, VideoQuality } from "../../../shared/providers";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { SaveForLater } from "@/components/SaveForLater";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { QualityOptions } from "@/components/QualitySelect";
 import { isYouTubePlaylistUrl } from "../../../shared/providers";
@@ -167,6 +168,7 @@ function OnlineResults(props: Props) {
       {!isList && <Button variant="ghost" aria-label={saved ? `Remove ${item.title} from saved` : `Save ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Saved" : "Save"}</Button>}
       {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => { setDetail(null); open(item, `${item.id}-broadcasts`); }}>Past broadcasts</Button>}
       {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}${inDetail ? "-detail" : ""}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
+      {item.kind === "media" && inDetail && <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: "web", url: item.url, title: item.title }} title={item.title} />}
     </div>;
   };
   return <section ref={section} aria-label={`${providerNames[provider]} search results`} aria-busy={loading} className="grid gap-3.5 border-t py-6 first:border-t-0 first:pt-3" onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented && trail.length > 1 && props.active) { event.preventDefault(); back(); } }}>

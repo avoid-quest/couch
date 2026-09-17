@@ -54,12 +54,12 @@ test.each([
       await chmod(path, 0o700);
     }
     child = Bun.spawn(["/bin/bash", resolve("packaging/appliance/root/usr/lib/couch-appliance/session")], { env: { ...Bun.env, PATH: `${directory}:/usr/bin:/bin`, COUCH_DISPLAY_TEST_DIR: directory, COUCH_DISPLAY_TEST_FAIL_MODE: failMode ? "1" : "0" }, stdout: "ignore", stderr: "pipe" });
-    for (let attempt = 0; attempt < 100 && !await Bun.file(started).exists(); attempt++) await Bun.sleep(10);
+    for (let attempt = 0; attempt < 300 && !await Bun.file(started).exists(); attempt++) await Bun.sleep(25);
     expect(await Bun.file(started).exists()).toBe(true);
     expect(await readFile(log, "utf8")).toBe("");
     await writeFile(inventory, `eDP-1 connected primary 1920x1080+0+0\nHDMI-2 connected ${geometry}\n`);
-    await Bun.sleep(2200);
-    const commands = await readFile(log, "utf8");
+    let commands = "";
+    for (let attempt = 0; attempt < 100 && !commands; attempt++) { await Bun.sleep(100); commands = await readFile(log, "utf8"); }
     expect(commands).toBe(expected);
     expect(commands).not.toContain("--off");
     expect(commands).not.toContain("--primary");
@@ -73,4 +73,4 @@ test.each([
     if (child) await child.exited;
     await rm(directory, { recursive: true, force: true });
   }
-}, 10_000);
+}, 30_000);

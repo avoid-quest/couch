@@ -142,8 +142,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
 
   const content = <>
       {inline ? <header className="saved-playlist-heading">
-        <span className="saved-playlist-art" aria-hidden="true"><ListMusic /></span>
-        <div><p className="text-sm text-muted-foreground">Shared on this TV</p><h2>{playlist?.name ?? "Playlists"}</h2><p className="text-sm text-muted-foreground">{selectedId ? "An ordered mix you can play again." : "Keep a queue to play again later."}</p></div>
+        <div><h2 className="text-xl font-semibold tracking-tight">{playlist?.name ?? "Playlists"}</h2><p className="text-sm text-muted-foreground">Shared on this TV · keep a queue to play again later.</p></div>
       </header> : <DialogHeader>
         <DialogTitle className="break-words pr-12">{playlist?.name ?? "Saved playlists"}</DialogTitle>
         <DialogDescription>{selectedId ? "Edit this playlist or load it into the shared TV queue." : "Playlists are shared on this TV and stay available when the watching profile changes. Save the queue to reuse it later."}</DialogDescription>
@@ -155,7 +154,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading playlists…</p>}
       {!selectedId ? <>
         <form className="grid gap-2" onSubmit={event => void create(event)}>
-          <Label htmlFor="saved-playlist-name">Save the current queue</Label>
+          <Label htmlFor="saved-playlist-name" className="sr-only">Save the current queue</Label>
           <div className="flex flex-wrap gap-2">
             <Input ref={nameRef} id="saved-playlist-name" className="min-h-11 min-w-0 flex-1" value={name} onChange={event => setName(event.target.value)} placeholder="Playlist name" maxLength={80} required autoComplete="off" disabled={disabled} />
             <Button type="submit" disabled={disabled || !name.trim() || !queueCount || playlists.length >= 100}><Save aria-hidden="true" />Save queue</Button>

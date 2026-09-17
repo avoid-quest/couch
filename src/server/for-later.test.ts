@@ -34,7 +34,7 @@ test("drag reordering persists across restarts and rejects malformed or stale or
   const directory = mkdtempSync(join(tmpdir(), "couch-for-later-"));
   close.push(() => rmSync(directory, { recursive: true, force: true }));
   const databasePath = join(directory, "state.sqlite");
-  const f = fixture({ databasePath, lookup: async reference => ({ ...entry, id: reference.id, source: `library:${reference.id}` }) });
+  const f = fixture({ databasePath, lookup: async reference => ({ ...entry, id: "id" in reference ? reference.id : "web", source: `library:${"id" in reference ? reference.id : "web"}` }) });
   const ids: string[] = [];
   for (const label of ["first", "second", "third"]) ids.push(((await (await request(f.service, "POST", "", { reference: { kind: "library", id: label } })).json()) as { item: ForLaterItem }).item.id);
   // New saves lead the list, so the saved order is third, second, first.

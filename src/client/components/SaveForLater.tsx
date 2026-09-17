@@ -9,7 +9,8 @@ export function SaveForLater({ origin, token, connected, reference, title }: {
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
-  useEffect(() => { setPending(false); setNotice(""); return () => controller.current?.abort(); }, [origin, token, connected, reference.kind, reference.id]);
+  const referenceKey = reference.kind === "web" ? `web:${reference.url}` : reference.id;
+  useEffect(() => { setPending(false); setNotice(""); return () => controller.current?.abort(); }, [origin, token, connected, referenceKey]);
   const save = async () => {
     if (!connected || pending) return;
     const request = new AbortController();
