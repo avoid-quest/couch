@@ -66,7 +66,7 @@ export function AddMediaDialog({ credentials, connected, defaultQuality, run }: 
 
   return <Dialog open={open} onOpenChange={value => { setOpen(value); if (value) { resetQuality(); setError(null); } }}>
     <DialogTrigger asChild><Button disabled={!connected}><Plus aria-hidden="true" />Add media</Button></DialogTrigger>
-    <DialogContent className="queue-add-dialog max-h-[85dvh] overflow-y-auto pr-8 sm:max-w-xl" onOpenAutoFocus={event => { event.preventDefault(); sourceRef.current?.focus(); }}>
+    <DialogContent className="pr-8" onOpenAutoFocus={event => { event.preventDefault(); sourceRef.current?.focus(); }}>
       <DialogHeader><DialogTitle>Add media</DialogTitle><DialogDescription>Paste a link to add it to the TV queue.</DialogDescription></DialogHeader>
       <form className="grid min-w-0 gap-4" aria-busy={adding} onSubmit={event => void add(event)}>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

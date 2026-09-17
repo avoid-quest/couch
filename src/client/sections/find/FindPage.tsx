@@ -33,7 +33,7 @@ export function FindPage() {
       {/* StreamingCommunity is one source among others: it opens on demand
           from the Sources row instead of leading the page. */}
       {credentials && <Dialog open={explorerOpen} onOpenChange={setExplorerOpen}>
-        <DialogContent className="max-h-[85dvh] max-w-3xl overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader><DialogTitle>StreamingCommunity</DialogTitle><DialogDescription>Films and series from the configured website source.</DialogDescription></DialogHeader>
           <StreamingCommunityExplorer showHeading={false} credentials={credentials} connected={connected} canPlay={available} active={onStage && explorerOpen} onEnqueue={enqueueProvider} onSavePlaylist={saveProviderPlaylist} />
         </DialogContent>

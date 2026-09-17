@@ -143,7 +143,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
         {!available && <p className="text-sm text-muted-foreground">Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
       </Card></li>;
     })}</ul>
-    {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="history-inspect-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
+    {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail, "history-inspect-art history-inspect-detail-art")}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Recently played</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}
         {!detail.playable && !detail.libraryItemId && !detail.queueEntryId && <p>Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
         {playbackActions(detail)}<ProgressActions origin={origin} token={token} connected={connected} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={refreshHistory} />

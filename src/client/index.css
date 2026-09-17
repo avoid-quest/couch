@@ -474,7 +474,6 @@ body { min-width: 0; }
 .history-inspect .history-inspect-title { display: flex; flex: 1; min-width: 0; min-height: 44px; height: auto; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; white-space: normal; text-align: left; }
 .history-inspect-title strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .history-inspect-title small { font-size: 11px; color: var(--muted-foreground); overflow-wrap: anywhere; }
-.history-inspect-detail { max-height: 85dvh; overflow-y: auto; }
 .history-inspect-detail-art { width: 100%; height: auto; aspect-ratio: 1.9; }
 .history-inspect-detail-art svg { width: 48px; height: 48px; }
 

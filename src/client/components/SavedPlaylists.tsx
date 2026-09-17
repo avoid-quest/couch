@@ -219,6 +219,6 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   if (inline) return <section className="saved-playlists saved-playlists-inline" aria-label="Saved playlists">{content}</section>;
   return <Dialog open={open} onOpenChange={value => { setOpen(value); setError(null); setNotice(null); setConfirm(null); }}>
     <DialogTrigger asChild><Button variant="outline" className="min-h-11" disabled={!connected}><ListMusic aria-hidden="true" />Saved playlists</Button></DialogTrigger>
-    <DialogContent className="saved-playlists sm:max-w-2xl">{content}</DialogContent>
+    <DialogContent className="saved-playlists">{content}</DialogContent>
   </Dialog>;
 }

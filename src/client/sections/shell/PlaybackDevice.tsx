@@ -129,7 +129,7 @@ function InstallationUpdates() {
   const change = (value: boolean) => { setOpen(value); if (value) device.show(); else device.dismiss(); };
   return <Dialog open={open} onOpenChange={change}>
     <DialogTrigger asChild><Button variant="outline">Update this app</Button></DialogTrigger>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+    <DialogContent>
       <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {credentials ? <UpdatesSettings credentials={credentials} connected showTools={false} /> : <p role="status">Connecting to this installation…</p>}
@@ -195,7 +195,7 @@ export function PlaybackDevice() {
       </PopoverContent>
     </Popover>
     <Dialog open={dialog !== null} onOpenChange={value => { if (!value) close(); }}>
-      <DialogContent className="sm:max-w-xl" showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={event => { if (device.pending) event.preventDefault(); }} onEscapeKeyDown={event => { if (device.pending) event.preventDefault(); }}>
+      <DialogContent showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={event => { if (device.pending) event.preventDefault(); }} onEscapeKeyDown={event => { if (device.pending) event.preventDefault(); }}>
         <DialogHeader><DialogTitle>{dialog === "confirmation" ? "Switch playback device?" : "Another Couch"}</DialogTitle><DialogDescription>{dialog === "confirmation" ? warning === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : warning === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode." : "Enter the LAN address shown on the playback computer, then pair there. A custom domain must point to that LAN."}</DialogDescription></DialogHeader>
         {dialog === "confirmation" ? <DialogFooter><Button variant="outline" onClick={close} disabled={device.pending}>Keep this computer</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></DialogFooter> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
           <div className="space-y-2"><Label htmlFor="another-couch-address">Couch address</Label><Input id="another-couch-address" autoFocus value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} /></div>
@@ -224,5 +224,5 @@ export function LocalSharingPrompt({ credentials, onRemoteControlChange }: { cre
     finally { active.current = false; setPending(false); }
   };
   if (!device || device.mode !== "local" || device.localSetupComplete || !credentials) return null;
-  return <Dialog open><DialogContent className="sm:max-w-xl" showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}><DialogHeader><DialogTitle>Allow remote control?</DialogTitle><DialogDescription>Browsers and other Couch apps on your LAN can pair to control this computer. You can change this later in Settings.</DialogDescription></DialogHeader>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<DialogFooter><Button variant="outline" disabled={pending} onClick={() => void setSharing(false)}>Keep private</Button><Button disabled={pending} onClick={() => void setSharing(true)}>Allow remote control</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open><DialogContent showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}><DialogHeader><DialogTitle>Allow remote control?</DialogTitle><DialogDescription>Browsers and other Couch apps on your LAN can pair to control this computer. You can change this later in Settings.</DialogDescription></DialogHeader>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<DialogFooter><Button variant="outline" disabled={pending} onClick={() => void setSharing(false)}>Keep private</Button><Button disabled={pending} onClick={() => void setSharing(true)}>Allow remote control</Button></DialogFooter></DialogContent></Dialog>;
 }

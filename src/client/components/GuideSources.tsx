@@ -73,7 +73,7 @@ export function GuideSources({ inline = false, request, sources, host, connected
   if (inline) return <section className="space-y-4" aria-label="IPTV sources"><h3 className="text-lg font-medium">IPTV</h3><p className="text-sm text-muted-foreground">Add an M3U channel list and its XMLTV guide.</p>{content}</section>;
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogTrigger asChild><Button variant="outline" data-tv-local-only={host || undefined}><Settings2 aria-hidden="true" />Guide sources</Button></DialogTrigger>
-    <DialogContent className="guide-sources max-h-[85dvh] overflow-y-auto sm:max-w-xl" data-tv-local-only={host || undefined}>
+    <DialogContent className="guide-sources" data-tv-local-only={host || undefined}>
       <DialogHeader><DialogTitle>Guide sources</DialogTitle><DialogDescription>Add a supported M3U channel list and its XMLTV guide. Use feeds you are allowed to watch.</DialogDescription></DialogHeader>
       {content}
     </DialogContent>

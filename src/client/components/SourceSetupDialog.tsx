@@ -14,7 +14,6 @@ export function SourceSetupDialog({ open, onOpenChange, localOnly, source: initi
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
         data-tv-local-only={localOnly || undefined}
         onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}
         onOpenAutoFocus={() => { trigger.current = document.activeElement as HTMLElement; }}

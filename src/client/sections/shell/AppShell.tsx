@@ -291,7 +291,7 @@ function ShellChrome({ children }: PropsWithChildren) {
             {/* Saved provider collections open here: Find stays search-first, and
                 Open gives the collection its own browsable trail. */}
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
-              <DialogContent className="max-w-3xl">
+              <DialogContent className="sm:max-w-3xl">
                 <DialogHeader><DialogTitle>{shell.onlineRequest?.item.title ?? "Saved source"}</DialogTitle><DialogDescription>Browse this saved source.</DialogDescription></DialogHeader>
                 {shell.onlineRequest && <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={shell.playHistory} onEnqueue={shell.enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} onSavePlaylist={shell.saveProviderPlaylist} />}
               </DialogContent>

@@ -51,7 +51,7 @@ export function GuideProgramDialog({ credentials, connected, canPlay, channel, r
 
   const programs = data?.programs ?? [];
   return <Dialog open onOpenChange={open => { if (!open) { onClose(); returnFocus(); } }}>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+    <DialogContent>
       <DialogHeader><DialogTitle>{channel.name} programs</DialogTitle><DialogDescription>Times in {Intl.DateTimeFormat().resolvedOptions().timeZone}. Play starts the live channel. Record schedules a future programme on the configured recording backend.</DialogDescription></DialogHeader>
       <div className="guide-day flex items-center justify-between gap-2">
         <Button variant="outline" size="icon" aria-label="Previous day" disabled={day <= -1} onClick={() => setDay(value => value - 1)}><ChevronLeft /></Button>
