@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, ListMusic, Play, Plus, Save, Trash2, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
+
+const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 
 export function SavedPlaylists({ origin, token, connected, canPlay, version, queueCount, inline = false }: {
   origin: string;
@@ -159,7 +162,11 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         {!loading && !playlists.length && <p className="text-sm text-muted-foreground">Your saved playlists will appear here.</p>}
         <ul ref={listRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Saved playlists" aria-busy={loading}>{playlists.map(item => <li key={item.id}>
           <Button variant="outline" className="h-auto min-h-11 w-full justify-between gap-3 py-3 text-left whitespace-normal" data-playlist-id={item.id} disabled={disabled} onClick={() => select(item.id)}>
-            <span className="min-w-0 break-words">{item.name}</span><span className="shrink-0 text-sm text-muted-foreground">{item.entryCount} {item.entryCount === 1 ? "item" : "items"}</span>
+            <span className="min-w-0 break-words">{item.name}</span>
+            <span className="flex shrink-0 items-center gap-2">
+              {item.source && <Badge variant="secondary">{providerLabels[item.source.provider]}</Badge>}
+              <span className="text-sm text-muted-foreground">{item.entryCount} {item.entryCount === 1 ? "item" : "items"}</span>
+            </span>
           </Button>
         </li>)}</ul>
       </> : playlist && <>

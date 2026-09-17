@@ -5,6 +5,7 @@ export type SavedPlaylist = {
   name: string;
   revision: number;
   updatedAt: number;
+  source: PlaylistSource | null;
   entries: Array<Omit<QueueEntry, "source" | "automaticTitle">>;
 };
 

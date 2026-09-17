@@ -13,7 +13,7 @@ type Options = {
   loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor) => void;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
-type Row = Omit<SavedPlaylist, "entries"> & { entries: string };
+type Row = Omit<SavedPlaylist, "entries" | "source"> & { entries: string; source: string | null };
 
 class PlaylistError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -22,7 +22,7 @@ class PlaylistError extends Error {
 const identifier = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const methods = (allow: string) => Response.json({ error: "Method not allowed." }, { status: 405, headers: { Allow: allow } });
-const columns = "id, name, revision, updatedAt, entries";
+const columns = "id, name, revision, updatedAt, source, entries";
 const sourceProviders = ["youtube", "raiplay", "bandcamp", "streamingcommunity"];
 
 function playlistName(value: unknown) {
@@ -100,9 +100,13 @@ export function capturePlaylistEntries(queue: QueueEntry[]): QueueEntry[] {
   });
 }
 
+function sourceOf(value: string | null): PlaylistSource | null {
+  return value ? JSON.parse(value) as PlaylistSource : null;
+}
+
 function view(row: Row): SavedPlaylist {
   const entries = JSON.parse(row.entries) as QueueEntry[];
-  return { ...row, entries: entries.map(({ source: _source, automaticTitle: _automaticTitle, ...entry }) => entry) };
+  return { ...row, source: sourceOf(row.source), entries: entries.map(({ source: _source, automaticTitle: _automaticTitle, ...entry }) => entry) };
 }
 
 export function createPlaylists({ databasePath, onChange, queue, loadQueue, resolveSource }: Options) {
@@ -111,8 +115,9 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
   db.run("PRAGMA journal_mode = WAL");
   db.run(`CREATE TABLE IF NOT EXISTS saved_playlists (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE,
-    revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, entries TEXT NOT NULL
+    revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, entries TEXT NOT NULL, source TEXT
   )`);
+  if (!db.query<{ name: string }, []>("PRAGMA table_info(saved_playlists)").all().some(column => column.name === "source")) db.run("ALTER TABLE saved_playlists ADD COLUMN source TEXT");
   const get = (id: string) => {
     const row = db.query<Row, [string]>(`SELECT ${columns} FROM saved_playlists WHERE id = ?`).get(id);
     if (!row) throw new PlaylistError("Playlist not found.", 404);
@@ -132,7 +137,8 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
       try {
         if (pathname === "/api/playlists") {
           if (request.method === "GET") {
-            const playlists = db.query<SavedPlaylistSummary, []>("SELECT id, name, revision, updatedAt, json_array_length(entries) AS entryCount FROM saved_playlists ORDER BY name_key, id").all();
+            const playlists = db.query<Omit<Row, "entries"> & { entryCount: number }, []>("SELECT id, name, revision, updatedAt, source, json_array_length(entries) AS entryCount FROM saved_playlists ORDER BY name_key, id").all()
+              .map(({ source, ...summary }): SavedPlaylistSummary => ({ ...summary, source: sourceOf(source) }));
             return Response.json({ playlists });
           }
           if (request.method !== "POST") return methods("GET, POST");
@@ -148,8 +154,8 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
           const row = db.transaction(() => {
             if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM saved_playlists").get()!.count >= 100) throw new PlaylistError("You can save up to 100 playlists.");
             uniqueName(name);
-            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(entries) };
-            db.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?)").run(saved.id, name, name.toLowerCase(), saved.revision, saved.updatedAt, saved.entries);
+            const saved: Row = { id: crypto.randomUUID(), name, revision: 1, updatedAt: Date.now(), entries: JSON.stringify(entries), source: source ? JSON.stringify(source) : null };
+            db.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?, ?)").run(saved.id, name, name.toLowerCase(), saved.revision, saved.updatedAt, saved.entries, saved.source);
             return saved;
           })();
           onChange();
