@@ -1,0 +1,9 @@
+{
+  "stable": null,
+  "preview": {
+    "version": "0.1.5-preview.5",
+    "checkedAt": "2026-09-17T21:00:00.000Z",
+    "format": "deb",
+    "url": "https://cdn.crabnebula.app/asset/01M2RK09SE66GE4VW4TYAA7TGT?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22updatePlatform%22%3A%22linux-x86_64-deb%22%2C%22current%22%3A%220.0.0%22%7D"
+  }
+}
