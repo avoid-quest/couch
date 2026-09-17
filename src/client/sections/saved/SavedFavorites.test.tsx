@@ -141,7 +141,7 @@ test("Saved keeps saved collections together without a separate history destinat
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
   for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toEqual(["For later", "Playlists", "Online and radio"]);
+  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toEqual(["For later", "Lists", "Online and radio"]);
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();
@@ -166,7 +166,7 @@ test("opening a saved collection browses its provider and URL, with Back returni
     const [selected, setSelected] = useState<ProviderItem | null>(null);
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
-      ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} />)
+      ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} />)
       : wrap(<SavedFavorites {...connection} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />);
   }
   await act(async () => root.render(<SavedCollection />));

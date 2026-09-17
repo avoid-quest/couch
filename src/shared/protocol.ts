@@ -1,4 +1,5 @@
-import type { VideoQuality } from "./providers";
+import type { MediaShape } from "./media";
+import type { ProviderId, VideoQuality } from "./providers";
 import type { WatchingProfile } from "./library";
 import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
@@ -71,6 +72,7 @@ export type Action =
   | { type: "enqueueAlbum"; albumId: string; playNow?: boolean }
   | { type: "enqueueProviderPlaylist"; provider: "youtube"; url: string; playNow?: boolean; quality?: VideoQuality }
   | { type: "enqueueProviderAlbum"; provider: "bandcamp"; url: string; playNow?: boolean }
+  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality }
   | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean }
   | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean }

@@ -70,7 +70,7 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
     {connected && catalog && shown.length > 0 && <ul className={rail ? "flex gap-3.5 overflow-x-auto pb-1.5 [scrollbar-width:thin] [&>li]:w-[clamp(200px,22vw,260px)] [&>li]:shrink-0" : "grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(min(100%,15rem),1fr))]"}>
       {shown.map(({ station, programme }) => <li key={station.id}>
         <Card className="catalog-card flex h-full min-w-0 flex-col gap-2 overflow-hidden p-3">
-          <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-2 p-0 text-left" aria-label={`Play now: ${programme?.title ?? station.name}`} disabled={!connected || !canPlay || busy} onClick={() => void play(station)}>
+          <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-2 p-0 text-left" aria-label={`Play: ${programme?.title ?? station.name}`} disabled={!connected || !canPlay || busy} onClick={() => void play(station)}>
             {programme?.artworkUrl || station.logoUrl
               ? <MediaArtwork key={programme?.artworkUrl || station.logoUrl} thumbnail={programme?.artworkUrl || station.logoUrl} title={programme?.title ?? station.name} className="block aspect-video w-full rounded-lg object-cover" />
               : <span className="grid aspect-video w-full place-items-center rounded-lg bg-muted text-primary" aria-hidden="true"><Radio className="size-10" /></span>}
@@ -79,8 +79,8 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
             {programme?.description && !rail && <span className="line-clamp-2 text-sm text-muted-foreground">{programme.description}</span>}
           </Button>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" disabled={!connected || !canPlay || busy} aria-label={`Play now: ${programme?.title ?? station.name}`} onClick={() => void play(station)}><Play aria-hidden="true" />Play now</Button>
-            <Button variant="ghost" size="icon" disabled={!connected || busy} aria-label={`Add to queue: ${station.name}`} onClick={() => void queue(station)}><Plus aria-hidden="true" /></Button>
+            <Button variant="secondary" disabled={!connected || !canPlay || busy} aria-label={`Play: ${programme?.title ?? station.name}`} onClick={() => void play(station)}><Play aria-hidden="true" />Play</Button>
+            <Button variant="ghost" size="icon" disabled={!connected || busy} aria-label={`Up next: ${station.name}`} onClick={() => void queue(station)}><Plus aria-hidden="true" /></Button>
           </div>
         </Card>
       </li>)}

@@ -4,6 +4,9 @@ import type { Action, ClientMessage, QueueEntry } from "../shared/protocol";
 const id = (value: unknown): value is string => typeof value === "string" && /^[\w-]{1,80}$/.test(value);
 const number = (value: unknown, max: number): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "streamingcommunity"]);
+const mediaShapes = new Set(["atom", "playlist"]);
+const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
 const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
   && (value.fromStart === undefined || value.playNow === true && typeof value.fromStart === "boolean");
 const httpUrl = (value: unknown): value is string => {
@@ -32,8 +35,12 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
     case "enqueueProviderPlaylist": return value.provider === "youtube" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean")
-      && (value.quality === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value.quality)));
+      && videoQuality(value.quality);
     case "enqueueProviderAlbum": return value.provider === "bandcamp" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
+      && (value.playNow === undefined || typeof value.playNow === "boolean") && videoQuality(value.quality)
+      && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
+      && (value.thumbnail === undefined || httpUrl(value.thumbnail));
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail))
@@ -76,6 +83,12 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
   if (value.action.type === "enqueueProviderAlbum") {
     const { provider, url, playNow } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "enqueueProviderAlbum", provider, url, ...(playNow === undefined ? {} : { playNow }) } };
+  }
+  if (value.action.type === "enqueueProvider") {
+    const { provider, url, shape, title, thumbnail, playNow, quality } = value.action;
+    return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
+      ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
+      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;

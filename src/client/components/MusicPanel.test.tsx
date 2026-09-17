@@ -56,7 +56,7 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} album return retain
   await flush(); await click("Next");
   scroller.scrollTop = 650; scroller.scrollLeft = 12;
   await click("Browse Three tones");
-  await click("Play album on TV"); await click("Add album to queue");
+  await click("Play"); await click("Up next");
   expect(queued).toEqual([["tones", true], ["tones", false]]);
   await render(false); await render(true);
   expect(document.querySelector(".music-album-detail")).not.toBeNull();

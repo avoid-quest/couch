@@ -65,7 +65,7 @@ for (const tv of [false, true]) test(`${tv ? "TV" : "phone"} show return restore
   await click("Details for First episode");
   const dialog = document.querySelector('[role="dialog"]')!;
   expect(dialog.textContent).toContain("Episode plot");
-  await click("Play First episode", dialog); await click("Add First episode to queue", dialog);
+  await click("Play First episode", dialog); await click("Up next: First episode", dialog);
   expect(queued).toEqual([["episode", { playNow: true }], ["episode", undefined]]);
   await click("Close", dialog);
   expect(document.querySelector<HTMLInputElement>("input")!.value).toBe("First");
@@ -90,7 +90,7 @@ test("movie inspection keeps the searched list and returns focus after play and 
   await render("movies"); await search("Evening");
   await click("Details for Evening movie");
   const dialog = document.querySelector('[role="dialog"]')!;
-  await click("Play Evening movie", dialog); await click("Add Evening movie to queue", dialog);
+  await click("Play Evening movie", dialog); await click("Up next: Evening movie", dialog);
   await click("Close", dialog);
   expect(queued).toEqual([["movie", { playNow: true }], ["movie", undefined]]);
   expect(paths.at(-1)).toBe("/api/library/items?q=Evening&offset=0&limit=24&videoType=movie");

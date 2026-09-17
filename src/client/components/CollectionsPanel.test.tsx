@@ -60,11 +60,11 @@ test("broadcasts retain device-local selection and preserve draft revision on a 
 
 test("load sends the displayed digest and revision then requires review of a rejected preview", async () => {
   await click("Film night1 movies");
-  await click("Add preview to queue");
+  await click("Up next");
   expect(writes[0]).toEqual({ revision: 1, digest: "initial", mode: "append" });
   preview = { ...preview, items: [{ ...preview.items[0]!, available: false }], digest: "offline" };
   await render(2);
   expect(button("Play preview").disabled).toBeTrue();
-  expect(button("Add preview to queue").disabled).toBeTrue();
+  expect(button("Up next").disabled).toBeTrue();
   expect(document.body.textContent).toContain("0 available · 1 missing");
 });

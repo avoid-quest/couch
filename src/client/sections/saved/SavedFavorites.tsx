@@ -131,7 +131,11 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="h-[54px] w-[46px] rounded-md" />
         <div className="grid min-w-[100px] flex-1 gap-1.5 [overflow-wrap:anywhere]"><strong className="text-sm font-semibold">{itemTitle}</strong><small className="text-xs text-muted-foreground">{detail}</small></div>
         <div className="flex min-h-11 flex-wrap gap-2">
-          {browse && favorite.kind === "provider" ? <Button className="min-h-11" disabled={!connected || pending} aria-label={`Open ${itemTitle}`} onClick={() => onOpenProvider(favorite.item)}><ArrowUpRight aria-hidden="true" />Open</Button> : <>
+          {favorite.kind === "provider" ? <>
+            <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}><Play aria-hidden="true" />Play</Button>
+            <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}><Plus aria-hidden="true" />Up next</Button>
+            {browse && <Button className="min-h-11" disabled={!connected || pending} aria-label={`Open ${itemTitle}`} onClick={() => onOpenProvider(favorite.item)}><ArrowUpRight aria-hidden="true" />Open</Button>}
+          </> : <>
             <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}><Play aria-hidden="true" />Play</Button>
             <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}><Plus aria-hidden="true" />Up next</Button>
           </>}

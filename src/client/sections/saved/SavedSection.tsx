@@ -12,7 +12,7 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   active: boolean;
   onBrowse: (section: string) => void;
 }) {
-  // SavedPlaylists stays at the client root: the Now section's queue imports
+  // SavedPlaylists stays at the client root: the Now section's Up next imports
   // it too, so moving it belongs to the cleanup layer (flagged on #362).
   return <section className="min-w-0 pb-8" aria-label="Saved media">
     {active && <div className="space-y-10">

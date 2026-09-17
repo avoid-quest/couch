@@ -14,7 +14,7 @@ async function renderLibrary(connected = true) {
   const { MediaLibrary } = await import("./MediaLibrary");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} onEnqueuePlaylist={async () => true} onEnqueueAlbum={async () => true} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><MediaLibrary origin="http://localhost" token="paired" connected={connected} canPlay={true} defaultQuality="auto" onPlayHistory={async (...args) => { played.push(args); return true; }} onBrowse={section => browsed.push(section)} onEnqueue={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
 }
 beforeEach(async () => {
   requests.length = 0; browsed.length = 0; played.length = 0;
@@ -109,7 +109,7 @@ test("recent history failure leaves saved items usable and recovers when reopene
   }) as typeof fetch);
   await renderLibrary();
   expect(document.body.textContent).toContain("History unavailable");
-  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(node => node.textContent?.startsWith("Saved"))!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(node => node.textContent?.startsWith("Kept"))!.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));
   expect(button("Play on TV")).toBeDefined();
   request.mockImplementation((async (_input: RequestInfo | URL) => Response.json({ items: [recent], favorites: [video] })) as typeof fetch);
   await act(async () => button("Browse").dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, button: 0 }) as unknown as Event));

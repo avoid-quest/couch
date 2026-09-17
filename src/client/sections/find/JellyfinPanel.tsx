@@ -101,7 +101,7 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
           </div>
           <div className="flex flex-wrap gap-2">
             <Button aria-label={`${item.resumePosition > 0 ? "Resume" : "Play"} ${item.title} on TV`} disabled={!connected || !canPlay || adding !== null || loading} onClick={() => void enqueue(item.id, item.title, { playNow: true })}><Play aria-hidden="true" />{adding?.id === item.id && adding.playNow ? "Starting…" : item.resumePosition > 0 ? "Resume" : "Play"}</Button>
-            <Button variant="secondary" className="secondary-button" aria-label={`Add ${item.title} to queue`} disabled={!connected || adding !== null || loading} onClick={() => void enqueue(item.id, item.title)}><Plus aria-hidden="true" />{adding?.id === item.id && !adding.playNow ? "Adding…" : "Queue"}</Button>
+            <Button variant="secondary" className="secondary-button" aria-label={`Up next: ${item.title}`} disabled={!connected || adding !== null || loading} onClick={() => void enqueue(item.id, item.title)}><Plus aria-hidden="true" />{adding?.id === item.id && !adding.playNow ? "Adding…" : "Up next"}</Button>
             {item.resumePosition > 0 && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!connected || !canPlay || adding !== null || loading} onClick={() => void enqueue(item.id, item.title, { playNow: true, fromStart: true })}><RotateCcw aria-hidden="true" />From start</Button>}
           </div>
         </Card>

@@ -17,7 +17,7 @@
     "package:prepare": "bun scripts/package-prepare.ts",
     "package:build": "bash scripts/package-build.sh",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --isolate",
+    "test": "bun test --parallel=4",
     "test:linux": "bun scripts/linux-test.ts",
     "setup:media": "bun scripts/setup-media.ts",
     "preview:linux": "bun scripts/preview.ts",

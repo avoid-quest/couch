@@ -13,6 +13,7 @@ import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as youtubeModule from "./providers/youtube";
 import * as bandcampModule from "./providers/bandcamp";
+import * as providersModule from "./providers";
 import * as webMediaModule from "./web-media";
 import type { ProviderPage } from "../shared/providers";
 
@@ -1395,6 +1396,18 @@ test("YouTube playlist queue is atomic, ordered and applies the selected quality
     expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
     expect(hub.session.state.queue).toHaveLength(2);
   } finally { playlist.mockRestore(); }
+});
+
+test("saved provider references queue atoms and expand lists without exposing the resolver", async () => {
+  const page: ProviderPage = { title: "Channel", items: ["abcdefghijk"].map(id => ({ id, title: "Broadcast", kind: "media", provider: "twitch", url: `https://www.twitch.tv/videos/${id}` })) };
+  const list = spyOn(providersModule, "loadProviderList").mockResolvedValue(page);
+  try {
+    const { hub } = fixture(); hub.session.observe(idle);
+    const remote = new Peer(hub, await pair(hub)); await remote.ready();
+    await remote.command({ type: "enqueueProvider", provider: "twitch", url: "https://www.twitch.tv/evening", shape: "playlist", title: "Evening channel" });
+    expect(hub.session.state.queue.map(({ title, source }) => [title, source])).toEqual([["Broadcast", "web:https://www.twitch.tv/videos/abcdefghijk"]]);
+    expect(list.mock.calls[0]).toEqual(["twitch", "https://www.twitch.tv/evening", expect.any(AbortSignal)]);
+  } finally { list.mockRestore(); }
 });
 
 test("a later Stop cancels playlist play intent without losing resolved queue entries", async () => {

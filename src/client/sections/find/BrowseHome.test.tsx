@@ -83,7 +83,7 @@ test("library artwork cards open details without playback and retain actual libr
   await act(async () => button("Details for A library film").click());
   expect(played).toEqual([]);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("TV folders");
-  await act(async () => button("Add to queue: A library film").click());
+  await act(async () => button("Up next: A library film").click());
   expect(added).toEqual([{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }]);
   expect(played).toEqual([]);
   await act(async () => button("Save A library film for later").click());
@@ -91,7 +91,7 @@ test("library artwork cards open details without playback and retain actual libr
   expect(saved?.[1]?.method).toBe("POST");
   expect(JSON.parse(String(saved?.[1]?.body))).toEqual({ reference: { kind: "library", id: "next" } });
   expect(played).toEqual([]);
-  await act(async () => button("Play now A library film").click());
+  await act(async () => button("Play A library film").click());
   expect(played).toEqual([[{ mediaId: "library:next", libraryItemId: "next", title: "A library film", position: 0, duration: 120, watched: false, lastPlayedAt: null }, { fromStart: false }]]);
 });
 

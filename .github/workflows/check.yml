@@ -34,9 +34,9 @@ jobs:
           fi
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      # Isolate the real clock from process-wide mocks in the other tests.
-      - run: bun test ./tests/linux/iptv-clock.test.ts
-      - run: bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
+      # The real clock stays in its own process away from process-wide mocks.
+      - run: bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
+      - run: bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
       # Tauri's build script requires the generated sidecar for native tests.
       - run: bun run build
       - name: Set up Rust

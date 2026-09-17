@@ -120,7 +120,9 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
   return async (url: string, signal?: AbortSignal): Promise<ProviderPage> => {
     signal?.throwIfAborted();
     const source = target(url);
-    if (!isYouTubePlaylistUrl(source.url)) throw new ProviderError("Choose a YouTube playlist link.", 400);
+    if (source.kind === "channel") source.url = `${source.url.replace(/\/$/, "")}/videos`;
+    const channelSection = source.kind === "collection" && /\/(?:videos|shorts|streams)$/.test(source.url);
+    if (!isYouTubePlaylistUrl(source.url) && !channelSection) throw new ProviderError("Choose a YouTube playlist or channel list link.", 400);
     const cancellation = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]);
     const output = await run(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", "1:501", "--", source.url], { signal: cancellation });
     cancellation.throwIfAborted();
@@ -128,12 +130,17 @@ export function createYouTubePlaylistLoader(run: typeof runYtDlp = runYtDlp) {
     try { info = JSON.parse(output); } catch { throw new ProviderError("YouTube returned invalid playlist information."); }
     if (!object(info) || info._type !== "playlist" || !Array.isArray(info.entries)) throw new ProviderError("YouTube returned invalid playlist information.");
     if (info.entries.length > 500 || typeof info.playlist_count === "number" && info.playlist_count > 500) throw new ProviderError("This playlist has more than 500 videos. Add individual videos instead.", 400);
-    if (info.playlist_count != null && info.playlist_count !== info.entries.length) throw new ProviderError("YouTube returned an incomplete playlist. Try again or add individual videos.");
-    if (info.webpage_url !== undefined && (typeof info.webpage_url !== "string" || target(info.webpage_url).url !== source.url)) throw new ProviderError("YouTube returned a different playlist.");
+    if (isYouTubePlaylistUrl(source.url) && info.playlist_count != null && info.playlist_count !== info.entries.length) throw new ProviderError("YouTube returned an incomplete playlist. Try again or add individual videos.");
+    if (info.webpage_url !== undefined) {
+      if (typeof info.webpage_url !== "string") throw new ProviderError("YouTube returned a different playlist.");
+      const returned = target(info.webpage_url).url;
+      const sameChannel = channelSection && returned.replace(/\/(?:videos|shorts|streams)$/, "") === source.url.replace(/\/(?:videos|shorts|streams)$/, "");
+      if (returned !== source.url && !sameChannel) throw new ProviderError("YouTube returned a different playlist.");
+    }
     const items = info.entries.map(item);
     if (!items.length) throw new ProviderError("This playlist is empty.");
     if (items.some(entry => !entry || entry.kind !== "media")) throw new ProviderError("Some videos in this playlist are unavailable. Add the available videos individually.");
-    return { title: label(info.title) ?? "YouTube playlist", items: items as ProviderItem[] };
+    return { title: label(info.title) ?? (channelSection ? "YouTube channel" : "YouTube playlist"), items: items as ProviderItem[] };
   };
 }
 

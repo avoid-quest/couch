@@ -93,7 +93,7 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
           </div>
           <div className="guide-channel-actions flex flex-wrap gap-2 [&>button]:flex-auto max-md:[&>button]:flex-auto md:[&>button]:flex-none">
             <Button disabled={!connected || !canPlay} aria-label={`Play ${channel.name}`} onClick={() => void enqueue(channel, true)}><Play aria-hidden="true" />Play</Button>
-            <Button variant="secondary" disabled={!connected} aria-label={`Queue ${channel.name}`} onClick={() => void enqueue(channel, false)}><Plus aria-hidden="true" />Queue</Button>
+            <Button variant="secondary" disabled={!connected} aria-label={`Up next: ${channel.name}`} onClick={() => void enqueue(channel, false)}><Plus aria-hidden="true" />Up next</Button>
             <Button variant="outline" onClick={event => { returnFocus.current = event.currentTarget; setSelected(channel); }}><ListVideo aria-hidden="true" />Programs</Button>
             {liveEdge.data?.liveEdge === "reload" && liveChannelId === channel.id && currentSource === `iptv:${channel.id}` && <Button variant="outline" disabled={!connected || !canPlay} onClick={onGoLive} title="Return to live playback. Slow feeds may pause to buffer."><Radio aria-hidden="true" />Go live</Button>}
           </div>

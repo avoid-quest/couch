@@ -1,3 +1,4 @@
+import type { MediaShape } from "./media";
 import { isStreamingCommunityHost } from "./streamingcommunity";
 
 export type ProviderId = "youtube" | "twitch" | "raiplay" | "bandcamp" | "streamingcommunity";
@@ -18,6 +19,9 @@ export type ProviderItem = {
 
 export type ProviderPage = { items: ProviderItem[]; nextCursor?: string; title?: string };
 export type BrowseRequest = { query?: string; url?: string; cursor?: string };
+
+export const providerShape = (item: Pick<ProviderItem, "kind">): MediaShape =>
+  item.kind === "media" ? "atom" : "playlist";
 // Lightweight title refresh from StreamingCommunity's preview endpoint. The
 // caller keeps the item's own name and link; the site's preview omits both.
 export type StreamingCommunityPreview = {

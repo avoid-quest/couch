@@ -180,10 +180,18 @@ test("playlist loader resolves every entry in order with a 500 item bound", asyn
   expect(args).toEqual(["--use-extractors", "youtube.*,end", "--flat-playlist", "--dump-single-json", "--playlist-items", "1:501", "--", playlist]);
 });
 
+test("channel video sections queue as a bounded list", async () => {
+  const channel = "https://www.youtube.com/@NASA/videos";
+  const load = createYouTubePlaylistLoader(async () => JSON.stringify({ _type: "playlist", entries: [video] }));
+  const page = await load(channel);
+  expect(page.title).toBe("YouTube channel");
+  expect(page.items).toHaveLength(1);
+});
+
 test("playlist loader rejects nonplaylists, partial or unavailable entries without returning a partial queue", async () => {
   let calls = 0;
   const load = createYouTubePlaylistLoader(async () => { calls++; return "{}"; });
-  for (const url of [video.url, "https://www.youtube.com/@NASA/videos", "https://example.org/playlist?list=PL1234567890"]) await expect(load(url)).rejects.toThrow();
+  for (const url of [video.url, "https://example.org/playlist?list=PL1234567890"]) await expect(load(url)).rejects.toThrow();
   expect(calls).toBe(0);
   for (const metadata of [
     { _type: "playlist", entries: [] },

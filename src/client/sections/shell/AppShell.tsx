@@ -1,10 +1,9 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, createContext, useContext, useEffect, useRef, useState, type ErrorInfo, type PropsWithChildren, type ReactNode } from "react";
-import type { ProviderItem } from "../../../shared/providers";
+import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/components/HistoryPanel";
 import type { Action } from "../../../shared/protocol";
-import type { PlaylistSource } from "../../../shared/playlists";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { DigitalClock } from "@/components/DigitalClock";
 import { Icon } from "@/components/Icon";
@@ -115,21 +114,7 @@ function useShellValue() {
   });
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
-    run({ type: "enqueueWeb", entryId: createId(), url: item.url, title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
-  const saveProviderPlaylist = async (provider: PlaylistSource["provider"], url: string) => {
-    if (!credentials) throw new Error("Could not save the playlist. Check the TV connection.");
-    const response = await fetch(`${credentials.origin}/api/playlists`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ source: { provider, url } }),
-      signal: AbortSignal.timeout(90_000),
-    }).catch(() => { throw new Error("Could not save the playlist. Check the TV connection."); });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error || "Could not save the playlist.");
-    }
-    return true;
-  };
+    run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
   const enqueueRadio = (station: RadioStation, playNow: boolean) => {
     const result = run(station.sourceId
       ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
@@ -192,7 +177,7 @@ function useShellValue() {
     ...gate, credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, recentRadio,
     changeSection, browseSection, back, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
-    enqueueProvider, enqueueRadio, enqueueCatalog, saveProviderPlaylist, playHistory,
+    enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
     closeOnlineRequest: () => setOnlineRequest(null),
     sectionUrl: (name: string) => name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name),
@@ -293,7 +278,7 @@ function ShellChrome({ children }: PropsWithChildren) {
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
               <DialogContent className="sm:max-w-3xl">
                 <DialogHeader><DialogTitle>{shell.onlineRequest?.item.title ?? "Saved source"}</DialogTitle><DialogDescription>Browse this saved source.</DialogDescription></DialogHeader>
-                {shell.onlineRequest && <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={shell.playHistory} onEnqueue={shell.enqueueProvider} onEnqueuePlaylist={(url, playNow, quality) => run({ type: "enqueueProviderPlaylist", provider: "youtube", url, playNow, ...(quality ? { quality } : {}) })} onEnqueueAlbum={(provider, url, playNow) => run({ type: "enqueueProviderAlbum", provider, url, playNow })} onSavePlaylist={shell.saveProviderPlaylist} />}
+                {shell.onlineRequest && <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={shell.playHistory} onEnqueue={shell.enqueueProvider} />}
               </DialogContent>
             </Dialog>
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>

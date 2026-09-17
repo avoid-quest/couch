@@ -6,14 +6,14 @@ needed. Install the pinned Bun dependencies once per lockfile change.
 ```sh
 bun install --frozen-lockfile
 bun run typecheck
-bun test ./tests/linux/iptv-clock.test.ts
-bun test --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
+bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
+bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
 bun run build
 ```
 
 The two test commands keep the real-clock test in a separate Bun process from
 tests that mock process-wide clocks. `bun run check` currently runs typechecking
-and plain `bun test`; use the commands above for the full suite with clock isolation.
+and the parallel Bun suite; use the commands above for the full suite with clock isolation.
 For native changes, run these after `bun run build` generates Tauri's sidecar,
 with the platform's native build dependencies installed:
 
