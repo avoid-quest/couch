@@ -1,5 +1,14 @@
 # couch
 
+## 0.1.5-preview.6
+
+### Patch Changes
+
+- [`ebcc334`](https://github.com/avoid-quest/couch/commit/ebcc3342caefe7c03f0dad0acd7808052979a34b) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Let the TV host manage every admin settings page: Connections, Sound,
+  Bluetooth, Display, TV appearance, Advanced, General, and Updates checked only
+  for the `"administrator"` authority and ignored the TV's own `"host"` authority,
+  so the TV saw "An administrator can manage..." instead of the management UI.
+
 ## 0.1.5-preview.5
 
 ### Patch Changes
