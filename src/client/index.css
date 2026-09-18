@@ -375,7 +375,7 @@ body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset
 
 /* couch-shell.css */
 /* The accepted TV rail and phone bottom navigation share the same destinations. */
-.couch-shell { --shell-header: 72px; --shell-rail: 195px; --shell-footer: 74px; --shell-gutter: 42px; }
+.couch-shell { --shell-header: 72px; --shell-rail: 195px; --shell-footer: 74px; --shell-gutter: 42px; container: couch-shell / inline-size; }
 .couch-shell.remote-shell { max-width: 1440px; padding: 0; margin: auto; }
 .couch-shell .app-header { position: sticky; top: 0; z-index: 20; background: var(--background); min-height: var(--shell-header); padding: 12px var(--shell-gutter); gap: 18px; border-bottom: 1px solid var(--border); }
 .couch-shell .brand { flex-shrink: 0; font-size: 26px; font-weight: 750; letter-spacing: -1.8px; gap: 4px; }
@@ -417,6 +417,18 @@ body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset
 .couch-shell.tv-shell .primary-nav [data-source] { font-size: 18px; }
 .couch-shell.tv-shell .pair-shortcut { font-size: 14px; }
 .couch-shell.tv-shell .media-browser .section-heading { padding-inline: 0; }
+/* Scaled interfaces still lay out in logical pixels, so shell breakpoints must
+   query the shell instead of the physical viewport. */
+@container couch-shell (max-width: 52rem) {
+  .couch-shell.tv-shell .header-status > button { min-width: 0; max-width: min(38cqi, 320px); }
+  .couch-shell.tv-shell .pair-shortcut { display: none; }
+}
+.settings-nav-rail { display: none; }
+@container couch-shell (min-width: 64rem) {
+  .settings-grid { grid-template-columns: 11rem minmax(0, 1fr); gap: 2rem; }
+  .settings-nav-select { display: none; }
+  .settings-nav-rail { position: sticky; top: 1.5rem; display: grid; gap: .25rem; }
+}
 @media (max-width: 959px) {
   .couch-shell.remote-shell { --shell-header: 64px; --shell-gutter: 20px; --shell-footer: 72px; --shell-nav: calc(74px + env(safe-area-inset-bottom)); max-width: none; }
   .couch-shell.remote-shell .app-header { position: sticky; min-height: var(--shell-header); padding: 10px 20px; gap: 12px; }
