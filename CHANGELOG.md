@@ -1,5 +1,11 @@
 # couch
 
+## 0.1.5-preview.7
+
+### Patch Changes
+
+- [#390](https://github.com/avoid-quest/couch/pull/390) [`ba728d3`](https://github.com/avoid-quest/couch/commit/ba728d3984d23aed910477243ce897fa0e6e663a) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Query the Couch shell's logical size for settings navigation and oversized TV headers, and keep a remote's device name when a stale pairing must be replaced.
+
 ## 0.1.5-preview.6
 
 ### Patch Changes
