@@ -53,7 +53,7 @@ export function TvNameSettings({ credentials, connected, canWrite, host }: Props
         </form>
       ) : (
         <div className="space-y-1">
-          <p className="font-medium">TV name</p>
+          <h3>TV name</h3>
           <p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
           <p className="text-muted-foreground">{credentials ? "An administrator can change this TV's name." : host ? "Pair this browser to control the TV." : "An administrator can change this TV's name."}</p>
         </div>

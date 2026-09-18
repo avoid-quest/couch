@@ -37,7 +37,7 @@ export function StartupSettings({ credentials, connected }: Props) {
 
   return (
     <div className="space-y-3">
-      <p className="font-medium">Automatic startup</p>
+      <h3>Automatic startup</h3>
       <p className="text-muted-foreground">Start Couch when the TV computer turns on, without a login prompt.</p>
       {state && (
         <>

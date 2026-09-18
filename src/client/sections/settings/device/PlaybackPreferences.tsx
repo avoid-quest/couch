@@ -42,7 +42,7 @@ export function PlaybackPreferences({ profile, preferences, connected, onCommand
 
   return <form className="grid gap-4" onSubmit={event => void save(event)}>
     <p className="text-sm text-muted-foreground">Applies to new playback.</p>
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
       <div className="grid gap-2">
         <Label htmlFor="preferred-audio-language">Preferred audio language</Label>
         <Select value={values.audioLanguage || "automatic"} disabled={!connected || pending} onValueChange={value => change({ audioLanguage: value === "automatic" ? "" : value })}>

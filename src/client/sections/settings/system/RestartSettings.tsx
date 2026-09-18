@@ -29,7 +29,7 @@ export function RestartSettings({ credentials, connected }: { credentials: { ori
     finally { operation.current = null; if (!controller.signal.aborted) setPending(false); }
   };
   return <div className="space-y-3">
-    <p className="font-medium">Restart Couch</p>
+    <h3>Restart Couch</h3>
     <p className="text-muted-foreground">Save viewing progress and restart the TV application. Paired remotes reconnect automatically. Playback stays stopped.</p>
     <Button variant="outline" className="min-h-11" disabled={!connected || pending} onClick={() => setConfirm(true)}>{pending ? "Restarting…" : "Restart Couch"}</Button>
     {notice && <p role="status">{notice}</p>}

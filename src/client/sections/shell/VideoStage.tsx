@@ -3,6 +3,7 @@ import { isNativeHost } from "@/session/native-context";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Music2 } from "lucide-react";
 import { Icon } from "@/components/Icon";
+import { useOptionalShell } from "@/sections/shell/shell-context";
 
 const nativeHost = isNativeHost();
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -16,6 +17,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
 }) {
   const element = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const controlsUp = useOptionalShell()?.tv.controlsVisible ?? false;
   useEffect(() => {
     if (!nativeHost || !element.current) return;
     let frame = 0;
@@ -53,9 +55,9 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
   return (
     <div ref={element} className={`video-stage${nativeHost && active && !audioOnly ? " has-video" : ""}${active && audioOnly ? " audio-stage" : ""}`} aria-label="TV playback">
       {active && audioOnly && !error ? (
-        <div className="audio-stage-caption">
-          <div className={`audio-stage-artwork${artwork ? "" : " without-artwork"}`} aria-hidden="true">{artwork || <Music2 />}</div>
-          <div className="audio-stage-copy"><p className="eyebrow">Listening now</p><h1>{title}</h1>{subtitle && <p className="audio-stage-track" role="status">{subtitle}</p>}</div>
+        <div className="audio-stage-caption flex h-full w-full flex-nowrap items-center justify-center gap-16 px-[6vw]">
+          <div className={`audio-stage-artwork h-[75%] max-h-[720px] w-auto shrink-0${artwork ? "" : " without-artwork"}`} aria-hidden="true">{artwork || <Music2 />}</div>
+          {!controlsUp && <div className="audio-stage-copy min-w-0 flex-1"><p className="eyebrow">Listening now</p><h1>{title}</h1>{subtitle && <p className="audio-stage-track" role="status">{subtitle}</p>}</div>}
         </div>
       ) : (!active || error) && (
         <div className="stage-caption">
