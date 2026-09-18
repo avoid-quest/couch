@@ -7,10 +7,10 @@
     "bytes": 133291198
   },
   "preview": {
-    "version": "0.1.2",
+    "version": "0.1.5-preview.7",
     "format": "deb",
-    "checkedAt": "2026-09-15T20:27:18.407Z",
-    "url": "https://cdn.crabnebula.app/asset/01M2KBAQ10VADAYKM5MQV0NY1N",
-    "bytes": 133291198
+    "checkedAt": "2026-09-18T04:06:28.473Z",
+    "url": "https://cdn.crabnebula.app/asset/01M2SASGMBNKRFAA8JKFZ4H9E7?from=%7B%22channel%22%3A%22preview%22%2C%22orgSlug%22%3A%22avoid-quest%22%2C%22appSlug%22%3A%22couch%22%2C%22filename%22%3A%22Couch_0.1.5-preview.7_amd64.deb%22%7D",
+    "bytes": 133411076
   }
 }
