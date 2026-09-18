@@ -17,6 +17,7 @@ import { useVideoQualityPreference } from "../video-quality";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
+const remoteNameKey = "couch.remote-name";
 const nativeHost = isNativeHost();
 
 function storedCredentials(): Credentials | null {
@@ -29,6 +30,10 @@ function storedCredentials(): Credentials | null {
   } catch {
     return null;
   }
+}
+
+function storedRemoteName() {
+  try { return localStorage.getItem(remoteNameKey) || "My remote"; } catch { return "My remote"; }
 }
 
 export function errorText(error: unknown) {
@@ -77,13 +82,14 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [booting, setBooting] = useState(nativeHost);
   const [error, setError] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
-  const [remoteName, setRemoteName] = useState("My remote");
+  const [remoteName, setRemoteName] = useState(storedRemoteName);
   const [pairing, setPairing] = useState(false);
   const [remoteControlEnabled, setRemoteControlEnabled] = useState(false);
   const backHandler = useRef<() => void>(() => {});
   const videoQualityPreference = useVideoQualityPreference();
 
   useEffect(() => { if (!nativeHost && pairingCodeFromHash(location.hash)) history.replaceState(history.state, "", location.pathname + location.search); }, []);
+  useEffect(() => { try { localStorage.setItem(remoteNameKey, remoteName); } catch { /* Pairing still works without remembering the name. */ } }, [remoteName]);
 
   function handleNavigation(key: NavigationKey) {
     if (!nativeHost) return;

@@ -27,7 +27,7 @@ export function SettingsNav({ active }: Props) {
   const current = sourcePage ? "sources" : active;
   return <>
     <Select value={current} onValueChange={id => { const page = settingsPages[id as SettingsPage]; if (page) void navigate({ to: page.path }); }}>
-      <SelectTrigger aria-label="Settings page" className="mb-6 w-full lg:hidden">
+      <SelectTrigger aria-label="Settings page" className="settings-nav-select mb-6 w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -39,7 +39,7 @@ export function SettingsNav({ active }: Props) {
         ))}
       </SelectContent>
     </Select>
-    <nav aria-label="Settings pages" className="hidden max-w-44 min-w-0 self-start lg:sticky lg:top-6 lg:grid lg:gap-1">
+    <nav aria-label="Settings pages" className="settings-nav-rail max-w-44 min-w-0 self-start">
       {groups.map(group => (
         <div key={group.label} className="border-b border-border pb-1 last:border-0">
           <p aria-hidden="true" className="px-3 pt-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground first:pt-0">{group.label}</p>
