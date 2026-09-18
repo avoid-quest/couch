@@ -50,7 +50,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} />;
   const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
-  return <div className={cn("player-controls space-y-6", session && "session-playback")}>
+  return <div className={cn("player-controls space-y-6", session && "session-playback", session && nativeHost && "bg-transparent! p-0! sm:p-0!")}>
     {!session && player && player.status !== "playing" && <div className="now-heading">
       <Badge variant="secondary" className="playback-status">{state?.radioRetry && player.status === "loading" ? "Reconnecting" : playbackLabels[player.status]}</Badge>
     </div>}
