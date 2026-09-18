@@ -8,6 +8,8 @@ import { MediaArtwork } from "./MediaArtwork";
 import { Icon } from "./Icon";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { playbackCapabilities, PlaybackTimeline, PlaybackTransport, PlaybackVolume } from "./PlaybackTransport";
+import { cn } from "cn";
+import { useOptionalShell } from "@/sections/shell/shell-context";
 
 const playbackLabels: Record<PlayerState["status"], string> = {
   unavailable: "No player", idle: "Ready", loading: "Loading…", playing: "Playing",
@@ -44,25 +46,36 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
   const programme = connected && radio && state?.radioProgramme?.playbackId === player?.playbackId ? state?.radioProgramme : null;
   const artwork = programme?.artworkUrl || current?.thumbnail;
   const session = presentation === "session";
+  const { nativeHost } = useOptionalShell() ?? { nativeHost: false };
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} />;
   const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
-  return <div className={`player-controls${session ? " session-playback" : ""}`}>
-    {!session && <div className="now-heading">
-      <p className="eyebrow">Now playing</p>
-      <Badge variant="secondary" className="playback-status">{state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</Badge>
+  return <div className={cn("player-controls space-y-6", session && "session-playback")}>
+    {!session && player && player.status !== "playing" && <div className="now-heading">
+      <Badge variant="secondary" className="playback-status">{state?.radioRetry && player.status === "loading" ? "Reconnecting" : playbackLabels[player.status]}</Badge>
     </div>}
-    {session && hasMedia && (current.artworkId || artwork) && <div className={`session-current-art${radio ? " session-radio-art" : ""}`}>{current.artworkId
-      ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} video={!radio} />
-      : <MediaArtwork key={artwork} thumbnail={artwork} title={current.title} />}</div>}
-    <h1 className="media-title" title={current?.title}>{current?.title || (session ? "What would you like to play?" : "Nothing playing")}</h1>
-    <p className="source-label">{current ? <>{sourceLabel(current.source)}{session && <> · <span className="playback-status">{!connected ? "Reconnecting" : state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</span>{current.live && " · LIVE"}</>}</> : !connected ? "Reconnecting to your TV. You can still browse." : player?.status === "unavailable" ? "Your TV player is offline. Browse now and play when it reconnects." : "Search your sources, pick something saved, or keep watching."}</p>
-    {current && state?.playedBy && <p className="source-label">Started from {state.playedBy.name}</p>}
-    {programme && <figure className="radio-programme">
-      {!session && programme.artworkUrl && <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} />}
-      <figcaption>Programme: {programme.title}{programme.description && <p className="radio-programme-description">{programme.description}</p>}<small>{programme.programmeUrl ? <a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme on radio.avoid.quest</a> : "via radio.avoid.quest"}</small></figcaption>
-    </figure>}
-    {radio && player?.nowPlaying && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
+    {session && hasMedia && (current.artworkId || artwork) ? (
+      <div className="flex flex-col items-start gap-8 sm:flex-row sm:items-center">
+        <div className={cn("aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-muted sm:w-[38%]", radio && "session-radio-art")}>{current.artworkId
+          ? <AuthArtwork className="size-full! rounded-none" origin={credentials.origin} token={credentials.token} id={current.artworkId} video={!radio} />
+          : <MediaArtwork key={artwork} thumbnail={artwork} title={current.title} />}</div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <h1 className="media-title" title={current?.title}>{current.title}</h1>
+          <p className="source-label">{sourceLabel(current.source)} · <span className="playback-status">{!connected ? "Reconnecting" : state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</span>{current.live && " · LIVE"}</p>
+          {programme && <figure className="radio-programme">
+            <figcaption className={cn("text-muted-foreground", session && nativeHost && "text-lg")}>Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!nativeHost && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
+          </figure>}
+        </div>
+      </div>
+    ) : <>
+      <h1 className="media-title" title={current?.title}>{current?.title || (session ? "What would you like to play?" : "Nothing playing")}</h1>
+      <p className="source-label">{!connected ? "Reconnecting to your TV. You can still browse." : player?.status === "unavailable" ? "Your TV player is offline. Playback resumes when it reconnects." : "Search or paste a link, or play something you saved."}</p>
+      {programme && <figure className="radio-programme">
+        {!nativeHost && programme.artworkUrl && <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} />}
+        <figcaption className="text-sm text-muted-foreground">Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!nativeHost && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
+      </figure>}
+      {radio && player?.nowPlaying && !nativeHost && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
+    </>}
     {state?.radioRetry && ["loading", "error"].includes(player?.status ?? "") && <Alert className="radio-retry" role="status"><AlertDescription>
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>
       {player?.status === "error" && current && <Button variant="outline" disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>Try again</Button>}
@@ -77,7 +90,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     {state && <PlaybackTimeline state={state} connected={connected} run={run} />}
     {hasMedia && <div className="transport-row">
       {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} onExpand={onExpand} />}
-      {session ? <div className="session-volume-row">{volume}{onRemote && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
+      {session ? <div className="session-volume-row">{volume}{onRemote && !nativeHost && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
     {state?.progressError && <Alert variant="destructive" className="playback-error"><AlertDescription>{state.progressError}</AlertDescription></Alert>}
     {!session && !hasMedia && <div className="player-settings">{settings}</div>}

@@ -198,12 +198,12 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
     <div className="playback-settings">
       <Dialog onOpenChange={open => { if (!open) focusRequest.current?.cancel(); }}>
         <DialogTrigger asChild><Button variant="ghost" size="icon" className="icon-button min-h-11 min-w-11" aria-label="Playback settings" title="Playback settings"><Settings aria-hidden="true" /></Button></DialogTrigger>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Playback settings</DialogTitle>
-            <DialogDescription className="sr-only">Controls for the current media.</DialogDescription>
+            <DialogDescription>{entry?.title ? `Controls for ${entry.title}.` : "Controls for the current media."}</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-5">
+          <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
             {showQuality && <QualitySelect id="playback-quality" label="Quality" value={entry?.quality ?? "auto"} disabled={disabled || !qualityAvailable} onChange={quality => {
               setDefaultError(null);
               if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }, "playback-quality").then(ok => { if (!ok) setDefaultError("Could not change quality."); });
@@ -254,7 +254,7 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
               </Select>
               {saveDefault("replayGain", "volume normalization")}
             </div>}
-            {video ? <details key={player.playbackId}>
+            {video ? <details key={player.playbackId} className="sm:col-span-2">
               <summary tabIndex={0} className="min-h-11 cursor-pointer content-center">Subtitles and timing</summary>
               <div className="grid gap-4 pt-3">
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
@@ -262,9 +262,9 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
                 {subtitles.length > 0 && <DelayControl id="playback-subtitle-delay" label="Subtitle delay" value={player.subtitleDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "subtitleDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
               </div>
             </details> : audio.length > 0 && <DelayControl key={player.playbackId} id="playback-audio-delay" label="TV audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
-            {pending && <p role="status">Applying…</p>}
-            {defaultError && <Alert variant="destructive"><AlertDescription>{defaultError}</AlertDescription></Alert>}
-            {player.subtitleError && <Alert variant="destructive"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
+            {pending && <p role="status" className="sm:col-span-2">Applying…</p>}
+            {defaultError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{defaultError}</AlertDescription></Alert>}
+            {player.subtitleError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
           </div>
           <DialogFooter><DialogClose asChild><Button className="min-h-11">Done</Button></DialogClose></DialogFooter>
         </DialogContent>

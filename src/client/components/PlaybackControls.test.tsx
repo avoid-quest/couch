@@ -6,7 +6,7 @@ import { PlaybackControls } from "./PlaybackControls";
 const state: SessionState = {
   queue: [{ id: "one", source: "radio:one", title: "Station", kind: "radio" }], currentEntryId: "one", activeProfile: { id: "household", name: "Household" },
   player: { playbackId: "one", status: "playing", position: 0, duration: null, volume: 80, seekable: false, error: null, nowPlaying: { title: "Observed song", artist: "Artist" } },
-  radioProgramme: { playbackId: "one", stationId: "station", provider: "radio.avoid.quest", title: "Programme title", artworkUrl: "https://art.example/programme.jpg", sampledAt: 1000, expiresAt: 901000 },
+  radioProgramme: { playbackId: "one", stationId: "station", provider: "radio.avoid.quest", title: "Programme title", programmeUrl: "https://radio.avoid.quest/", artworkUrl: "https://art.example/programme.jpg", sampledAt: 1000, expiresAt: 901000 },
 };
 const render = (value: SessionState, connected = true) => renderToStaticMarkup(<PlaybackControls state={value} connected={connected} credentials={{ origin: "http://localhost", token: "test" }} run={async () => true} />);
 
@@ -14,8 +14,9 @@ test("radio controls show programme artwork and attribution alongside native tra
   const html = render(state);
   expect(html).toContain("Programme: Programme title");
   expect(html).toContain("https://art.example/programme.jpg");
-  expect(html).toContain("via radio.avoid.quest");
+  expect(html).toContain("Programme details");
   expect(html).toContain("Artist · Observed song");
+  expect(html).not.toContain("Started from");
 });
 
 test("missing programme artwork leaves a title and disconnected controllers hide stale programmes", () => {
@@ -27,7 +28,6 @@ test("missing programme artwork leaves a title and disconnected controllers hide
 test("session hero uses real artwork and keeps idle free of placeholder art and controls", () => {
   const session = (value: SessionState) => renderToStaticMarkup(<PlaybackControls presentation="session" state={value} connected credentials={{ origin: "http://localhost", token: "test" }} run={async () => true} />);
   const playing = session(state);
-  expect(playing).toContain("session-current-art");
   expect(playing).toContain("https://art.example/programme.jpg");
   expect(playing).not.toContain("Volume &amp; playback options");
   expect(playing).not.toContain("Playback position");

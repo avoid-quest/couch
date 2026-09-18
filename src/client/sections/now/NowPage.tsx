@@ -14,18 +14,12 @@ import { SearchBar } from "@/components/SearchBar";
 
 export function NowPage() {
   const shell = useShell();
-  const { nativeHost, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen } = shell;
+  const { nativeHost, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio } = shell;
   const [nowDraft, setNowDraft] = useState("");
   const [layout, setLayout] = useState<ReturnType<typeof readNowSections>>(readNowSections);
   const { order, hidden } = layout;
   const [editing, setEditing] = useState(false);
   const sensors = useDndSensors();
-  const parts = layout.parts ?? {};
-  const togglePart = (part: "current" | "next") => {
-    const nextParts = { ...parts, [part]: !parts[part] };
-    const next = { ...layout, parts: nextParts };
-    setLayout(next); saveNowSections(next);
-  };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
     const next = moveNowSection(order, String(active.id), String(over.id));
@@ -38,9 +32,10 @@ export function NowPage() {
   };
   const onStage = !nativeHost || tv.browsing;
   const sections: Record<NowSectionId, ReactNode> = {
-    playing: <NowPlaying embedded state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} onRemote={nativeHost ? undefined : () => setRemoteOpen(true)} active={onStage} hiddenParts={parts} editing={editing} onHidePart={togglePart} />,
-    history: <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} />,
-    radio: <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={available} onEnqueue={enqueueRadio} active={onStage} />,
+    playing: <NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />,
+    queue: <NowPlaying embedded part="next" state={state} credentials={credentials} connected={connected} run={run} active={onStage} />,
+    history: <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} stations={recentRadio} onRadio={station => enqueueRadio(station, true)} />,
+    radio: <LiveNow rail heading="Live radio" credentials={credentials} connected={connected} canPlay={available} onEnqueue={enqueueRadio} active={onStage} />,
   };
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>

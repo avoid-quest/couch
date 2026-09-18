@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Keep Linux output away from the Mac checkout and reuse the acceptance-test cache.
 tar -C /source --exclude=target --exclude=binaries -cf - \
-  package.json bun.lock bunfig.toml components.json tsconfig.json src src-tauri scripts packaging vendor tests/linux/fixtures.ts tests/linux/video-library-fixture.ts | tar -xf -
+  package.json bun.lock bunfig.toml components.json tsconfig.json vite.config.ts src src-tauri scripts packaging vendor tests/linux/fixtures.ts tests/linux/video-library-fixture.ts | tar -xf -
 bun install --frozen-lockfile
 bun run desktop:build --debug --no-bundle
 mkdir -p /work/bin

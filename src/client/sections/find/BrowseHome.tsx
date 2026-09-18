@@ -119,11 +119,11 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     {item.libraryItemId && <Button variant="outline" disabled={!connected || !currentProfile || loading || pending || metadata(item)?.available === false} aria-label={`Up next: ${item.title}`} onClick={() => void add(item)}><Plus aria-hidden="true" />Up next</Button>}
     {(item.libraryItemId || item.queueEntryId) && <SaveForLater origin={origin} token={token} connected={connected && currentProfile && !loading} reference={item.libraryItemId ? { kind: "library", id: item.libraryItemId } : { kind: "queue", id: item.queueEntryId! }} title={item.title} />}
   </div>;
-  const radioArt = (station: RadioStation) => <span className="relative grid aspect-[.85] place-items-center overflow-hidden rounded-xl bg-muted from-emerald-800 to-slate-900 bg-gradient-to-br p-3.5 text-center text-2xl font-semibold">
+  const radioArt = (station: RadioStation) => <span className="relative grid aspect-video w-full place-items-center overflow-hidden rounded-xl from-emerald-800 to-slate-900 bg-gradient-to-br p-3.5 text-center text-2xl font-semibold">
     {station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="absolute inset-0 size-full rounded-[inherit] object-cover" /> : <><Radio aria-hidden="true" /><span>{station.name}</span></>}
   </span>;
   const radioCards = !!recentRadio?.length && onRadio && <>{recentRadio.map(station => <li key={`radio:${station.id}`}>
-    <button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
+    <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
       {radioArt(station)}<strong className="mt-1.5 text-sm font-semibold break-words">{station.name}</strong><small>Radio station</small>
     </button>
   </li>)}</>;
@@ -142,7 +142,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     recent: currentProfile && (history.some(item => item.mediaId !== hero?.mediaId) || !!recentRadio?.length) ? <section aria-label="Recently played">
       <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Recently played</h2></div>
       <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{radioCards}{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
-        <button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
+        <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
           {artwork(item)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{item.position > 0 ? `Continue at ${progressTime(item.position)}` : item.watched ? "Finished" : item.sourceLabel || "Played"}</small>
         </button>{playbackActions(item)}
       </li>)}</ul>
@@ -150,10 +150,10 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
     folders: !!cards.length ? <><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">TV folders</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button>}</div>
       <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{cards.map(item => {
         const entry = asHistory(item);
-        return <li key={item.id}><button type="button" className="flex min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
+        return <li key={item.id}><button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
       })}</ul></> : null,
     sources: onAddSource ? <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div> : null,
-    radio: onRadio ? <LiveNow rail limit={8} heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} /> : null,
+    radio: onRadio ? <LiveNow rail heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} /> : null,
     forlater: active ? <ForLaterSection origin={origin} token={token} connected={connected} canPlay={canPlay} onFind={() => onBrowse("Search")} /> : null,
   };
   const sensors = useDndSensors();

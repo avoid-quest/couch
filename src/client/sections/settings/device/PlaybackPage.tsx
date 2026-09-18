@@ -13,7 +13,7 @@ export function PlaybackPage() {
   const preferences = state?.preferences;
   return (
     <SettingsLayout section="playback">
-      <div className="max-w-[28rem] space-y-6">
+      <div className="space-y-6">
         <QualitySelect id="playback-default-quality" value={videoQualityPreference.quality} disabled={!connected} onChange={videoQualityPreference.save}
           description="Stored in this browser. The TV uses it for the next video you play or add." />
         <Separator />

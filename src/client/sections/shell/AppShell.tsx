@@ -11,7 +11,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { ProviderPanel } from "@/components/ProviderPanel";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { LocalSharingPrompt, PlaybackDevice } from "@/sections/shell/PlaybackDevice";
+import { LocalSharingPrompt } from "@/sections/shell/PlaybackDevice";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
@@ -32,6 +32,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Bookmark, Compass, House, Settings2, CirclePlay } from "lucide-react";
+import { cn } from "cn";
+import { useNavigation } from "@/navigation";
+import { ShellContext } from "./shell-context";
 
 const radioHistoryKey = "couch.radio-recents";
 const radioHistory = (): RadioStation[] => { try { return JSON.parse(localStorage.getItem(radioHistoryKey) ?? "[]") as RadioStation[]; } catch { return []; } };
@@ -42,15 +45,9 @@ const navItems: { name: string; label: string; icon: typeof House }[] = [
   { name: "Settings", label: "Settings", icon: Settings2 },
 ];
 
-type ShellValue = ReturnType<typeof useShellValue>;
-
-const ShellContext = createContext<ShellValue | null>(null);
-
-export function useShell(): ShellValue {
-  const value = useContext(ShellContext);
-  if (!value) throw new Error("useShell must be used inside the app shell.");
-  return value;
-}
+export type ShellValue = ReturnType<typeof useShellValue>;
+export { useShell, useOptionalShell } from "./shell-context";
+import { useShell } from "./shell-context";
 
 function useShellValue() {
   const gate = useSessionGate();
@@ -83,6 +80,9 @@ function useShellValue() {
   };
   const at = location.pathname + location.searchStr;
   const changePage = (name: string) => {
+    // Big-picture behavior: while playing, any navigation opens the browsing
+    // layer over the player instead of floating the controls above the page.
+    if (nativeHost && active && !tv.browsing) tv.openHome();
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
     if (to !== at) router.history.push(to);
   };
@@ -200,7 +200,16 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
+  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome>{shell.nativeHost && <TvKeys onBack={() => { if (!shell.tv.dismissLayer()) shell.back(); }} />}</ShellContext.Provider></ShellErrorBoundary>;
+}
+
+// The TV shell is driven with arrows/select/back like a Big Picture UI; the web
+// keyboard path reaches the same spatial navigation the paired remotes use.
+function TvKeys({ onBack }: { onBack: () => void }) {
+  const back = useRef(onBack);
+  back.current = onBack;
+  useNavigation(() => back.current());
+  return null;
 }
 
 function ShellChrome({ children }: PropsWithChildren) {
@@ -212,20 +221,24 @@ function ShellChrome({ children }: PropsWithChildren) {
   const player = state?.player;
 
   return (
-    <div className={`app-shell couch-shell ${nativeHost ? `tv-shell${tv.browsing ? " tv-browsing" : ""}${tv.controlsVisible ? " tv-controls-visible" : ""}` : "remote-shell"}`}>
+    <div className={cn("app-shell couch-shell", nativeHost
+      ? cn("tv-shell", tv.browsing && "tv-browsing", tv.controlsVisible && "tv-controls-visible",
+        // Slim strokes and real icon-button targets: the TV zoom magnifies stroke weight.
+        "[&_svg]:stroke-[1.5] [&_.icon-button]:min-h-11 [&_.icon-button]:min-w-11 [&_.icon-button_svg]:size-6")
+      : "remote-shell")}>
 
       <main id="main">
         {nativeHost && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
         {nativeHost && <VideoStage active={active} title={current?.title || "Your media"}
           audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
-          subtitle={[programme ? `Programme: ${programme.title}` : null, player?.nowPlaying ? [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ") : null].filter(Boolean).join(" · ") || undefined}
+          subtitle={programme ? `Programme: ${programme.title}` : undefined}
           artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
         <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
       <header className="app-header">
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <div className="header-status">
-          {nativeHost ? <PlaybackDevice /> : <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
+          {!nativeHost && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
           {host && remoteControlEnabled && <Button variant="ghost" className="pair-shortcut" onClick={() => shell.setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
@@ -246,7 +259,7 @@ function ShellChrome({ children }: PropsWithChildren) {
                 <Label htmlFor="remote-name">Device name</Label>
                 <Input id="remote-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required />
                <Label htmlFor="pairing-code">Pairing code</Label>
-                <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode}>
+                <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} containerClassName="w-full [&_[data-slot=input-otp-group]]:flex-1 [&_[data-slot=input-otp-group]]:justify-center [&_[data-slot=input-otp-group]]:gap-1.5 [&_[data-slot=input-otp-slot]]:h-14 [&_[data-slot=input-otp-slot]]:w-14 [&_[data-slot=input-otp-slot]]:rounded-lg [&_[data-slot=input-otp-slot]]:text-2xl">
                   <InputOTPGroup>
                     <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
                   </InputOTPGroup>
@@ -265,14 +278,16 @@ function ShellChrome({ children }: PropsWithChildren) {
             {player?.status === "unavailable" && <p className="notice">{player.error || "TV player unavailable. You can still add to the queue."}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
-                {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
+                {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined} aria-label={label}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
               </nav>
               <div className="media-browser">
                 {children}
               </div>
             </div>
             <SourceSetupDialog localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} />
-            {current && (active || player?.status === "error") && section !== "Now" && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => shell.changeSection("Now")} onRemote={nativeHost ? undefined : () => shell.setRemoteOpen(true)} />}
+            {/* On the TV the bar is always available while playing and returns to the
+                playback view; remotes open the inline Now playing page instead. */}
+            {current && (active || player?.status === "error") && (nativeHost ? tv.browsing : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => nativeHost ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={nativeHost ? undefined : () => shell.setRemoteOpen(true)} />}
             {/* Saved provider collections open here: Find stays search-first, and
                 Open gives the collection its own browsable trail. */}
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>

@@ -47,8 +47,9 @@ export function useInterfaceSize(native: boolean, appearance = defaultTvAppearan
   const remote = useRemoteInterfaceSize();
   const seconds = usePreviewSeconds(appearance);
   const size = native ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
-  // Keep persisted choices and remote scaling; TV viewing needs wider steps.
-  const scale = native ? size === 1.3 ? 1.75 : size === 1.15 ? 1.35 : 1 : size;
+  // Keep persisted choices and remote scaling. The old wider TV steps
+  // (1.35/1.75) predate the deduplicated scaling and read as bloat now.
+  const scale = size;
   useLayoutEffect(() => {
     document.documentElement.style.setProperty("--interface-scale", String(scale));
     window.dispatchEvent(new Event("couch-interface-size-applied"));
