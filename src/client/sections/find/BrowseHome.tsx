@@ -18,6 +18,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { SortableRow, useDndSensors } from "../../lib/dnd";
 import { findSectionIds, findSectionLabels, type FindSectionId } from "../../find-sections";
 import { ProgressActions, progressTime, type HistoryPlayback } from "@/components/HistoryPanel";
+import { mergeRecent } from "@/recent";
 import type { Credentials } from "../../session/session";
 import { SaveForLater } from "@/components/SaveForLater";
 
@@ -122,11 +123,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
   const radioArt = (station: RadioStation) => <span className="relative grid aspect-video w-full place-items-center overflow-hidden rounded-xl from-emerald-800 to-slate-900 bg-gradient-to-br p-3.5 text-center text-2xl font-semibold">
     {station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="absolute inset-0 size-full rounded-[inherit] object-cover" /> : <><Radio aria-hidden="true" /><span>{station.name}</span></>}
   </span>;
-  const radioCards = !!recentRadio?.length && onRadio && <>{recentRadio.map(station => <li key={`radio:${station.id}`}>
-    <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play: ${station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(station)}>
-      {radioArt(station)}<strong className="mt-1.5 text-sm font-semibold break-words">{station.name}</strong><small>Radio station</small>
-    </button>
-  </li>)}</>;
+  const recentEntries = mergeRecent(history, recentRadio ?? [], hero?.mediaId);
   const detailLibrary = library.find(item => `library:${item.id}` === detailId);
   const detail = currentProfile ? history.find(item => item.mediaId === detailId) ?? (detailLibrary ? asHistory(detailLibrary) : null) : null;
   const selected = detail && metadata(detail);
@@ -139,12 +136,17 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
           <div className="mt-3 flex flex-wrap gap-1"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
         </div>
       </section></> : null,
-    recent: currentProfile && (history.some(item => item.mediaId !== hero?.mediaId) || !!recentRadio?.length) ? <section aria-label="Recently played">
+    recent: currentProfile && !!recentEntries.length ? <section aria-label="Recently played">
       <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Recently played</h2></div>
-      <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{radioCards}{history.filter(item => item.mediaId !== hero?.mediaId).map(item => <li key={item.mediaId}>
-        <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
-          {artwork(item)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{item.position > 0 ? `Continue at ${progressTime(item.position)}` : item.watched ? "Finished" : item.sourceLabel || "Played"}</small>
-        </button>{playbackActions(item)}
+      <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 md:grid-cols-3 md:gap-[18px]">{recentEntries.map(entry => entry.kind === "radio" ? <li key={entry.key}>
+        <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Play: ${entry.station.name}`} disabled={!connected || !canPlay} onClick={() => void onRadio!(entry.station)}>
+          {radioArt(entry.station)}<strong className="mt-1.5 text-sm font-semibold break-words">{entry.station.name}</strong><small>Radio station</small>
+        </button>
+        {onRadio && <div className="mt-3 flex flex-wrap gap-1"><Button variant="outline" disabled={!connected || !canPlay} aria-label={`Play: ${entry.station.name}`} onClick={() => void onRadio!(entry.station)}><Play aria-hidden="true" />Play</Button></div>}
+      </li> : <li key={entry.key}>
+        <button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${entry.item.title}`} onClick={event => openDetail(entry.item, event.currentTarget)}>
+          {artwork(entry.item)}<strong className="mt-1.5 text-sm font-semibold break-words">{entry.item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{entry.item.position > 0 ? `Continue at ${progressTime(entry.item.position)}` : entry.item.watched ? "Finished" : entry.item.sourceLabel || "Played"}</small>
+        </button>{playbackActions(entry.item)}
       </li>)}</ul>
     </section> : null,
     folders: !!cards.length ? <><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">TV folders</h2>{onAddSource && <Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button>}{onBrowse && <Button variant="ghost" onClick={() => onBrowse("Files")}>View all<ChevronRight aria-hidden="true" /></Button>}</div>

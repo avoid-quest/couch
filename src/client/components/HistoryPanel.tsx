@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { HistoryItem, ViewingProgress } from "../../shared/library";
 import type { RadioStation } from "../../shared/radio";
+import { mergeRecent } from "../recent";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./MediaArtwork";
 import { historyQuery, removeHistory } from "@/api/library";
@@ -127,27 +128,30 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
     {item.position > 0 && <Button variant="outline" disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
   </div>;
   const summary = (item: HistoryItem) => `${item.position > 0 ? `${progressTime(item.position)}${item.duration ? ` of ${progressTime(item.duration)}` : ""}` : "No saved resume point"}${item.watched ? " · Watched" : ""}${item.playedBy ? ` · Started from ${item.playedBy.name}` : ""}`;
+  const entries = presentation === "default" ? mergeRecent(items, stations) : items.map(item => ({ key: item.mediaId, kind: "media" as const, item }));
 
   return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label="Playback history">
     <div><h3 className="text-xl font-semibold">Recently played</h3></div>
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => void refetch()}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
-    {!loading && !error && !items.length && !stations?.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
-    <ul className="history-items space-y-3" aria-busy={loading}>{presentation === "default" && stations?.map(station => <li key={`radio:${station.id}`}><Card className="catalog-row gap-3 p-3">
-      <div className="catalog-row-main flex min-w-0 items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
-        <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
-      </div>
-      {onRadio && <div className="catalog-row-actions flex flex-wrap gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
-    </Card></li>)}{items.map(item => {
+    {!loading && !error && !entries.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
+    <ul className="history-items space-y-3" aria-busy={loading}>{entries.map(entry => {
+      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key}><Card className="catalog-row gap-3 p-3">
+        <div className="catalog-row-main flex min-w-0 items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
+          <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
+        </div>
+        {onRadio && <div className="catalog-row-actions flex flex-wrap gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
+      </Card></li>; }
+      const item = entry.item;
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;
-      if (presentation === "inspect") return <li key={item.mediaId} className="history-inspect-row">
+      if (presentation === "inspect") return <li key={entry.key} className="history-inspect-row">
         {artwork(item, "history-inspect-art")}
         <Button variant="ghost" className="history-inspect-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(item.mediaId); }}><strong>{item.title}</strong><small>{summary(item)}</small></Button>
       </li>;
-      return <li key={item.mediaId}><Card className="catalog-row gap-3 p-3">
+      return <li key={entry.key}><Card className="catalog-row gap-3 p-3">
         <div className="catalog-row-main flex min-w-0 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary"><History aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
