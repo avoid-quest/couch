@@ -6,6 +6,9 @@ import { join } from "node:path";
 
 // Non-onboarding journeys start after setup, but keep their existing pairing and
 // claim scenarios. This is fixture state, never evidence of first-run acceptance.
+// Local playback setup and administrator claim are separate prerequisites: this
+// fixture selects configured local playback but deliberately leaves no device
+// administrator, so the native journey must exercise the actual claim.
 export function seedConfiguredFixture(directory = process.env.COUCH_DATA_DIR ?? "/work/configured-fixture") {
   process.env.COUCH_DATA_DIR = directory;
   mkdirSync(directory, { recursive: true });

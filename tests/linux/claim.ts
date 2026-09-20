@@ -19,6 +19,12 @@ async function openSettings(ui: UiDriver, until: Wait) {
   await until("Settings loads General through the real application", () => ui.execute("const dialog = document.querySelector(arguments[0]); return !!dialog && !dialog.textContent.includes('Loading settings…') && !!dialog.querySelector('#tv-name, [data-settings-tv-name]')", [settings]));
 }
 
+async function openConnectionSettings(ui: UiDriver, until: Wait) {
+  await openSettings(ui, until);
+  await ui.settingsSection("connection");
+  await until("Settings loads Connections through the real application", () => ui.execute("const dialog = document.querySelector(arguments[0]); return !!dialog && !!dialog.querySelector('[aria-label=\"Administrator setup\"], [aria-label=\"Claim administrator\"], [aria-label=\"Connected devices\"]')", [settings]));
+}
+
 async function frames(ui: UiDriver) {
   await ui.request(`/session/${ui.session()}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
 }
@@ -185,8 +191,8 @@ export async function verifyClaim(context: Context) {
     assert.equal((await (await api("/api/controllers/me", client.token)).json() as ControllerIdentity).authority, "controller");
   }
   await httpRemote.minimize();
-  await openSettings(ui, until);
-  await until("unclaimed TV Settings displays its separate short-lived administrator code and local QR", () => ui.execute("return /^\\d{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent ?? '') && !!document.querySelector('[role=dialog] svg title')"));
+  await openConnectionSettings(ui, until);
+  await until("unclaimed TV Settings displays its separate short-lived administrator code and local QR", () => ui.execute("return /^\\d{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent ?? '') && !!document.querySelector('[aria-label=\"Administrator setup\"] svg title')"));
   const code = await ui.execute("return document.querySelector('[data-administrator-code]').textContent");
   const qr = await ui.execute("const svg = [...document.querySelectorAll('[role=dialog] svg')].find(svg => svg.querySelector('title')); return { svg: svg.outerHTML, title: svg.querySelector('title').textContent, links: [...document.querySelectorAll('[role=dialog] a')].map(a => a.href) }");
   assert.match(qr.title, /^Open Couch at https?:\/\//, "The setup QR title identifies its local HTTP address");
@@ -195,17 +201,19 @@ export async function verifyClaim(context: Context) {
   assert.ok(!qr.svg.includes(code), "The setup QR contains the address without the administrator credential");
   await Bun.write(`${artifactDir}/administrator-setup-qr.svg`, qr.svg);
   await closeSettings(ui, until);
-  await openSettings(ui, until);
+  await openConnectionSettings(ui, until);
   assert.equal(await ui.execute("return document.querySelector('[data-administrator-code]')?.textContent"), code, "Abandoned setup resumes using the same still-valid administrator code");
 
   await httpRemote.restore();
   const phone = httpRemote.ui;
-  await openSettings(phone, until);
+  await openConnectionSettings(phone, until);
   await until("ordinary HTTP phone offers the distinct administrator claim form", () => phone.execute("return !!document.querySelector('#administrator-code') && !document.querySelector('#tv-name')"));
   await assertResponsive(phone, "Phone administrator claim");
   await phone.type("#administrator-code", code);
   await phone.button("Claim administrator", settings);
-  await until("phone claim commits one administrator and broadcasts claimed state to both WebSocket controllers", async () => all(state => state.administratorClaimed === true && (state.controllerVersion ?? 0) > (before.controllerVersion ?? 0)) && await phone.execute("return !!document.querySelector('#tv-name:not(:disabled)') && !document.querySelector('#administrator-code')"));
+  await until("phone claim commits one administrator and broadcasts claimed state to both WebSocket controllers", async () => all(state => state.administratorClaimed === true && (state.controllerVersion ?? 0) > (before.controllerVersion ?? 0)) && await phone.execute("return !document.querySelector('#administrator-code')"));
+  await phone.settingsSection("general");
+  await until("claimed phone opens editable TV name", () => phone.execute("return !!document.querySelector('#tv-name:not(:disabled)') && !document.querySelector('#administrator-code')"));
   await until("claim consumption removes the administrator code from the TV", () => ui.execute("return !document.querySelector('[data-administrator-code]') && !document.querySelector(arguments[0])?.textContent.includes('Set up your administrator remote')", [settings]));
   assert.equal((await api("/api/controllers/claim", clients[1]!.token, { code })).status, 401, "The consumed TV setup code cannot claim a second administrator");
   const name = "Living room fixture";
