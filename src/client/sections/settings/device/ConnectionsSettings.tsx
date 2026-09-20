@@ -104,7 +104,8 @@ export function ConnectionsSettings({ credentials, connected, host, selfId, iden
       <section aria-label="Connected devices" className="space-y-3">
         <h3 className="font-medium">Devices</h3>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {controllers.isPending ? <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading devices…</p>
+        {!manager ? <p className="text-sm text-muted-foreground">Claim administration to manage devices.</p>
+          : controllers.isPending ? <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading devices…</p>
           : controllers.isError ? <p role="alert">Could not load devices. <Button variant="outline" className="min-h-11" onClick={() => void controllers.refetch()}>Retry</Button></p>
           : <ul className="divide-y rounded-md border">
               {controllers.data.map(device => (
