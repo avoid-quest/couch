@@ -69,12 +69,12 @@ export class UiDriver {
   }
 
   async click(selector: string) {
-    // React can replace a stable-looking navigation node while playback state
-    // settles. Resolve again for that narrow stale-element race, not for real
-    // assertions or clicks that have already reached the browser.
+    // React can replace a stable-looking selector target before WebDriver
+    // resolves it. Retry only that lookup: after an element handle exists, a
+    // stale-node failure must stop because the click may already have applied.
     let lastError: unknown;
     for (let attempt = 0; attempt < 5; attempt++) {
-      try { await this.clickElement(await this.element(selector)); return; }
+      try { return await this.clickElement(await this.element(selector)); }
       catch (error) {
         lastError = error;
         if (!String(error).includes("Node with identifier")) throw error;
@@ -246,7 +246,11 @@ export async function assertResponsive(ui: UiDriver, description: string) {
   await settlePortals(ui);
   const layout = await ui.execute(`
     const visible = element => element.getClientRects().length && getComputedStyle(element).visibility === 'visible';
+    const describe = element => ({ label: element.getAttribute('aria-label') || element.textContent.trim().slice(0, 120),
+      selector: element.id ? '#' + element.id : element.tagName.toLowerCase() + [...element.classList].map(name => '.' + name).join(''),
+      rect: element.getBoundingClientRect().toJSON(), scrollWidth: element.scrollWidth, clientWidth: element.clientWidth });
     return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll('body *')].filter(visible).filter(element => element.getBoundingClientRect().right > innerWidth + 1 || element.scrollWidth > element.clientWidth + 2 && !element.closest('[hidden]')).slice(0, 20).map(describe),
       clipped: [...document.querySelectorAll('button')].filter(visible).filter(element =>
         element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
       ).map(element => element.getAttribute('aria-label') || element.textContent.trim()),
