@@ -138,11 +138,7 @@ test("unpair retires in-flight reads; re-pair cannot display a late old househol
 });
 
 test("storage-disabled pairing supplies live administrator authority and authenticated reads", async () => {
-  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: {
-    getItem() { throw new Error("Storage disabled"); },
-    setItem() { throw new Error("Storage disabled"); },
-    removeItem() { throw new Error("Storage disabled"); },
-  } });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("Storage disabled"); } });
   await mount();
   expect(gate.credentials).toBeNull();
   await pair();
