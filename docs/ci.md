@@ -1,53 +1,112 @@
-# Development checks and release qualification
+# Development checks and the pre-merge gate
 
-Iterate locally. Run the tests affected by a change, then the broader checks when
-needed. Install the pinned Bun dependencies once per lockfile change.
+Use the pinned Bun 1.4.2 and the frozen lockfile. Versioning, tagging and release
+publication are not part of verification.
 
 ```sh
 bun install --frozen-lockfile
-bun run typecheck
-bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
-bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
-bun run build
+bun run check                 # Fast iteration, including uncommitted changes
+bun run verify                # Committed revision: core checks and production build
 ```
 
-The two test commands keep the real-clock test in a separate Bun process from
-tests that mock process-wide clocks. `bun run check` currently runs typechecking
-and the parallel Bun suite; use the commands above for the full suite with clock isolation.
-For native changes, run these after `bun run build` generates Tauri's sidecar,
-with the platform's native build dependencies installed:
+`check` runs the pinned TypeScript check and `test`. `test` starts the real-clock
+IPTV test in its own Bun process, then runs the remaining suite with per-file
+isolation and four-way parallelism. The same commands run locally and in hosted
+verification. Tests for media intake, connection lifetime and Query cancellation
+are part of that existing suite, not another harness. For focused iteration use
+`bun test --isolate --parallel=4 <test paths>`; run the real-clock test separately.
+A nonzero exit or unhandled error is a failure, regardless of the assertion count.
+
+## Exact-revision evidence
+
+`verify` refuses the wrong Bun version, an uncommitted source tree, or missing
+Linux qualification dependencies (ffmpeg, minisign, ACL tools and jq). It runs
+`check` followed by the frontend/sidecar build, failing immediately on a failed
+step. It writes `.artifacts/verification.json`, including the before/after Git
+revision and dirty state, executed commands, exit codes, timestamps, coverage and
+hosted run/attempt when present. Outputs remain in the normal terminal/CI log.
+
+The receipt is eligible only when every selected step passed and the source
+remained the same clean commit. A failed or interrupted run is not a green gate;
+a later source push invalidates an earlier receipt. An eligible core receipt is
+necessary but not sufficient for changes requiring the additional gates below.
+The PR template makes those requirements explicit. This is a recorded review
+gate, not a claim that repository branch-protection settings were changed.
+
+On Linux, install the actual test dependencies rather than accepting skips caused
+by missing minisign or native libraries. A Mac result does not qualify Linux-only
+installer checks. Record baseline failures separately from new regressions.
+
+## Browser and native gates
+
+For frontend, route, connection or build changes, run the compiled sidecar's
+browser remote. The existing Linux launcher has a browser-only selection:
 
 ```sh
-cargo test --manifest-path src-tauri/Cargo.toml --locked
-cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
+bun run test:linux --built-remote
 ```
 
-GitHub Actions is enabled. Use it for PR checks, builds and releases. Local checks
-remain the quickest way to iterate. A passing assertion count with unhandled
-errors or a nonzero exit is a failed run.
+The launcher requires a clean committed checkout, creates a Git bundle of that
+revision and checks it out inside the existing Linux test container. This avoids
+a partial tar copy omitting Vite configuration, workspace packages or tests, and
+preserves real build identity. It does not copy build output back into the host
+checkout. The browser-only selection skips native application compilation/tests,
+not the shared core checks or production frontend/sidecar build.
 
-[Check](../.github/workflows/check.yml) is manually dispatched on Blacksmith's
-Ubuntu runner. It runs typechecking, the isolated-clock Bun suite, the
-frontend/sidecar build, locked Cargo tests and retained installer tests. Pushes
-and PR edits do not dispatch it automatically.
+`tests/linux/built-remote.ts` reuses the existing HTTP browser driver. It checks
+that every served frontend file matches Tauri's `dist` bytes, pairs from a deep
+link, navigates, refreshes and sends browser Play/Stop to the running coordinator.
+It checks worker activation on loopback, which is a supported secure context;
+ordinary insecure LAN HTTP must not register a worker. Its native pipe peer is
+simulated, not libmpv. The build identity, checks, asset hashes and screenshot go
+to `.artifacts/linux/built-remote`. After building in an already configured Linux
+WebKit/X11/null-PulseAudio environment, `bun run verify --remote` runs that same
+journey and includes it in the exact-revision verification receipt.
 
-[Package](../.github/workflows/package.yml) uses the pinned Debian 13 builder for
-native packaging. A single job builds, signs, qualifies and uploads directly to
-CrabNebula. Publication is an explicit input and fresh candidates enter Preview.
-Actions artifacts contain small receipts, not required binary handoffs. The
-[hosted release guide](hosted-releases.md) owns exact commands, retry rules and
-unchanged-byte Stable promotion.
+Native source changes additionally require the retained native commands:
 
-Run the release workflow locally with `act` after workflow edits, then verify a
-real hosted run. Local emulation does not establish hosted quota availability,
-secret access or successful publication. If GitHub capacity blocks a release,
-use the same pinned Debian build on the Mac and upload to CrabNebula. The T480
-never builds Couch, and published downloads do not depend on the Mac being online.
+```sh
+bun run verify --native
+bun run test:linux
+```
 
-Before adding jobs, caches or repeated checks, compare complete usage against
-[the CI budgets](https://github.com/avoid-quest/couch/issues/43#budgets). Record
-run/attempt, exact source, cache state, checks and job/step timestamps.
-Include failures, cancellation, setup and cleanup; distinguish queue delay from
-allocated runner time and account billing. A passing build does not establish
-package runtime or physical appliance acceptance. Reuse evidence unless a
-change invalidates it, and state when warm performance has not been measured.
+`--native` adds the locked Cargo tests and the retained startup-buffer test after
+the sidecar build. The full Linux journey retains its native feature tests and
+actual Tauri/libmpv playback checks; it also runs the same built-remote journey.
+Neither simulated playback nor software rendering qualifies physical TV, speaker
+or hardware behavior. The launcher still accepts its existing Jellyfin/provider
+options. Use `preview:linux` for an uncommitted visual preview, not qualification.
+
+## Hosted execution and budget
+
+[Check](../.github/workflows/check.yml) remains manually dispatched on the existing
+Blacksmith Ubuntu runner. Pushes and PR edits do not dispatch it automatically.
+It uses frozen dependencies and the same `bun run verify` entry point. Select the
+`native` input for native changes; ordinary source verification does not install
+native development packages or restore Cargo caches. Required native coverage is
+not waived by leaving that input false: the PR's applicable gates must be met.
+Receipts are retained as small seven-day artifacts. The built-browser gate is
+run through the existing Linux environment rather than adding another hosted
+browser harness or an automatic heavy job for every push.
+
+Workflow and packaging edits require `act` proof before hosted dispatch, using
+`catthehacker/ubuntu:full-latest` (the default act image lacks gh). Exercise the
+ordinary and selected-native paths after a Check workflow edit, and retain the
+exact revision, command, inputs and process exits. Local emulation does not prove
+hosted capacity, secret access or hosted timings. Do not dispatch an unvalidated
+workflow or treat a website deployment check as Couch qualification.
+
+The [existing CI budget decision](https://github.com/avoid-quest/couch/issues/43)
+remains in force. Before increasing jobs, checks or caches, compare complete
+workflow usage: setup/action downloads, dependency installation, cache restore
+and save, execution and cleanup, including failures and cancellations. Distinguish
+allocated runner time, queue delay and account billing. CLI step milliseconds
+alone are not that whole-workflow measurement. The revised command selection has
+not yet established hosted cold/warm measurements; record them before claiming a
+budget improvement. Reuse valid same-revision evidence instead of rerunning it
+merely because PR metadata changed.
+
+[Package](../.github/workflows/package.yml) and the [hosted release guide](hosted-releases.md)
+retain ownership of signed Debian builds, qualification, CrabNebula publication
+and unchanged-byte promotion. Publication requires separate authorization. The
+T480 installs/runs Couch; it is never a build worker.

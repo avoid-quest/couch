@@ -12,7 +12,8 @@ import { createUpdates } from "./updates";
 import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
-import type { PlaybackActor, PlaybackCommand, ServerMessage } from "../shared/protocol";
+import type { Action, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
+import type { ProviderId, VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -64,7 +65,8 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
-  frontend?: HTMLBundle;
+  frontend?: HTMLBundle | Response;
+  assets?: Record<string, Response>;
   development?: boolean;
   advertisedUrls?: string[];
   updateFeed?: UpdateFeed<UpdateRelease>;
@@ -294,12 +296,92 @@ export function createHub(options: HubOptions) {
     return device ? { deviceId: device.id, name: device.name } : undefined;
   };
 
+  // Catalog intake stays private to the hub. Callers do not reserve, normalize
+  // or apply play intent; Session alone owns queue order and playback. Already
+  // normalized enqueue/transport commands still go directly to Session.
+  const enqueueMedia = (action: Action, authorize: () => void, playedBy?: PlaybackActor): Promise<void> | undefined => {
+    type Intake = { entry: QueueEntry; fromStart?: boolean; inspectUrl?: string } | { entries: QueueEntry[] };
+    const authorized = () => { if (closed) return false; authorize(); return true; };
+    const web = (item: Omit<Extract<Action, { type: "enqueueWeb" }>, "type">): Intake => {
+      const title = item.title?.trim();
+      return { entry: { id: item.entryId, source: `web:${item.url}`, title: title || new URL(item.url).hostname, automaticTitle: !title, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.quality ? { quality: item.quality } : {}) }, fromStart: item.fromStart, ...(!title ? { inspectUrl: item.url } : {}) };
+    };
+    const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
+      const page = await loadProviderList(provider, url, shutdown.signal);
+      return { entries: page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })) };
+    };
+    let prepare: () => Intake | null | Promise<Intake | null>;
+    switch (action.type) {
+      case "enqueueWeb": prepare = () => web(action); break;
+      case "enqueueProvider":
+        prepare = action.shape === "atom" ? () => web({ ...action, entryId: crypto.randomUUID() }) : () => list(action.provider, action.url, action.quality);
+        break;
+      case "enqueueProviderAlbum": prepare = () => list("bandcamp", action.url); break;
+      case "enqueueProviderPlaylist": prepare = () => list("youtube", action.url, action.quality); break;
+      case "enqueueLibrary":
+        prepare = async () => {
+          const media = await library.getPlayable(action.itemId);
+          // The local metadata read also needs the guard after asynchronous I/O.
+          if (!authorized()) return null;
+          const item = library.getItem(action.itemId);
+          return { entry: { id: action.entryId, title: media.title.slice(0, 300), source: `library:${action.itemId}`, ...(item?.artworkId ? { artworkId: item.artworkId } : {}), ...(item?.duration ? { duration: item.duration } : {}) }, fromStart: action.fromStart };
+        };
+        break;
+      case "enqueueAlbum":
+        prepare = () => {
+          const { items } = library.albumTracks(action.albumId);
+          if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
+          return { entries: items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })) };
+        };
+        break;
+      case "enqueueRadio":
+        prepare = () => {
+          const station = radio.getPlayable(action.stationId);
+          return { entry: { id: action.entryId, title: station.title, source: `radio:${action.stationId}`, kind: "radio", live: true, ...station.metadata } };
+        };
+        break;
+      case "enqueueJellyfin": prepare = async () => ({ entry: await jellyfin.entry(action.itemId, action.entryId), fromStart: action.fromStart }); break;
+      default: return;
+    }
+    return (async () => {
+      if (!authorized()) return;
+      const intent = action.playNow ? session.reservePlay() : undefined;
+      const pending = prepare();
+      // Do not yield for synchronous intake: a following Stop must not overtake
+      // an already prepared atom/album/radio command before its queue mutation.
+      const prepared = pending instanceof Promise ? await pending : pending;
+      if (!prepared || !authorized()) return;
+      let entries: QueueEntry[], fromStart: boolean | undefined, selectedEntryIds: string[] = [];
+      if ("entry" in prepared) {
+        const { entry, inspectUrl } = prepared;
+        session.command({ type: "enqueue", entry }, authorize, playedBy);
+        entries = [entry];
+        fromStart = prepared.fromStart;
+        if (inspectUrl) {
+          const controller = new AbortController();
+          inspections.set(entry.id, controller);
+          void inspectWebMedia(inspectUrl, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
+            if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(entry.id, entry.source, metadata); }
+          }).catch(() => {}).finally(() => {
+            if (inspections.get(entry.id) === controller) { inspections.delete(entry.id); idle.activity(); }
+          });
+        }
+      } else {
+        entries = session.loadQueue(prepared.entries, "append", authorize, playedBy);
+        fromStart = true;
+        selectedEntryIds = entries.map(entry => entry.id);
+      }
+      if (intent !== undefined && entries[0]) session.playIfCurrent(intent, entries[0].id, fromStart, authorize, playedBy, selectedEntryIds);
+    })();
+  };
+
   const serveOptions: Bun.Serve.Options<SocketData> = {
     hostname,
     port: options.port ?? 3800,
     development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
     routes: {
+      ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1 })) : json({ error: "Unrecognized host or origin." }, 403),
@@ -464,60 +546,13 @@ export function createHub(options: HubOptions) {
           const playedBy = playbackActor(socket.data.controllerId);
           const authorize = socket.data.authorize;
           const action = command.action;
-          const playIntent = (action.type === "enqueueWeb" || action.type === "enqueueProvider" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin" || action.type === "enqueueAlbum" || action.type === "enqueueProviderAlbum" || action.type === "enqueueProviderPlaylist" || action.type === "enqueueRadio") && action.playNow
-            ? session.reservePlay() : undefined;
-          const webCommand = action.type === "enqueueWeb" ? action : action.type === "enqueueProvider" && action.shape === "atom" ? {
-            type: "enqueueWeb" as const, entryId: crypto.randomUUID(), url: action.url, ...(action.title ? { title: action.title } : {}),
-            ...(action.thumbnail ? { thumbnail: action.thumbnail } : {}), ...(action.playNow ? { playNow: action.playNow } : {}),
-            ...(action.quality ? { quality: action.quality } : {}),
-          } : null;
-          const providerList = action.type === "enqueueProvider" && action.shape === "playlist" ? action
-            : action.type === "enqueueProviderAlbum" ? { provider: "bandcamp" as const, url: action.url }
-            : action.type === "enqueueProviderPlaylist" ? { provider: "youtube" as const, url: action.url, quality: action.quality }
-            : null;
-          if (action.type === "navigate") {
+          const enqueued = enqueueMedia(action, authorize, playedBy);
+          if (enqueued) {
+            await enqueued;
+            if (closed) return;
+          } else if (action.type === "navigate") {
             if (server.subscriberCount("navigation") === 0) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
             server.publish("navigation", JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage));
-          } else if (webCommand) {
-            const source = `web:${webCommand.url}`;
-            const title = webCommand.title?.trim();
-            session.command({ type: "enqueue", entry: { id: webCommand.entryId, source, title: title || new URL(webCommand.url).hostname, automaticTitle: !title, ...(webCommand.thumbnail ? { thumbnail: webCommand.thumbnail } : {}), ...(webCommand.quality ? { quality: webCommand.quality } : {}) } });
-            if (!title) {
-              const controller = new AbortController();
-              inspections.set(webCommand.entryId, controller);
-              void inspectWebMedia(webCommand.url, controller.signal, store.streamingCommunityOrigin()).then(metadata => {
-                if (!closed && !controller.signal.aborted) { authorize(); session.enrichEntry(webCommand.entryId, source, metadata); }
-              }).catch(() => {}).finally(() => {
-                if (inspections.get(webCommand.entryId) === controller) { inspections.delete(webCommand.entryId); idle.activity(); }
-              });
-            }
-          } else if (action.type === "enqueueLibrary") {
-            const media = await library.getPlayable(action.itemId);
-            if (closed) return;
-            authorize();
-            const item = library.getItem(action.itemId);
-            session.command({ type: "enqueue", entry: { id: action.entryId, title: media.title.slice(0, 300), source: `library:${action.itemId}`, ...(item?.artworkId ? { artworkId: item.artworkId } : {}), ...(item?.duration ? { duration: item.duration } : {}) } });
-          } else if (action.type === "enqueueAlbum") {
-            const { items } = library.albumTracks(action.albumId);
-            if (items.some(item => !item.available)) throw new Error("Some album tracks are unavailable. Reconnect their drive and scan again.");
-            const entries = session.loadQueue(items.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration ? { duration: item.duration } : {}) })), "append");
-            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
-          } else if (providerList) {
-            const page = await loadProviderList(providerList.provider, providerList.url, shutdown.signal);
-            if (closed) return;
-            authorize();
-            const quality = action.type === "enqueueProvider" ? action.quality : action.type === "enqueueProviderPlaylist" ? action.quality : undefined;
-            const entries = session.loadQueue(page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })), "append");
-            if (playIntent !== undefined && entries[0]) session.playIfCurrent(playIntent, entries[0].id, true, authorize, playedBy, entries.map(entry => entry.id));
-          } else if (action.type === "enqueueRadio") {
-            const station = radio.getPlayable(action.stationId);
-            session.command({ type: "enqueue", entry: { id: action.entryId, title: station.title, source: `radio:${action.stationId}`, kind: "radio", live: true, ...station.metadata } });
-            if (action.playNow) session.command({ type: "play", entryId: action.entryId }, authorize, playedBy);
-          } else if (action.type === "enqueueJellyfin") {
-            const entry = await jellyfin.entry(action.itemId, action.entryId);
-            if (closed) return;
-            authorize();
-            session.command({ type: "enqueue", entry });
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
@@ -526,9 +561,6 @@ export function createHub(options: HubOptions) {
               if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
               await session.command(action, authorize, playedBy);
             }
-          }
-          if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
-            session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize, playedBy);
           }
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };

@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
+import { frontendPaths } from "./src/shared/page-paths";
 
 // scripts/build.ts writes the release identity before the client build runs;
 // a standalone `vite build` or the dev server falls back to the unsigned shape
@@ -19,7 +20,9 @@ const buildInfo = (() => {
 
 export default defineConfig({
   root: "src/client",
-  base: "./",
+  // Both the Tauri asset protocol and the sidecar serve the application at /.
+  // Relative asset/worker URLs would instead resolve below a refreshed route.
+  base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
     tanstackRouter({ routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
@@ -49,7 +52,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: "index.html",
+        navigateFallback: "/index.html",
+        navigateFallbackAllowlist: [...new Set(frontendPaths)].map(path => new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\?.*)?$`)),
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
       },
     }),
