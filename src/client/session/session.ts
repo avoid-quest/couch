@@ -150,6 +150,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onerror = () => connection.close();
       connection.onclose = event => {
         if (!isCurrent()) return;
+        // Retire the socket now, not only on effect cleanup or replacement.
+        // Captured callbacks from a closed/revoked connection must stay stale.
+        socket.current = null;
+        socketCredentials.current = null;
         clearTimeout(handshake);
         ready.current = false;
         rejectPending();
