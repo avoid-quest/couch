@@ -57,7 +57,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     queryFn: ({ signal }) => apiFetch({ origin, token }, `/api/library/items?${new URLSearchParams({ q: query, artistId: artist?.id ?? "", offset: String(offset), limit: String(pageSize) })}`, { signal }).then(response => response.json() as Promise<LibrarySearch>),
   });
   const sources = folders.data?.sources ?? [];
-  const results = items.data ?? { items: [], total: 0, offset: 0, limit: pageSize };
+  const results = (items.data as LibrarySearch | undefined) ?? { items: [], total: 0, offset: 0, limit: pageSize };
   const loading = connected && (folders.isFetching || items.isFetching);
   const queryError = folders.error ?? items.error;
   const error = actionError ?? (queryError ? queryError instanceof Error ? queryError.message : "Could not load the library." : null);
