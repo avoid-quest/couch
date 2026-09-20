@@ -13,7 +13,7 @@ export const radioCatalogQuery = (credentials: Credentials) =>
 // One response shape per cache key, even when a caller wants only the list.
 export const radioFavoritesListQuery = (credentials: Credentials) =>
   queryOptions({
-    queryKey: ["radio", "favorites"] as const,
+    queryKey: ["radio", "favorites", credentials.origin] as const,
     queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
   });
 
@@ -43,7 +43,7 @@ export const radioProgrammesQuery = (credentials: Credentials) =>
 export const radioSearchQuery = (credentials: Credentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>
   queryOptions({
     // The external directory is independent of local favorites/source revisions.
-    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, query] as const,
+    queryKey: [source === "Radio directory" ? "radio-directory" : "radio", "search", source, credentials.origin, query] as const,
     retry: false,
     queryFn: async ({ signal }): Promise<{ stations: RadioStation[]; error?: string }> => {
       if (query.length > 100) throw new Error("Search radio with at most 100 characters.");

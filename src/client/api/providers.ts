@@ -22,7 +22,7 @@ async function browse(credentials: Credentials, provider: ProviderId, target: Br
 
 export const providerBrowseQuery = (credentials: Credentials, provider: ProviderId, request: BrowseRequest) =>
   infiniteQueryOptions({
-    queryKey: ["providers", "browse", provider, request] as const,
+    queryKey: ["search", "providers", credentials.origin, provider, request] as const,
     initialPageParam: request.cursor as string | undefined,
     queryFn: ({ pageParam, signal }) => browse(credentials, provider, { ...request, cursor: pageParam }, signal),
     getNextPageParam: (page: ProviderSearchPage) => page.nextCursor || undefined,
@@ -38,6 +38,6 @@ export const providerItemsQuery = (credentials: Credentials, provider: ProviderI
 
 export const providerFavoritesQuery = (credentials: Credentials) =>
   queryOptions({
-    queryKey: ["providers", "favorites"] as const,
+    queryKey: ["providers", "favorites", credentials.origin] as const,
     queryFn: ({ signal }) => apiFetch(credentials, "/api/providers/favorites", { signal }).then(r => r.json() as Promise<{ favorites: ProviderItem[] }>),
   });

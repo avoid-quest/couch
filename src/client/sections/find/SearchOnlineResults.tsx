@@ -27,7 +27,7 @@ export async function readSearch<T>(props: Pick<SearchPlaybackProps, "origin" | 
 
 type Location = { request: BrowseRequest; title: string; opener?: string };
 type Props = SearchPlaybackProps & {
-  provider: ProviderId; query: string; url?: string; quality: VideoQuality; onQualityChange?: (quality: VideoQuality) => void; onEnqueued: () => void;
+  provider: ProviderId; query: string; retry?: number; url?: string; quality: VideoQuality; onQualityChange?: (quality: VideoQuality) => void; onEnqueued: () => void;
 };
 export function SearchOnlineResults(props: Props) {
   return <OnlineResults key={JSON.stringify([props.origin, props.token, props.provider, props.query, props.url])} {...props} />;
@@ -43,7 +43,7 @@ function OnlineResults(props: Props) {
   const restoreDetailFocus = useRef(false);
   // Hidden sources still report search counts. Active controls presentation,
   // not whether a source participates in the cross-source search.
-  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, location.request), enabled: props.connected, refetchOnMount: "always" });
+  const browse = useInfiniteQuery({ ...providerBrowseQuery(props, provider, location.request), enabled: props.connected, refetchOnMount: !!props.retry ? "always" : true });
   const page = useMemo<ProviderSearchPage | null>(() => {
     if (!browse.data?.pages.length) return null;
     const pages = browse.data.pages, items: ProviderItem[] = [], ids = new Set<string>();
@@ -137,7 +137,7 @@ function OnlineResults(props: Props) {
       <Button data-search-item={item.kind === "media" ? item.id : undefined} aria-label={`Play: ${item.title}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(item, true)}>Play</Button>
       <Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(item, false)}>Up next</Button>
       {item.kind !== "media" && <Button data-search-item={item.id} aria-label={`Open ${item.title}`} disabled={!props.connected} onClick={() => { setDetail(null); open(item); }}>Open</Button>}
-      <Button variant="ghost" aria-label={saved ? `Remove ${item.title}` : `Keep ${item.title}`} aria-pressed={saved} disabled={!props.connected || busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Kept" : "Keep"}</Button>
+      {props.connected && <Button variant="ghost" aria-label={saved ? `Remove ${item.title}` : `Keep ${item.title}`} aria-pressed={saved} disabled={busy || favorites === null} onClick={() => save(item, saved)}>{saved ? "Kept" : "Keep"}</Button>}
       {provider === "twitch" && item.live && item.url !== location.request.url && <Button data-search-item={`${item.id}-broadcasts`} variant="outline" aria-label={`Past broadcasts from ${item.title}`} disabled={!props.connected} onClick={() => { setDetail(null); open(item, `${item.id}-broadcasts`); }}>Past broadcasts</Button>}
       {item.kind === "media" && provider !== "bandcamp" && props.onQualityChange && <QualityOptions id={`${qualityId}-${item.id}${inDetail ? "-detail" : ""}`} label={`Video quality for ${item.title}`} value={props.quality} onChange={props.onQualityChange} disabled={!props.connected || busy} />}
     </div>;
