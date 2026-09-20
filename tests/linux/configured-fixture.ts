@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Non-onboarding journeys start after setup, but keep their existing pairing and
@@ -13,4 +13,7 @@ export function seedConfiguredFixture(directory = process.env.COUCH_DATA_DIR ?? 
   const db = new Database(path);
   db.run("CREATE TABLE installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL); INSERT INTO installation_setup VALUES (1, 'complete')");
   db.close();
+  // Non-onboarding playback journeys exercise the configured local TV, not
+  // first-use device selection; native startup reads this sidecar-side choice.
+  writeFileSync(join(directory, "operating-mode.json"), JSON.stringify({ mode: "local", address: null, targets: [], localSetupComplete: true }));
 }
