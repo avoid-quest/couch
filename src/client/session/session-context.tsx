@@ -1,9 +1,9 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import type { Action, ConnectionInfo, NavigationKey } from "../../shared/protocol";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { Action, ConnectionInfo, NavigationKey, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
 import { applyTvNavigation, useNavigation } from "../navigation";
 import { isNativeHost } from "./native-context";
@@ -19,6 +19,7 @@ const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
 const remoteNameKey = "couch.remote-name";
 const nativeHost = isNativeHost();
+let cacheSequence = 0;
 
 function storedCredentials(): Credentials | null {
   if (nativeHost) return null;
@@ -43,6 +44,7 @@ export function errorText(error: unknown) {
 type SessionBag = ReturnType<typeof useSession>;
 
 type SessionGateValue = SessionBag & {
+  queryClient: QueryClient;
   nativeHost: boolean;
   credentials: Credentials | null;
   setCredentials: (credentials: Credentials | null) => void;
@@ -75,8 +77,7 @@ export function useSessionGate(): SessionGateValue {
 }
 
 export function SessionGate({ children }: PropsWithChildren) {
-  const queryClient = useQueryClient();
-  const [credentials, setCredentials] = useState<Credentials | null>(storedCredentials);
+  const [credentials, saveCredentials] = useState<Credentials | null>(storedCredentials);
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
   const [booting, setBooting] = useState(nativeHost);
@@ -86,7 +87,15 @@ export function SessionGate({ children }: PropsWithChildren) {
   const [pairing, setPairing] = useState(false);
   const [remoteControlEnabled, setRemoteControlEnabled] = useState(false);
   const backHandler = useRef<() => void>(() => {});
+  const pairingOperation = useRef<AbortController | null>(null);
   const videoQualityPreference = useVideoQualityPreference();
+  const setCredentials = useCallback((value: Credentials | null) => {
+    pairingOperation.current?.abort();
+    pairingOperation.current = null;
+    setPairing(false);
+    saveCredentials(value);
+  }, []);
+  useEffect(() => () => pairingOperation.current?.abort(), []);
 
   useEffect(() => { if (!nativeHost && pairingCodeFromHash(location.hash)) history.replaceState(history.state, "", location.pathname + location.search); }, []);
   useEffect(() => { try { localStorage.setItem(remoteNameKey, remoteName); } catch { /* Pairing still works without remembering the name. */ } }, [remoteName]);
@@ -113,29 +122,37 @@ export function SessionGate({ children }: PropsWithChildren) {
   }
 
   const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  // A cache belongs to one authenticated connection/authority, never to storage.
+  // The new provider is selected during render, before old responses can become
+  // visible under new credentials. Cleanup cancels the retired queries; its
+  // detached client cannot populate the replacement client even if I/O ignores abort.
+  const cache = useMemo(() => ({ id: ++cacheSequence, client: new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } }) }),
+    [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id]);
+  const queryClient = cache.client;
+  useLayoutEffect(() => () => queryClient.clear(), [queryClient]);
   useUpdateActivity(credentials, connected);
   useEffect(() => setRemoteControlEnabled(details?.remoteControlEnabled === true), [details?.remoteControlEnabled]);
 
-  // Socket events replace the old version-prop drilling: when the server
-  // bumps a revision, the matching Query cache is invalidated and readers
-  // refetch. Sections opt in by reading through api/ queryOptions instead of
-  // receiving version props.
-  const revisions = useRef({ library: 0, radio: 0, iptv: 0, recordings: 0, provider: 0, jellyfin: 0, playlist: 0, forLater: 0, controller: 0 });
+  // Session snapshots invalidate Query directly. The first snapshot after a
+  // reconnect revalidates everything, including counters reset by server restart.
+  const revisions = useRef<{ client: QueryClient; state: SessionState } | null>(null);
   useEffect(() => {
-    if (!state) return;
-    const changed = (current: number | undefined, previous: number) => current !== undefined && current !== previous;
-    const invalidate = (key: string[]) => { void queryClient.invalidateQueries({ queryKey: key }); };
-    if (changed(state.libraryVersion, revisions.current.library)) invalidate(["library"]);
-    if (changed(state.radioVersion, revisions.current.radio)) invalidate(["radio"]);
-    if (changed(state.iptvVersion, revisions.current.iptv)) invalidate(["iptv"]);
-    if (changed(state.recordingsVersion, revisions.current.recordings)) invalidate(["recordings"]);
-    if (changed(state.providerVersion, revisions.current.provider)) invalidate(["providers"]);
-    if (changed(state.jellyfinVersion, revisions.current.jellyfin)) invalidate(["jellyfin"]);
-    if (changed(state.playlistVersion, revisions.current.playlist)) invalidate(["playlists"]);
-    if (changed(state.forLaterVersion, revisions.current.forLater)) invalidate(["for-later"]);
-    if (changed(state.controllerVersion, revisions.current.controller)) invalidate(["controllers"]);
-    revisions.current = { library: state.libraryVersion ?? 0, radio: state.radioVersion ?? 0, iptv: state.iptvVersion ?? 0, recordings: state.recordingsVersion ?? 0, provider: state.providerVersion ?? 0, jellyfin: state.jellyfinVersion ?? 0, playlist: state.playlistVersion ?? 0, forLater: state.forLaterVersion ?? 0, controller: state.controllerVersion ?? 0 };
-  }, [state, queryClient]);
+    if (!connected || !state) {
+      revisions.current = null;
+      void queryClient.cancelQueries();
+      return;
+    }
+    const previous = revisions.current;
+    if (!previous || previous.client !== queryClient) void queryClient.invalidateQueries();
+    else {
+      const domains = { library: "library", radio: "radio", iptv: "iptv", recordings: "recordings", provider: "providers", jellyfin: "jellyfin", playlist: "playlists", forLater: "for-later", controller: "controllers" } as const;
+      for (const [domain, key] of Object.entries(domains)) {
+        const field = `${domain}Version` as `${keyof typeof domains}Version`;
+        if ((state[field] ?? 0) !== (previous.state[field] ?? 0)) void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    }
+    revisions.current = { client: queryClient, state };
+  }, [state, connected, queryClient]);
 
   useInterfaceSize(nativeHost, state?.appearance);
   const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
@@ -182,7 +199,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (!disposed) setBooting(false);
     });
     return () => { disposed = true; };
-  }, [hostAttempt]);
+  }, [hostAttempt, setCredentials]);
 
   useEffect(() => {
     if (!nativeHost) return;
@@ -227,25 +244,30 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const pair = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
+    pairingOperation.current?.abort();
+    const operation = new AbortController();
+    pairingOperation.current = operation;
+    const current = () => pairingOperation.current === operation && !operation.signal.aborted && credentials === currentCredentials.current;
     setPairing(true);
     setError(null);
     try {
       const origin = credentials?.origin ?? location.origin;
       const response = await fetch(`${origin}/api/pair`, {
         method: "POST",
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.any([operation.signal, AbortSignal.timeout(8_000)]),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: pairingCode.trim(), name: remoteName.trim() }),
       });
       const result = await response.json() as { token?: string; installationId?: string; error?: string };
+      if (!current()) return;
       if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the playback computer." : result.error || "Could not pair with the player.");
       try { localStorage.setItem(tokenKey, result.token); localStorage.setItem(installationKey, result.installationId); } catch { /* Pairing still works for this tab. */ }
       setCredentials({ origin, token: result.token, installationId: result.installationId });
       setPairingCode("");
     } catch (reason) {
-      setError(`${errorText(reason)} Check that your device and playback computer are on the same network, then try Connect again.`);
+      if (current()) setError(`${errorText(reason)} Check that your device and playback computer are on the same network, then try Connect again.`);
     } finally {
-      setPairing(false);
+      if (pairingOperation.current === operation) { pairingOperation.current = null; setPairing(false); }
     }
   };
 
@@ -256,10 +278,10 @@ export function SessionGate({ children }: PropsWithChildren) {
   };
 
   const value: SessionGateValue = {
-    nativeHost, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
+    queryClient, nativeHost, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, reconnect, pair, unpair,
     pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
     tv, registerBackHandler: handler => { backHandler.current = handler; },
   };
-  return <SessionGateContext.Provider value={value}>{children}</SessionGateContext.Provider>;
+  return <SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider>;
 }
