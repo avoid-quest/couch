@@ -194,7 +194,7 @@ export async function verifyClaim(context: Context) {
   await openConnectionSettings(ui, until);
   await until("unclaimed TV Settings displays its separate short-lived administrator code and local QR", () => ui.execute("return /^\\d{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent ?? '') && !!document.querySelector('[aria-label=\"Administrator setup\"] svg title')"));
   const code = await ui.execute("return document.querySelector('[data-administrator-code]').textContent");
-  const qr = await ui.execute("const svg = [...document.querySelectorAll('[role=dialog] svg')].find(svg => svg.querySelector('title')); return { svg: svg.outerHTML, title: svg.querySelector('title').textContent, links: [...document.querySelectorAll('[role=dialog] a')].map(a => a.href) }");
+  const qr = await ui.execute("const setup = document.querySelector('[aria-label=\"Administrator setup\"]'); const svg = [...setup.querySelectorAll('svg')].find(value => value.querySelector('title')); return { svg: svg.outerHTML, title: svg.querySelector('title').textContent, links: [...setup.querySelectorAll('a')].map(a => a.href) }");
   assert.match(qr.title, /^Open Couch at https?:\/\//, "The setup QR title identifies its local HTTP address");
   const qrAddress = new URL(qr.title.slice("Open Couch at ".length)).href;
   assert.ok(qr.links.some((url: string) => new URL(url).href === qrAddress), "The setup QR points to one displayed local TV address");
