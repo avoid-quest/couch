@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 // Non-onboarding journeys start after setup, but keep their existing pairing and
@@ -15,5 +16,10 @@ export function seedConfiguredFixture(directory = process.env.COUCH_DATA_DIR ?? 
   db.close();
   // Non-onboarding playback journeys exercise the configured local TV, not
   // first-use device selection; native startup reads this sidecar-side choice.
-  writeFileSync(join(directory, "operating-mode.json"), JSON.stringify({ mode: "local", address: null, targets: [], localSetupComplete: true }));
+  const choice = JSON.stringify({ mode: "local", address: null, targets: [], localSetupComplete: true });
+  writeFileSync(join(directory, "operating-mode.json"), choice);
+  // WebDriver launches the native binary without this script's data override.
+  const nativeData = join(homedir(), ".local/share/quest.avoid.couch");
+  mkdirSync(nativeData, { recursive: true });
+  writeFileSync(join(nativeData, "operating-mode.json"), choice);
 }
