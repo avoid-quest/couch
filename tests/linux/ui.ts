@@ -69,7 +69,19 @@ export class UiDriver {
   }
 
   async click(selector: string) {
-    await this.clickElement(await this.element(selector));
+    // React can replace a stable-looking navigation node while playback state
+    // settles. Resolve again for that narrow stale-element race, not for real
+    // assertions or clicks that have already reached the browser.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try { await this.clickElement(await this.element(selector)); return; }
+      catch (error) {
+        lastError = error;
+        if (!String(error).includes("Node with identifier")) throw error;
+        await Bun.sleep(50);
+      }
+    }
+    throw lastError;
   }
 
   async clickElement(id: string) {
