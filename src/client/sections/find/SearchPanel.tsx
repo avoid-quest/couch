@@ -10,7 +10,6 @@ import type { ProviderId, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchSource } from "./SearchSource";
 import { SearchRadioResults } from "./SearchRadioResults";
-import { useInvalidation } from "./useInvalidation";
 import { QualityOptions } from "@/components/QualitySelect";
 import { supportsWebVideoQuality, useEnqueueVideoQuality } from "../../video-quality";
 import { createId } from "../../session/session";

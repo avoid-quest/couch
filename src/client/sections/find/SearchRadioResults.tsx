@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useInvalidation } from "./useInvalidation";
-import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioStation } from "../../../shared/radio";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { avoidRadioPlaylistId, type RadioStation } from "../../../shared/radio";
+import { radioFavoritesListQuery, radioSearchQuery } from "@/api/radio";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
@@ -10,70 +11,34 @@ import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlin
 
 type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
-  return <RadioResults key={`${props.origin}:${props.token}`} {...props} />;
+  return <RadioResults key={JSON.stringify([props.origin, props.token, props.source, props.directory, props.query])} {...props} />;
 }
 function RadioResults(props: Props) {
+  const client = useQueryClient();
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const restoreDetailFocus = useRef(false);
-  const [stations, setStations] = useState<RadioStation[]>([]);
-  const [favorites, setFavorites] = useState<RadioStation[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const revision = useInvalidation("radio");
-  const forceRefresh = useRef(false);
   const [visible, setVisible] = useState(6);
   const lifetime = useRef<AbortController | null>(null);
-  const previousSearch = useRef("");
   const title = props.source ?? (props.directory ? "Radio directory" : "Radio playlists");
   const directory = title === "Radio directory", avoid = title === "avoid radio";
+  const options = radioSearchQuery(props, title, props.query);
+  const search = useQuery({ ...options, enabled: props.connected });
+  const kept = useQuery({ ...radioFavoritesListQuery(props), enabled: props.connected, retry: false });
+  const stations = search.data?.stations ?? [];
+  const favorites = kept.error ? null : kept.data?.favorites ?? null;
+  const loading = props.connected && search.isFetching;
+  const error = search.error ? searchError(search.error) : search.data?.error ?? "";
+  const saveError = kept.error ? searchError(kept.error) : "";
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; setBusy(false); return () => controller.abort(); }, [props.origin, props.token, props.connected]);
-  useEffect(() => {
-    if (!props.connected) { setFavorites(null); return; }
-    const controller = new AbortController(); setSaveError("");
-    void readSearch<{ favorites: RadioStation[] }>(props, "/api/radio/favorites", controller.signal).then(body => { if (!controller.signal.aborted) setFavorites(body.favorites); }).catch(reason => { if (!controller.signal.aborted) { setFavorites(null); setSaveError(searchError(reason)); } });
-    return () => controller.abort();
-  }, [props.origin, props.token, props.connected, revision, retry]);
-  useEffect(() => {
-    if (!props.connected) { setLoading(false); return; }
-    const controller = new AbortController(); setLoading(true); setError("");
-    const key = JSON.stringify([props.origin, props.token, props.query]);
-    if (previousSearch.current !== key) { previousSearch.current = key; setStations([]); setVisible(6); }
-    async function load() {
-      if (props.query.length > 100) throw new Error("Search radio with at most 100 characters.");
-      const query = new URLSearchParams({ q: props.query });
-      if (avoid) {
-        const refresh = forceRefresh.current;
-        forceRefresh.current = false;
-        const { playlist, stations } = await readSearch<AvoidRadioCatalog>(props, `/api/radio/avoid${refresh ? "?refresh=true" : ""}`, controller.signal);
-        if (!controller.signal.aborted && playlist?.error) setError(playlist.error);
-        return stations.filter(station => `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase()));
-      }
-      if (directory) return (await readSearch<{ stations: RadioStation[] }>(props, `/api/radio/stations?${query}`, controller.signal)).stations;
-      const { playlists: allPlaylists } = await readSearch<{ playlists: RadioPlaylistSummary[] }>(props, "/api/radio/playlists", controller.signal);
-      const playlists = allPlaylists.filter(playlist => playlist.id !== avoidRadioPlaylistId);
-      const results: RadioStation[][] = Array.from({ length: playlists.length }, () => []);
-      const failures: string[] = [];
-      let index = 0;
-      // Keep configured-source reads bounded even when the TV has many playlists.
-      await Promise.all(Array.from({ length: Math.min(3, playlists.length) }, async () => {
-        while (index < playlists.length && !controller.signal.aborted) {
-          const current = index++; const playlist = playlists[current]!;
-          try { results[current] = (await readSearch<{ stations: RadioStation[] }>(props, `/api/radio/playlists/${encodeURIComponent(playlist.id)}/stations?${query}`, controller.signal)).stations; }
-          catch (reason) { failures.push(`${playlist.name}: ${searchError(reason)}`); }
-        }
-      }));
-      if (!controller.signal.aborted && failures.length) setError(failures.join(" "));
-      return [...new Map(results.flat().map(station => [station.id, station])).values()];
-    }
-    void load().then(result => { if (!controller.signal.aborted) setStations(result); }).catch(reason => { if (!controller.signal.aborted) setError(searchError(reason)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [props.origin, props.token, props.connected, props.query, title, directory ? 0 : revision, retry]);
+
+  async function retry() {
+    await client.invalidateQueries({ queryKey: options.queryKey, exact: true, refetchType: "none" });
+    await client.fetchQuery({ ...radioSearchQuery(props, title, props.query, avoid), staleTime: 0 }).catch(() => {});
+  }
   async function action(work: (signal: AbortSignal) => Promise<boolean | void>, done: string) {
     if (busy || !props.connected || !lifetime.current) return;
     const signal = lifetime.current.signal; setBusy(true); setActionError(""); setNotice("");
@@ -87,7 +52,7 @@ function RadioResults(props: Props) {
   function save(station: RadioStation, saved: boolean) {
     void action(async signal => {
       await readSearch(props, saved ? `/api/radio/favorites/${encodeURIComponent(station.id)}` : "/api/radio/favorites", signal, { method: saved ? "DELETE" : "POST", ...(saved ? {} : { body: JSON.stringify({ station }) }) });
-      if (!signal.aborted) setFavorites(current => saved ? current?.filter(entry => entry.id !== station.id) ?? [] : [...current?.filter(entry => entry.id !== station.id) ?? [], station]);
+      if (!signal.aborted) await client.invalidateQueries({ queryKey: ["radio", "favorites"] });
     }, `${station.name} ${saved ? "removed." : "kept."}`);
   }
   const matches = (station: RadioStation) => !!station.sourceId && station.sourceId !== avoidRadioPlaylistId && `${station.name} ${station.groupTitle ?? ""}`.toLocaleLowerCase().includes(props.query.toLocaleLowerCase());
@@ -114,13 +79,13 @@ function RadioResults(props: Props) {
   };
   return <section aria-label={`${title} search results`} aria-busy={loading} className="grid gap-3.5 border-t py-6 first:border-t-0 first:pt-3"><div className="flex items-baseline justify-between gap-3"><h2 className="text-[13px] font-semibold tracking-[.01em] text-muted-foreground">{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
-    {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => { forceRefresh.current = avoid; setRetry(value => value + 1); }}>Retry {title}</Button></p>}
+    {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => void retry()}>Retry {title}</Button></p>}
     {error && !directory && !avoid && (props.onManageSources ? <Button variant="outline" onClick={() => props.onManageSources?.("radio")}>Source settings</Button> : <p className="text-sm text-muted-foreground">Ask an administrator to manage this source.</p>)}
-    {saveError && <p role="status">Kept status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => setRetry(value => value + 1)}>Retry kept status</Button></p>}
+    {saveError && <p role="status">Kept status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => void kept.refetch()}>Retry kept status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{results.slice(0, visible).map(station => <li key={station.id} className="flex min-w-0 flex-col"><MediaArtwork thumbnail={station.logoUrl} title={station.name} /><div className="grid gap-1 px-0.5 pb-0 pt-2.5"><Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong className="text-[15px] font-semibold leading-tight break-words">{station.name}</strong><small className="text-xs text-muted-foreground">{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button></div>{itemActions(station)}</li>)}</ul>
-    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><MediaArtwork thumbnail={detail.logoUrl} title={detail.name} className="h-auto aspect-[1.9] w-full" /><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
+    <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current?.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><MediaArtwork thumbnail={detail.logoUrl} title={detail.name} className="h-auto aspect-[1.9] w-full" /><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;
 }
