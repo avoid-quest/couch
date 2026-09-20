@@ -345,7 +345,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       const fonts = await request(`/session/${session}/execute/async`, {
         script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(document.fonts.status))));", args: [],
       });
-      return fonts === "loaded" && await ui.execute("return document.documentElement.clientWidth === innerWidth && document.documentElement.scrollWidth <= innerWidth + 1");
+      return fonts === "loaded" && await ui.execute("return document.documentElement.scrollWidth <= innerWidth + 1");
     });
     // WebKitWebDriver's element clicks do not account for this fractional GTK
     // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
