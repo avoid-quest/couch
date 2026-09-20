@@ -36,7 +36,7 @@ test("a complete passing receipt qualifies only the exact clean revision", () =>
 });
 
 test("missing steps, process failures and empty runs cannot qualify", () => {
-  for (const exits of [[], [0], [0, 1], [0, 1], [127], [0, 0, 0]]) expect(verificationOutcome(before, before, exits, 2)).toEqual({ passed: false, eligible: false });
+  for (const exits of [[], [0], [0, 1], [127], [0, 0, 0]]) expect(verificationOutcome(before, before, exits, 2)).toEqual({ passed: false, eligible: false });
 });
 
 test("a failing CLI preflight removes a previous success receipt", async () => {

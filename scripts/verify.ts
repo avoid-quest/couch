@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
 type Source = { revision: string; dirty: boolean };
@@ -19,6 +19,11 @@ export function verificationOutcome(before: Source, after: Source, exits: number
 
 async function main() {
   const root = resolve(import.meta.dir, "..");
+  const artifacts = resolve(process.env.COUCH_VERIFICATION_ARTIFACTS ?? resolve(root, ".artifacts"));
+  await mkdir(artifacts, { recursive: true });
+  // Invalidate older evidence before argument parsing or Git/tooling preflight.
+  // A failed or interrupted attempt must not leave an earlier green receipt.
+  await rm(resolve(artifacts, "verification.json"), { force: true });
   const commands = verificationPlan(process.argv.slice(2));
   const git = (...args: string[]) => {
     const result = Bun.spawnSync(["git", ...args], { cwd: root });
@@ -55,8 +60,6 @@ async function main() {
   try { after = source(); } catch (reason) { error ??= String(reason); }
   const outcome = verificationOutcome(before, after, steps.map(step => step.exitCode), commands.length);
   const eligible = !error && outcome.eligible;
-  const artifacts = resolve(process.env.COUCH_VERIFICATION_ARTIFACTS ?? resolve(root, ".artifacts"));
-  await mkdir(artifacts, { recursive: true });
   await Bun.write(resolve(artifacts, "verification.json"), JSON.stringify({
     schema: 1, before, after, startedAt, finishedAt: new Date().toISOString(),
     bun: Bun.version, platform: process.platform, architecture: process.arch,
