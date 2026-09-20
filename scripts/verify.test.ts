@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { verificationPlan, verificationOutcome } from "./verify";
 
 const revision = "a".repeat(40);
@@ -33,5 +36,20 @@ test("a complete passing receipt qualifies only the exact clean revision", () =>
 });
 
 test("missing steps, process failures and empty runs cannot qualify", () => {
-  for (const exits of [[], [0], [0, 1], [127], [0, 0, 0]]) expect(verificationOutcome(before, before, exits, 2)).toEqual({ passed: false, eligible: false });
+  for (const exits of [[], [0], [0, 1], [0, 1], [127], [0, 0, 0]]) expect(verificationOutcome(before, before, exits, 2)).toEqual({ passed: false, eligible: false });
+});
+
+test("a failing CLI preflight removes a previous success receipt", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-verification-receipt-"));
+  const receipt = join(directory, "verification.json");
+  try {
+    await Bun.write(receipt, JSON.stringify({ eligible: true, before }));
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "verify.ts"), "--unknown"], {
+      env: { ...process.env, COUCH_VERIFICATION_ARTIFACTS: directory }, stdout: "pipe", stderr: "pipe",
+    });
+    const [code, error] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(code).not.toBe(0);
+    expect(error).toContain("Unknown verification option");
+    expect(await Bun.file(receipt).exists()).toBe(false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
