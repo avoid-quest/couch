@@ -13,10 +13,13 @@ import { startHttpRemote, type Wait } from "./ui";
 // a pipe-level native peer. Run in the Linux test container (including its null
 // PulseAudio sink). This checks delivery and commands, not libmpv or hardware.
 const root = resolve(import.meta.dir, "../..");
-const binary = resolve(process.env.COUCH_SIDECAR ?? join(root, "src-tauri/binaries/couch-server-x86_64-unknown-linux-gnu"));
+const architecture = process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : null;
+assert.ok(process.platform === "linux" && architecture, "Use the existing Linux amd64/arm64 test environment");
+const binary = resolve(process.env.COUCH_SIDECAR ?? join(root, `src-tauri/binaries/couch-server-${architecture}-unknown-linux-gnu`));
 const dist = resolve(process.env.COUCH_FRONTEND_DIST ?? join(root, "dist"));
 const artifacts = resolve(process.env.COUCH_ARTIFACTS ?? join(root, ".artifacts/built-remote"));
 await mkdir(artifacts, { recursive: true });
+await rm(join(artifacts, "result.json"), { force: true });
 const directory = await mkdtemp(join(tmpdir(), "couch-built-remote-"));
 seedConfiguredFixture(directory);
 const hostToken = crypto.randomUUID() + crypto.randomUUID();
@@ -70,7 +73,7 @@ const until: Wait = async (description, predicate, timeout = 15_000) => {
   checks.push(description);
 };
 const digest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
-let completed = false;
+let receipt: string | undefined;
 try {
   await until("built sidecar announces readiness", () => !!info);
   const { origin, pairingCode } = info!;
@@ -135,17 +138,19 @@ try {
     return Array.isArray(values) && values.some(value => value.scope === origin + "/" && value.script === origin + "/sw.js");
   });
   await remote.screenshot("built-remote");
-  await Bun.write(join(artifacts, "result.json"), JSON.stringify({ revision: build.revision, build, simulatedNative: true, hardwareVerified: false, checks, assets }, null, 2));
-  completed = true;
+  receipt = JSON.stringify({ revision: build.revision, build, simulatedNative: true, hardwareVerified: false, checks, assets }, null, 2);
 } finally {
-  await remote?.close();
-  socket?.close();
+  let cleanupError: unknown;
+  try { await remote?.close(); } catch (error) { cleanupError = error; }
+  try { socket?.close(); } catch (error) { cleanupError ??= error; }
   try { send({ type: "shutdown" }); } catch { /* The process may already have failed. */ }
   const killed = setTimeout(() => child.kill(), 5_000);
   const code = await child.exited;
   clearTimeout(killed);
   await reader;
   await rm(directory, { recursive: true, force: true });
-  if (completed) { assert.equal(code, 0, "Sidecar shuts down cleanly"); if (pipeError) throw pipeError; }
+  if (receipt) { assert.equal(code, 0, "Sidecar shuts down cleanly"); if (cleanupError) throw cleanupError; if (pipeError) throw pipeError; }
 }
+// Only retain success evidence after browser and sidecar cleanup also succeeded.
+await Bun.write(join(artifacts, "result.json"), receipt!);
 console.log(`PASS built-sidecar remote: ${checks.length} checks; simulated native playback, no hardware qualification.`);
