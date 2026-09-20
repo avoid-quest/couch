@@ -18,6 +18,9 @@ jobs:
     timeout-minutes: 15
     env:
       CHECK_NATIVE: ${{ inputs.native }}
+      # Workflow containers can expose several private interfaces; qualification
+      # needs one deterministic LAN address for native sidecar sharing tests.
+      COUCH_LAN_INTERFACE: eth0
       # Keep assertions and overflow checks without bulky debug symbols.
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
