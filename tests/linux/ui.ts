@@ -56,6 +56,7 @@ export class UiDriver {
 
   async addMedia() {
     await this.browse();
+    if (await this.execute("return !!document.querySelector('[role=dialog] #media-url')")) return;
     if (await this.execute("const input = document.querySelector('#media-url'); return !!input && input.getClientRects().length > 0 && !input.closest('[hidden]')")) return;
     await this.section("Now");
     await this.button("Add media");
