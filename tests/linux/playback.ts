@@ -1,5 +1,5 @@
-import { seedConfiguredFixture } from "./configured-fixture";
-seedConfiguredFixture();
+import { seedFirstUseLocalFixture } from "./configured-fixture";
+seedFirstUseLocalFixture();
 import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
@@ -182,7 +182,9 @@ try {
   // already connecting.
   if (await execute("return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'This computer')")) await ui.button("This computer");
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
-  if (await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false")) await ui.button("Keep private");
+  await until("local first-use offers the sharing choice", async () => await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false"), 10_000);
+  await ui.button("Allow remote control");
+  await until("local first-use enables remote control", () => execute("return !!document.querySelector('.pair-shortcut')"));
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
   await assertTvFullscreen(ui, until, "startup");
