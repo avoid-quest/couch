@@ -177,7 +177,11 @@ try {
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
+  // This playback journey deliberately selects the local device, whether the
+  // isolated app is configured or starts with an empty choice.
+  await ui.button("This computer");
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
+  if (await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false")) await ui.button("Keep private");
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
   await assertTvFullscreen(ui, until, "startup");
