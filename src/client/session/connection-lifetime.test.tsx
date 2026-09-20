@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isRedirect } from "@tanstack/react-router";
 import type { ServerMessage, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
@@ -209,4 +209,30 @@ test("unpair cancels a pending pairing response rather than silently pairing the
   await act(async () => pending);
   expect(gate.credentials).toBeNull();
   expect(localStorage.getItem("couch.remote-token")).toBeNull();
+});
+
+test("a reachable local coordinator still serves and refreshes reads when the browser reports offline", async () => {
+  const wasOnline = onlineManager.isOnline();
+  onlineManager.setOnline(false);
+  try {
+    await mount(); await connected();
+    await until(() => !!screen.queryByText("Old household"));
+    title = "Updated local library";
+    await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, libraryVersion: 1 } }));
+    await until(() => !!screen.queryByText("Updated local library"));
+    expect(onlineManager.isOnline()).toBe(false);
+    expect(gate.connected).toBe(true);
+  } finally { await act(async () => onlineManager.setOnline(wasOnline)); }
+});
+
+test("a captured callback from a revoked socket cannot restore connected state", async () => {
+  await mount(); await connected();
+  const revoked = sockets.at(-1)!;
+  const lateMessage = revoked.onmessage!;
+  await act(async () => revoked.close(4001));
+  await act(async () => lateMessage({ data: JSON.stringify({ type: "state", state }) } as MessageEvent<string>));
+  expect(gate.connected).toBe(false);
+  expect(gate.pairingRequired).toBe(true);
+  expect(gate.identity).toBeNull();
+  expect(gate.state).toBeNull();
 });
