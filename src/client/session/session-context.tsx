@@ -126,8 +126,12 @@ export function SessionGate({ children }: PropsWithChildren) {
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
   // detached client cannot populate the replacement client even if I/O ignores abort.
-  const cache = useMemo(() => ({ id: ++cacheSequence, client: new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } }) }),
-    [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id]);
+  // Local/loopback reachability comes from the session, not the browser's offline
+  // indicator. Disconnected reads are disabled/cancelled below, never queued for replay.
+  const cache = useMemo(() => ({ id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
+    queries: { networkMode: "always", retry: 1, refetchOnWindowFocus: false },
+    mutations: { networkMode: "always", retry: false },
+  } }) }), [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id]);
   const queryClient = cache.client;
   useLayoutEffect(() => () => queryClient.clear(), [queryClient]);
   useUpdateActivity(credentials, connected);
