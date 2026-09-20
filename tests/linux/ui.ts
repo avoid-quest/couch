@@ -84,15 +84,17 @@ export class UiDriver {
     // resolves it. Retry only that lookup: after an element handle exists, a
     // stale-node failure must stop because the click may already have applied.
     let lastError: unknown;
+    let id: string | undefined;
     for (let attempt = 0; attempt < 5; attempt++) {
-      try { return await this.clickElement(await this.element(selector)); }
+      try { id = await this.element(selector); break; }
       catch (error) {
         lastError = error;
         if (!String(error).includes("Node with identifier")) throw error;
         await Bun.sleep(50);
       }
     }
-    throw lastError;
+    if (!id) throw lastError;
+    return await this.clickElement(id);
   }
 
   async clickElement(id: string) {
@@ -349,14 +351,14 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     const width = await ui.execute("return innerWidth");
     await request(`/session/${session}/window/rect`, { width: Math.round(rect.width * 390 / width), height: 900 });
     await until("HTTP remote viewport is phone sized", async () => await ui.execute("return innerWidth") === 390);
-    // WebKit can expose the new innerWidth while the previous larger GTK layout
-    // is still active. Settle frames and fonts first; overflow itself remains
-    // an assertion failure with named elements.
-    await ui.waitFor("Phone viewport layout and fonts settle after resize", async () => {
+    // WebKit can expose the new innerWidth before replacement fonts finish
+    // loading. Let those frames settle; overflow itself remains an assertion
+    // failure with named elements.
+    await ui.waitFor("Phone viewport fonts settle after resize", async () => {
       const fonts = await request(`/session/${session}/execute/async`, {
         script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(document.fonts.status))));", args: [],
       });
-      return fonts === "loaded" && await ui.execute("return document.documentElement.scrollWidth <= innerWidth + 1");
+      return fonts === "loaded";
     });
     // WebKitWebDriver's element clicks do not account for this fractional GTK
     // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
