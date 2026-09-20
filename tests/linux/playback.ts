@@ -205,7 +205,7 @@ try {
 
   await type("#media-url", "http://127.0.0.1:4200/multitrack.mkv");
   await type("#media-title", "Linux multitrack fixture");
-  await click(".queue-add-form button[type=submit]");
+  await click("[role=dialog] form button[type=submit]");
   await until("native UI queues media for both remotes", () => all(state => state.queue.length === 1));
   await click('[aria-label="Play Linux multitrack fixture"]');
   await until("native libmpv playback observed by both remotes", () => all(state => state.player.status === "playing" && state.player.position > 0));
@@ -470,7 +470,7 @@ try {
   await ui.select("#media-quality", qualityLabel("480p"));
   await type("#media-url", "http://127.0.0.1:4200/web.html");
   await type("#media-title", "");
-  await click(".queue-add-form button[type=submit]");
+  await click("[role=dialog] form button[type=submit]");
   await until("native webpage form shares chosen quality with both remotes", () => all(state => state.queue.some(entry => entry.source === "web:http://127.0.0.1:4200/web.html" && entry.quality === "480p")));
   const webEntryId = clients[0]!.state!.queue.find(entry => entry.source === "web:http://127.0.0.1:4200/web.html")!.id;
   await until("real yt-dlp fills automatic webpage title and artwork for both remotes", () => all(state => state.queue.some(entry =>
@@ -494,7 +494,7 @@ try {
     await ui.select("#media-quality", qualityLabel(quality));
     await type("#media-url", "http://127.0.0.1:4200/quality.html");
     await type("#media-title", title);
-    await click(".queue-add-form button[type=submit]");
+    await click("[role=dialog] form button[type=submit]");
     await until(`native webpage form queues multiresolution DASH at ${quality}`, () => all(state => state.queue.some(entry => entry.title === title && entry.quality === quality)));
     const entry = clients[0]!.state!.queue.find(entry => entry.title === title)!;
     const playButton = `[aria-label=${JSON.stringify(`Play ${title}`)}]`;

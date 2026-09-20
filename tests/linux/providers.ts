@@ -186,7 +186,7 @@ try {
         await ui.select("#media-kind", provider.kind === "webpage" ? "Webpage" : "Direct media");
         await interact("#media-url", provider.url!);
         await interact("#media-title", provider.name);
-        await interact(".queue-add-form button[type=submit]");
+        await interact("[role=dialog] form button[type=submit]");
         await until(() => remotes.every(remote => remote.state?.queue.some(entry => entry.title === provider.name)));
         entry = remotes[0]!.state!.queue.find(entry => entry.title === provider.name)!;
         command(0, { type: "play", entryId: entry.id });
