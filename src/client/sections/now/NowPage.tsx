@@ -11,6 +11,7 @@ import { useShell } from "@/sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { SearchBar } from "@/components/SearchBar";
+import { SessionBar } from "@/components/SessionBar";
 
 export function NowPage() {
   const shell = useShell();
@@ -70,6 +71,9 @@ export function NowPage() {
                   </div>}
             </SortableRow>;
           })}
+          {/* A customized Now page can hide its Now playing section. This bar is
+              the TV's remaining transport route while browsing that page. */}
+          {nativeHost && tv.browsing && hidden.includes("playing") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tv.dismissLayer()} />}
         </section>
       </SortableContext>
     </DndContext>
