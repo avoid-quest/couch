@@ -13,7 +13,17 @@ export class UiDriver {
 
   async element(selector: string) {
     if (/^#media-(url|title|kind|quality)$/.test(selector)) await this.addMedia();
-    return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
+      } catch (error) {
+        lastError = error;
+        if (!String(error).includes("no such element")) throw error;
+        await Bun.sleep(50);
+      }
+    }
+    throw lastError;
   }
 
   async waitFor(description: string, predicate: () => Promise<boolean>) {
