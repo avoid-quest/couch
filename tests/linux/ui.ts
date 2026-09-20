@@ -338,6 +338,15 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     const width = await ui.execute("return innerWidth");
     await request(`/session/${session}/window/rect`, { width: Math.round(rect.width * 390 / width), height: 900 });
     await until("HTTP remote viewport is phone sized", async () => await ui.execute("return innerWidth") === 390);
+    // WebKit can expose the new innerWidth while the previous larger GTK layout
+    // is still active. Settle frames and fonts first; overflow itself remains
+    // an assertion failure with named elements.
+    await ui.waitFor("Phone viewport layout and fonts settle after resize", async () => {
+      const fonts = await request(`/session/${session}/execute/async`, {
+        script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(document.fonts.status))));", args: [],
+      });
+      return fonts === "loaded" && await ui.execute("return document.documentElement.clientWidth === innerWidth && document.documentElement.scrollWidth <= innerWidth + 1");
+    });
     // WebKitWebDriver's element clicks do not account for this fractional GTK
     // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
     ui.clickElement = async id => {
