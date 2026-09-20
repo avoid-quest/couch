@@ -170,7 +170,7 @@ test("an unreachable remote cannot prevent this installation's update controls",
   connectionError = "Cannot reach that Couch.";
   request.mockImplementation((async (input, init) => {
     expect(String(input)).toStartWith("http://127.0.0.1:54321/");
-    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer own-installation");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer own-installation");
     if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
     return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, repairAvailable: false, transaction: null } });
   }) as typeof fetch);
