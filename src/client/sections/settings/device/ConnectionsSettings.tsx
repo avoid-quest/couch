@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { controllersQuery } from "@/api/controllers";
@@ -36,7 +36,9 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const [pairingOpen, setPairingOpen] = useState(false);
   const [sharingPending, setSharingPending] = useState(false);
   const [sharingError, setSharingError] = useState<string | null>(null);
+  const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
+  useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
 
   async function claim(event: FormEvent) {
     event.preventDefault();
@@ -78,8 +80,9 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       {manager && <section aria-label="Pair a remote" className="space-y-3">
         <h3 className="font-medium">Pair a new remote</h3>
         <p className="text-sm text-muted-foreground">New devices pair as controllers. Promote one below to make it an administrator.</p>
-        <Button disabled={!connected || !pairUrl} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
-        <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} />
+        <Button ref={pairingRef} disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
+        {!remoteControlEnabled && <p className="text-sm text-muted-foreground">Turn on remote control before pairing a device.</p>}
+        <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} openerRef={pairingRef} />
       </section>}
       {identity.authority === "host" && <section aria-label="Remote control" className="space-y-3">
         <div className="flex items-center justify-between gap-4"><div><h3 className="font-medium">Allow remote control</h3><p className="text-sm text-muted-foreground">Let browsers and other Couch apps on your LAN pair with this computer.</p></div><Switch aria-label="Allow remote control" checked={remoteControlEnabled} disabled={sharingPending} onCheckedChange={saveSharing} /></div>
