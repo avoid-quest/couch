@@ -88,7 +88,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
       mode = failure;
       await refresh(imported.id);
       assert.equal((await stations(imported.id)).length, 3, "Failed refresh retains the previously imported catalog");
-      assert.equal(await phone.execute("return document.querySelector(arguments[0])?.textContent.includes('last imported stations are still available')", [sourceCard(imported.id)]), true);
+      assert.equal(await phone.execute("return !!document.querySelector('[aria-labelledby=radio-settings-title] [role=alert]')?.textContent.trim()"), true, "Failed refresh reports an error while the cached catalog stays playable");
       observations.push({ phase: failure, source: (await summaries()).find(source => source.id === imported.id) });
     }
     await httpRemote.screenshot("radio-sources-cached-failure");

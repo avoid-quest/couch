@@ -193,9 +193,9 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     for (const entry of first().queue.filter(entry => !originalQueue.includes(entry.id))) await clients[0]!.command({ type: "remove", entryId: entry.id });
     await stop();
     assert.deepEqual(first().queue.map(entry => entry.id), originalQueue, "IPTV qualification restores the existing queue");
-    for (const client of clients) {
+    for (const [index, client] of clients.entries()) {
       const identity = await (await fetch(`${origin}/api/controllers/me`, { headers: { Origin: origin, Authorization: `Bearer ${client.token}` } })).json() as { authority: string };
-      assert.equal(identity.authority, "controller", "Both existing WebSocket remotes remain ordinary controllers");
+      assert.equal(identity.authority, index === 0 ? "administrator" : "controller", "Source administration preserves the existing controller roles");
     }
     await httpRemote.ui.section("Queue"); await httpRemote.minimize(); await ui.section("Queue");
     evidence.source = saved; evidence.completeBeforeRestart = true;

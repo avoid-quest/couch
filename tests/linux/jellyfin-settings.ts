@@ -48,7 +48,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.type("#jellyfin-url", server);
     await phone.type("#jellyfin-user", username);
     await phone.type("#jellyfin-password", password);
-    await phone.button("Test and connect", settings);
+    await phone.button((await api("/api/jellyfin")).connected ? "Test and replace connection" : "Test and connect", settings);
   };
   const saved = async (username: string) => until("phone connection test saves the selected Jellyfin account", async () => (await api("/api/jellyfin")).username === username && await phone.execute("return !document.querySelector('.jellyfin-connect') && document.querySelector(arguments[0])?.textContent.includes('Connection tested and saved.')", [settings]), 30_000);
   const disconnect = async () => {
