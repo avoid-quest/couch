@@ -142,11 +142,14 @@ export class UiDriver {
   async button(label: string, scope = "") {
     if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
     const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
-      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]).map(button => ({ id: button.getAttribute('element-6066-11e4-a52e-4f735466cecf'), ariaLabel: button.getAttribute('aria-label'), text: button.textContent.trim() }));`, [scope, label]);
+      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
-    const match = matches[0]!;
-    const selector = match.ariaLabel ? `[aria-label="${match.ariaLabel.replaceAll('"', '\\"')}"]` : `xpath=//button[normalize-space()="${label.replaceAll('"', '\\"')}"]`;
-    await this.clickElement(match.id!, selector);
+    const id = matches[0]!["element-6066-11e4-a52e-4f735466cecf"];
+    const selector = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
+      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]).map(button => button.getAttribute('aria-label')
+        ? '[aria-label="' + button.getAttribute('aria-label').replaceAll('"', '\\\\"') + '"]'
+        : 'xpath=//button[normalize-space()="' + button.textContent.trim().replaceAll('"', '\\\\"') + '"]')[0];`, [scope, label]);
+    await this.clickElement(id, selector);
   }
 
   async section(label: string) {
