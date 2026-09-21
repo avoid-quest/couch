@@ -58,7 +58,7 @@ export class UiDriver {
 
   async watching() {
     if (!await this.execute("return !!document.querySelector('.tv-shell')")) return;
-    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show playback");
+    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.key(keys.escape);
     if (await this.execute("return !!document.querySelector('.tv-playback-controls:not([hidden])')")) await this.button("Hide playback controls");
     await this.waitFor("TV browser and playback overlay close before native pixel capture", () => this.execute("return !!document.querySelector('.tv-browser[hidden]') && !!document.querySelector('.tv-playback-controls[hidden]') && !document.querySelector('[role=dialog], [role=listbox], [data-slot=popover-content]')"));
     await Bun.sleep(350);
