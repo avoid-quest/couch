@@ -1,3 +1,4 @@
+import { screen } from "./testing";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, startTransition, StrictMode, Suspense, use, useLayoutEffect } from "react";
@@ -79,7 +80,7 @@ test("an unavailable target never sends its pairing to advertised aliases", asyn
   expect(request).toHaveBeenCalledTimes(1);
   expect(String(request.mock.calls[0]![0])).toStartWith(location.origin + "/api/");
   expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
-  expect(document.querySelector("output")?.textContent).toBe("server-unavailable");
+  expect(screen.getByRole("status").textContent).toBe("server-unavailable");
 });
 
 test("an unpaired page checks its own origin despite cached connection addresses", async () => {
@@ -94,7 +95,7 @@ test("an unpaired page checks its own origin despite cached connection addresses
 test("a replaced installation at the same origin requires pairing before any credential is sent", async () => {
   request.mockImplementation(async () => Response.json({ name: "Different Couch", player: "idle", urls: [location.origin], installationId: "different-installation" }));
   await act(async () => root.render(<Remote credentials={{ origin: location.origin, token: "old-pairing", installationId: "remembered-installation" }} />));
-  expect(document.querySelector("output")?.textContent).toBe("pairing-required");
+  expect(screen.getByRole("status").textContent).toBe("pairing-required");
   expect(request.mock.calls.length).toBeGreaterThan(0);
   for (const [url, options] of request.mock.calls) {
     expect(url).toBe(location.origin + "/api/connection");
@@ -204,11 +205,11 @@ test("controller refresh ignores an older response body completed after a new co
   await act(async () => root.render(<Remote credentials={credentials} />));
   const socket = Socket.instances[0]!;
   const stale = deferred<ControllerIdentity>();
-  request.mockImplementation(async () => ({ ok: true, status: 200, json: () => stale.promise }) as Response);
+  request.mockImplementation(async (url: string | URL | Request) => String(url).endsWith("/api/connection") ? Response.json(details) : ({ ok: true, status: 200, json: () => stale.promise }) as Response);
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   const staleSignal = request.mock.calls.at(-1)![1]!.signal as AbortSignal;
   const restricted: ControllerIdentity = { ...identity, authority: "controller" };
-  request.mockImplementation(async () => Response.json(restricted));
+  request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? details : restricted));
   await act(async () => socket.receive({ type: "state", state: { ...state, controllerVersion: 1 } }));
   expect(current.identity).toEqual(restricted);
   await act(async () => stale.resolve(identity));

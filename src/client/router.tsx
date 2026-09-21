@@ -1,14 +1,12 @@
 import { createRouter } from "@tanstack/react-router";
-import { QueryClient } from "@tanstack/react-query";
 import { createAppHistory } from "./app-history";
 import { routeTree } from "./routeTree.gen";
 
-// Route guards read identity through the shared Query cache (beforeLoad).
-export const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
-
+// SessionGate supplies the current client and identity through RouterProvider.
+// There is deliberately no application-wide credential or QueryClient singleton.
 export const router = createRouter({
   routeTree,
-  context: { queryClient },
+  context: { queryClient: undefined!, identity: null, connected: false },
   history: createAppHistory(),
   scrollRestoration: false,
 });
