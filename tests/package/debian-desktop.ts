@@ -75,7 +75,6 @@ try {
     return true;
   `), true);
   await until("Debian libmpv plays video and audio", () => execute("const p=window.__proof.state?.player; return p?.status === 'playing' && p.position > 1 && p.tracks?.some(t=>t.kind === 'video') && p.tracks?.some(t=>t.kind === 'audio')"));
-  await execute("Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Show playback')?.click(); return true");
   inside("runuser", "-u", "qualifier", "--", "env", "DISPLAY=:99", "ffmpeg", "-v", "error", "-y", "-f", "x11grab", "-video_size", "1280x720", "-i", ":99", "-frames:v", "1", "/evidence/playing.png");
   await execute("window.__proof.socket.send(JSON.stringify({type:'command',requestId:crypto.randomUUID(),action:{type:'stop'}})); window.__proof.socket.close(); return true");
   await driver(`/session/${native}`, undefined, "DELETE");

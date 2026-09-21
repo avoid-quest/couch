@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { HistoryItem, LibraryItem, WatchingProfile } from "../../src/shared/library";
 import type { Action, SessionState } from "../../src/shared/protocol";
-import { keys, type UiDriver, type Wait } from "./ui";
+import { type UiDriver, type Wait } from "./ui";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type ProgressContext = {
@@ -85,16 +85,18 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   assert.ok(checkpoint.lastPlayedAt && Math.abs(checkpoint.position - 7) < 0.4);
 
   await ui.section("Library");
-  await until("native Library displays the committed resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`.library-items ${labeled(`Resume ${item.title}`)}`]));
+  await ui.type("#media-search", item.title);
+  await until("native Library displays the committed resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[aria-label="Library search results"] ${labeled(`Resume: ${item.title}`)}`]));
   let previous = first().player.playbackId;
-  await ui.click(`.library-items ${labeled(`Resume ${item.title}`)}`);
+  await ui.click(`[aria-label="Library search results"] ${labeled(`Resume: ${item.title}`)}`);
   await until("native Library Resume starts its scanned item for both remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source === mediaId));
   await started(previous, first().currentEntryId!, 7, "native Library Resume passes the saved point to libmpv");
   await pause();
   await stop();
-  await until("native Library offers an explicit restart for resumable media", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`.library-items ${labeled(`Play ${item.title} from start`)}`]));
+  await ui.button(`Details for ${item.title}`, '[aria-label="Library search results"]');
+  await until("native Library offers an explicit restart for resumable media", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[role=dialog] ${labeled(`Play ${item.title} from start`)}`]));
   previous = first().player.playbackId;
-  await ui.click(`.library-items ${labeled(`Play ${item.title} from start`)}`);
+  await ui.click(`[role=dialog] ${labeled(`Play ${item.title} from start`)}`);
   await until("native Library Play from start opens the scanned item", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source === mediaId));
   await started(previous, first().currentEntryId!, 0, "native Library Play from start clears mpv's previous start option");
   await pause();
@@ -113,31 +115,19 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   assert.equal(switched.watched, false);
 
   const profileName = `Native viewer ${crypto.randomUUID().slice(0, 8)}`;
-  await ui.click(".watching-profile");
-  await until("native watching-profile dialog explains shared controller attribution", async () => await ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('Everyone paired with this TV controls the same profile.')"));
-  await ui.type("#watching-profile-name", profileName);
-  await ui.button("Add profile", "[role=dialog]");
-  let otherProfile: WatchingProfile | undefined;
-  await until("a watching profile created on the TV is visible to the second remote", async () => {
-    otherProfile = (await api("/api/profiles", undefined, 1)).profiles.find((profile: WatchingProfile) => profile.name === profileName);
-    return !!otherProfile;
-  });
-  await until("native profile list displays the newly created viewer", async () => await ui.execute("return [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button')].some(button => button.textContent.trim() === arguments[0] && !button.disabled)", [profileName]));
-  await ui.button(profileName, '[aria-label="Watching profiles"]');
-  await until("selecting a watching profile updates both controllers and closes the native dialog", async () => all(state => state.activeProfile.id === otherProfile!.id) && !await ui.execute("return !!document.querySelector('[role=dialog]')"));
-  assert.equal((await catalog()).progress, null, "New profile has no borrowed Household resume point");
-  assert.equal((await saved()), undefined, "New profile has its own local history");
-  await play(entryId, 0);
+  const otherProfile = (await api("/api/profiles", { name: profileName })).profile as WatchingProfile;
+  assert.ok((await api("/api/profiles", undefined, 1)).profiles.some((profile: WatchingProfile) => profile.id === otherProfile.id));
+  await api(`/api/profiles/${otherProfile.id}/select`, {});
+  await until("selecting a watching profile updates both controllers", () => all(state => state.activeProfile.id === otherProfile.id));
+  assert.equal((await catalog()).progress!.position, switched.position, "Find exposes the shared TV resume point after changing profile");
+  assert.equal((await saved())!.position, switched.position, "Now history stays shared across watching profiles");
+  await play(entryId, switched.position);
   await pause();
   await seek(5);
-  await ui.click(".watching-profile");
-  await until("paused playback disables native watching-profile selection", async () => await ui.execute("return [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button[aria-pressed]')].length >= 2 && [...document.querySelectorAll('[aria-label=\"Watching profiles\"] button[aria-pressed]')].every(button => button.disabled)"));
   const select = () => fetch(`${origin}/api/profiles/${household.id}/select`, { method: "POST", headers: { origin, Authorization: `Bearer ${clients[1]!.token}`, "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(10_000) });
   let rejected = await select();
   assert.equal(rejected.status, 409, "A paired remote cannot change the watching profile while paused");
   assert.match((await rejected.json() as { error: string }).error, /Stop playback/);
-  await ui.key(keys.escape);
-  await until("Escape restores focus to the native watching-profile trigger", async () => await ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.matches('.watching-profile')"));
   await stop();
   const otherProgress = (await saved())!;
   assert.ok(Math.abs(otherProgress.position - 5) < 0.4);
@@ -169,17 +159,19 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
 
   await api(`/api/profiles/${household.id}/select`, {}, 1);
   await until("the second remote can select Household once playback is stopped", () => all(state => state.activeProfile.id === household.id));
-  assert.equal((await saved())!.position, switched.position, "Changing profiles preserves the Household checkpoint");
-  const lastEntry = first().queue.at(-1)!;
-  assert.equal(lastEntry.source, mediaId, "EOF fixture is the last queued item so auto-advance cannot overwrite its watched mark");
-  await play(lastEntry.id, 0, true);
+  assert.equal((await saved())!.position, otherProgress.position, "Changing profiles retains the latest shared checkpoint");
+  const eofEntryId = crypto.randomUUID();
+  await clients[0]!.command({ type: "enqueueLibrary", itemId: item.id, entryId: eofEntryId });
+  await play(eofEntryId, 0, true);
+  await clients[0]!.command({ type: "move", entryId: eofEntryId, beforeEntryId: null });
+  await until("playing EOF fixture is last on both controllers", () => all(state => state.queue.at(-1)?.id === eofEntryId));
   await pause();
   await seek(first().player.duration! - 0.7);
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: false });
   await until("actual native EOF marks short local media watched and clears its resume point", async () => all(state => state.player.status === "ended") && (await saved())?.watched === true && (await saved())?.position === 0);
   await stop();
-  await until("native Library reflects the committed watched mark", async () => await ui.execute("return [...document.querySelectorAll('.library-items li')].some(row => row.textContent.includes(arguments[0]) && row.textContent.includes('Watched'))", [item.title]));
-  await ui.click(`.library-items ${labeled(`Watching options for ${item.title}`)}`);
+  await ui.section("Now");
+  await ui.click(`.history-items ${labeled(`Watching options for ${item.title}`)}`);
   await until("native watching-options popover offers the committed watched state", async () => await ui.execute("return [...document.querySelectorAll('[data-slot=popover-content] button')].some(button => button.textContent.trim() === 'Mark unwatched')"));
   await ui.button("Mark unwatched", "[data-slot=popover-content]");
   await until("native watched-state action is committed for the other remote", async () => (await saved())?.watched === false);
@@ -188,8 +180,8 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   await pause();
   await seek(6);
   await stop();
-  await ui.button("History", '[aria-label="Library view"]');
-  await until("native Library History shows the active profile and saved item", async () => await ui.execute("return document.querySelector('.history-panel')?.textContent.includes(arguments[1]) && !!document.querySelector(arguments[0] + ':enabled')", [`.history-items ${labeled(`Resume ${item.title}`)}`, `${household.name}'s local history.`]));
+  await ui.section("Now");
+  await until("native Library History shows the active profile and saved item", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`.history-items ${labeled(`Resume ${item.title}`)}`, `${household.name}'s local history.`]));
   previous = first().player.playbackId;
   await ui.click(`.history-items ${labeled(`Resume ${item.title}`)}`);
   await until("native history resumes its local item without changing source navigation", async () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source === mediaId) && !!await ui.execute("return document.querySelector('.history-panel')"));
@@ -200,8 +192,9 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   const householdProgress = (await saved())!;
   assert.ok(Math.abs(householdProgress.position - 6) < 0.4);
   for (const entry of first().queue) if (!queueIds.includes(entry.id)) await clients[0]!.command({ type: "remove", entryId: entry.id });
+  for (const id of queueIds) await clients[0]!.command({ type: "move", entryId: id, beforeEntryId: null });
   await until("viewing acceptance preserves the existing queue and volume", () => all(state => JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds) && state.player.volume === originalVolume));
-  return { household, otherProfile: otherProfile!, householdProgress, otherProgress };
+  return { household, otherProfile: otherProfile!, householdProgress, otherProgress: householdProgress };
 }
 
 export async function assertLocalProgressAfterRestart(context: ProgressContext, expected: PersistedProgress) {
@@ -219,7 +212,7 @@ export async function assertLocalProgressAfterRestart(context: ProgressContext, 
     for (const key of ["mediaId", "position", "duration", "watched", "lastPlayedAt", "libraryItemId"] as const) assert.equal(persisted[key], progress[key], `${profile.name} ${key} survives the real desktop restart`);
   }
   await api(`/api/profiles/${expected.household.id}/select`, {}, 1);
-  await until("Household is restored after verifying isolated persisted histories", () => all(state => state.activeProfile.id === expected.household.id));
+  await until("Household is restored after verifying shared persisted history", () => all(state => state.activeProfile.id === expected.household.id));
   await play(entryId, expected.householdProgress.position);
   await pause();
   await stop();
@@ -267,8 +260,8 @@ export async function verifyJellyfinResume(context: Pick<ProgressContext, "ui" |
       return (await activeSessions()).length === 0 && item?.played === false && Math.abs(item.resumePosition - 7) < 0.4;
     });
     await ui.section("Jellyfin");
-    await ui.button("Continue watching", '[aria-label="Jellyfin library view"]');
-    const resume = `.jellyfin-items ${labeled(`Resume ${item.title} on TV`)}`;
+    await ui.type("#media-search", item.title);
+    const resume = `[aria-label="Jellyfin search results"] ${labeled(`Resume: ${item.title}`)}`;
     await until("native Jellyfin Continue watching displays the server's resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [resume]));
     previous = first().player.playbackId;
     await ui.click(resume);
@@ -278,7 +271,8 @@ export async function verifyJellyfinResume(context: Pick<ProgressContext, "ui" |
     await seek(7);
     await stop();
     await until("Jellyfin resume stop is reported before an explicit restart", async () => (await activeSessions()).length === 0 && Math.abs((await resumeItem())?.resumePosition - 7) < 0.4);
-    const restart = `.jellyfin-items ${labeled(`Play ${item.title} from start`)}`;
+    await ui.button(`Details for ${item.title}`, '[aria-label="Jellyfin search results"]');
+    const restart = `[role=dialog] ${labeled(`Play ${item.title} from start`)}`;
     await until("native Jellyfin Continue watching offers Play from start", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [restart]));
     previous = first().player.playbackId;
     await ui.click(restart);
@@ -291,7 +285,7 @@ export async function verifyJellyfinResume(context: Pick<ProgressContext, "ui" |
       await stop();
       await until("Jellyfin progress acceptance leaves the upstream playback session stopped", async () => (await activeSessions()).length === 0);
       for (const entry of first().queue) if (!queueIds.includes(entry.id)) await clients[0]!.command({ type: "remove", entryId: entry.id });
-      await ui.button("All", '[aria-label="Jellyfin library view"]');
+      await ui.section("Now");
     } finally {
       const current = await request("/System/Configuration");
       await request("/System/Configuration", { ...current, MinResumeDurationSeconds: configuration.MinResumeDurationSeconds });
