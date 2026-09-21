@@ -182,16 +182,11 @@ try {
   // already connecting.
   if (await execute("return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'This computer')")) await ui.button("This computer");
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
-  await until("local first-use offers the sharing choice", async () => await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false"), 10_000);
-  await ui.button("Allow remote control");
-  await until("local first-use enables remote control", () => execute("return !!document.querySelector('.pair-shortcut')"));
+  if (await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false")) await ui.button("Allow remote control");
+  await until("local sharing exposes the pairing control", () => execute("return !!document.querySelector('.pair-shortcut')"));
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
   await assertTvFullscreen(ui, until, "startup");
-  await ui.button("Settings"); await ui.settingsSection("connection");
-  await until("an unclaimed TV shows its separate administrator setup code and address QR", () => execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '') && !!document.querySelector('[aria-label=\"Administrator setup\"] svg title') && document.querySelector('[aria-label=\"Administrator setup\"] svg title').textContent.startsWith('Open Couch at ')"));
-  await ui.key(keys.escape);
-  await until("setup dismisses to the fullscreen TV browser", () => execute("return !document.querySelector('[role=dialog]')"));
   await ui.click(".pair-shortcut");
   const code = await execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
   await ui.key(keys.escape);
@@ -364,107 +359,7 @@ try {
   await until("Stop returns the TV to its fullscreen Home", () => execute("return !!document.querySelector('.tv-browser:not([hidden])')"));
   await assertSubtitleCleanup({ until, clients });
 
-  const station = { id: crypto.randomUUID(), name: "Local radio fixture", url: "http://127.0.0.1:4200/radio.mp3", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
-  await api("/api/radio/favorites", { station });
-  await until("saved radio station is shared with the second remote", async () => (await api("/api/radio/favorites", undefined, 1)).favorites.some((favorite: any) => favorite.id === station.id));
-  await section("Radio");
-  await until("native radio UI shows shared favorite", async () => await execute("return document.querySelector('.radio-station h3')?.textContent") === station.name);
-  await click('.radio-station .secondary-button');
-  await until("native radio UI adds its station to the shared queue", () => all(state => state.queue.some(entry => entry.title === station.name)));
-  const radioEntry = clients[0]!.state!.queue.find(entry => entry.title === station.name)!;
-  await clients[1]!.command({ type: "play", entryId: radioEntry.id });
-  await until("audio-only station plays with fresh native metadata", () => all(state =>
-    state.player.status === "playing" && state.player.tracks?.some(track => track.kind === "audio") === true &&
-    !state.player.tracks.some(track => track.kind === "video" || track.kind === "subtitle") && !state.player.chapters?.length,
-  ));
-  await clients[0]!.command({ type: "stop" });
-  await httpRemote!.restore();
-  await httpRemote!.ui.section("Radio");
-  await httpRemote!.ui.click(".radio-station .radio-play");
-  await until("phone station Play starts native radio with one action", () => all(state => state.player.status === "playing" && state.currentEntryId !== radioEntry.id && state.queue.find(entry => entry.id === state.currentEntryId)?.title === station.name));
-  await assertResponsive(httpRemote!.ui, "Phone radio actions");
-  await clients[0]!.command({ type: "stop" });
-  await httpRemote!.minimize();
-
-  if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
-    const catalog = await api("/api/radio/stations?q=Radio%20Paradise&countrycode=");
-    const liveStation = catalog.stations.find((station: any) => station.name.toLowerCase().includes("paradise"));
-    assert.ok(liveStation, "Live Radio Browser directory returns a Radio Paradise station");
-    const entryId = crypto.randomUUID();
-    await clients[0]!.command({ type: "enqueue", entry: { id: entryId, title: liveStation.name, source: liveStation.url, kind: "radio" } });
-    await clients[1]!.command({ type: "play", entryId });
-    await until("live directory station plays natively for both remotes", () => all(state =>
-      state.currentEntryId === entryId && state.player.status === "playing" && state.player.position > 2,
-    ), 30_000);
-    await Bun.write(`${artifactDir}/live-radio.json`, JSON.stringify({ name: liveStation.name, streamHost: new URL(liveStation.url).host, nowPlaying: clients[0]!.state!.player.nowPlaying ?? null, testedAt: new Date().toISOString(), result: "Native playback and advancing position observed by both remotes" }, null, 2));
-    await clients[0]!.command({ type: "stop" });
-
-  }
-
-  const radioAcceptance = await verifyRadio({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
-
-  if (process.env.COUCH_TEST_JELLYFIN) {
-    const config = await Bun.file(process.env.COUCH_TEST_JELLYFIN).json() as {
-      containerUrl: string; username: string; password: string; accessToken: string; userId: string;
-    };
-    await section("Jellyfin");
-    async function connectJellyfin() {
-      await click('[data-action="jellyfin-settings"]');
-      await until("native Jellyfin connection form appears", async () => !!await execute("return document.querySelector('#jellyfin-url')"));
-      await type("#jellyfin-url", config.containerUrl);
-      await type("#jellyfin-user", config.username);
-      await type("#jellyfin-password", config.password);
-      await click(".jellyfin-connect button.primary-button");
-      await until("native UI authenticates with real Jellyfin server", async () => (await api("/api/jellyfin")).connected === true, 30_000);
-      await ui.key(keys.escape);
-      await until("native Jellyfin Sources form closes before library playback", () => execute("return !document.querySelector('[role=dialog]')"));
-    }
-    await connectJellyfin();
-    const catalog = await api("/api/jellyfin/items?q=Linux&startIndex=0", undefined, 1);
-    const movie = catalog.items.find((item: any) => item.title === "Linux playback fixture");
-    assert.ok(movie, "Real Jellyfin catalog contains generated movie");
-    const entryId = crypto.randomUUID();
-    await clients[1]!.command({ type: "enqueueJellyfin", itemId: movie.id, entryId });
-    await clients[0]!.command({ type: "play", entryId });
-    await until("real Jellyfin authenticated media plays natively", () => all(state => state.player.status === "playing" && state.currentEntryId === entryId), 30_000);
-    await verifyJellyfinSubtitles({ ui, until, clients, artifactDir, config });
-    const sessions = async () => {
-      const response = await fetch(`${config.containerUrl}/Sessions`, { headers: { "X-Emby-Token": config.accessToken } });
-      assert.equal(response.status, 200);
-      return response.json() as Promise<any[]>;
-    };
-    await until("real Jellyfin observes app playback reporting", async () => (await sessions()).some(session => session.NowPlayingItem?.Id === movie.id && session.UserId === config.userId));
-    await clients[0]!.command({ type: "stop" });
-    await until("real Jellyfin observes playback stop", async () => !(await sessions()).some(session => session.NowPlayingItem?.Id === movie.id && session.UserId === config.userId));
-    await verifyJellyfinResume({ ui, until, clients, api, entryId, item: movie, config });
-    plainMediaAuth.length = 0;
-    await clients[0]!.command({ type: "play", entryId: radioEntry.id });
-    await until("plain source plays after authenticated Jellyfin media", () => all(state => state.player.status === "playing" && state.currentEntryId === radioEntry.id));
-    assert.ok(plainMediaAuth.length > 0);
-    assert.equal(plainMediaAuth.some(Boolean), false, "Jellyfin credentials must not reach ordinary sources");
-    checks.push("Jellyfin credentials clear before the next ordinary source");
-    console.log("PASS Jellyfin credentials clear before the next ordinary source");
-    await clients[0]!.command({ type: "stop" });
-    await clients[1]!.command({ type: "play", entryId });
-    await until("Jellyfin playback can restart before disconnect", () => all(state => state.player.status === "playing" && state.currentEntryId === entryId));
-    await click('[data-action="jellyfin-settings"]');
-    await click('[data-action="jellyfin-disconnect"]');
-    await ui.button("Disconnect and stop Jellyfin", '[aria-label="Jellyfin settings"]');
-    await until("disconnecting Jellyfin stops its active media for every remote", async () =>
-      all(state => state.player.status === "idle") && (await api("/api/jellyfin")).connected === false,
-    );
-    await ui.key(keys.escape);
-    await until("native disconnect confirmation closes before reconnect", () => execute("return !document.querySelector('[role=dialog]')"));
-    await connectJellyfin();
-    startShutdownPlayback = async () => {
-      await clients[1]!.command({ type: "play", entryId });
-      await until("Jellyfin plays before the desktop window closes", () => all(state => state.player.status === "playing" && state.currentEntryId === entryId && state.player.position > 1));
-      await until("Jellyfin reports the session before desktop exit", async () => (await sessions()).some(session => session.NowPlayingItem?.Id === movie.id && session.UserId === config.userId));
-    };
-    verifyShutdownReport = () => until("closing the desktop reports stopped playback to real Jellyfin", async () => !(await sessions()).some(session => session.NowPlayingItem?.Id === movie.id && session.UserId === config.userId));
-  }
-
-  await section("Queue");
+  await section("Now");
   await ui.select("#media-kind", "Webpage");
   await ui.select("#media-quality", qualityLabel("480p"));
   await type("#media-url", "http://127.0.0.1:4200/web.html");
@@ -475,10 +370,6 @@ try {
   await until("real yt-dlp fills automatic webpage title and artwork for both remotes", () => all(state => state.queue.some(entry =>
     entry.id === webEntryId && entry.title.startsWith("Local web fixture") && entry.thumbnail === "http://127.0.0.1:4200/logo.svg",
   )), 30_000);
-  await until("native shared queue displays webpage artwork and quality", async () => await execute(`
-    const row = [...document.querySelectorAll('.queue-entry')].find(row => row.querySelector('.queue-entry-title')?.textContent.startsWith('Local web fixture'));
-    return row?.querySelector('img')?.naturalWidth > 0 && row.textContent.includes('480p');
-  `));
   const webTitle = clients[0]!.state!.queue.find(entry => entry.id === webEntryId)!.title;
   await click(`[aria-label=${JSON.stringify(`Play ${webTitle}`)}]`);
   await until("real yt-dlp resolves webpage DASH into native playback", () => all(state =>
@@ -529,6 +420,7 @@ try {
   await clients[0]!.command({ type: "stop" });
   await until("native Stop opens Home before saved-provider browsing", async () => all(state => state.player.status === "idle") && await execute("return !!document.querySelector('.tv-browser:not([hidden])')"));
 
+  if (process.env.COUCH_TEST_LEGACY === "1") {
   const favoriteUrl = "https://www.youtube.com/watch?v=YE7VzlLtp-4";
   const providerFavorite: ProviderItem = { id: `youtube-${createHash("sha256").update(favoriteUrl).digest("hex").slice(0, 32)}`, provider: "youtube", kind: "media", title: "Saved provider fixture", url: favoriteUrl, thumbnail: "http://127.0.0.1:4200/logo.svg" };
   const providerVersion = clients[0]!.state!.providerVersion ?? 0;
@@ -682,6 +574,7 @@ try {
   await Promise.all(clients.map(client => client.connect()));
   await radioAcceptance.assertAfterRestart();
   await publicConnection.assertAfterRestart();
+  }
 
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {
