@@ -136,8 +136,8 @@ try {
   await ui.button("Stop playback");
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
-  await ui.type("#media-search", "provider fixture");
   await ui.button("YouTube");
+  await ui.type("#media-search", "provider fixture");
   await ui.button("Play: Provider result fixture");
   await until("provider result Play creates one occurrence and reaches the native pipe", () => {
     const occurrences = latest?.queue.filter(item => item.source === `web:${providerUrl}`) ?? [];
