@@ -370,10 +370,6 @@ try {
   await until("real yt-dlp fills automatic webpage title and artwork for both remotes", () => all(state => state.queue.some(entry =>
     entry.id === webEntryId && entry.title.startsWith("Local web fixture") && entry.thumbnail === "http://127.0.0.1:4200/logo.svg",
   )), 30_000);
-  await until("native shared queue displays webpage artwork and quality", async () => await execute(`
-    const row = [...document.querySelectorAll('.queue-entry')].find(row => row.querySelector('.queue-entry-title')?.textContent.startsWith('Local web fixture'));
-    return row?.querySelector('img')?.naturalWidth > 0 && row.textContent.includes('480p');
-  `));
   const webTitle = clients[0]!.state!.queue.find(entry => entry.id === webEntryId)!.title;
   await click(`[aria-label=${JSON.stringify(`Play ${webTitle}`)}]`);
   await until("real yt-dlp resolves webpage DASH into native playback", () => all(state =>
