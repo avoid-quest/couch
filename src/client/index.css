@@ -157,9 +157,9 @@ h3 { font-weight: 600; }
 .playback-error { color: var(--destructive); line-height: 1.5; margin-top: 14px; }
 .address-list { display: grid; gap: 8px; list-style: none; padding: 0; margin: 0; }
 .address-list a { display: flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
-.pairing-display { text-align: center; background: var(--secondary); padding: 20px; border-radius: var(--radius); }
+.pairing-display { text-align: center; background: var(--secondary); padding: 12px 16px; border-radius: var(--radius); }
 .pairing-display span { color: var(--muted-foreground); }
-.pairing-display strong { display: block; font-family: ui-monospace, monospace; font-weight: 500; font-size: 36px; letter-spacing: .25em; margin: 8px -.25em 0 0; }
+.pairing-display strong { display: block; font-family: ui-monospace, monospace; font-weight: 500; font-size: 32px; letter-spacing: .25em; margin: 4px -.25em 0 0; }
 .pair-card { max-width: 480px; margin: 40px auto 80px; padding: 36px; gap: 12px; }
 .pair-icon { margin-bottom: 8px; }
 .pair-card h1 { font-size: 30px; letter-spacing: -.03em; line-height: 1.2; font-weight: 600; }
