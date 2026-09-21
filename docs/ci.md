@@ -22,6 +22,15 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
 ```
 
+For frontend or build changes, execute `bun tests/linux/built-remote.ts` after
+building the committed revision in the existing Linux test environment. This
+reuses the HTTP browser driver to check exact-byte frontend delivery, deep-link
+boot and pairing, navigation, root worker activation on loopback and browser
+Play/Stop reaching the coordinator. Its native peer is simulated. See the
+[current architecture map](architecture.md) for prerequisites and output paths.
+Use `bun run test:linux` for actual Tauri/libmpv qualification; neither replaces
+physical TV and speaker acceptance.
+
 GitHub Actions is enabled. Use it for PR checks, builds and releases. Local checks
 remain the quickest way to iterate. A passing assertion count with unhandled
 errors or a nonzero exit is a failed run.
