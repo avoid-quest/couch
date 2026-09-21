@@ -251,6 +251,9 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
             "COUCH_PORT",
             std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
         );
+    if let Some(urls) = std::env::var_os("COUCH_ADVERTISE_URLS") {
+        sidecar = sidecar.env("COUCH_ADVERTISE_URLS", urls);
+    }
     for (variable, name) in [
         ("COUCH_YT_DLP", "yt-dlp"),
         ("COUCH_DENO", "deno"),
