@@ -4,7 +4,9 @@ set -euo pipefail
 [[ -f /.dockerenv && ${COUCH_PACKAGE_UPDATE_FIXTURE:-} = 1 ]] || exit 1
 
 root=$(mktemp -d)
-trap 'rm -rf "$root"' EXIT
+socket_pid=
+trap '[[ -z ${socket_pid:-} ]] || kill "$socket_pid" 2>/dev/null || true; rm -rf "$root"' EXIT
+mkdir -p "$root/bin"
 mkdir -p /usr/lib/couch /usr/lib/systemd/system /usr/share/polkit-1/rules.d
 cp packaging/native/package-update /usr/lib/couch/package-update
 cp packaging/native/couch-package-update@.service /usr/lib/systemd/system/
@@ -12,10 +14,30 @@ cp packaging/native/50-couch-package-update.rules /usr/share/polkit-1/rules.d/
 chmod 0755 /usr/lib/couch/package-update
 command -v minisign >/dev/null || { apt-get update -qq && apt-get install -y -qq minisign; }
 
+# package-update runs in a child shell, so the fixture must put its fake APT
+# executable on PATH rather than defining an unexported shell function.
+cat > "$root/bin/apt-get" <<'EOF'
+#!/bin/bash
+[[ $1 = install ]] && dpkg -i "${@: -1}" >/dev/null || { echo "unexpected apt call: $*" >&2; exit 64; }
+EOF
+cat > "$root/bin/systemctl" <<EOF
+#!/bin/bash
+printf '%s\n' "\$*" > "$root/systemctl.args"
+EOF
+chmod 0755 "$root/bin/apt-get"
+chmod 0755 "$root/bin/systemctl"
+chmod 0755 "$root"
+export PATH="$root/bin:$PATH"
+
 useradd -m couchtest
+install -m 0600 -o couchtest -g couchtest /dev/null "$root/systemctl.args"
 home=$(getent passwd couchtest | cut -d: -f6)
 inbox=$home/.local/share/couch/updates
 mkdir -p "$inbox" /usr/bin
+runtime=/run/user/$(id -u couchtest)
+mkdir -p "$runtime"
+perl -MSocket -e 'socket(my $socket, PF_UNIX, SOCK_STREAM, 0) or die $!; bind($socket, sockaddr_un($ARGV[0])) or die $!; listen($socket, 1) or die $!; sleep 60' "$runtime/bus" &
+socket_pid=$!
 
 # A disposable passphrase-free keypair stands in for the enrolled release key.
 printf '\n\n' | minisign -G -p "$root/test.pub" -s "$root/test.key" 2>/dev/null
@@ -37,9 +59,6 @@ stage() {
     sign
     chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
 }
-# The real dpkg stands in for apt's dependency resolution.
-apt-get() { [[ $1 = install ]] && dpkg -i "${@: -1}" >/dev/null || { echo "unexpected apt call: $*" >&2; return 64; }; }
-
 update() { /usr/lib/couch/package-update "$@"; }
 reject() {
     local message=$1
@@ -55,6 +74,7 @@ grep -q 'outcome=installed' "/var/lib/couch-package-update/couchtest/receipt"
 grep -q 'version=0.1.2' "/var/lib/couch-package-update/couchtest/receipt"
 [[ $(dpkg-query -W -f='${Version}' couch) = 0.1.2 ]]
 [[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
+grep -qx -- '--user daemon-reload' "$root/systemctl.args"
 
 # Preview accumulation installs a signed -preview.N over the stable, and the
 # final 0.1.3 supersedes its own previews even though Debian orders the suffix

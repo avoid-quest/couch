@@ -75,6 +75,7 @@ export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, exe
   signal?.throwIfAborted();
   const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : Bun.which("yt-dlp"));
   if (!command) throw new Error("The bundled extractor is unavailable. Reinstall a verified Couch AppImage.");
+  if (command.includes("/") && !await Bun.file(command).exists()) throw new Error("yt-dlp could not be started. Check its installation on the player.");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {

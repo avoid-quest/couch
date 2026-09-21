@@ -70,6 +70,6 @@ for (const corrupt of [false, true]) test(`remote startup trial reports ${corrup
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "wrong" } })).status).toBe(409);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build })).status).toBe(204);
   const complete = await f.wait(m => m.action?.type === "complete");
-  expect(complete.action.error).toBe(corrupt ? "Package tools failed fresh hash/version checks." : null);
+  expect(complete.action.error).toEqual(corrupt ? expect.stringContaining("Package tools failed fresh hash/version checks: Deno:") : null);
   expect(await Bun.file(join(f.directory, "couch.sqlite")).bytes()).toEqual(f.database);
 });
