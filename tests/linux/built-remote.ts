@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, relative, sep } from "node:path";
 import type { ConnectionInfo, PlaybackCommand, PlayerState, ServerMessage, SessionState, SidecarMessage } from "../../src/shared/protocol";
@@ -22,6 +22,16 @@ await mkdir(artifacts, { recursive: true });
 await rm(join(artifacts, "result.json"), { force: true });
 const directory = await mkdtemp(join(tmpdir(), "couch-built-remote-"));
 seedConfiguredFixture(directory);
+// Replace only the external extractor; the compiled coordinator, provider adapter,
+// browser result and native command pipe remain real.
+const extractor = join(directory, "provider-extractor");
+const providerUrl = "https://www.youtube.com/watch?v=abcdefghijk";
+const providerTransport = "https://media.example/private-provider.mp4";
+await Bun.write(extractor, `#!/usr/bin/env bun
+const item = { id: "abcdefghijk", title: "Provider result fixture", webpage_url: ${JSON.stringify(providerUrl)}, url: ${JSON.stringify(providerTransport)}, vcodec: "h264", acodec: "aac", duration: 60 };
+console.log(JSON.stringify(process.argv.some(value => value.includes("/results?")) ? { entries: [item] } : item));
+`);
+await chmod(extractor, 0o700);
 const hostToken = crypto.randomUUID() + crypto.randomUUID();
 const checks: string[] = [];
 const commands: PlaybackCommand[] = [];
@@ -34,7 +44,7 @@ let remote: Awaited<ReturnType<typeof startHttpRemote>> | undefined;
 let socket: WebSocket | undefined;
 const child = Bun.spawn([binary], {
   cwd: directory, stdin: "pipe", stdout: "pipe", stderr: Bun.file(join(artifacts, "sidecar.log")),
-  env: { ...process.env, COUCH_NATIVE: "1", COUCH_HOST_TOKEN: hostToken, COUCH_DATA_DIR: directory, COUCH_PORT: "0", COUCH_APPIMAGE: "0", COUCH_PACKAGE_UPDATE: "0", COUCH_MAINTENANCE_ONLY: "0" },
+  env: { ...process.env, COUCH_YT_DLP: extractor, COUCH_NATIVE: "1", COUCH_HOST_TOKEN: hostToken, COUCH_DATA_DIR: directory, COUCH_PORT: "0", COUCH_APPIMAGE: "0", COUCH_PACKAGE_UPDATE: "0", COUCH_MAINTENANCE_ONLY: "0" },
 });
 const send = (message: unknown) => { child.stdin.write(JSON.stringify(message) + "\n"); child.stdin.flush(); };
 const reader = (async () => {
@@ -125,6 +135,20 @@ try {
   assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host", "Playback is attributed to the paired browser");
   await ui.button("Stop playback");
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
+  await ui.section("Find");
+  await ui.type("#media-search", "provider fixture");
+  await ui.button("YouTube");
+  await ui.button("Play: Provider result fixture");
+  await until("provider result Play creates one occurrence and reaches the native pipe", () => {
+    const occurrences = latest?.queue.filter(item => item.source === `web:${providerUrl}`) ?? [];
+    return occurrences.length === 1 && latest?.currentEntryId === occurrences[0]?.id && latest?.player.status === "playing"
+      && commands.some(command => command.type === "load" && command.source === providerTransport);
+  });
+  assert.ok(latest?.playedBy?.deviceId && latest.playedBy.deviceId !== "host");
+  assert.ok(!JSON.stringify(latest).includes(providerTransport), "Resolved transport remains private to the native pipe");
+  await ui.section("Now");
+  await ui.button("Stop playback");
+  await until("provider playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Saved");
   await remote.refresh();
   await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token')"));
