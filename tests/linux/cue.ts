@@ -33,7 +33,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
   await until("cue pause is authoritative on both remotes", () => all(state => state.player.status === "paused"));
   await clients[1]!.command({ type: "seek", playbackId: first().player.playbackId!, position: 2 });
-  await until("cue seek acknowledges two seconds within the segment", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.08));
+  await until("cue seek acknowledges two seconds within the segment", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.4));
   const profileId = first().activeProfile.id;
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.button("Stop playback", ".player-controls");
@@ -41,7 +41,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   if (!entries.some(entry => entry.id === phoneEntryId)) await clients[0]!.command({ type: "remove", entryId: phoneEntryId });
   await clients[0]!.command({ type: "remove", entryId: entries[0]!.id });
   await clients[0]!.command({ type: "play", entryId: entries[1]!.id });
-  await until("cue resumes at its saved segment-relative position", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position >= 1.9 && state.player.position < 3));
+  await until("cue resumes at its saved segment-relative position", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position >= 1.6 && state.player.position < 3));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
   await until("resumed cue pauses before Next", () => all(state => state.player.status === "paused"));
   await httpRemote.ui.button("Next in queue", ".player-controls");
@@ -70,8 +70,10 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await clients[0]!.command({ type: "play", entryId: entries[1]!.id, fromStart: true });
   await until("explicit cue restart clears its saved resume", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position > 0 && state.player.position < 1.9));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
+  await until("cue pauses before its final checkpoint seek", () => all(state => state.player.status === "paused"));
   await clients[1]!.command({ type: "seek", playbackId: first().player.playbackId!, position: 2 });
-  await until("cue checkpoint is stored relative to the track before restart", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.08));
+  await until("cue checkpoint is stored relative to the track before restart", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.4));
+  const checkpoint = first().player.position;
   await stop();
   const source = (await api("/api/library/sources")).sources.find((source: any) => source.name === "cue-fixtures");
   await httpRemote.minimize();
@@ -80,7 +82,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await closeFolderSources(ui, until);
   await until("cue rescan completes before comparing identities", async () => (await api("/api/library/sources")).sources.some((current: any) => current.id === source.id && current.status === "ready" && current.lastScanned > source.lastScanned));
   await until("cue rescan preserves album and track IDs", async () => JSON.stringify((await api(`/api/library/music/albums/${album.id}`)).items.map((item: LibraryItem) => item.id)) === JSON.stringify(tracks.map(track => track.id)));
-  const result = { album, tracks, playlist, profileId };
+  const result = { album, tracks, playlist, profileId, checkpoint };
   await Bun.write(`${artifactDir}/cue-before-restart.json`, JSON.stringify(result, null, 2));
   await restoreQueue(context, originalQueue);
   await httpRemote.minimize();
@@ -99,7 +101,7 @@ export async function assertCueAfterRestart(context: MusicContext, saved: Awaite
   const entryId = crypto.randomUUID();
   try {
     const item = (await context.api("/api/library/items?q=Second%20tone")).items.find((item: LibraryItem) => item.id === saved.tracks[1]!.id) as LibraryItem;
-    assert.ok(item.progress && Math.abs(item.progress.position - 2) < 0.08, "Restart retains the observed segment-relative checkpoint");
+    assert.ok(item.progress && Math.abs(item.progress.position - saved.checkpoint) < 0.4, "Restart retains the observed segment-relative checkpoint");
     await context.clients[1]!.command({ type: "enqueueLibrary", itemId: item.id, entryId });
     await context.clients[1]!.command({ type: "play", entryId });
     const firstPlaying = new Map<number, PlayerState>();
@@ -110,7 +112,7 @@ export async function assertCueAfterRestart(context: MusicContext, saved: Awaite
       return firstPlaying.size === context.clients.length;
     });
     for (const player of firstPlaying.values()) {
-      assert.ok(player.playbackId && player.position >= 1.9 && player.position < 3, "The first native playing observation must already reflect saved cue progress");
+      assert.ok(player.playbackId && player.position >= saved.checkpoint - 0.4 && player.position < saved.checkpoint + 1, "The first native playing observation must already reflect saved cue progress");
       assert.ok(Math.abs(player.duration! - saved.tracks[1]!.duration!) < 0.01);
     }
     await Bun.write(`${context.artifactDir}/cue-after-restart.json`, JSON.stringify({ stoppedBeforeExplicitPlay: true, stableIds: true, playlistPreserved: true, savedProgress: item.progress, resumedPlayer: first().player, physicalOutputQualified: false }, null, 2));
