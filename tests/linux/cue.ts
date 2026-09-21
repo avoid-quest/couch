@@ -10,7 +10,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   const { ui, until, clients, api, httpRemote, artifactDir } = context;
   const { first, all, stop } = musicControls(context);
   const originalQueue = structuredClone(first().queue);
-  await stop();
+  await restoreQueue(context, []);
   await httpRemote.minimize();
   await addTVFolder(ui, until, "cue-fixtures");
   await until("cue source scans with explicit invalid-sheet warning", async () => (await api("/api/library/sources")).sources.some((source: any) => source.name === "cue-fixtures" && source.status === "ready" && source.warning?.includes("missing.cue")));
@@ -39,6 +39,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await httpRemote.ui.button("Stop playback", ".player-controls");
   await until("phone Stop retires the cue playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   if (!entries.some(entry => entry.id === phoneEntryId)) await clients[0]!.command({ type: "remove", entryId: phoneEntryId });
+  await clients[0]!.command({ type: "remove", entryId: entries[0]!.id });
   await clients[0]!.command({ type: "play", entryId: entries[1]!.id });
   await until("cue resumes at its saved segment-relative position", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position >= 1.9 && state.player.position < 3));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
