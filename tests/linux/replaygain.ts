@@ -82,8 +82,11 @@ export async function verifyReplayGain(context: Context) {
         await clients[0]!.command({ type: "pause", playbackId: before.playbackId!, paused: false });
       } else await play(id);
       const dedicatedSink = Number(sinks.split("\n").find(line => line.split("\t")[1] === "couch-replaygain")!.split("\t")[0]);
-      const routedInputs = await sinkInputs();
-      assert.ok(routedInputs.length > 0 && routedInputs.every(input => input.sink === dedicatedSink), "Actual native output is routed into the dedicated captured sink");
+      let routedInputs = await sinkInputs();
+      await until("Actual native output is routed into the dedicated captured sink", async () => {
+        routedInputs = await sinkInputs();
+        return routedInputs.length > 0 && routedInputs.every(input => input.sink === dedicatedSink);
+      });
       await Bun.write(`${artifactDir}/replaygain-${label}-routing.json`, JSON.stringify({ previousSink, previousInputs, routedInputs }, null, 2));
       const excluded = radio || fixture.name === "video" || fixture.name === "r128-overflow";
       await until("native ReplayGain mode matches music eligibility on both controllers", () => all(state => excluded ? state.player.replayGain === undefined : state.player.replayGain === mode));
