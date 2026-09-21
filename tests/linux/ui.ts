@@ -214,7 +214,7 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
-    await this.clickElement(options[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"], `xpath=//*[@role='option'][normalize-space()="${label.replaceAll('"', '\\"')}"]`);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
       assert.ok(Date.now() < closeDeadline, `${selector} closes and displays ${label}`);
