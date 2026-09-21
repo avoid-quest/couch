@@ -1,5 +1,13 @@
 # couch
 
+## 0.1.5-preview.8
+
+### Patch Changes
+
+- [#393](https://github.com/avoid-quest/couch/pull/393) [`a6dc1f1`](https://github.com/avoid-quest/couch/commit/a6dc1f1fb965c9f994697e6f909bd0e96bf8bcbd) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Polish the now-playing hero and Recently played: the hero spans the full content width with the volume slider on the transport button row, and Recently played follows one shared merge rule on Home and Find. Every kind shows up with its own actions: live stations play immediately, media keeps resume, watching options and details. Find's Recently played cards fill their grid cell with real poster boxes, the Live radio rail lists every catalog station instead of the first eight, and the programme link, queue empty state and offline copy are settled.
+
+- [#393](https://github.com/avoid-quest/couch/pull/393) [`a6dc1f1`](https://github.com/avoid-quest/couch/commit/a6dc1f1fb965c9f994697e6f909bd0e96bf8bcbd) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Rework the TV now-playing experience with Big-picture patterns: spatial keyboard/remote navigation on the TV shell, uniform interface scaling steps (the old TV-only multipliers double-scaled text over icons), settings presented as shadcn cards at full width, a single now-playing info surface with clamped programme metadata, a slim icon sidebar, a session bar that stays available on the TV home and returns to the playback view, and no playback-on select in the TV header. Also fix the Linux preview build, which could not resolve the client entry because `vite.config.ts` was missing from the copied sources.
+
 ## 0.1.5-preview.7
 
 ### Patch Changes
