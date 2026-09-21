@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { Action, SessionState } from "../../src/shared/protocol";
-import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote } from "./ui";
+import { assertResponsive, type UiDriver, type Wait, type startHttpRemote } from "./ui";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
@@ -48,7 +48,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.type("#jellyfin-url", server);
     await phone.type("#jellyfin-user", username);
     await phone.type("#jellyfin-password", password);
-    await phone.click(".jellyfin-connect .primary-button");
+    await phone.button("Test and connect", settings);
   };
   const saved = async (username: string) => until("phone connection test saves the selected Jellyfin account", async () => (await api("/api/jellyfin")).username === username && await phone.execute("return !document.querySelector('.jellyfin-connect') && document.querySelector(arguments[0])?.textContent.includes('Connection tested and saved.')", [settings]), 30_000);
   const disconnect = async () => {

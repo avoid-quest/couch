@@ -1,12 +1,11 @@
 import { strict as assert } from "node:assert";
 import type { HistoryItem, WatchingProfile } from "../../src/shared/library";
 import type { Action, PlaybackPreferences, SessionState } from "../../src/shared/protocol";
-import { assertNativePortal, assertResponsive, keys, type startHttpRemote, type UiDriver, type Wait } from "./ui";
+import type { startHttpRemote, Wait } from "./ui";
 
 type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
 type Context = {
   origin: string;
-  ui: UiDriver;
   httpRemote: HttpRemote;
   otherRemote: HttpRemote;
   until: Wait;
@@ -25,11 +24,8 @@ export type PersistedProfiles = {
   originalPreferences: PlaybackPreferences;
 };
 
-const row = (id: string) => `[data-profile-id="${id}"]`;
-const form = '[aria-label="Rename watching profile"]';
-
 export async function verifyProfileManagement(context: Context): Promise<PersistedProfiles> {
-  const { origin, ui, httpRemote, otherRemote, until, clients, api, entryId, artifactDir } = context;
+  const { origin, httpRemote, otherRemote, until, clients, api, entryId, artifactDir } = context;
   assert.ok(clients.length >= 2, "Profile acceptance requires two independently paired controllers");
   const all = (predicate: (state: SessionState) => boolean) => clients.every(client => client.state && predicate(client.state));
   const state = () => clients[0]!.state!;
@@ -45,7 +41,7 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   };
   // The profile picker is retired; exercise the retained profile contract
   // against actual native playback and independent paired credentials.
-  const create = async (_target: UiDriver, name: string) => (await api("/api/profiles", { name })).profile as WatchingProfile;
+  const create = async (name: string) => (await api("/api/profiles", { name })).profile as WatchingProfile;
   const checkpoint = async (position: number) => {
     await clients[0]!.command({ type: "play", entryId, fromStart: true });
     await until("profile fixture plays a scanned local item in native libmpv", () => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.seekable));
@@ -69,9 +65,9 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   const suffix = crypto.randomUUID().slice(0, 8);
   await httpRemote.minimize();
   await otherRemote.minimize();
-  const survivor = await create(ui, `Keep ${suffix}`);
+  const survivor = await create(`Keep ${suffix}`);
   await httpRemote.restore();
-  const removed = await create(httpRemote.ui, `Remove ${suffix}`);
+  const removed = await create(`Remove ${suffix}`);
   await httpRemote.minimize();
   await select(survivor);
   await checkpoint(7);
