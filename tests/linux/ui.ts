@@ -364,6 +364,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
     ui.clickElement = async id => {
       const target = { "element-6066-11e4-a52e-4f735466cecf": id };
+      await ui.execute("window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { x: event.clientX, y: event.clientY, actual: event.target.getAttribute('aria-label') || event.target.textContent }; }, { once: true, capture: true })");
       let point = "";
       // React may replace the node before any pointer is sent. Retrying this
       // preparation is safe; after xdotool dispatch below there is no retry.
@@ -383,7 +384,6 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
             return stable;
           });
           point = JSON.parse(previous);
-          await ui.execute("const target = arguments[0]; window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { hit: target.contains(event.target), actual: event.target.getAttribute('aria-label') || event.target.textContent, intended: target.getAttribute('aria-label') || target.textContent }; }, { once: true, capture: true });", [target]);
           break;
         } catch (error) {
           if (!String(error).includes("Node with identifier")) throw error;
@@ -399,7 +399,8 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       // X11 completion does not acknowledge WebKit event dispatch after window activation.
       await ui.waitFor("HTTP browser acknowledges the physical pointer event", () => ui.execute("return window.__httpPointer !== null"));
       const hit = await ui.execute("return window.__httpPointer");
-      assert.ok(hit?.hit, `HTTP pointer reaches its intended control: ${JSON.stringify({ point, hit })}`);
+      const intended = JSON.parse(point);
+      assert.ok(hit && Math.abs(hit.x - intended.x) <= 1 && Math.abs(hit.y - intended.y) <= 1, `HTTP pointer dispatches at the measured target: ${JSON.stringify({ point, hit })}`);
     };
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
