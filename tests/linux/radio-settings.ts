@@ -5,7 +5,7 @@ import { changedRadioTitle, initialRadioTitle, suppliedRadioArtist, type RadioFi
 import { assertResponsive } from "./ui";
 
 // Called after administrator claim. All mutations go through the real phone form;
-// the two WebSocket controllers remain ordinary station and favorite users.
+// existing WebSocket controller roles remain unchanged.
 export async function verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }: RadioContext, streams: RadioFixture) {
   const phone = httpRemote.ui;
   const originalQueue = structuredClone(clients[0]!.state!.queue);

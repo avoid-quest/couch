@@ -129,7 +129,8 @@ export async function verifyAppearance(context: Context) {
   await ui.home();
   await ui.section("Queue");
   await ui.execute("document.querySelector('.primary-nav [data-source=Now]').focus()");
-  await clients[1]!.command({ type: "navigate", key: "right" });
+  await clients[1]!.command({ type: "navigate", key: "down" });
+  await until("directional focus reaches Find in the vertical TV navigation", () => ui.execute("return document.activeElement?.getAttribute('data-source') === 'Find'"));
   await clients[1]!.command({ type: "navigate", key: "select" });
   await until("directional focus selects the next source at the largest TV size", () => ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.getAttribute('data-source') === 'Find'"));
   await clients[0]!.command({ type: "stop" });

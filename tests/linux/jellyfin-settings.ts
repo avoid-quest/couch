@@ -62,7 +62,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await until("phone Jellyfin browse offers the real fixture movie", () => phone.execute("return !!document.querySelector('[aria-label=\"Jellyfin search results\"] [aria-label=\"Play: Linux playback fixture\"]:not(:disabled), [aria-label=\"Jellyfin search results\"] [aria-label=\"Resume: Linux playback fixture\"]:not(:disabled)')"));
     const previous = clients[0]!.state!.player.playbackId;
     await phone.click('[aria-label="Jellyfin search results"] [aria-label="Play: Linux playback fixture"], [aria-label="Jellyfin search results"] [aria-label="Resume: Linux playback fixture"]');
-    await until("phone Jellyfin play uses the one native player and reaches both ordinary remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.player.position > 0.5), 30_000);
+    await until("phone Jellyfin play uses the one native player and reaches both paired remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.player.position > 0.5), 30_000);
     await httpRemote.screenshot("jellyfin-phone-browse-play");
     assert.equal(await phone.execute("return !!document.querySelector('.video-stage')"), false, "The HTTP phone remains a controller without its own video stage");
     await open();

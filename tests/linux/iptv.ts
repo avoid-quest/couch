@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { Action, SessionState } from "../../src/shared/protocol";
 import type { GuidePage, GuideSource } from "../../src/shared/iptv";
-import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote } from "./ui";
+import { type UiDriver, type Wait, type startHttpRemote } from "./ui";
 import { assertNativeVideoPixels } from "./pixels";
 import { assertLiveFrame, clockLag } from "./iptv-clock";
 import { captureGuideClock } from "./iptv-native-clock";
