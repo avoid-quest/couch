@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
-import { act, useState } from "react";
+import { act, useRef, useState } from "react";
 import type { Root } from "react-dom/client";
 import * as session from "@/session/session";
 import { screen } from "@/testing";
@@ -86,7 +86,8 @@ test("closing restores focus to the native shortcut and reopening refreshes the 
   const { PairingDialog } = await import("./PairingDialog");
   function Shortcut() {
     const [open, setOpen] = useState(false);
-    return <><button className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><PairingDialog credentials={host} urls={host.urls} connected open={open} onOpenChange={setOpen} /></>;
+    const openerRef = useRef<HTMLButtonElement>(null);
+    return <><button ref={openerRef} className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><PairingDialog credentials={host} urls={host.urls} connected open={open} onOpenChange={setOpen} openerRef={openerRef} /></>;
   }
   await act(async () => root.render(<Shortcut />));
   expect(request).not.toHaveBeenCalled();
