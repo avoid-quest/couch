@@ -48,7 +48,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.type("#jellyfin-url", server);
     await phone.type("#jellyfin-user", username);
     await phone.type("#jellyfin-password", password);
-    await phone.button("Test and connect", settings);
+    await phone.button((await api("/api/jellyfin")).connected ? "Test and replace connection" : "Test and connect", settings);
   };
   const saved = async (username: string) => until("phone connection test saves the selected Jellyfin account", async () => (await api("/api/jellyfin")).username === username && await phone.execute("return !document.querySelector('.jellyfin-connect') && document.querySelector(arguments[0])?.textContent.includes('Connection tested and saved.')", [settings]), 30_000);
   const disconnect = async () => {
@@ -62,7 +62,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await until("phone Jellyfin browse offers the real fixture movie", () => phone.execute("return !!document.querySelector('[aria-label=\"Jellyfin search results\"] [aria-label=\"Play: Linux playback fixture\"]:not(:disabled), [aria-label=\"Jellyfin search results\"] [aria-label=\"Resume: Linux playback fixture\"]:not(:disabled)')"));
     const previous = clients[0]!.state!.player.playbackId;
     await phone.click('[aria-label="Jellyfin search results"] [aria-label="Play: Linux playback fixture"], [aria-label="Jellyfin search results"] [aria-label="Resume: Linux playback fixture"]');
-    await until("phone Jellyfin play uses the one native player and reaches both ordinary remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.player.position > 0.5), 30_000);
+    await until("phone Jellyfin play uses the one native player and reaches both paired remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.player.position > 0.5), 30_000);
     await httpRemote.screenshot("jellyfin-phone-browse-play");
     assert.equal(await phone.execute("return !!document.querySelector('.video-stage')"), false, "The HTTP phone remains a controller without its own video stage");
     await open();

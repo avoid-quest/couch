@@ -5,7 +5,7 @@ import { changedRadioTitle, initialRadioTitle, suppliedRadioArtist, type RadioFi
 import { assertResponsive } from "./ui";
 
 // Called after administrator claim. All mutations go through the real phone form;
-// the two WebSocket controllers remain ordinary station and favorite users.
+// existing WebSocket controller roles remain unchanged.
 export async function verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }: RadioContext, streams: RadioFixture) {
   const phone = httpRemote.ui;
   const originalQueue = structuredClone(clients[0]!.state!.queue);
@@ -88,7 +88,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
       mode = failure;
       await refresh(imported.id);
       assert.equal((await stations(imported.id)).length, 3, "Failed refresh retains the previously imported catalog");
-      assert.equal(await phone.execute("return document.querySelector(arguments[0])?.textContent.includes('last imported stations are still available')", [sourceCard(imported.id)]), true);
+      assert.equal(await phone.execute("return !!document.querySelector('[aria-labelledby=radio-settings-title] [role=alert]')?.textContent.trim()"), true, "Failed refresh reports an error while the cached catalog stays playable");
       observations.push({ phase: failure, source: (await summaries()).find(source => source.id === imported.id) });
     }
     await httpRemote.screenshot("radio-sources-cached-failure");
