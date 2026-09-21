@@ -43,7 +43,10 @@ async function settings(ui: UiDriver, until: Wait) {
 
 async function closeSettings(ui: UiDriver, until: Wait) {
   await ui.key(keys.escape);
-  await until("Escape closes playback settings and restores its trigger", async () => await ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Playback settings'"));
+  await until("Escape closes playback settings and restores its trigger", async () => await ui.execute(`
+    const native = !!document.querySelector('.tv-shell');
+    return !document.querySelector('[role=dialog]') && (!native || document.activeElement?.getAttribute('aria-label') === 'Playback settings');
+  `));
 }
 
 async function uploadFile(ui: UiDriver, path: string) {
