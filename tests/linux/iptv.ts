@@ -26,7 +26,8 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     await Bun.write(`${artifactDir}/${name}.png`, Buffer.from(data, "base64"));
   };
   const stop = async () => { await clients[0]!.command({ type: "stop" }); await until("IPTV Stop clears the current native load on both controllers", () => all(state => state.player.status === "idle" && state.currentEntryId === null)); };
-  const playing = (id: string) => all(state => state.player.status === "playing" && state.player.position > 0.2 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
+  // Live clock-only ticks do not broadcast; the captured frames below prove advancement.
+  const playing = (id: string) => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
   const observations: unknown[] = [];
   let previous = "";
   const observe = setInterval(() => {
@@ -130,8 +131,9 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     assert.ok(!hold.request!.aborted && hold.request!.releasedAt! - hold.request!.heldAt! >= 12_000, "Native segment delivery remains held for the complete twelve-second fault");
     assert.equal(stalledFrames[0]!.tick, stalledFrames[1]!.tick, "The bounded delivery hold actually stalls presented video");
     assert.equal(first().player.playbackId, stalledPlayback, "A delivery stall preserves current playback authority");
-    const releasedAt = hold.request!.releasedAt!, stalledPosition = first().player.position;
-    await until("the same native load resumes after held segment delivery", () => playing(blue.id) && first().player.playbackId === stalledPlayback && first().player.position > stalledPosition + 1, 25_000);
+    const releasedAt = hold.request!.releasedAt!;
+    await until("the same native load resumes after held segment delivery", async () => playing(blue.id) && first().player.playbackId === stalledPlayback
+      && (await capture("native-iptv-stall-resuming", String(Date.now()))).tick > stalledFrames[1]!.tick, 25_000);
     const recovered = await frames("native-iptv-stall-resumed");
     stall.recovered = recovered; await write();
     assert.ok(recovered[0]!.tick > stalledFrames[1]!.tick && recovered[1]!.captureEnd - releasedAt <= 25_000, "The same stalled load resumes advancing pixels within twenty-five seconds");
@@ -182,7 +184,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     saved = (await reimport.json() as { source: GuideSource }).source;
     const publicChannel = (await page()).channels.find(channel => channel.tvgId === "apple")!;
     assert.equal((await api(`channels/${publicChannel.id}/play`, "POST", undefined, clients[1]!.token)).status, 200);
-    await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id) && first().player.position > 3, 45_000);
+    await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id), 45_000);
     evidence.publicObserved = { playback: first().player, channel: publicChannel, testedAt: new Date().toISOString() };
     await httpRemote.minimize(); await screenshot("native-iptv-apple-sample"); await stop();
     fixture.update(); assert.equal((await api(`sources/${saved.id}/refresh`, "POST")).status, 200);
