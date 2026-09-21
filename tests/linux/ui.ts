@@ -393,7 +393,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
         }
       }
       if (!point) assert.fail("HTTP click target resolves to an unobstructed pre-dispatch node");
-      await request(`/session/${session}/element/${id}/click`, {});
+      await ui.execute("const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) throw new Error('Click target disappeared'); element.click();", [selector]);
     };
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
