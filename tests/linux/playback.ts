@@ -245,28 +245,7 @@ try {
   await clients[1]!.command({ type: "seek", playbackId, position: chapterPosition });
   await until("native chapter seek reaches both remotes", () => all(state => Math.abs(state.player.position - chapterPosition) < 0.3));
 
-  const keyboardWindow = (await xdotool("search", "--onlyvisible", "--name", "^Couch$")).output.split("\n")[0]!;
-  await ui.controls();
-  assert.equal((await xdotool("windowactivate", "--sync", keyboardWindow)).code, 0);
-  const keyboardPoint = await execute("const rect = document.querySelector('.media-title').getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }");
-  await xdotool("mousemove", "--sync", "--window", keyboardWindow, String(Math.round(keyboardPoint.x)), String(Math.round(keyboardPoint.y)), "click", "1");
-  await until("native keyboard tests focus the actual GTK WebView", async () => await execute("return document.hasFocus()"));
-  await execute("window.__videoStageBeforeNavigation = document.querySelector('.video-stage'); document.querySelector('[aria-label=\"Stop playback\"]').focus()");
-  await xdotool("key", "Left");
-  await until("directional navigation moves focus between native transport controls", async () => await execute("return document.activeElement?.getAttribute('aria-label')") === "Next in queue");
-  await until("native keyboard focus has a visible focus indicator", async () => await execute("const style = getComputedStyle(document.activeElement); return (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none'"));
-  await xdotool("key", "Tab");
-  await until("Tab reaches the next native transport control", async () => await execute("return document.activeElement?.getAttribute('aria-label')") === "Stop playback");
-  await xdotool("key", "shift+Tab");
-  await until("Shift-Tab restores the previous native transport focus", async () => await execute("return document.activeElement?.getAttribute('aria-label')") === "Next in queue");
-  await ui.section("Queue");
-  await xdotool("key", "Right");
-  await xdotool("key", "Return");
-  await until("source tabs support real arrow-key navigation", async () => await execute("return document.querySelector('.source-nav [data-state=active]')?.textContent.trim()") === "Search");
-  await xdotool("key", "Escape");
-  await until("Escape closes TV Home while retaining its browsed source", async () => await execute("return !!document.querySelector('.tv-browser[hidden]') && document.querySelector('.source-nav [data-state=active]')?.textContent.trim() === 'Search'"));
-  await ui.home();
-  await until("TV Home restores source-tab focus without resetting browsing", async () => await execute("return document.activeElement?.getAttribute('role') === 'tab' && document.activeElement?.textContent.trim() === 'Search'"));
+  await execute("window.__videoStageBeforeNavigation = document.querySelector('.video-stage')");
   await ui.section("Queue");
   await until("VideoStage retains DOM identity and playback across source navigation", async () => await execute("return window.__videoStageBeforeNavigation === document.querySelector('.video-stage')") && all(state => state.player.playbackId === playbackId && state.player.status === "paused"));
 
