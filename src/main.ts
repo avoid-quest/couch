@@ -54,6 +54,7 @@ if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await ch
 hub = createHub({
   updater,
   managedLan: native && !previewProxyLan,
+  publishedLan: previewProxyLan,
   onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
   ...(appimage || deb ? { restart: (appimage ? appimageUpdates : debUpdates).restart } : {}),
