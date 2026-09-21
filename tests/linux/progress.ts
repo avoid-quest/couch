@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { HistoryItem, LibraryItem, WatchingProfile } from "../../src/shared/library";
 import type { Action, SessionState } from "../../src/shared/protocol";
-import { keys, type UiDriver, type Wait } from "./ui";
+import { type UiDriver, type Wait } from "./ui";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type ProgressContext = {

@@ -5,7 +5,6 @@ import { musicControls, restoreQueue, type MusicContext, type SavedMusic } from 
 import type { PlayerState } from "../../src/shared/protocol";
 import type { LibraryItem, MusicAlbum } from "../../src/shared/library";
 
-const panel = '.library-panel [data-slot="tabs-content"][data-state="active"] .music-panel';
 
 export async function verifyCue(context: MusicContext & { screenshot: (name: string) => Promise<void> }) {
   const { ui, until, clients, api, httpRemote, artifactDir } = context;

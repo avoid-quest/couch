@@ -16,7 +16,6 @@ export type MusicContext = {
   artifactDir: string;
 };
 export type SavedMusic = { playlist: SavedPlaylist; album: MusicAlbum; tracks: LibraryItem[] };
-const activeMusic = '.library-panel [data-slot="tabs-content"][data-state="active"] .music-panel';
 const label = (text: string) => `[aria-label=${JSON.stringify(text)}]`;
 const orderedTitles = ["Disc one first", "Disc one last", "Disc two first"];
 const playlistDialog = ".saved-playlists";
