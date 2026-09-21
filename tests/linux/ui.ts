@@ -123,10 +123,11 @@ export class UiDriver {
 
   async button(label: string, scope = "") {
     if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
-    const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
+    const matches = () => this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
-    assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
-    await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
+    const [button] = await matches();
+    await this.clickElement(button["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
   async section(label: string) {
