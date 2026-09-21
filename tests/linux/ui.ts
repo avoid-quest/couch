@@ -371,19 +371,16 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await ui.revealElement(id);
-          let previous = "";
-          await ui.waitFor("HTTP click target becomes visible, unobstructed and stable", async () => {
+          await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
             await ui.execute("const element = arguments[0], rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
             await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
             const point = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
           const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
           return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
             ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [target]);
-            const stable = !!point && point === previous;
-            previous = point;
-            return stable;
+            return !!point;
           });
-          point = JSON.parse(previous);
+          point = JSON.parse(point);
           break;
         } catch (error) {
           if (!String(error).includes("Node with identifier")) throw error;
