@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Action, ConnectionInfo, NavigationKey, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
@@ -128,10 +128,13 @@ export function SessionGate({ children }: PropsWithChildren) {
   // detached client cannot populate the replacement client even if I/O ignores abort.
   // Local/loopback reachability comes from the session, not the browser's offline
   // indicator. Disconnected reads are disabled/cancelled below, never queued for replay.
-  const cache = useMemo(() => ({ id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
+  const cacheOwner = [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id] as const;
+  const cacheRef = useRef<{ owner: typeof cacheOwner; id: number; client: QueryClient } | null>(null);
+  if (!cacheRef.current || cacheRef.current.owner.some((value, index) => value !== cacheOwner[index])) cacheRef.current = { owner: cacheOwner, id: ++cacheSequence, client: new QueryClient({ defaultOptions: {
     queries: { networkMode: "always", retry: 1, refetchOnWindowFocus: false },
     mutations: { networkMode: "always", retry: false },
-  } }) }), [credentials?.origin, credentials?.token, credentials?.installationId, details?.installationId, pairingRequired, identity?.authority, identity?.controller?.id]);
+  } }) };
+  const cache = cacheRef.current;
   const queryClient = cache.client;
   useLayoutEffect(() => () => queryClient.clear(), [queryClient]);
   useUpdateActivity(credentials, connected);

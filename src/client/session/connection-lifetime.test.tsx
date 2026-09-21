@@ -190,12 +190,13 @@ test("installation replacement at the same address does not send the old token t
 test("ordinary reconnect revalidates cached reads even when server version counters restart at zero", async () => {
   await mount(); await connected();
   await until(() => !!screen.queryByText("Old household"));
-  const count = sockets.length;
+  const count = sockets.length, previous = client;
   title = "Updated household";
   await act(async () => gate.reconnect());
   await until(() => sockets.length > count);
   await connected();
   await until(() => !!screen.queryByText("Updated household"));
+  expect(client).toBe(previous);
 });
 
 test("unpair cancels a pending pairing response rather than silently pairing the tab again", async () => {
