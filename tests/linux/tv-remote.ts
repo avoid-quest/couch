@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { Action, SessionState } from "../../src/shared/protocol";
-import { assertResponsive, type UiDriver, type Wait, type startHttpRemote } from "./ui";
+import { assertResponsive, keys, type UiDriver, type Wait, type startHttpRemote } from "./ui";
 
 type Remote = { state: SessionState | null; command: (action: Action) => Promise<void> };
 
@@ -55,5 +55,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await assertTvFullscreen(ui, until, "phone D-pad navigation");
   await until("phone remote dialog remains available for the retained screenshot", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
   await httpRemote.screenshot("http-tv-remote");
+  await phone.key(keys.escape);
+  await until("phone Remote dialog closes before continuing", () => phone.execute("return !document.querySelector('[role=dialog]')"));
   await Bun.write(`${artifactDir}/tv-remote.json`, JSON.stringify({ testedAt: new Date().toISOString(), controllers: clients.length, nativeViewport: [1600, 1000], phoneViewport: 390, nativeFullscreen: true, remoteVideoStages: 0, playbackId: initial.playbackId, checks: ["Remote dialog pad", "Info transport focus", "OK resume/pause", "visible focused transport", "mounted native stage"] }, null, 2));
 }

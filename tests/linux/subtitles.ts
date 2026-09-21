@@ -34,18 +34,16 @@ function controls({ clients, until }: Pick<Context, "clients" | "until">) {
 }
 
 async function settings(ui: UiDriver, until: Wait) {
-  if (await ui.execute("return !!document.querySelector('.tv-shell')")) {
-    await ui.controls();
-    await ui.click('.tv-playback-controls:not([hidden]) [aria-label="Playback settings"]');
-  } else await ui.execute("const button = [...document.querySelectorAll('.remote-shell [aria-label=\"Playback settings\"]')].find(value => value.getClientRects().length); if (!button) return false; button.click()");
+  const native = await ui.execute("return !!window.__TAURI_INTERNALS__");
+  if (native) await ui.controls();
+  await ui.button("Playback settings", native ? ".tv-playback-controls:not([hidden])" : "");
   await until("playback settings exposes its subtitle upload control", async () => await ui.execute("return !!document.querySelector('[role=dialog] #playback-subtitle-file')"));
 }
 
 async function closeSettings(ui: UiDriver, until: Wait) {
   await ui.key(keys.escape);
   await until("Escape closes playback settings and restores its trigger", async () => await ui.execute(`
-    const native = !!document.querySelector('.tv-shell');
-    return !document.querySelector('[role=dialog]') && (!native || document.activeElement?.getAttribute('aria-label') === 'Playback settings');
+    return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Playback settings';
   `));
 }
 
