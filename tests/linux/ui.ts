@@ -142,9 +142,11 @@ export class UiDriver {
   async button(label: string, scope = "") {
     if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
     const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
-      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
+      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]).map(button => ({ id: button.getAttribute('element-6066-11e4-a52e-4f735466cecf'), ariaLabel: button.getAttribute('aria-label'), text: button.textContent.trim() }));`, [scope, label]);
     assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
-    await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    const match = matches[0]!;
+    const selector = match.ariaLabel ? `[aria-label="${match.ariaLabel.replaceAll('"', '\\"')}"]` : `xpath=//button[normalize-space()="${label.replaceAll('"', '\\"')}"]`;
+    await this.clickElement(match.id!, selector);
   }
 
   async section(label: string) {
@@ -371,9 +373,9 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
-            await ui.execute("const element = document.querySelector(arguments[0]); if (!element) return false; const rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [selector]);
+            await ui.execute("const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) return false; const rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [selector]);
             await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-            const measured = await ui.execute(`const element = document.querySelector(arguments[0]); if (!element) return ''; const rect = element.getBoundingClientRect();
+            const measured = await ui.execute(`const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) return ''; const rect = element.getBoundingClientRect();
           const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
           return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
             ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [selector]);
