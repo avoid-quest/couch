@@ -387,7 +387,7 @@ try {
       await type("#jellyfin-url", config.containerUrl);
       await type("#jellyfin-user", config.username);
       await type("#jellyfin-password", config.password);
-      await click(".jellyfin-connect button.primary-button");
+      await ui.button("Test and connect", '[aria-label="Jellyfin settings"]');
       await until("native UI authenticates with real Jellyfin server", async () => (await api("/api/jellyfin")).connected === true, 30_000);
       await ui.section("Now");
     }
@@ -426,8 +426,7 @@ try {
     await until("disconnecting Jellyfin stops its active media for every remote", async () =>
       all(state => state.player.status === "idle") && (await api("/api/jellyfin")).connected === false,
     );
-    await ui.key(keys.escape);
-    await until("native disconnect confirmation closes before reconnect", () => execute("return !document.querySelector('[role=dialog]')"));
+    await ui.section("Now");
     await connectJellyfin();
     startShutdownPlayback = async () => {
       await clients[1]!.command({ type: "play", entryId });

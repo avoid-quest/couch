@@ -149,7 +149,7 @@ export class UiDriver {
     await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
-  async settingsSection(section: string) {
+  async settingsSection(section: string): Promise<void> {
     if (await this.execute("return !!document.querySelector('[aria-label=\"Settings pages\"]')")) {
       if (section.startsWith("source-")) {
         await this.settingsSection("sources");
@@ -205,7 +205,8 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
-    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"]);
+    for (const character of label) await this.key(character);
+    await this.key(keys.enter);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
       assert.ok(Date.now() < closeDeadline, `${selector} closes and displays ${label}`);
@@ -217,11 +218,13 @@ export class UiDriver {
 export const qualityLabel = (value: string) => value === "auto" ? "1080p (recommended)" : value === "best" ? "Unrestricted quality" : `Up to ${value}`;
 
 async function settlePortals(ui: UiDriver) {
-  const deadline = Date.now() + 5_000;
-  while (await ui.execute("return [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')].some(portal => portal.getAnimations().some(animation => animation.playState === 'running'))")) {
-    assert.ok(Date.now() < deadline, "Portal opening animations settle before measuring controls");
-    await Bun.sleep(50);
-  }
+  await ui.request(`/session/${ui.session()}/execute/async`, {
+    script: `const done = arguments[arguments.length - 1];
+      requestAnimationFrame(() => requestAnimationFrame(() => Promise.allSettled(
+        [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')]
+          .flatMap(portal => portal.getAnimations().map(animation => animation.finished))
+      ).then(() => done(null))));`, args: [],
+  });
 }
 
 export async function assertTheme(ui: UiDriver) {

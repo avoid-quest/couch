@@ -25,7 +25,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   const entries = first().queue.slice(-3);
   const playlist = (await api("/api/playlists", { name: "Cue boundary qualification" })).playlist as SavedMusic["playlist"];
   await httpRemote.restore();
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", "Second tone");
   await httpRemote.ui.button("Play: Second tone", '[aria-label="Library search results"]');
   await until("phone starts the second cue at relative zero with its own duration", () => all(state => state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${tracks[1]!.id}` && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2 && Math.abs(state.player.duration! - tracks[1]!.duration!) < 0.01));

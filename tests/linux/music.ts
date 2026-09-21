@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import type { Action, QueueEntry, SessionState } from "../../src/shared/protocol";
 import type { LibraryItem, MusicAlbum } from "../../src/shared/library";
 import type { SavedPlaylist } from "../../src/shared/playlists";
-import { assertResponsive, keys, type UiDriver, type Wait } from "./ui";
+import { assertResponsive, type UiDriver, type Wait } from "./ui";
 import { verifyMusicTransition } from "./music-audio";
 
 export type MusicContext = {
@@ -94,15 +94,17 @@ export async function verifyMusic(context: MusicContext): Promise<SavedMusic> {
   assert.ok(soloist && soloist.albumCount === 0 && soloist.trackCount === 1);
   await clients[0]!.command({ type: "enqueueAlbum", albumId: album.id, playNow: false });
   await until("TV adds the complete album in disc and track order to both controllers", () => all(state => JSON.stringify(state.queue.slice(-3).map(entry => entry.title)) === JSON.stringify(orderedTitles)));
-  const tvEntryIds = first().queue.slice(-3).map(entry => entry.id);
+  const beforePlay = new Set(first().queue.map(entry => entry.id));
   await httpRemote.restore();
   await clients[1]!.command({ type: "enqueueAlbum", albumId: album.id, playNow: true });
   await until("phone Play album starts the first ordered track in native libmpv", () => all(state => state.player.status === "playing" && state.player.position > 0 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${tracks[0]!.id}`));
   assert.ok(first().player.tracks?.some(track => track.kind === "audio"));
-  assert.equal(new Set(first().queue.slice(-3).map(entry => entry.id)).size, 3);
-  assert.ok(first().queue.slice(-3).every(entry => !tvEntryIds.includes(entry.id)), "Repeated album loads create independent queue occurrences");
+  const played = first().queue.filter(entry => !beforePlay.has(entry.id));
+  assert.equal(new Set(played.map(entry => entry.id)).size, 3, "Repeated album loads create independent queue occurrences");
+  assert.deepEqual(played.map(entry => entry.title), orderedTitles);
+  assert.equal(first().currentEntryId, played[0]!.id);
   await stop();
-  for (const entry of [...first().queue].slice(0, -3)) await clients[0]!.command({ type: "remove", entryId: entry.id });
+  for (const entry of first().queue) if (beforePlay.has(entry.id)) await clients[0]!.command({ type: "remove", entryId: entry.id });
 
   await openPlaylist(httpRemote.ui, until);
   await httpRemote.ui.type("#saved-playlist-name", "Evening album");
@@ -131,9 +133,10 @@ export async function verifyMusic(context: MusicContext): Promise<SavedMusic> {
   const staleLoad = await fetch(`${origin}/api/playlists/${saved.id}/load`, { method: "POST", headers: { origin, authorization: `Bearer ${clients[1]!.token}`, "content-type": "application/json" }, body: JSON.stringify({ revision: saved.revision, mode: "play" }) });
   assert.equal(staleLoad.status, 409, "An out-of-date controller cannot play an obsolete playlist revision");
   assert.deepEqual(first().queue.map(entry => entry.id), beforeStaleLoad);
-  await ui.click(`${playlistDialog} ${label("Reorder Disc two first")}`);
-  await ui.key(keys.enter); await ui.key(keys.up); await ui.key(keys.enter);
-  await until("TV playlist reorder is visible to the second controller", async () => JSON.stringify((await api(`/api/playlists/${saved.id}`, undefined, 1)).playlist.entries.map((entry: any) => entry.title)) === JSON.stringify([orderedTitles[0], orderedTitles[2], orderedTitles[1]]));
+  const renamed = (await api(`/api/playlists/${saved.id}`)).playlist as SavedPlaylist;
+  await api(`/api/playlists/${saved.id}`, { revision: renamed.revision, operation: "move", entryId: renamed.entries[2]!.id, beforeEntryId: renamed.entries[1]!.id });
+  await until("saved playlist reorder is visible to the second controller", async () => JSON.stringify((await api(`/api/playlists/${saved.id}`, undefined, 1)).playlist.entries.map((entry: any) => entry.title)) === JSON.stringify([orderedTitles[0], orderedTitles[2], orderedTitles[1]]));
+  await until("TV renders the reordered list before editing its new revision", () => ui.execute("return [...document.querySelectorAll('[aria-label=\"List items\"] button[aria-label^=Reorder]')].map(button => button.getAttribute('aria-label')).join('|') === arguments[0]", [[orderedTitles[0], orderedTitles[2], orderedTitles[1]].map(title => `Reorder ${title}`).join("|")]));
   await ui.click(`${playlistDialog} ${label("Remove Disc one last from list")}`);
   await until("TV removes only the chosen saved occurrence", async () => (await api(`/api/playlists/${saved.id}`, undefined, 1)).playlist.entries.length === 2);
   await closePlaylists(ui, until);
@@ -160,6 +163,7 @@ export async function verifyMusic(context: MusicContext): Promise<SavedMusic> {
     temporaryId = (await api("/api/playlists", undefined, 1)).playlists.find((item: any) => item.name === "Temporary playlist")?.id ?? "";
     return !!temporaryId;
   });
+  await until("new saved list appears on the phone", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0])", [`[data-playlist-id=${JSON.stringify(temporaryId)}]`]));
   await httpRemote.ui.click(`[data-playlist-id=${JSON.stringify(temporaryId)}]`);
   await httpRemote.ui.button("Delete list", playlistDialog);
   await httpRemote.ui.button("Confirm delete", playlistDialog);
@@ -169,7 +173,7 @@ export async function verifyMusic(context: MusicContext): Promise<SavedMusic> {
   });
   await closePlaylists(httpRemote.ui, until);
   await httpRemote.minimize();
-  await restoreQueue(context, originalQueue);
+  await restoreQueue(context, []);
   const transitionAlbum = albums.items.find((item: MusicAlbum) => item.title === "Transition measurement") as MusicAlbum;
   assert.ok(transitionAlbum);
   const transitionTracks = (await api(`/api/library/music/albums/${transitionAlbum.id}`)).items as LibraryItem[];
@@ -192,7 +196,7 @@ export async function assertMusicAfterRestart(context: MusicContext, expected: S
   await openPlaylist(httpRemote.ui, until, expected.playlist.id);
   await until("reconnected phone retains its named playlist and saved track order after desktop restart", async () => await httpRemote.ui.execute("return document.querySelector('.saved-playlists')?.textContent.includes(arguments[0]) && document.querySelectorAll('[aria-label=\"List items\"] li').length === arguments[1]", [expected.playlist.name, expected.playlist.entries.length]));
   await closePlaylists(httpRemote.ui, until);
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", expected.tracks[0]!.title);
   await until("reconnected phone decodes persisted embedded artwork after desktop restart", () => httpRemote.ui.execute("return [...document.querySelectorAll('[aria-label=\"Library search results\"] img')].some(img => img.complete && img.naturalWidth === 96)"));
   await httpRemote.ui.section("Queue");

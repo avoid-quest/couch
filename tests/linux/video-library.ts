@@ -105,7 +105,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   const artworkUrl = `${origin}/api/library/artwork/${movie.artworkId}`;
   assert.equal((await fetch(artworkUrl, { headers: { origin } })).status, 401);
 
-  await ui.section("Find");
+  await ui.section("Library");
   await ui.type("#media-search", movie.title);
   await loadedArtwork(ui, context, 240, "native Find decodes the movie poster");
   await ui.button(`Details for ${movie.title}`, active);
@@ -124,7 +124,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await until("native catalog movie reaches the requested resume point", () => all(state => Math.abs(state.player.position - 7) < 0.4));
   await stop();
   await httpRemote.restore();
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", movie.title);
   await loadedArtwork(httpRemote.ui, context, 240, "HTTP phone decodes cached movie poster");
   await assertResponsive(httpRemote.ui, "Phone movie search");
@@ -135,7 +135,8 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await until("phone-started movie pauses", () => all(state => state.player.status === "paused"));
   await clients[0]!.command({ type: "seek", playbackId: first().player.playbackId!, position: 7 });
   await until("movie progress returns to seven seconds", () => all(state => Math.abs(state.player.position - 7) < 0.4));
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.key(keys.escape);
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", episodes[0]!.title);
   await httpRemote.ui.button(`Up next: ${episodes[0]!.title}`, active);
   await httpRemote.ui.button(`Play: ${episodes[0]!.title}`, active);
@@ -187,7 +188,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   assert.ok(Math.abs(offlineMovie.progress!.position - 7) < 0.5);
   await restoreQueue(context, queue);
   await httpRemote.restore();
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", movie.title);
   await loadedArtwork(httpRemote.ui, context, 240, "phone continues decoding cached artwork while source is unplugged");
   await until("unavailable movie remains browsable with disabled playback", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0] + ' button[aria-label^=Resume]:disabled') && document.querySelector(arguments[0])?.textContent.includes('File unavailable')", [row(movie.title)]));
@@ -208,7 +209,7 @@ export async function assertVideoLibraryAfterRestart(context: Context, expected:
   assert.equal((await api("/api/library/video/shows?q=Observatory")).items[0].id, expected.show.id);
   assert.equal((await api("/api/library/sources")).sources.find((item: LibrarySource) => item.id === expected.source.id).status, "unavailable");
   await httpRemote.restore();
-  await httpRemote.ui.section("Find");
+  await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", movie.title);
   const freshArtwork = await httpRemote.ui.request(`/session/${httpRemote.ui.session()}/execute/async`, { args: [movie.artworkId], script: `
     const id = arguments[0], done = arguments[arguments.length - 1];

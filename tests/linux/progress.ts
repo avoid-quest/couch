@@ -84,7 +84,7 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
   assert.equal(checkpoint.watched, false);
   assert.ok(checkpoint.lastPlayedAt && Math.abs(checkpoint.position - 7) < 0.4);
 
-  await ui.section("Find");
+  await ui.section("Library");
   await ui.type("#media-search", item.title);
   await until("native Library displays the committed resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[aria-label="Library search results"] ${labeled(`Resume: ${item.title}`)}`]));
   let previous = first().player.playbackId;

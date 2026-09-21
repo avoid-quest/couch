@@ -70,7 +70,7 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
     await phone.button(label, folderCard(sourceId));
   };
   const play = async () => {
-    await phone.section("Find");
+    await phone.section("Library");
     await phone.type("#media-search", item.title);
     const region = '[aria-label="Library search results"]';
     await until("phone library finds the retained folder item", () => phone.execute("return !!document.querySelector(arguments[0])", [`${region} [aria-label=${JSON.stringify(`Play: ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume: ${item.title}`)}]`]));
