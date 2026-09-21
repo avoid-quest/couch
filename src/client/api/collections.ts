@@ -6,5 +6,5 @@ import { apiFetch } from "./client";
 export const collectionsQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["collections"],
-    queryFn: () => apiFetch(credentials, "/api/collections").then(r => r.json() as Promise<SavedCollection[]>),
+    queryFn: ({ signal }) => apiFetch(credentials, "/api/collections", { signal }).then(r => r.json() as Promise<SavedCollection[]>),
   });
