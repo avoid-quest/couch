@@ -112,6 +112,7 @@ test("the Docker preview admits its published origin without changing native LAN
   expect(ready).toMatchObject({ type: "ready", urls: [advertised] });
   const headers = { Host: new URL(advertised).host, Origin: advertised, "Content-Type": "application/json" };
   expect((await fetch(`${ready.origin}/api/settings/sharing`, { method: "POST", headers: { ...headers, Authorization: `Bearer ${token}` }, body: JSON.stringify({ enabled: true }) })).status).toBe(200);
+  expect(await (await fetch(`${ready.origin}/api/connection`, { headers })).json()).toMatchObject({ urls: [advertised] });
   expect((await fetch(`${ready.origin}/api/pair`, { method: "POST", headers, body: JSON.stringify({ code: ready.pairingCode, name: "Preview phone" }) })).status).toBe(200);
   expect((await fetch(`${ready.origin}/api/connection`, { headers: { Host: "untrusted.example", Origin: "http://untrusted.example" } })).status).toBe(403);
   child.stdin.end();
