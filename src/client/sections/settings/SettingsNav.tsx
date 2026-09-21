@@ -44,7 +44,7 @@ export function SettingsNav({ active }: Props) {
         <div key={group.label} className="border-b border-border pb-1 last:border-0">
           <p aria-hidden="true" className="px-3 pt-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground first:pt-0">{group.label}</p>
           {group.pages.map(([id, page]) => (
-            <Button key={id} variant="ghost" asChild className={`h-auto min-h-11 justify-start gap-3 p-3 text-left whitespace-normal ${nativeHost ? "flex" : "w-full justify-between"} ${nativeHost
+            <Button key={id} data-settings-page={id} variant="ghost" asChild className={`h-auto min-h-11 justify-start gap-3 p-3 text-left whitespace-normal ${nativeHost ? "flex" : "w-full justify-between"} ${nativeHost
               ? "aria-[current=page]:bg-primary! aria-[current=page]:text-primary-foreground! aria-[current=page]:hover:bg-primary! aria-[current=page]:hover:text-primary-foreground!"
               : "aria-[current=page]:bg-muted aria-[current=page]:text-foreground"}`}>
               <Link aria-current={active === id || id === "sources" && sourcePage ? "page" : undefined} to={page.path}>
