@@ -17,6 +17,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
   const first = () => clients[0]!.state!;
   const all = (predicate: (state: SessionState) => boolean) => clients.every(client => !!client.state && predicate(client.state));
   const originalQueue = first().queue.map(entry => entry.id);
+  const profileId = first().activeProfile.id, speed = first().preferences!.profile.speed;
   const adminToken: string = await httpRemote.ui.execute("return localStorage.getItem('couch.remote-token')");
   const api = (path: string, method = "GET", body?: unknown, token = adminToken) => fetch(`${origin}/api/iptv/${path}`, { method, headers: { Origin: origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const page = async () => (await (await api("guide")).json()) as GuidePage;
@@ -27,7 +28,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
   };
   const stop = async () => { await clients[0]!.command({ type: "stop" }); await until("IPTV Stop clears the current native load on both controllers", () => all(state => state.player.status === "idle" && state.currentEntryId === null)); };
   // Live clock-only ticks do not broadcast; the captured frames below prove advancement.
-  const playing = (id: string) => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
+  const playing = (id: string) => all(state => state.player.status === "playing" && state.player.speed === 1 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
   const observations: unknown[] = [];
   let previous = "";
   const observe = setInterval(() => {
@@ -36,10 +37,12 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     const encoded = JSON.stringify({ ...value, at: 0 });
     if (encoded !== previous) { observations.push(value); previous = encoded; }
   }, 100);
-  const evidence: Record<string, unknown> = { generated: fixture.hashes, encoding: fixture.encoding, epoch: fixture.epoch, publicSample: { url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
+  const evidence: Record<string, unknown> = { clockSpeed: 1, originalSpeed: speed, generated: fixture.hashes, encoding: fixture.encoding, epoch: fixture.epoch, publicSample: { url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
   const write = () => Bun.write(`${artifactDir}/iptv.json`, JSON.stringify({ ...evidence, date: new Date().toISOString(), requests: fixture.requests(), observations, limits: "Software rendering and a silent audio sink. No physical audio, decoder, HDMI or network hardware qualification." }, null, 2));
   try {
     await stop();
+    if (speed !== 1) await clients[0]!.command({ type: "preferences", profileId, preferences: { speed: 1 } });
+    await until("IPTV clock fixture uses normal playback speed", () => all(state => state.preferences?.profile.speed === 1));
     assert.equal((await api("sources", "POST", fixture.definition, clients[1]!.token)).status, 403, "An ordinary paired controller cannot import guide URLs");
     assert.equal((await api("sources", "GET", undefined, "")).status, 401, "An unpaired browser cannot read the guide");
     // Guide browsing was retired. Keep authenticated source and native HLS
@@ -205,5 +208,9 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       assert.deepEqual((await page()).channels, cached, "Restart restores the cached guide while its upstream is offline");
       evidence.restart = true; await write();
     } };
-  } catch (error) { evidence.failure = error instanceof Error ? error.message : String(error); throw error; } finally { clearInterval(observe); await write(); }
+  } catch (error) { evidence.failure = error instanceof Error ? error.message : String(error); throw error; } finally {
+    clearInterval(observe);
+    if (speed !== 1) await clients[0]!.command({ type: "preferences", profileId, preferences: { speed } });
+    await write();
+  }
 }
