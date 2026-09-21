@@ -69,8 +69,13 @@ export async function verifyClaim(context: Context) {
     assert.deepEqual(client.state!.queue.map(entry => entry.id), before.queue.map(entry => entry.id));
     assert.deepEqual(client.state!.activeProfile, before.activeProfile);
   }
+  const phoneToken = await httpRemote.ui.execute("return localStorage.getItem('couch.remote-token')") as string;
+  const phone = await (await api(phoneToken, "/api/controllers/me")).json() as ControllerIdentity;
+  assert.ok(phone.controller);
+  assert.equal((await api(clients[0]!.token, `/api/controllers/${phone.controller.id}/role`, { role: "administrator" })).status, 200);
   await Bun.write(`${artifactDir}/native-authority.json`, JSON.stringify({ roles, protectedActions: ["TV folder browser"], queuePreserved: true }, null, 2));
   return { verifyAfterRestart: async (nextClients: readonly Remote[], _remote: HttpRemote) => {
     for (const [index, client] of nextClients.entries()) assert.equal((await (await api(client.token, "/api/controllers/me")).json() as ControllerIdentity).authority, roles[index]);
+    assert.equal((await (await api(phoneToken, "/api/controllers/me")).json() as ControllerIdentity).authority, "administrator");
   } };
 }
