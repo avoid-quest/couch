@@ -1,3 +1,4 @@
+import { settingsPages, type SettingsPage } from "../../src/shared/settings-pages";
 import { strict as assert } from "node:assert";
 
 type Request = (path: string, body?: unknown, method?: string) => Promise<any>;
@@ -70,35 +71,32 @@ export class UiDriver {
   }
 
   async click(selector: string) {
-    await this.clickElement(await this.element(selector), selector);
+    await this.clickElement("", selector);
   }
 
   async clickElement(id: string, selector?: string) {
     await this.revealElement(id, selector);
     await settlePortals(this);
+    const scale = await this.execute("return devicePixelRatio");
+    if (scale === 1) {
+      const target = selector ? await this.element(selector) : id;
+      await this.waitFor("Click target is enabled", () => this.request(`/session/${this.session()}/element/${target}/enabled`));
+      return this.request(`/session/${this.session()}/element/${target}/click`, {});
+    }
+    // WebKitGTK element-click misses fractional-DPI targets; pointer actions take device pixels.
     const element = selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id };
-    const deadline = Date.now() + 5_000;
-    let previous = "";
-    while (true) {
-      const point = await this.execute(`
+    let point = "";
+    await this.waitFor("Click target is enabled and unobstructed", async () => {
+      point = await this.execute(`
         const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
         const rect = element.getBoundingClientRect();
         const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
-        const hit = document.elementFromPoint(x, y);
-        return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(hit) ? JSON.stringify([x, y, rect.width, rect.height]) : '';
+        return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y)) ? JSON.stringify([x, y]) : '';
       `, [element, selector]);
-      if (point && point === previous) break;
-      if (Date.now() >= deadline) {
-        const target = await this.execute("const el=arguments[1] ? document.querySelector(arguments[1]) : arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element, selector]);
-        assert.fail(`Click target becomes enabled, unobstructed and stable: ${JSON.stringify(target)}`);
-      }
-      previous = point;
-      await Bun.sleep(50);
-    }
-    // WebKitGTK pointer actions use device pixels at fractional display scales.
-    const [x, y] = JSON.parse(previous);
-    const scale = await this.execute("return devicePixelRatio");
+      return !!point;
+    });
+    const [x, y] = JSON.parse(point);
     await this.request(`/session/${this.session()}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", duration: 0, origin: "viewport", x: Math.round(x * scale), y: Math.round(y * scale) },
       { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
@@ -108,6 +106,7 @@ export class UiDriver {
   async type(selector: string, text: string) {
     const id = await this.element(selector);
     await this.clickElement(id);
+    if (!text) { await this.key(keys.home); await this.key(keys.end, true); await this.key("\uE003"); return; }
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});
     if (text) await this.request(`/session/${this.session()}/element/${id}/value`, { text });
   }
@@ -123,21 +122,24 @@ export class UiDriver {
 
   async button(label: string, scope = "") {
     if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
-    const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
+    const matches = () => this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
-    assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
-    await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
+    const [button] = await matches();
+    await this.clickElement(button["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
   async section(label: string) {
     await this.browse();
     if (await this.execute("return !!document.querySelector('.primary-nav')")) {
-      const destination = label === "For later" ? "Saved" : label === "Online" ? "Library" : label;
-      const libraryLabel = ({ Files: "TV folders", Radio: "Radio", Guide: "Live TV", Jellyfin: "Jellyfin" } as Record<string, string>)[destination];
-      await this.click(`.primary-nav a[data-source="${libraryLabel ? "Library" : destination}"]`);
-      if (libraryLabel) {
-        await this.waitFor("Library page opens before choosing its source", () => this.execute('return !!document.querySelector(\'[data-page="Library"]:not([hidden])\')'));
-        await this.button(libraryLabel, '[data-page="Library"]:not([hidden])');
+      const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
+      const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
+      await this.click(`.primary-nav a[data-source="${destination}"]`);
+      if (source) {
+        await this.type("#media-search", "");
+        await this.key(keys.enter);
+        await this.button(source, '[aria-label="Filter search results"]');
+        await this.waitFor(`${source} filter is selected`, () => this.execute("return document.querySelector('[data-search-scopes] [aria-pressed=true]')?.getAttribute('aria-label') === arguments[0]", [source]));
       }
       await this.waitFor(`${label} page opens`, () => this.execute('return !!document.querySelector(arguments[0])', [`[data-page="${destination}"]:not([hidden])`]));
       return;
@@ -148,14 +150,26 @@ export class UiDriver {
     await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
-  async settingsSection(section: string) {
+  async settingsSection(section: string): Promise<void> {
     if (await this.execute("return !!document.querySelector('[aria-label=\"Settings pages\"]')")) {
+      if (section.startsWith("source-")) {
+        await this.settingsSection("sources");
+        await this.click(`[aria-label="Sources"] a[href$="${settingsPages[section as SettingsPage].path}"]`);
+        await this.waitFor(`${section} opens`, () => this.execute("return document.querySelector('section[aria-label=Settings] h2')?.textContent === arguments[0]", [settingsPages[section as SettingsPage].label]));
+        return;
+      }
+      if (section === "tv-appearance") {
+        if (await this.execute("return !!document.querySelector('.tv-shell')")) return this.settingsSection("appearance");
+        // Retained administrator deep link has no primary navigation item.
+        const url = new URL("/settings/tv-appearance", await this.execute("return location.href")).href;
+        await this.request(`/session/${this.session()}/url`, { url });
+        await this.waitFor("TV appearance route reconnects", () => this.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+        return;
+      }
       const destination = section === "remotes" ? "connection" : section === "remote" ? "playback" : section;
-      const category = ".settings-page:not([hidden]) .settings-category select";
+      const category = '[aria-label="Settings page"]';
       if (await this.execute("return !!document.querySelector(arguments[0])?.getClientRects().length", [category])) {
-        const option = await this.element(`${category} option[value="${destination}"]`);
-        // WebDriver's option click selects the native option and dispatches input/change.
-        await this.request(`/session/${this.session()}/element/${option}/click`, {});
+        await this.select(category, settingsPages[destination as SettingsPage].label);
       } else {
         const target = `[aria-label="Settings pages"] [data-settings-page="${destination}"]`;
         if (await this.execute("return !!document.querySelector('[role=dialog] .settings-back')")) await this.button("All settings", '[role="dialog"]');
@@ -182,6 +196,7 @@ export class UiDriver {
   }
 
   async select(selector: string, label: string) {
+    if (/^#media-(kind|quality)$/.test(selector)) await this.addMedia();
     await this.click(selector);
     const deadline = Date.now() + 5_000;
     let options: any[] = [];
@@ -191,7 +206,8 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
-    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"]);
+    await this.execute("arguments[0].focus()", [options[0]]);
+    await this.key(keys.enter);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
       assert.ok(Date.now() < closeDeadline, `${selector} closes and displays ${label}`);
@@ -203,31 +219,28 @@ export class UiDriver {
 export const qualityLabel = (value: string) => value === "auto" ? "1080p (recommended)" : value === "best" ? "Unrestricted quality" : `Up to ${value}`;
 
 async function settlePortals(ui: UiDriver) {
-  const deadline = Date.now() + 5_000;
-  while (await ui.execute(`return [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')].some(portal => {
-    const rect = portal.getBoundingClientRect();
-    let zoom = 1;
-    for (let element = portal; element; element = element.parentElement) zoom *= parseFloat(getComputedStyle(element).zoom) || 1;
-    return Math.abs(rect.width / zoom - portal.offsetWidth) > 0.75 || Math.abs(rect.height / zoom - portal.offsetHeight) > 0.75 || portal.getAnimations().some(animation => animation.playState === 'running');
-  })`)) {
-    assert.ok(Date.now() < deadline, "Portal opening animations settle before measuring controls");
-    await Bun.sleep(50);
-  }
+  await ui.request(`/session/${ui.session()}/execute/async`, {
+    script: `const done = arguments[arguments.length - 1];
+      requestAnimationFrame(() => requestAnimationFrame(() => Promise.allSettled(
+        [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')]
+          .flatMap(portal => portal.getAnimations().map(animation => animation.finished))
+      ).then(() => done(null))));`, args: [],
+  });
 }
 
 export async function assertTheme(ui: UiDriver) {
   const theme = await ui.execute(`
     const root = getComputedStyle(document.documentElement);
     const button = document.querySelector('[data-slot=button].bg-primary');
-    if (!button) return null;
     const actual = getComputedStyle(button);
     const probe = document.createElement('span');
     probe.style.color = 'var(--primary)';
     document.body.append(probe);
     const expected = getComputedStyle(probe).color;
     probe.remove();
-    return { primary: root.getPropertyValue('--primary').trim(), background: root.getPropertyValue('--background').trim(),
+    const result = { primary: root.getPropertyValue('--primary').trim(), background: root.getPropertyValue('--background').trim(),
       actual: actual.backgroundColor, expected, display: actual.display, radius: actual.borderRadius, font: getComputedStyle(document.body).fontFamily };
+    return result;
   `);
   assert.ok(theme?.primary && theme?.background, "Generated shadcn theme variables are present");
   assert.equal(theme.actual, theme.expected, "Tailwind bg-primary uses the generated theme");
@@ -337,11 +350,11 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(null))))", args: [],
     });
     await assertResponsive(ui, "Phone pairing");
+    const theme = await assertTheme(ui);
     await ui.type("#pairing-code", code);
     await until("HTTP pairing form enables Connect for a complete code", async () => await ui.execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
     await ui.click(".pair-form button[type=submit], .pair-form button:not([type])");
     await until("real HTTP remote pairs and receives current playback", async () => await ui.execute("return document.querySelector('.header-status [role=status]')?.textContent") === "Connected");
-    const theme = await assertTheme(ui);
     await assertResponsive(ui, "Phone queue");
     return { ui, theme, close, refresh: () => request(`/session/${session}/refresh`, {}),
       minimize: () => request(`/session/${session}/window/minimize`, {}),
