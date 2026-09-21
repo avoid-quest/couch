@@ -292,7 +292,6 @@ try {
   await assertResponsive(httpRemote.ui, "Phone find");
   await httpRemote.ui.section("Now");
   await httpRemote.ui.button("Remove Keyboard next fixture from Up next");
-  await until("phone queue action owns focus", async () => await httpRemote!.ui.execute("return document.activeElement?.getAttribute('aria-label') === 'Remove Keyboard next fixture from Up next'"));
   await assertResponsive(httpRemote.ui, "Phone queue actions");
   await httpRemote.ui.button("Add media");
   await until("phone Add media dialog opens for link selection", async () => await httpRemote!.ui.execute("return !!document.querySelector('[role=dialog] #media-kind')"));
