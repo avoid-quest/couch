@@ -70,7 +70,7 @@ export class UiDriver {
   }
 
   async click(selector: string) {
-    await this.clickElement(await this.element(selector), selector);
+    await this.clickElement("", selector);
   }
 
   async clickElement(id: string, selector?: string) {
