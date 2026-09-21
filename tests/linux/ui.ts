@@ -94,10 +94,10 @@ export class UiDriver {
       }
     }
     if (!id) throw lastError;
-    return await this.clickElement(id);
+    return await this.clickElement(id, selector);
   }
 
-  async clickElement(id: string) {
+  async clickElement(id: string, selector?: string) {
     await this.revealElement(id);
     await settlePortals(this);
     const element = { "element-6066-11e4-a52e-4f735466cecf": id };
@@ -362,22 +362,21 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     });
     // WebKitWebDriver's element clicks do not account for this fractional GTK
     // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
-    ui.clickElement = async id => {
-      const target = { "element-6066-11e4-a52e-4f735466cecf": id };
+    ui.clickElement = async (id, selector) => {
+      assert.ok(selector, "HTTP clicks use selectors because state updates can invalidate handles");
       await ui.execute("window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { x: event.clientX, y: event.clientY, actual: event.target.getAttribute('aria-label') || event.target.textContent }; }, { once: true, capture: true })");
       let point: { x: number; y: number; width: number; height: number } | null = null;
       // React may replace the node before any pointer is sent. Retrying this
       // preparation is safe; after xdotool dispatch below there is no retry.
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
-          await ui.revealElement(id);
           await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
-            await ui.execute("const element = arguments[0], rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
+            await ui.execute("const element = document.querySelector(arguments[0]); if (!element) return false; const rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [selector]);
             await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-            const measured = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
+            const measured = await ui.execute(`const element = document.querySelector(arguments[0]); if (!element) return ''; const rect = element.getBoundingClientRect();
           const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
           return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
-            ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [target]);
+            ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [selector]);
             if (!measured) return false;
             point = JSON.parse(measured);
             return true;
