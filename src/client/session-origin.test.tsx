@@ -204,11 +204,11 @@ test("controller refresh ignores an older response body completed after a new co
   await act(async () => root.render(<Remote credentials={credentials} />));
   const socket = Socket.instances[0]!;
   const stale = deferred<ControllerIdentity>();
-  request.mockImplementation(async () => ({ ok: true, status: 200, json: () => stale.promise }) as Response);
+  request.mockImplementation(async (url: string | URL | Request) => String(url).endsWith("/api/connection") ? Response.json(details) : ({ ok: true, status: 200, json: () => stale.promise }) as Response);
   await act(async () => { socket.open(); socket.receive({ type: "state", state }); });
   const staleSignal = request.mock.calls.at(-1)![1]!.signal as AbortSignal;
   const restricted: ControllerIdentity = { ...identity, authority: "controller" };
-  request.mockImplementation(async () => Response.json(restricted));
+  request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? details : restricted));
   await act(async () => socket.receive({ type: "state", state: { ...state, controllerVersion: 1 } }));
   expect(current.identity).toEqual(restricted);
   await act(async () => stale.resolve(identity));
