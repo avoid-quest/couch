@@ -9,7 +9,7 @@ import { createNativeReadiness } from "./server/readiness-native";
 import { loadedBuild } from "./shared/build";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import frontend from "./client/index.html";
+import frontend, { assets } from "./frontend";
 import { createNativeDiagnostics } from "./server/diagnostics-native";
 import { createHub, type Hub } from "./server/hub";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
@@ -72,7 +72,7 @@ hub = createHub({
   databasePath: join(dataDir, "couch.sqlite"),
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
-  frontend,
+  frontend, assets,
   development: !native && process.env.NODE_ENV !== "production",
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
   sendPlayer(command) {

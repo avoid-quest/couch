@@ -65,7 +65,8 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
-  frontend?: HTMLBundle;
+  frontend?: HTMLBundle | Response;
+  assets?: Record<string, Response>;
   development?: boolean;
   advertisedUrls?: string[];
   updateFeed?: UpdateFeed<UpdateRelease>;
@@ -380,6 +381,7 @@ export function createHub(options: HubOptions) {
     development: options.development ? { hmr: true, console: true } : false,
     maxRequestBodySize: subtitleSizeLimit,
     routes: {
+      ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1 })) : json({ error: "Unrecognized host or origin." }, 403),
