@@ -8,10 +8,8 @@ import { keys, type UiDriver, type Wait } from "./ui";
 export const folderSettings = '[aria-label="TV folder settings"]';
 export const folderCard = (id: string) => `${folderSettings} [data-folder-source="${id}"]`;
 export async function openFolderSources(ui: UiDriver, until: Wait) {
-  await ui.section("Files");
-  await ui.click('[data-action="folder-settings"]');
-  await until("Sources offers its folder manager", () => ui.execute("return !!document.querySelector('[data-settings-page=source-folders], [aria-label=\"TV folder settings\"]')"));
-  if (await ui.execute("return !!document.querySelector('[data-settings-page=source-folders]')")) await ui.click('[data-settings-page="source-folders"]');
+  await ui.button("Settings");
+  await ui.settingsSection("source-folders");
   await until("Library opens its canonical Sources folder manager", () => ui.execute("return document.querySelectorAll(arguments[0]).length === 1 && [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === 'Add TV folder' && !button.disabled)", [folderSettings]));
 }
 export async function closeFolderSources(ui: UiDriver, until: Wait) {
@@ -72,13 +70,11 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
     await phone.button(label, folderCard(sourceId));
   };
   const play = async () => {
-    await phone.section("Files");
-    await phone.button("All media", '.library-views');
-    await phone.type("#library-query", "Folder acceptance");
-    await phone.button("Search", ".library-search");
-    await until("phone library finds the retained folder item", () => phone.execute("return [...document.querySelectorAll('.library-play-button')].some(button => button.getAttribute('aria-label')?.endsWith(arguments[0]) && !button.disabled)", [item.title]));
-    const label = await phone.execute("return [...document.querySelectorAll('.library-play-button')].find(button => button.getAttribute('aria-label')?.endsWith(arguments[0])).getAttribute('aria-label')", [item.title]);
-    await phone.button(label, ".library-items");
+    await phone.section("Library");
+    await phone.type("#media-search", item.title);
+    const region = '[aria-label="Library search results"]';
+    await until("phone library finds the retained folder item", () => phone.execute("return !!document.querySelector(arguments[0])", [`${region} [aria-label=${JSON.stringify(`Play: ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume: ${item.title}`)}]`]));
+    await phone.click(`${region} [aria-label=${JSON.stringify(`Play: ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume: ${item.title}`)}]`);
     await until("phone folder Play reaches the one native player with the saved media identity", () => all(state => state.player.status === "playing" && state.player.position > 0.5 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${item.id}`), 30_000);
     assert.equal(await phone.execute("return !!document.querySelector('.video-stage')"), false);
   };
