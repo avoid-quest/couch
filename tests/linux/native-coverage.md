@@ -20,6 +20,10 @@ and does not qualify libmpv. `diagnostics.ts` is a separate native run.
 | Preferences | Routed Playback settings, independent browser defaults, native audio/subtitle/speed and ReplayGain capture | Saved preferences as a dialog; saved-provider per-item quality selector. Add-media overrides remain exercised |
 | Diagnostics | Native report/export, ordinary-controller denial, secret/path redaction, playback continuity | General pairing codes and Advanced tab |
 
+IPTV progression and stall recovery use captured frame clocks because live position-only
+updates do not broadcast. The public Apple sample checks native startup with audio/video
+tracks; the generated HLS fixtures prove advancing frames and recovery timing.
+
 The final evidence must list which commands actually passed. This mapping is not
 a qualification receipt. Null-sink audio capture and Xvfb pixels do not qualify
 physical T480 audio, display, Wi-Fi, or an installed package.
