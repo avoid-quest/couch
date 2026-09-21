@@ -23,7 +23,6 @@ import { verifyJellyfinSettings } from "./jellyfin-settings";
 import { verifyVideoQuality } from "./video-quality";
 import { verifyAppearance } from "./appearance";
 import { verifyProfileManagement, assertProfilesAfterRestart } from "./profiles";
-import { preparePublicConnection, verifyConnection, verifyRecovery } from "./session/connection";
 import { createGuideFixture } from "./iptv-fixture";
 import { verifyGuide } from "./iptv";
 
@@ -598,8 +597,6 @@ try {
   const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
   const persistedProfiles = await verifyProfileManagement(profileContext);
   const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
-  const connectionContext = { origin, ui, httpRemote, until, artifactDir };
-  await verifyConnection(connectionContext);
   const persistedGuide = await verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }, guideFixture);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
@@ -615,13 +612,9 @@ try {
   assert.ok(performance.now() - exitStarted < 3_000, "desktop and sidecar shut down within three seconds");
   await verifyShutdownReport?.();
   await until("real HTTP browser distinguishes server unavailability and disables stale controls after host shutdown", async () => await httpRemote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Server unavailable' && document.querySelector('#media-url')?.disabled"));
-  // Restart the local launcher with a fresh recovery environment after the long
-  // playback checks, so its ten-minute claim deadline starts at this restart.
   driver.kill();
   await driver.exited;
-  const recoveryCode = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
   driver = Bun.spawn(["tauri-driver"], {
-    env: { ...process.env, COUCH_ADMIN_RECOVERY_CODE: recoveryCode },
     stdout: Bun.file(`${artifactDir}/recovery-driver.log`), stderr: Bun.file(`${artifactDir}/recovery-native.log`),
   });
   await until("local recovery launcher is ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
@@ -649,7 +642,6 @@ try {
   await persistedJellyfinSettings?.verifyAfterRestart();
   await persistedRadioSettings.verifyAfterRestart();
   await persistedFolderSettings.verifyAfterRestart();
-  await verifyRecovery(connectionContext, recoveryCode);
   await persistedGuide.verifyAfterRestart(clients, httpRemote);
   const persistentFavorites = (await api("/api/radio/favorites")).favorites;
   assert.ok(persistentFavorites.some((favorite: any) => favorite.id === station.id));
@@ -664,7 +656,6 @@ try {
   await click(".provider-views button:nth-child(2)");
   await until("provider favorites survive desktop restart in the native Saved view", async () => await execute("return document.querySelector('.provider-item h4')?.textContent") === providerFavorite.title);
 
-  const publicConnection = await preparePublicConnection(connectionContext, secondHttpRemote);
   await radioAcceptance.prepareShutdown();
   clients.forEach(client => client.socket?.close());
   const radioExitStarted = performance.now();
@@ -675,14 +666,12 @@ try {
   });
   assert.ok(performance.now() - radioExitStarted < 3_000, "Radio backoff does not delay desktop shutdown");
   await radioAcceptance.assertShutdown();
-  await publicConnection.assertOffline();
   sessionId = (await webdriver("/session", { capabilities: { alwaysMatch: {
     browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" },
   } } })).sessionId;
   await until("desktop reconnects after shutdown during radio backoff", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   await Promise.all(clients.map(client => client.connect()));
   await radioAcceptance.assertAfterRestart();
-  await publicConnection.assertAfterRestart();
 
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {

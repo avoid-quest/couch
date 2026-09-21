@@ -53,8 +53,9 @@ try {
   await until("connection native driver starts", async () => { try { return (await fetch("http://127.0.0.1:4444/status")).ok; } catch { return false; } });
   let tv = await openNative();
   await connections(tv, "configured native Connections loads its setup controls");
-  await until("native exposes a pairing code", () => tv.execute("return /^\\d{6}$/.test(document.querySelector('.pairing-display strong')?.textContent ?? '')"));
-  const pairingCode = await tv.execute("return document.querySelector('.pairing-display strong').textContent") as string;
+  await tv.button("Pair a remote", ".app-header");
+  await until("native pairing dialog exposes its current code", () => tv.execute("return /^\\d{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent ?? '')"));
+  const pairingCode = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong').textContent") as string;
   await tv.key(keys.escape);
 
   primary = await startHttpRemote(`${origin}/settings/connection`, pairingCode, artifacts, until);
