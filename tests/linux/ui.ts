@@ -399,8 +399,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       // X11 completion does not acknowledge WebKit event dispatch after window activation.
       await ui.waitFor("HTTP browser acknowledges the physical pointer event", () => ui.execute("return window.__httpPointer !== null"));
       const hit = await ui.execute("return window.__httpPointer");
-      const intended = JSON.parse(point);
-      assert.ok(hit && Math.abs(hit.x - intended.x) <= 1 && Math.abs(hit.y - intended.y) <= 1, `HTTP pointer dispatches at the measured target: ${JSON.stringify({ point, hit })}`);
+      assert.ok(hit && Math.abs(hit.x - point.x) <= 1 && Math.abs(hit.y - point.y) <= 1, `HTTP pointer dispatches at the measured target: ${JSON.stringify({ point, hit })}`);
     };
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
