@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import type { RadioPlaylistSummary, RadioStation } from "../../src/shared/radio";
 import type { RadioContext } from "./radio";
 import { changedRadioTitle, initialRadioTitle, suppliedRadioArtist, type RadioFixture } from "./radio-fixture";
-import { assertResponsive, keys } from "./ui";
+import { assertResponsive } from "./ui";
 
 // Called after administrator claim. All mutations go through the real phone form;
 // the two WebSocket controllers remain ordinary station and favorite users.
@@ -24,16 +24,16 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
   const open = async () => {
     await phone.button("Settings");
     await phone.settingsSection("source-radio");
-    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('.radio-settings').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
+    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('[aria-labelledby=radio-settings-title]').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
   };
   const close = async () => { await phone.section("Radio"); await phone.type("#media-search", "Imported station"); };
   const importSource = async (name: string, url: string) => {
     await phone.type("#radio-source-name", name);
     await phone.type("#radio-source-url", url);
-    await phone.button("Import playlist", ".radio-settings");
+    await phone.button("Import playlist", "[aria-labelledby=radio-settings-title]");
     await until("source import completes and restores its form", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
   };
-  const sourceCard = (id: string) => `.radio-source[data-radio-source-id="${id}"]`;
+  const sourceCard = (id: string) => `[data-radio-source-id="${id}"]`;
   const refresh = async (id: string) => {
     await phone.button("Refresh playlist", sourceCard(id));
     await until("source refresh completes", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
@@ -111,7 +111,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     await until("native Find receives the imported stations", () => ui.execute("return document.querySelectorAll('[aria-label=\"Radio playlists search results\"] button[aria-label^=\"Play:\"]').length === 3"));
     if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
       await open();
-      await phone.button("Add avoid radio", ".radio-settings");
+      await phone.button("Refresh avoid radio", "[aria-labelledby=radio-settings-title]");
       await until("one-step avoid import completes in Sources", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
       const avoid = (await summaries()).find(source => source.name === "avoid radio")!;
       assert.ok(avoid, "The actual avoid radio source imports");
@@ -119,8 +119,9 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
       assert.deepEqual(liveStations.map(station => station.name), ["Sygma Radio", "Lyl Radio", "Cashmere Radio", "NTS Radio | Channel 1", "NTS Radio | Channel 2", "Resonance Extra", "Internet Public Radio", "HKCR", "Radio Alhara", "Radio BlackOut"]);
       assert.ok(liveStations.every(station => station.groupTitle === "avoid radio" && station.logoUrl?.startsWith("https://") && station.tvgId?.startsWith("avoid-radio-")));
       await close();
-      await phone.select("#radio-playlist-select", "avoid radio · 10 stations");
-      await phone.button("Play: Imported station 1", '[aria-label="Radio playlists search results"]');
+      await phone.type("#media-search", liveStations[0]!.name);
+      await phone.button("avoid radio", '[aria-label="Filter search results"]');
+      await phone.button(`Play: ${liveStations[0]!.name}`, '[aria-label="avoid radio search results"]');
       await until("the actual avoid station imported in Sources plays through the native owner", () => all(state => state.player.status === "playing" && state.player.position > 2 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `radio:${liveStations[0]!.id}`), 30_000);
       observations.push({ phase: "live avoid radio", feed: "https://radio.avoid.quest/playlist.m3u", station: liveStations[0], observed: clients[0]!.state!.player.nowPlaying ?? null });
       await httpRemote.screenshot("radio-sources-live-avoid");
