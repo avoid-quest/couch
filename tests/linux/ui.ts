@@ -125,7 +125,7 @@ export class UiDriver {
 
   async type(selector: string, text: string) {
     const id = await this.element(selector);
-    await this.clickElement(id);
+    await this.clickElement(id, selector);
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});
     if (text) await this.request(`/session/${this.session()}/element/${id}/value`, { text });
   }
