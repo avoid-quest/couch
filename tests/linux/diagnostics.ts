@@ -41,7 +41,7 @@ try {
   const paired = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   const guest = (await paired.json() as { token: string }).token;
   for (const path of ["/api/diagnostics", "/api/diagnostics/export"]) assert.equal((await api(path)).status, 403);
-  await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.settingsSection("general");
+  await phone.ui.browse(); await phone.ui.button("Settings"); await phone.ui.settingsSection("connection");
   assert.equal(await phone.ui.execute("return [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'Advanced')"), false);
   await phone.ui.type("#administrator-code", claim); await phone.ui.button("Claim administrator");
   await until("claimed phone exposes Advanced", () => phone!.ui.execute("return [...document.querySelectorAll('[role=tab]')].some(tab => tab.textContent === 'Advanced')"));
