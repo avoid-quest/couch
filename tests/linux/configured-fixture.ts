@@ -23,7 +23,7 @@ export function seedConfiguredFixture(directory = process.env.COUCH_DATA_DIR ?? 
   const nativeData = join(homedir(), ".local/share/quest.avoid.couch");
   mkdirSync(nativeData, { recursive: true });
   const nativeDb = new Database(join(nativeData, "couch.sqlite"));
-  nativeDb.run("CREATE TABLE installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL); INSERT INTO installation_setup VALUES (1, 'complete'); CREATE TABLE installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))); INSERT INTO installation_sharing VALUES (1, 1)");
+  nativeDb.run("CREATE TABLE IF NOT EXISTS installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL); INSERT OR IGNORE INTO installation_setup VALUES (1, 'complete'); CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))); INSERT OR IGNORE INTO installation_sharing VALUES (1, 1)");
   nativeDb.close();
   writeFileSync(join(nativeData, "operating-mode.json"), choice);
 }
