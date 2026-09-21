@@ -1,3 +1,4 @@
+import { screen } from "./testing";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act, startTransition, StrictMode, Suspense, use, useLayoutEffect } from "react";
@@ -79,7 +80,7 @@ test("an unavailable target never sends its pairing to advertised aliases", asyn
   expect(request).toHaveBeenCalledTimes(1);
   expect(String(request.mock.calls[0]![0])).toStartWith(location.origin + "/api/");
   expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
-  expect(document.querySelector("output")?.textContent).toBe("server-unavailable");
+  expect(screen.getByRole("status").textContent).toBe("server-unavailable");
 });
 
 test("an unpaired page checks its own origin despite cached connection addresses", async () => {
@@ -94,7 +95,7 @@ test("an unpaired page checks its own origin despite cached connection addresses
 test("a replaced installation at the same origin requires pairing before any credential is sent", async () => {
   request.mockImplementation(async () => Response.json({ name: "Different Couch", player: "idle", urls: [location.origin], installationId: "different-installation" }));
   await act(async () => root.render(<Remote credentials={{ origin: location.origin, token: "old-pairing", installationId: "remembered-installation" }} />));
-  expect(document.querySelector("output")?.textContent).toBe("pairing-required");
+  expect(screen.getByRole("status").textContent).toBe("pairing-required");
   expect(request.mock.calls.length).toBeGreaterThan(0);
   for (const [url, options] of request.mock.calls) {
     expect(url).toBe(location.origin + "/api/connection");
