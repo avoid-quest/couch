@@ -281,7 +281,7 @@ function ShellChrome({ children }: PropsWithChildren) {
             <SourceSetupDialog localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} />
             {/* On the TV the bar is always available while playing and returns to the
                 playback view; remotes open the inline Now playing page instead. */}
-            {current && (active || player?.status === "error") && (nativeHost ? tv.browsing : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => nativeHost ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={nativeHost ? undefined : () => shell.setRemoteOpen(true)} />}
+            {current && (active || player?.status === "error") && (nativeHost ? tv.browsing && section !== "Now" : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => nativeHost ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={nativeHost ? undefined : () => shell.setRemoteOpen(true)} />}
             {/* Saved provider collections open here: Find stays search-first, and
                 Open gives the collection its own browsable trail. */}
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
