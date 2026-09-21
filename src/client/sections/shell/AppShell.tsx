@@ -63,6 +63,7 @@ function useShellValue() {
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingOpen, setPairingOpen] = useState(false);
+  useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
   const playCredentials = useRef(credentials);
   const playAttempt = useRef(0);

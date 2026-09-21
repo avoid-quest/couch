@@ -115,11 +115,11 @@ test("a failed sharing save keeps pairing disabled and reports the error", async
   expect(button("Pair a remote").disabled).toBe(true);
 });
 
-test("closing the Connections pairing dialog restores its exact opener", async () => {
+for (const close of ["Close", "Escape"] as const) test(`${close} restores the Connections pairing opener`, async () => {
   await render();
   await act(async () => { fireEvent.click(button("Pair a remote")); });
   await flush();
-  await act(async () => { fireEvent.click(button("Close")); });
+  await act(async () => { if (close === "Close") fireEvent.click(button("Close")); else fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" }); });
   await flush();
   expect(document.activeElement).toBe(button("Pair a remote"));
 });

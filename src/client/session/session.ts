@@ -195,13 +195,21 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     // credential, even in the render between replacement and effect cleanup.
     if (!current || status !== "connected" || !credentials) return;
     const controller = new AbortController();
-    void fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]) }).then(async response => {
+    void (async () => {
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
+      const discovery = await fetch(`${credentials.origin}/api/connection`, { signal });
+      if (!discovery.ok) return;
+      const next = await discovery.json() as ConnectionDetails;
+      if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current)) return;
+      setConnectionDetails({ origin: credentials.origin, details: next });
+      if (credentials.installationId && next.installationId !== credentials.installationId) { socket.current?.close(4001, "Pair again"); return; }
+      const response = await fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
       if (controller.signal.aborted) return;
       if (response.status === 401) { socket.current?.close(4001, "Pair again"); return; }
       if (!response.ok) return;
       const caller = await response.json() as ControllerIdentity;
       if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current)) setIdentity(caller);
-    }).catch(() => {});
+    })().catch(() => {});
     return () => controller.abort();
   }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.controllerVersion]);
 
