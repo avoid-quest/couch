@@ -8,9 +8,9 @@ import { join } from "node:path";
 // Local playback setup and administrator claim are separate prerequisites: this
 // fixture selects configured local playback but deliberately leaves no device
 // administrator, so the native journey must exercise the actual claim.
-type Fixture = { directory?: string; localSetupComplete?: boolean; sharing?: boolean };
+type Fixture = { directory?: string; localSetupComplete?: boolean; sharing?: boolean; configuredLocal?: boolean };
 
-function seedFixture({ directory = process.env.COUCH_DATA_DIR ?? "/work/configured-fixture", localSetupComplete = true, sharing = true }: Fixture = {}) {
+function seedFixture({ directory = process.env.COUCH_DATA_DIR ?? "/work/configured-fixture", localSetupComplete = true, sharing = true, configuredLocal = true }: Fixture = {}) {
   process.env.COUCH_DATA_DIR = directory;
   mkdirSync(directory, { recursive: true });
   const path = join(directory, "couch.sqlite");
@@ -21,10 +21,11 @@ function seedFixture({ directory = process.env.COUCH_DATA_DIR ?? "/work/configur
 // journey. The sharing choice is explicit, not implied by setup completion.
   db.run(`CREATE TABLE installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))); INSERT INTO installation_sharing VALUES (1, ${sharing ? 1 : 0})`);
   db.close();
-  // Non-onboarding playback journeys exercise the configured local TV, not
-  // first-use device selection; native startup reads this sidecar-side choice.
-  const choice = JSON.stringify({ mode: "local", address: null, targets: [], localSetupComplete });
-  writeFileSync(join(directory, "operating-mode.json"), choice);
+  if (configuredLocal) {
+    // Non-onboarding playback journeys exercise the configured local TV, not
+    // first-use device selection; native startup reads this sidecar-side choice.
+    writeFileSync(join(directory, "operating-mode.json"), JSON.stringify({ mode: "local", address: null, targets: [], localSetupComplete }));
+  }
 }
 
 export function seedConfiguredFixture(directory?: string) {
@@ -32,5 +33,5 @@ export function seedConfiguredFixture(directory?: string) {
 }
 
 export function seedFirstUseLocalFixture(directory?: string) {
-  return seedFixture({ directory, localSetupComplete: false, sharing: false });
+  return seedFixture({ directory, localSetupComplete: false, sharing: false, configuredLocal: false });
 }
