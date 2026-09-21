@@ -34,8 +34,10 @@ function controls({ clients, until }: Pick<Context, "clients" | "until">) {
 }
 
 async function settings(ui: UiDriver, until: Wait) {
-  await ui.controls();
-  await ui.click('.tv-playback-controls:not([hidden]) [aria-label="Playback settings"]');
+  if (await ui.execute("return !!document.querySelector('.tv-shell')")) {
+    await ui.controls();
+    await ui.click('.tv-playback-controls:not([hidden]) [aria-label="Playback settings"]');
+  } else await ui.button("Playback settings");
   await until("playback settings exposes its subtitle upload control", async () => await ui.execute("return !!document.querySelector('[role=dialog] #playback-subtitle-file')"));
 }
 
