@@ -101,11 +101,6 @@ async function api(path: string, body?: unknown, index = 0) {
   assert.equal(response.ok, true, `HTTP ${response.status} for ${path}`);
   return response.json() as Promise<any>;
 }
-async function xdotool(...args: string[]) {
-  const process = Bun.spawn(["xdotool", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [code, output] = await Promise.all([process.exited, new Response(process.stdout).text()]);
-  return { code, output: output.trim() };
-}
 async function screenshot(name: string) {
   await execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code], #administrator-code').forEach(pairing => pairing.style.visibility = 'hidden')");
   await Bun.sleep(250);
