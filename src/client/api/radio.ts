@@ -17,22 +17,6 @@ export const radioFavoritesListQuery = (credentials: Credentials) =>
     queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
   });
 
-export const radioFavoritesQuery = (credentials: Credentials) =>
-  queryOptions({ ...radioFavoritesListQuery(credentials), select: result => result.favorites });
-
-export const radioPlaylistsQuery = (credentials: Credentials) =>
-  queryOptions({
-    queryKey: ["radio", "playlists"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/playlists", { signal }).then(r => r.json() as Promise<{ playlists: RadioPlaylistSummary[] }>),
-    select: result => result.playlists,
-  });
-
-export const radioSourcesQuery = (credentials: Credentials) =>
-  queryOptions({
-    queryKey: ["radio", "sources"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/sources", { signal }).then(r => r.json() as Promise<{ sources: string[] }>),
-  });
-
 export const radioProgrammesQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["radio", "avoid", "programmes"],

@@ -6,6 +6,6 @@ import type { ControllerIdentity } from "../../../shared/controllers";
 // use the very same identity rendered by SessionGate. The server still enforces
 // every request independently.
 export async function requireAdministrator({ context }: { context: { identity: ControllerIdentity | null; connected: boolean } }) {
-  if (!context.connected) return;
-  if (context.identity?.authority !== "administrator" && context.identity?.authority !== "host") throw redirect({ href: "/settings", replace: true });
+  if (!context.connected || !context.identity) return;
+  if (context.identity.authority !== "administrator" && context.identity.authority !== "host") throw redirect({ href: "/settings", replace: true });
 }
