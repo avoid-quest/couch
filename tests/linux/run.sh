@@ -39,4 +39,4 @@ pactl load-module module-null-sink sink_name=couch > /artifacts/pulseaudio-modul
 pactl load-module module-null-sink sink_name=couch-replaygain format=float32le rate=48000 channels=2 > /artifacts/replaygain-pulseaudio-module.txt
 pactl set-default-sink couch
 exec dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1000x24 +extension GLX' \
-  bash -ec 'openbox > /artifacts/openbox.log 2>&1 & COUCH_ARTIFACTS=/artifacts/built-remote bun tests/linux/built-remote.ts; if [[ ${COUCH_TEST_BUILT_REMOTE:-} = 1 ]]; then exit 0; elif [[ -n "${COUCH_TEST_PROVIDERS:-}${COUCH_TEST_PROVIDER_CATALOGS:-}" ]]; then exec bun tests/linux/providers.ts; else exec bun tests/linux/playback.ts; fi'
+  bash -ec 'openbox > /artifacts/openbox.log 2>&1 & COUCH_ARTIFACTS=/artifacts/built-remote bun tests/linux/built-remote.ts; if [[ ${COUCH_TEST_BUILT_REMOTE:-} = 1 ]]; then exit 0; elif [[ ${COUCH_TEST_DIAGNOSTICS:-} = 1 ]]; then exec bun tests/linux/diagnostics.ts; elif [[ -n "${COUCH_TEST_PROVIDERS:-}${COUCH_TEST_PROVIDER_CATALOGS:-}" ]]; then exec bun tests/linux/providers.ts; else exec bun tests/linux/playback.ts; fi'
