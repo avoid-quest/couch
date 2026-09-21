@@ -63,6 +63,7 @@ function useShellValue() {
   const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingOpen, setPairingOpen] = useState(false);
+  useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
   const playCredentials = useRef(credentials);
   const playAttempt = useRef(0);
@@ -211,6 +212,7 @@ function ShellChrome({ children }: PropsWithChildren) {
   const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const player = state?.player;
+  const pairingRef = useRef<HTMLButtonElement>(null);
 
   return (
     <div className={cn("app-shell couch-shell", nativeHost
@@ -231,7 +233,7 @@ function ShellChrome({ children }: PropsWithChildren) {
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <div className="header-status">
           {!nativeHost && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
-          {host && remoteControlEnabled && <Button variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote <strong>{host.pairingCode}</strong></Button>}
+          {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
           {credentials && !pairingRequired && !nativeHost && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label="Remote" onClick={() => shell.setRemoteOpen(true)}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
@@ -297,7 +299,7 @@ function ShellChrome({ children }: PropsWithChildren) {
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}
         {nativeHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
-        {host && remoteControlEnabled && <PairingDialog host={host} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} />}
+        {host && remoteControlEnabled && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} openerRef={pairingRef} />}
 
       </main>
 
