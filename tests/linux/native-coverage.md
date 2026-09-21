@@ -21,7 +21,8 @@ and does not qualify libmpv. `diagnostics.ts` is a separate native run.
 | Diagnostics | Native report/export, ordinary-controller denial, secret/path redaction, playback continuity | General pairing codes and Advanced tab |
 
 IPTV progression and stall recovery use captured frame clocks because live position-only
-updates do not broadcast. The public Apple sample checks native startup with audio/video
+updates do not broadcast. This wall-clock fixture uses normal playback speed and
+restores the previously saved speed afterward. The public Apple sample checks native startup with audio/video
 tracks; the generated HLS fixtures prove advancing frames and recovery timing.
 
 The final evidence must list which commands actually passed. This mapping is not
