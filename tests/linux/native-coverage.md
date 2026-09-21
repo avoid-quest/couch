@@ -16,7 +16,7 @@ and does not qualify libmpv. `diagnostics.ts` is a separate native run.
 | Video library | Find artwork/details/Play, native movie/episode playback, resume, source rescans/offline state, authenticated artwork and restart | Movies/Shows tabs, season drill-down and Back focus; metadata refresh remains checked through the catalog API |
 | IPTV | Authorized coordinator import/play, native HLS color/clock captures, Go live, delayed/stalled segment cancellation, source replacement, cached guide persistence | Removed Guide source page, channel search, program dialog and channel-card logos |
 | Source administration | Current Sources routes, folder picker/scan, radio import/refresh/failure, Jellyfin login/replacement/revocation and password clearing | Browse-page source-settings shortcuts |
-| Authority | Native protected folder/Open file controls and server authorization; connection journey handles role/revocation | Retired source-tab focus traversal and nested Library dialog |
+| Authority | Native protected folder control and server authorization; connection journey handles role/revocation | Retired source-tab focus traversal, nested Library dialog and Open file button from the unmounted QueuePanel |
 | Preferences | Routed Playback settings, independent browser defaults, native audio/subtitle/speed and ReplayGain capture | Saved preferences as a dialog; saved-provider per-item quality selector. Add-media overrides remain exercised |
 | Diagnostics | Native report/export, ordinary-controller denial, secret/path redaction, playback continuity | General pairing codes and Advanced tab |
 

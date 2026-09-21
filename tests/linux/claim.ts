@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { ControllerIdentity } from "../../src/shared/controllers";
 import type { Action, NavigationKey, SessionState } from "../../src/shared/protocol";
-import { keys, type UiDriver, type Wait, type startHttpRemote } from "./ui";
+import { type UiDriver, type Wait, type startHttpRemote } from "./ui";
 
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
@@ -35,7 +35,7 @@ async function stopProbe(ui: UiDriver) {
   assert.equal(clicks, 0, "Paired navigation does not click the protected native action");
 }
 
-async function verifyNavigationBoundary({ ui, clients, until, origin }: Context) {
+async function verifyNavigationBoundary({ ui, clients, until }: Context) {
   const guest = clients[1]!;
   await ui.button("Settings");
   await ui.settingsSection("source-folders");
@@ -48,21 +48,7 @@ async function verifyNavigationBoundary({ ui, clients, until, origin }: Context)
   await until("physical input opens the protected folder browser", () => ui.execute("return !!document.querySelector('[aria-label=\"TV folder browser\"]')"));
   await navigate(ui, guest, until, "back");
   await ui.section("Now");
-  await ui.addMedia();
-  const openFile = await ui.execute("const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Open file'); if (button) button.id = 'claim-open-file'; return !!button");
-  assert.equal(openFile, true);
-  await focusProbe(ui, "#claim-open-file");
-  try {
-    await navigate(ui, guest, until, "select");
-    const picker = Bun.spawn(["xdotool", "search", "--onlyvisible", "--name", "^Open media on this player$"], { stdout: "pipe", stderr: "pipe" });
-    const windows = (await new Response(picker.stdout).text()).trim();
-    await picker.exited;
-    assert.equal(windows, "", "Remote OK on a physically focused Open file button does not launch the native picker");
-  } finally {
-    await stopProbe(ui);
-    await ui.execute("document.querySelector('#claim-open-file')?.removeAttribute('id')");
-    await ui.key(keys.escape);
-  }
+
 }
 
 export async function verifyClaim(context: Context) {
@@ -83,7 +69,7 @@ export async function verifyClaim(context: Context) {
     assert.deepEqual(client.state!.queue.map(entry => entry.id), before.queue.map(entry => entry.id));
     assert.deepEqual(client.state!.activeProfile, before.activeProfile);
   }
-  await Bun.write(`${artifactDir}/native-authority.json`, JSON.stringify({ roles, protectedActions: ["TV folder browser", "Open file"], queuePreserved: true }, null, 2));
+  await Bun.write(`${artifactDir}/native-authority.json`, JSON.stringify({ roles, protectedActions: ["TV folder browser"], queuePreserved: true }, null, 2));
   return { verifyAfterRestart: async (nextClients: readonly Remote[], _remote: HttpRemote) => {
     for (const [index, client] of nextClients.entries()) assert.equal((await (await api(client.token, "/api/controllers/me")).json() as ControllerIdentity).authority, roles[index]);
   } };
