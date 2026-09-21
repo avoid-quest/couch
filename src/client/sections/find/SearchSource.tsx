@@ -24,7 +24,7 @@ export function SearchSource({ source, query, attempt, ...props }: Props & { sou
   const [offset, setOffset] = useState(0);
   const pageSize = source === "Library" ? 30 : 50;
   const result = useQuery({
-    queryKey: [source === "Library" ? "library" : "jellyfin", "search", query, offset],
+    queryKey: [source === "Library" ? "library" : "jellyfin", "search", query, attempt, offset],
     enabled: props.connected, retry: false,
     queryFn: async ({ signal }): Promise<Page> => {
       const read = <T,>(path: string) => apiFetch(props, path, { signal }, 20_000).then(response => response.json() as Promise<T>);
