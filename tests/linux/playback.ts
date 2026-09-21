@@ -1,5 +1,5 @@
-import { seedConfiguredFixture } from "./configured-fixture";
-seedConfiguredFixture();
+import { seedFirstUseLocalFixture } from "./configured-fixture";
+seedFirstUseLocalFixture();
 import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
@@ -31,8 +31,8 @@ const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const artifactDir = "/artifacts";
 const checks: string[] = [];
-const radioFixture = await createRadioFixture();
-const guideFixture = await createGuideFixture(4202, "ffmpeg", artifactDir);
+const radioFixture = process.env.COUCH_TEST_LEGACY === "1" ? await createRadioFixture() : undefined;
+const guideFixture = process.env.COUCH_TEST_LEGACY === "1" ? await createGuideFixture(4202, "ffmpeg", artifactDir) : undefined;
 const plainMediaAuth: boolean[] = [];
 const BunWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
 let driver = Bun.spawn(["tauri-driver"], {
@@ -182,7 +182,8 @@ try {
   // already connecting.
   if (await execute("return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'This computer')")) await ui.button("This computer");
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
-  if (await execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false")) await ui.button("Allow remote control");
+  await until("local first-use offers the sharing choice", () => execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false"));
+  await ui.button("Allow remote control");
   await ui.button("Pair a remote");
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
@@ -483,14 +484,14 @@ try {
   const persistedReplayGain = await verifyReplayGain({ ...musicContext, otherRemote: secondHttpRemote, screenshot });
   const persistedClaim = await verifyClaim({ origin, ui, httpRemote, clients, until, artifactDir });
   const persistedFolderSettings = await verifyFolderSettings(musicContext);
-  const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture);
+  const persistedRadioSettings = await verifyRadioSettings({ origin, ui, until, clients, api, httpRemote, artifactDir }, radioFixture!);
   const persistedJellyfinSettings = await verifyJellyfinSettings({ origin, ui, httpRemote, clients, until, artifactDir });
   const profileContext = { origin, ui, httpRemote, otherRemote: secondHttpRemote, until, clients, api, entryId: preferenceEntryId, artifactDir };
   const persistedProfiles = await verifyProfileManagement(profileContext);
   const persistedAppearance = await verifyAppearance({ ui, httpRemote, otherRemote: secondHttpRemote, clients, until, artifactDir, entryId: progressContext.switchEntryId });
   const connectionContext = { origin, ui, httpRemote, until, artifactDir };
   await verifyConnection(connectionContext);
-  const persistedGuide = await verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }, guideFixture);
+  const persistedGuide = await verifyGuide({ origin, ui, httpRemote, clients, until, artifactDir }, guideFixture!);
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
@@ -599,6 +600,6 @@ try {
   if (sessionId) await webdriver(`/session/${sessionId}`, undefined, "DELETE").catch(() => {});
   driver.kill();
   await media.stop(true);
-  await radioFixture.close();
-  await guideFixture.close();
+  await radioFixture?.close();
+  await guideFixture?.close();
 }
