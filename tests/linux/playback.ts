@@ -284,11 +284,9 @@ try {
   await httpRemote.ui.section("Find");
   await assertResponsive(httpRemote.ui, "Phone find");
   await httpRemote.ui.section("Now");
-  await httpRemote.ui.button("Queue options for Linux multitrack fixture");
-  await until("phone queue actions open in an accessible popover", async () => await httpRemote!.ui.execute("return !!document.querySelector('[data-slot=popover-content]') && !!document.activeElement?.closest('[data-slot=popover-content]')"));
-  await assertResponsive(httpRemote.ui, "Phone queue popover");
-  await httpRemote.ui.key(keys.escape);
-  await until("Escape closes phone queue popover and restores its trigger", async () => await httpRemote!.ui.execute("return !document.querySelector('[data-slot=popover-content]') && document.activeElement?.getAttribute('aria-label') === 'Queue options for Linux multitrack fixture'"));
+  await httpRemote.ui.button("Remove Keyboard next fixture from Up next");
+  await until("phone queue action owns focus", async () => await httpRemote!.ui.execute("return document.activeElement?.getAttribute('aria-label') === 'Remove Keyboard next fixture from Up next'"));
+  await assertResponsive(httpRemote.ui, "Phone queue actions");
   await httpRemote.ui.button("Add media");
   await until("phone Add media dialog opens for link selection", async () => await httpRemote!.ui.execute("return !!document.querySelector('[role=dialog] #media-kind')"));
   await httpRemote.ui.select("#media-kind", "Webpage");
