@@ -19,7 +19,7 @@ const shell = {
   nativeHost: true, credentials: { origin: "http://localhost", token: "paired" }, state, connected: true,
   run: async () => true, available: true, tv: { browsing: true, dismissLayer() {} },
   browseSection: () => {}, playHistory: async () => true, enqueueRadio: async () => true,
-  gotoSearch: () => {}, setRemoteOpen: () => {}, recentRadio: [],
+  videoQualityPreference: { quality: "auto" }, gotoSearch: () => {}, setRemoteOpen: () => {}, recentRadio: [],
 } as unknown as ComponentProps<typeof ShellContext.Provider>["value"];
 
 beforeEach(async () => {
