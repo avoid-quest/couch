@@ -38,10 +38,10 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
   } });
   let proxy = startProxy();
   const url = "http://127.0.0.1:4203";
-  const close = async () => { await phone.key(keys.escape); await until("phone Sources closes", () => phone.execute("return !document.querySelector('[role=dialog]')")); };
+  const close = async () => { await phone.section("Jellyfin"); await phone.type("#media-search", "Linux playback fixture"); };
   const open = async () => {
-    await phone.section("Jellyfin");
-    await phone.click('[data-action="jellyfin-settings"]');
+    await phone.button("Settings");
+    await phone.settingsSection("source-jellyfin");
     await until("phone browse opens the canonical Jellyfin Sources form", () => phone.execute("return document.querySelectorAll(arguments[0]).length === 1 && !!document.querySelector('[data-action=jellyfin-disconnect]:not(:disabled), #jellyfin-url:not(:disabled)')", [settings]));
   };
   const connect = async (server: string, username = config.username, password = config.password) => {
@@ -59,9 +59,9 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
   };
   const play = async () => {
     await close();
-    await until("phone Jellyfin browse offers the real fixture movie", () => phone.execute("return !!document.querySelector('.jellyfin-items [aria-label=\"Play Linux playback fixture on TV\"]:not(:disabled), .jellyfin-items [aria-label=\"Resume Linux playback fixture on TV\"]:not(:disabled)')"));
+    await until("phone Jellyfin browse offers the real fixture movie", () => phone.execute("return !!document.querySelector('[aria-label=\"Jellyfin search results\"] [aria-label=\"Play: Linux playback fixture\"]:not(:disabled), [aria-label=\"Jellyfin search results\"] [aria-label=\"Resume: Linux playback fixture\"]:not(:disabled)')"));
     const previous = clients[0]!.state!.player.playbackId;
-    await phone.click('.jellyfin-items [aria-label="Play Linux playback fixture on TV"], .jellyfin-items [aria-label="Resume Linux playback fixture on TV"]');
+    await phone.click('[aria-label="Jellyfin search results"] [aria-label="Play: Linux playback fixture"], [aria-label="Jellyfin search results"] [aria-label="Resume: Linux playback fixture"]');
     await until("phone Jellyfin play uses the one native player and reaches both ordinary remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.player.position > 0.5), 30_000);
     await httpRemote.screenshot("jellyfin-phone-browse-play");
     assert.equal(await phone.execute("return !!document.querySelector('.video-stage')"), false, "The HTTP phone remains a controller without its own video stage");

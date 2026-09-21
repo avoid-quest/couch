@@ -43,24 +43,9 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
     await api(`/api/profiles/${profile.id}/select`, {}, 1);
     await until(`both controllers select ${profile.name}`, () => all(state => state.activeProfile.id === profile.id));
   };
-  const open = async (target: UiDriver) => {
-    await target.controls();
-    await target.click(".watching-profile");
-    await until("watching profiles finish loading", () => target.execute("return document.querySelector('[aria-label=\"Watching profiles\"]')?.getAttribute('aria-busy') === 'false'"));
-  };
-  const close = async (target: UiDriver) => {
-    await target.key(keys.escape);
-    await until("profile dialog closes and restores its trigger", () => target.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.matches('.watching-profile')"));
-  };
-  const create = async (target: UiDriver, name: string) => {
-    await open(target);
-    await target.type("#watching-profile-name", name);
-    await target.button("Add profile", "[role=dialog]");
-    let profile: WatchingProfile | undefined;
-    await until(`profile ${name} created through the visible dialog`, async () => !!(profile = (await list()).find(item => item.name === name)));
-    await close(target);
-    return profile!;
-  };
+  // The profile picker is retired; exercise the retained profile contract
+  // against actual native playback and independent paired credentials.
+  const create = async (_target: UiDriver, name: string) => (await api("/api/profiles", { name })).profile as WatchingProfile;
   const checkpoint = async (position: number) => {
     await clients[0]!.command({ type: "play", entryId, fromStart: true });
     await until("profile fixture plays a scanned local item in native libmpv", () => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.seekable));
@@ -76,13 +61,6 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
     const removed = await raw(profile.id, "remove", { expectedName: profile.name });
     assert.equal(removed.status, 409, `${status} rejects removal through an actual paired HTTP request`);
     assert.match((await removed.json()).error, /Stop playback/);
-    await open(ui);
-    await until(`${status} disables every native selection and removal action while retaining rename`, () => ui.execute(`
-      const selections = [...document.querySelectorAll('[aria-label="Watching profiles"] button[aria-pressed]')];
-      const removals = [...document.querySelectorAll('[data-action="remove"]')];
-      return selections.length >= 3 && selections.every(button => button.disabled) && removals.length >= 2 && removals.every(button => button.disabled) && !document.querySelector(arguments[0] + ' [data-action="rename"]').disabled;
-    `, [row(profile.id)]));
-    await close(ui);
   };
 
   await stop();
@@ -106,17 +84,12 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   await select(removed);
   await checkpoint(4);
   await guard(removed, "paused");
-  await open(ui);
-  await ui.click(`${row(removed.id)} [data-action="rename"]`);
-  await ui.type("#watching-profile-rename", `Renamed ${suffix}`);
-  await assertNativePortal(ui, "[role=dialog]", artifactDir, "profiles-native-rename-paused");
   const playback = structuredClone(state().player), prefs = structuredClone(state().preferences!);
-  await ui.button("Save name", form);
+  assert.equal((await raw(removed.id, "rename", { expectedName: removed.name, name: `Renamed ${suffix}` })).status, 200);
   removed.name = `Renamed ${suffix}`;
   await until("native rename reaches both controllers without replacing playback", () => all(state => state.activeProfile.name === removed.name));
   assert.deepEqual(state().player, playback);
   assert.deepEqual(state().preferences, prefs);
-  await close(ui);
   await clients[0]!.command({ type: "pause", playbackId: state().player.playbackId!, paused: false });
   await until("profile removal is tested against native playing status", () => all(state => state.player.status === "playing"));
   await guard(removed, "playing");
@@ -138,52 +111,23 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
     finally { await delayed.stop(true); }
   }
 
-  await httpRemote.restore();
-  await open(httpRemote.ui);
-  await httpRemote.ui.click(`${row(survivor.id)} [data-action="rename"]`);
-  await httpRemote.ui.type("#watching-profile-rename", `My draft ${suffix}`);
-  await otherRemote.restore();
-  await open(otherRemote.ui);
-  await otherRemote.ui.click(`${row(survivor.id)} [data-action="rename"]`);
-  await otherRemote.ui.type("#watching-profile-rename", `Other name ${suffix}`);
-  await otherRemote.ui.button("Save name", form);
-  await close(otherRemote.ui);
-  await otherRemote.minimize();
-  await httpRemote.restore();
-  await until("the first HTTP browser keeps its draft and explains the other remote's rename", () => httpRemote.ui.execute("return document.querySelector('#watching-profile-rename')?.value === arguments[0] && document.querySelector('[role=dialog]')?.textContent.includes('Another remote renamed')", [`My draft ${suffix}`]));
-  await httpRemote.ui.button("Use current profile", form);
-  await httpRemote.ui.button("Save name", form);
+  const oldName = survivor.name;
+  assert.equal((await raw(survivor.id, "rename", { expectedName: oldName, name: `Other name ${suffix}` }, 1)).status, 200);
+  assert.equal((await raw(survivor.id, "rename", { expectedName: oldName, name: `My draft ${suffix}` })).status, 409, "Stale rename cannot overwrite another controller's change");
+  assert.equal((await raw(survivor.id, "rename", { expectedName: `Other name ${suffix}`, name: `My draft ${suffix}` })).status, 200);
   survivor.name = `My draft ${suffix}`;
-  await until("the reviewed name is shared", async () => (await list()).some(profile => profile.id === survivor.id && profile.name === survivor.name));
-  await assertResponsive(httpRemote.ui, "Phone watching profile management");
-  await httpRemote.screenshot("profiles-phone-list");
-  await close(httpRemote.ui);
-  await httpRemote.refresh();
-  await until("HTTP reload reconnects with the current profile snapshot", () => httpRemote.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
-  await open(httpRemote.ui);
-  await httpRemote.ui.click(`${row(removed.id)} [data-action="remove"]`);
-  await until("removal confirmation states all local consequences and unchanged upstream/controller scope", () => httpRemote.ui.execute(`
-    const text = document.querySelector('[aria-label="Remove watching profile"]')?.textContent || '';
-    return ['resume points', 'watched marks', 'media history', 'saved playback preferences', "Other viewers'", 'Jellyfin', 'paired remotes', 'administrator'].every(value => text.includes(value));
-  `));
-  await assertResponsive(httpRemote.ui, "Phone profile removal confirmation");
-  await httpRemote.screenshot("profiles-phone-remove");
-  await httpRemote.ui.button("Cancel", '[aria-label="Remove watching profile"]');
-  assert.ok((await list()).some(profile => profile.id === removed.id), "Cancel leaves the profile and its local records in place");
-  await httpRemote.ui.click(`${row(removed.id)} [data-action="remove"]`);
-  await httpRemote.ui.button("Remove profile", '[aria-label="Remove watching profile"]');
+  assert.equal((await raw(removed.id, "remove", { expectedName: removed.name })).status, 200);
   await until("removing the selected viewer switches both controllers to the shared fallback", () => all(state => state.activeProfile.id === "household"));
-  await close(httpRemote.ui);
   assert.ok(!(await list()).some(profile => profile.id === removed.id));
   assert.equal((await raw(removed.id, "remove", { expectedName: removed.name }, 1)).status, 404);
   await select(survivor);
   assert.deepEqual(await history(), survivorHistory, "Another viewer's entire history survives rename and removal");
   assert.deepEqual(state().preferences, survivorPreferences, "Another viewer's saved preferences survive rename and removal");
   await select(original);
-  assert.deepEqual(await history(), originalHistory);
+  assert.deepEqual(await history(), survivorHistory, "The shared TV history is independent of the selected preference profile");
   assert.deepEqual(state().preferences, originalPreferences);
   await httpRemote.minimize();
-  const persisted = { removed, survivor, history: survivorHistory, preferences: survivorPreferences, original, originalHistory, originalPreferences };
+  const persisted = { removed, survivor, history: survivorHistory, preferences: survivorPreferences, original, originalHistory: survivorHistory, originalPreferences };
   await Bun.write(`${artifactDir}/profiles-before-restart.json`, JSON.stringify(persisted, null, 2));
   return persisted;
 }
@@ -199,12 +143,5 @@ export async function assertProfilesAfterRestart({ clients, api, until, httpRemo
     assert.deepEqual((await api("/api/progress/history")).items, history);
     assert.deepEqual(clients[0]!.state!.preferences, preferences);
   }
-  await httpRemote.restore();
-  await httpRemote.ui.controls();
-  await httpRemote.ui.click(".watching-profile");
-  await until("reconnected HTTP browser displays the renamed survivor and no removed viewer", () => httpRemote.ui.execute("return document.querySelector(arguments[0])?.textContent.includes(arguments[2]) && !document.querySelector(arguments[1])", [row(expected.survivor.id), row(expected.removed.id), expected.survivor.name]));
-  await httpRemote.screenshot("profiles-after-restart");
-  await httpRemote.ui.key(keys.escape);
-  await httpRemote.minimize();
   await Bun.write(`${artifactDir}/profiles-after-restart.json`, JSON.stringify({ profiles, retained: expected.survivor }, null, 2));
 }

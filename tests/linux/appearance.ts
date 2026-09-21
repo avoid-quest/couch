@@ -10,7 +10,7 @@ type Context = {
   ui: UiDriver; httpRemote: HttpRemote; otherRemote: HttpRemote; until: Wait; artifactDir: string; entryId: string;
   clients: { token: string; state: SessionState | null; command: (action: Action) => Promise<void> }[];
 };
-const settingsDialog = '[role="dialog"]:has([aria-label="Settings sections"])';
+const settingsDialog = 'section[aria-label="Settings"]';
 const remoteChoices = '[role="group"][aria-label="This remote interface size"]';
 const tvChoices = '[role="group"][aria-label="TV interface size"]';
 const scale = (ui: UiDriver) => ui.execute("return Number(getComputedStyle(document.getElementById('root')).zoom)");
@@ -42,8 +42,7 @@ async function open(ui: UiDriver, until: Wait, scope: "device" | "tv" = "device"
   await until("Appearance loads its controls", () => ui.execute("return !!document.querySelector('#tv-interface-size, #remote-interface-size') && !document.querySelector('[role=dialog]')?.textContent.includes('Loading settings…')"));
 }
 async function close(ui: UiDriver, until: Wait) {
-  await ui.key(keys.escape);
-  await until("Settings closes before the next action", () => ui.execute("return !document.querySelector('[role=dialog]')"));
+  await ui.section("Now");
 }
 
 export async function verifyAppearance(context: Context) {
@@ -90,7 +89,7 @@ export async function verifyAppearance(context: Context) {
   await close(phone, until);
   await httpRemote.minimize();
   await open(ui, until);
-  await ui.execute("[...document.querySelectorAll('[role=dialog] button')].find(button => button.textContent === 'Reset TV to default').focus()");
+  await ui.execute("[...document.querySelectorAll('section[aria-label=Settings] button')].find(button => button.textContent === 'Reset TV to default').focus()");
   await clients[1]!.command({ type: "navigate", key: "select" });
   await ui.request(`/session/${ui.session()}/execute/async`, { script: "const done=arguments[arguments.length-1]; requestAnimationFrame(()=>requestAnimationFrame(()=>done(null)))", args: [] });
   assert.ok(all(state => state.appearance?.confirmedSize === 1.3), "Ordinary remote navigation cannot activate a physical host's privileged reset");
@@ -134,9 +133,10 @@ export async function verifyAppearance(context: Context) {
   const maskSha256 = createHash("sha256").update(largestMask).digest("hex");
   await ui.home();
   await ui.section("Queue");
+  await ui.execute("document.querySelector('.primary-nav [data-source=Now]').focus()");
   await clients[1]!.command({ type: "navigate", key: "right" });
   await clients[1]!.command({ type: "navigate", key: "select" });
-  await until("directional focus selects the next source at the largest TV size", () => ui.execute("return document.querySelector('.source-nav [aria-selected=true]')?.textContent.trim() === 'Online'"));
+  await until("directional focus selects the next source at the largest TV size", () => ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.getAttribute('data-source') === 'Find'"));
   await clients[0]!.command({ type: "stop" });
   await until("appearance verification restores idle playback and the original queue", () => all(state => state.player.status === "idle" && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queue)));
   await Bun.write(`${artifactDir}/appearance.json`, JSON.stringify({ nativeViewport: [1600, 1000], physical: false, nativeGeometry: original, remoteSizes: [1.3, 1.15], subtitlePixels: largest, subtitleGeometry: { differingCoordinates, maskSha256 }, checks: ["immediate browser size", "browser reload", "two separate HTTP browsers", "administrator scope", "TV timeout", "TV confirmation", "physical pointer reset", "ordinary remote navigation boundary", "directional focus", "native pattern", "identical subtitle screen-coordinate masks"] }, null, 2));

@@ -15,11 +15,12 @@ const providersConfig = providersArgument === -1 ? null : process.argv[providers
 const providerCatalogs = process.argv.includes("--provider-catalogs");
 const builtRemote = process.argv.includes("--built-remote");
 const connection = process.argv.includes("--connection");
+const diagnostics = process.argv.includes("--diagnostics");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
 if (providersConfig && providerCatalogs) throw new Error("Use either --providers or --provider-catalogs");
 if (autoJellyfin && jellyfinConfig) throw new Error("Use either --jellyfin or --jellyfin-config");
-if (builtRemote && (connection || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
-if (connection && (providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --connection alone for the focused native/browser connection journey.");
+if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
+if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
 
 async function run(command: string[]) {
   const child = Bun.spawn(command, { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
@@ -56,6 +57,7 @@ try {
     "--mount", "type=volume,source=couch-linux-bun,target=/root/.bun/install/cache",
     ...(builtRemote ? ["--env", "COUCH_TEST_BUILT_REMOTE=1"] : []),
     ...(connection ? ["--env", "COUCH_TEST_CONNECTION=1"] : []),
+    ...(diagnostics ? ["--env", "COUCH_TEST_DIAGNOSTICS=1"] : []),
     ...(config ? ["--mount", `type=bind,source=${resolve(config)},target=/jellyfin-test.json,readonly`, "--env", "COUCH_TEST_JELLYFIN=/jellyfin-test.json"] : []),
     ...(fixture ? ["--network", fixture.dockerNetwork] : []),
     ...(providersConfig ? ["--mount", `type=bind,source=${resolve(providersConfig)},target=/providers.json,readonly`, "--env", "COUCH_TEST_PROVIDERS=/providers.json"] : []),
