@@ -1,3 +1,4 @@
+import { settingsPages, type SettingsPage } from "../../src/shared/settings-pages";
 import { strict as assert } from "node:assert";
 
 type Request = (path: string, body?: unknown, method?: string) => Promise<any>;
@@ -108,6 +109,7 @@ export class UiDriver {
   async type(selector: string, text: string) {
     const id = await this.element(selector);
     await this.clickElement(id);
+    if (!text) { await this.key(keys.home); await this.key(keys.end, true); await this.key("\uE003"); return; }
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});
     if (text) await this.request(`/session/${this.session()}/element/${id}/value`, { text });
   }
@@ -133,13 +135,11 @@ export class UiDriver {
   async section(label: string) {
     await this.browse();
     if (await this.execute("return !!document.querySelector('.primary-nav')")) {
-      const destination = label === "For later" ? "Saved" : label === "Online" ? "Library" : label === "Queue" ? "Now" : label;
-      const libraryLabel = ({ Files: "TV folders", Radio: "Radio", Guide: "Live TV", Jellyfin: "Jellyfin" } as Record<string, string>)[destination];
-      await this.click(`.primary-nav a[data-source="${libraryLabel ? "Library" : destination}"]`);
-      if (libraryLabel) {
-        await this.waitFor("Library page opens before choosing its source", () => this.execute('return !!document.querySelector(\'[data-page="Library"]:not([hidden])\')'));
-        await this.button(libraryLabel, '[data-page="Library"]:not([hidden])');
-      }
+      const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
+      const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
+      await this.click(`.primary-nav a[data-source="${destination}"]`);
+      if (source) await this.type("#media-search", "");
+      if (source) await this.button(source, '[aria-label="Filter search results"]');
       await this.waitFor(`${label} page opens`, () => this.execute('return !!document.querySelector(arguments[0])', [`[data-page="${destination}"]:not([hidden])`]));
       return;
     }
@@ -151,12 +151,24 @@ export class UiDriver {
 
   async settingsSection(section: string) {
     if (await this.execute("return !!document.querySelector('[aria-label=\"Settings pages\"]')")) {
+      if (section.startsWith("source-")) {
+        await this.settingsSection("sources");
+        await this.click(`[aria-label="Sources"] a[href$="${settingsPages[section as SettingsPage].path}"]`);
+        await this.waitFor(`${section} opens`, () => this.execute("return document.querySelector('section[aria-label=Settings] h2')?.textContent === arguments[0]", [settingsPages[section as SettingsPage].label]));
+        return;
+      }
+      if (section === "tv-appearance") {
+        if (await this.execute("return !!document.querySelector('.tv-shell')")) return this.settingsSection("appearance");
+        // Retained administrator deep link has no primary navigation item.
+        const url = new URL("/settings/tv-appearance", await this.execute("return location.href")).href;
+        await this.request(`/session/${this.session()}/url`, { url });
+        await this.waitFor("TV appearance route reconnects", () => this.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+        return;
+      }
       const destination = section === "remotes" ? "connection" : section === "remote" ? "playback" : section;
-      const category = ".settings-page:not([hidden]) .settings-category select";
+      const category = '[aria-label="Settings page"]';
       if (await this.execute("return !!document.querySelector(arguments[0])?.getClientRects().length", [category])) {
-        const option = await this.element(`${category} option[value="${destination}"]`);
-        // WebDriver's option click selects the native option and dispatches input/change.
-        await this.request(`/session/${this.session()}/element/${option}/click`, {});
+        await this.select(category, settingsPages[destination as SettingsPage].label);
       } else {
         const target = `[aria-label="Settings pages"] [data-settings-page="${destination}"]`;
         if (await this.execute("return !!document.querySelector('[role=dialog] .settings-back')")) await this.button("All settings", '[role="dialog"]');
@@ -183,6 +195,7 @@ export class UiDriver {
   }
 
   async select(selector: string, label: string) {
+    if (/^#media-(kind|quality)$/.test(selector)) await this.addMedia();
     await this.click(selector);
     const deadline = Date.now() + 5_000;
     let options: any[] = [];

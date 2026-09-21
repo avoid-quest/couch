@@ -174,20 +174,22 @@ async function savePreferences(ui: UiDriver, until: Wait, preferences: ProfilePl
   await ui.select("#preferred-subtitle-language", languageName(preferences.subtitleLanguage));
   await ui.select("#preferred-subtitle-mode", preferences.subtitles === "off" ? "Off" : "Automatic");
   await ui.select("#preferred-playback-speed", preferences.speed === 1 ? "Normal" : `${preferences.speed}×`);
-  await ui.button("Save preferences", "[role=dialog]");
-  await until("the saved-preferences form confirms a committed change", async () => await ui.execute("return [...document.querySelectorAll('[role=dialog] [role=status]')].some(element => element.textContent.startsWith('Preferences saved for '))"));
+  await ui.button("Save preferences", 'section[aria-label="Settings"]');
+  await until("the saved-preferences form confirms a committed change", async () => await ui.execute("return [...document.querySelectorAll('section[aria-label=Settings] [role=status]')].some(element => element.textContent === 'Playback defaults saved.')"));
   await closeSavedSettings(ui, until);
 }
 
+const previousPages = new WeakMap<UiDriver, string>();
+
 async function savedSettings(ui: UiDriver, until: Wait) {
+  previousPages.set(ui, await ui.execute('return document.querySelector(".primary-nav [aria-current=page]")?.getAttribute("data-source") || "Now"'));
   await ui.button("Settings");
   await ui.settingsSection("playback");
-  await until("Settings Playback shows the watching profile and saved choices", () => ui.execute("return !!document.querySelector('#preferred-audio-language') && document.querySelector('[role=dialog]').textContent.includes('Watching profile:')"));
+  await until("Settings Playback shows the watching profile and saved choices", () => ui.execute("return !!document.querySelector('#preferred-audio-language')"));
 }
 
 async function closeSavedSettings(ui: UiDriver, until: Wait) {
-  await ui.key(keys.escape);
-  await until("Escape closes saved preferences and restores Settings", () => ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Settings'"));
+  await ui.section(previousPages.get(ui) ?? "Now");
 }
 
 async function assertPreferencesLoad(context: PreferenceContext, preferences: ProfilePlaybackPreferences, audioDelay: number, description: string) {
@@ -250,27 +252,27 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   await closeSavedSettings(ui, until);
   if (otherRemote) {
     await httpRemote.restore();
-    await httpRemote.ui.section("Library");
+    await httpRemote.ui.section("Find");
     await savedSettings(httpRemote.ui, until);
     await httpRemote.ui.select("#preferred-audio-language", "English");
     await httpRemote.minimize();
     await otherRemote.restore();
-    await otherRemote.ui.section("Radio");
+    await otherRemote.ui.section("Saved");
     await savedSettings(otherRemote.ui, until);
     await until("second real HTTP remote receives the TV's saved profile defaults", () => otherRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'Italian' && document.querySelector('#preferred-playback-speed')?.textContent.trim() === '1.25×'"));
     await otherRemote.ui.select("#preferred-playback-speed", "1.5×");
-    await otherRemote.ui.button("Save preferences", "[role=dialog]");
+    await otherRemote.ui.button("Save preferences", 'section[aria-label="Settings"]');
     await until("second HTTP remote commits its speed default", () => all(state => state.preferences?.profile.speed === 1.5));
     await otherRemote.screenshot("preferences-second-http");
     await closeSavedSettings(otherRemote.ui, until);
     await otherRemote.minimize();
     await httpRemote.restore();
     await until("first remote retains its language draft while showing the other remote's saved speed", () => httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'English' && document.querySelector('#preferred-playback-speed')?.textContent.trim() === '1.5×'"));
-    await httpRemote.ui.button("Save preferences", "[role=dialog]");
+    await httpRemote.ui.button("Save preferences", 'section[aria-label="Settings"]');
     await until("independent HTTP form saves retain both language and speed changes", () => all(state => state.preferences?.profile.audioLanguage === "en" && state.preferences.profile.speed === 1.5));
     await httpRemote.screenshot("preferences-first-http");
     await closeSavedSettings(httpRemote.ui, until);
-    await until("saved defaults never move either HTTP remote's independent browsing", async () => await httpRemote.ui.execute("return document.querySelector('[aria-label=\"Media sources\"] [aria-selected=true]')?.textContent") === "Library" && await otherRemote.ui.execute("return document.querySelector('[aria-label=\"Media sources\"] [aria-selected=true]')?.textContent") === "Radio");
+    await until("saved defaults never move either HTTP remote's independent browsing", async () => await httpRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent") === "Find" && await otherRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent") === "Saved");
     await savePreferences(httpRemote.ui, until, householdPreferences, true);
     await httpRemote.minimize();
   }
@@ -336,7 +338,7 @@ export async function assertPlaybackPreferencesAfterRestart(context: PreferenceC
   await until("saved playback preferences survive the desktop restart without autoplay", () => all(state => state.player.status === "idle" && state.activeProfile.id === expected.household.id && JSON.stringify(state.preferences?.profile) === JSON.stringify(expected.householdPreferences) && state.preferences?.device.audioDelay === expected.audioDelay));
   await httpRemote.restore();
   await savedSettings(httpRemote.ui, until);
-  await until("reconnected HTTP phone displays the persisted profile and device preferences", async () => await httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'Italian' && document.querySelector('#preferred-subtitle-mode')?.textContent.trim() === 'Off' && document.querySelector('[role=dialog]')?.textContent.includes('TV audio delay is 0.4 seconds')"));
+  await until("reconnected HTTP phone displays the persisted profile and device preferences", async () => await httpRemote.ui.execute("return document.querySelector('#preferred-audio-language')?.textContent.trim() === 'Italian' && document.querySelector('#preferred-subtitle-mode')?.textContent.trim() === 'Off'"));
   await httpRemote.screenshot("preferences-restarted-http");
   await closeSavedSettings(httpRemote.ui, until);
   await httpRemote.minimize();

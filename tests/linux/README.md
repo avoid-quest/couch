@@ -7,11 +7,18 @@ application data and artifacts are disposable.
 
 The default journey first runs `bun run check`, compiles the debug Tauri app and
 sidecar, runs the locked Rust coverage, then starts the compiled-browser remote
-journey. It next runs `playback.ts`, the current focused native journey. That
-journey covers first-use sharing and pairing, browser controls, simulated
-remote-side state, native libmpv playback, subtitles, focus and reconnect,
-Stop, local-page yt-dlp intake, and DASH quality selection. It does not run the
-retired Radio, Guide, old Library, or monolithic restart journey.
+journey. It next runs `playback.ts` against the actual Tauri/libmpv process.
+The first-use fixture leaves the operating-mode choice unset; the connection
+journey uses a configured-local fixture. They must not share application data.
+
+The default journey retains browser transport, native subtitles and pixel
+checks, reconnect, radio metadata and real-clock retries, yt-dlp/DASH selection,
+library progress and restart, playback preferences, music/CUE, ReplayGain audio
+capture, source credentials and persistent catalog checks. Real
+Jellyfin qualification additionally requires the documented `--jellyfin` fixture.
+See [native coverage](native-coverage.md) for the retired UI checks and their
+current executable replacements. A successful individual helper or diagnostic
+iteration is not a passing default journey.
 
 `bun run test:linux --built-remote` runs only the shared checks, production
 build, and `built-remote.ts`. Its browser talks to the compiled sidecar and
@@ -30,6 +37,11 @@ is intentionally the administrator; the focused
 cache retirement, stale-read cancellation, role/revocation transitions, and
 same-address installation replacement. It is client-state proof, not a second
 native installation at the same address.
+
+`bun run test:linux --diagnostics` uses the same build and environment, then runs
+`diagnostics.ts` with separate configured-local data. It checks native report and
+export facts, ordinary-controller denial, secret/path redaction and uninterrupted
+native playback.
 
 The tests use Tauri WebDriver and WebKit WebDriver under Xvfb, Openbox, software
 rendering, and a PulseAudio null sink. They use no production test endpoint.

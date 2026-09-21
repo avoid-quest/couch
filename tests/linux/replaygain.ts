@@ -44,7 +44,8 @@ export async function verifyReplayGain(context: Context) {
     await until("ReplayGain fixture starts in the actual native player", () => all(state => state.currentEntryId === id && state.player.playbackId !== previous && state.player.status === "playing" && state.player.position > 0), 15_000);
   };
   const close = async (driver: UiDriver) => {
-    await driver.key(keys.escape);
+    if (await driver.execute("return !!document.querySelector('[role=dialog]')")) await driver.key(keys.escape);
+    else await driver.section("Saved");
     await until("ReplayGain dialog closes", () => driver.execute("return !document.querySelector('[role=dialog]')"));
   };
   const savedSettings = async (driver: UiDriver) => {
@@ -135,14 +136,15 @@ export async function verifyReplayGain(context: Context) {
     await until("music pauses for native and real HTTP ReplayGain controls", () => all(state => state.player.status === "paused" && state.player.replayGain === "off" && state.player.volume === 100 && state.player.audioDelay === 0));
     const playbackId = first().player.playbackId;
     await httpRemote.minimize(); await otherRemote.minimize();
-    await ui.button("Playback settings");
+    await ui.controls();
+    await ui.button("Playback settings", ".tv-playback-controls");
     await ui.select("#playback-replaygain", "Track");
     await until("TV current ReplayGain changes only the paused item", () => all(state => state.player.replayGain === "track" && state.preferences?.profile.replayGain === "off" && state.player.playbackId === playbackId));
     assert.deepEqual(await ui.execute("return [innerWidth, innerHeight, devicePixelRatio]"), [1600, 1000, 1]);
     await context.screenshot("replaygain-native-1600x1000");
     await close(ui);
     await httpRemote.restore();
-    await httpRemote.ui.section("Library");
+    await httpRemote.ui.section("Now");
     await httpRemote.ui.button("Playback settings");
     await httpRemote.ui.select("#playback-replaygain", "Album");
     await until("first real HTTP browser changes native gain without changing the saved profile", () => all(state => state.player.replayGain === "album" && state.preferences?.profile.replayGain === "off"));
@@ -151,17 +153,18 @@ export async function verifyReplayGain(context: Context) {
     await httpRemote.screenshot("replaygain-first-http-current");
     await close(httpRemote.ui);
     await httpRemote.minimize(); await otherRemote.restore();
-    await otherRemote.ui.section("Radio");
+    await otherRemote.ui.section("Saved");
     await savedSettings(otherRemote.ui);
     await otherRemote.ui.select("#preferred-replaygain", "Off");
-    await otherRemote.ui.button("Save preferences", "[role=dialog]");
+    await otherRemote.ui.button("Save preferences", 'section[aria-label="Settings"]');
     await until("second real HTTP browser saves the next-item default without changing current Album", () => all(state => state.preferences?.profile.replayGain === "off" && state.player.replayGain === "album" && state.player.playbackId === playbackId));
     await otherRemote.screenshot("replaygain-second-http-default");
     await close(otherRemote.ui);
-    assert.ok((await otherRemote.ui.execute("return document.querySelector('.source-nav [role=tab][data-state=active]')?.textContent")).startsWith("Radio"));
-    assert.ok((await httpRemote.ui.execute("return document.querySelector('.source-nav [role=tab][data-state=active]')?.textContent")).startsWith("Library"));
+    assert.ok((await otherRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent")).startsWith("Saved"));
+    assert.ok((await httpRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent")).startsWith("Now"));
     await otherRemote.refresh();
     await until("a real HTTP browser reconnects", () => otherRemote.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+    await otherRemote.ui.section("Now");
     await otherRemote.ui.button("Playback settings");
     await until("reconnected browser receives observed Album and saved Off", () => otherRemote.ui.execute("return document.querySelector('#playback-replaygain')?.textContent.trim() === 'Album' && document.querySelector('[role=dialog]').textContent.includes('Default for ReplayGain verification: Off')"));
     await close(otherRemote.ui);
