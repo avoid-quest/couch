@@ -249,7 +249,7 @@ try {
   const keyboardWindow = (await xdotool("search", "--onlyvisible", "--name", "^Couch$")).output.split("\n")[0]!;
   assert.equal((await xdotool("windowactivate", "--sync", keyboardWindow)).code, 0);
   await ui.controls();
-  const keyboardPoint = await execute("const rect = document.querySelector('.media-title').getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }");
+  const keyboardPoint = await execute("const rect = document.querySelector('.tv-playback-controls:not([hidden]) .media-title').getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }");
   await xdotool("mousemove", "--sync", "--window", keyboardWindow, String(Math.round(keyboardPoint.x)), String(Math.round(keyboardPoint.y)), "click", "1");
   await until("native keyboard tests focus the actual GTK WebView", async () => await execute("return document.hasFocus()"));
   await execute("window.__videoStageBeforeNavigation = document.querySelector('.video-stage'); document.querySelector('[aria-label=\"Stop playback\"]').focus()");
