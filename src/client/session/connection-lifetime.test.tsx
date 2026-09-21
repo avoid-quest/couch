@@ -20,6 +20,7 @@ let gate: ReturnType<typeof useSessionGate>;
 let fetchSpy: ReturnType<typeof spyOn>;
 const storageSpies: Array<ReturnType<typeof spyOn>> = [];
 const requests: Array<{ path: string; token: string | null; signal?: AbortSignal | null }> = [];
+let sharing = true;
 let installation: string, role: "administrator" | "controller", title: string;
 let delayedRead: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
 let delayedPair: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
@@ -78,7 +79,7 @@ async function pair() {
 }
 
 beforeEach(() => {
-  installation = "installation"; role = "administrator"; title = "Old household";
+  sharing = true; installation = "installation"; role = "administrator"; title = "Old household";
   delayedRead = delayedPair = undefined; readSignal = undefined;
   sockets.length = requests.length = 0;
   window = new Window({ url: origin });
@@ -92,7 +93,7 @@ beforeEach(() => {
   fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     requests.push({ path, token: new Headers(init?.headers).get("Authorization"), signal: init?.signal });
-    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: installation, urls: [origin], player: "idle", remoteControlEnabled: true });
+    if (path === "/api/connection") return Response.json({ name: "Couch", installationId: installation, urls: [origin], player: "idle", remoteControlEnabled: sharing });
     if (path === "/api/build") return Response.json(loadedBuild);
     if (path === "/api/controllers/me") return Response.json({ authority: role, controller: { id: "remote", name: "Memory remote", role }, claimAvailable: false });
     if (path === "/api/pair") return delayedPair ? delayedPair.promise : Response.json({ token: "new-secret", installationId: installation });
@@ -235,4 +236,14 @@ test("a captured callback from a revoked socket cannot restore connected state",
   expect(gate.pairingRequired).toBe(true);
   expect(gate.identity).toBeNull();
   expect(gate.state).toBeNull();
+});
+
+
+test("live sharing changes update the connected gate", async () => {
+  await mount(); await connected();
+  expect(gate.remoteControlEnabled).toBe(true);
+  sharing = false;
+  await act(async () => sockets.at(-1)!.emit({ type: "state", state: { ...state, controllerVersion: 1 } }));
+  await flush(); await flush();
+  expect(gate.remoteControlEnabled).toBe(false);
 });
