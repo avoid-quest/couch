@@ -220,15 +220,15 @@ export async function assertTheme(ui: UiDriver) {
   const theme = await ui.execute(`
     const root = getComputedStyle(document.documentElement);
     const button = document.querySelector('[data-slot=button].bg-primary');
-    if (!button) return null;
     const actual = getComputedStyle(button);
     const probe = document.createElement('span');
     probe.style.color = 'var(--primary)';
     document.body.append(probe);
     const expected = getComputedStyle(probe).color;
     probe.remove();
-    return { primary: root.getPropertyValue('--primary').trim(), background: root.getPropertyValue('--background').trim(),
+    const result = { primary: root.getPropertyValue('--primary').trim(), background: root.getPropertyValue('--background').trim(),
       actual: actual.backgroundColor, expected, display: actual.display, radius: actual.borderRadius, font: getComputedStyle(document.body).fontFamily };
+    return result;
   `);
   assert.ok(theme?.primary && theme?.background, "Generated shadcn theme variables are present");
   assert.equal(theme.actual, theme.expected, "Tailwind bg-primary uses the generated theme");
@@ -338,11 +338,11 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(null))))", args: [],
     });
     await assertResponsive(ui, "Phone pairing");
+    const theme = await assertTheme(ui);
     await ui.type("#pairing-code", code);
     await until("HTTP pairing form enables Connect for a complete code", async () => await ui.execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
     await ui.click(".pair-form button[type=submit], .pair-form button:not([type])");
     await until("real HTTP remote pairs and receives current playback", async () => await ui.execute("return document.querySelector('.header-status [role=status]')?.textContent") === "Connected");
-    const theme = await assertTheme(ui);
     await assertResponsive(ui, "Phone queue");
     return { ui, theme, close, refresh: () => request(`/session/${session}/refresh`, {}),
       minimize: () => request(`/session/${session}/window/minimize`, {}),
