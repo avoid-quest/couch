@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act, useRef, useState } from "react";
 import type { Root } from "react-dom/client";
 import * as session from "@/session/session";
-import { screen } from "@/testing";
+import { screen, fireEvent } from "@/testing";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 let sessionMock: ReturnType<typeof spyOn> | undefined;
@@ -82,7 +82,7 @@ test("no advertised address leaves Close and manual recovery available", async (
   expect(button("Close")).toBeDefined();
 });
 
-test("closing restores focus to the native shortcut and reopening refreshes the QR", async () => {
+for (const close of ["Close", "Escape"] as const) test(`${close} restores focus to the native shortcut and reopening refreshes the QR`, async () => {
   const { PairingDialog } = await import("./PairingDialog");
   function Shortcut() {
     const [open, setOpen] = useState(false);
@@ -93,7 +93,7 @@ test("closing restores focus to the native shortcut and reopening refreshes the 
   expect(request).not.toHaveBeenCalled();
   await act(async () => button("Pair a remote").click());
   expect(qr()).not.toBeNull();
-  await act(async () => button("Close").click()); await flush();
+  await act(async () => { if (close === "Close") fireEvent.click(button("Close")); else fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" }); }); await flush();
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(button("Pair a remote"));
   await act(async () => button("Pair a remote").click());
