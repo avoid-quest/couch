@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { useInvalidation } from "./useInvalidation";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LibrarySearch, LibrarySource, MusicArtist } from "../../../shared/library";
+import { apiFetch } from "@/api/client";
+import { librarySourcesQuery } from "@/api/library";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,53 +40,39 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
   onEnqueue: (id: string, options?: { playNow?: boolean; fromStart?: boolean }) => Promise<boolean>;
   onQueueAlbum: (albumId: string, playNow: boolean) => Promise<boolean>;
 }) {
-  const revision = useInvalidation("library");
-  const [sources, setSources] = useState<LibrarySource[]>([]);
-  const [results, setResults] = useState<LibrarySearch>({ items: [], total: 0, offset: 0, limit: pageSize });
+  const client = useQueryClient();
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
-  const [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [foldersOpen, setFoldersOpen] = useState(false);
   const [enqueuing, setEnqueuing] = useState<{ id: string; playNow: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [view, setView] = useState("all");
   const [artist, setArtist] = useState<MusicArtist | null>(null);
+  const folders = useQuery({ ...librarySourcesQuery({ origin, token }), enabled: connected, retry: false });
+  const items = useQuery({
+    queryKey: ["library", "browse", query, artist?.id ?? "", offset], enabled: connected, retry: false,
+    placeholderData: keepPreviousData,
+    queryFn: ({ signal }) => apiFetch({ origin, token }, `/api/library/items?${new URLSearchParams({ q: query, artistId: artist?.id ?? "", offset: String(offset), limit: String(pageSize) })}`, { signal }).then(response => response.json() as Promise<LibrarySearch>),
+  });
+  const sources = folders.data?.sources ?? [];
+  const results = (items.data as LibrarySearch | undefined) ?? { items: [], total: 0, offset: 0, limit: pageSize };
+  const loading = connected && (folders.isFetching || items.isFetching);
+  const queryError = folders.error ?? items.error;
+  const error = actionError ?? (queryError ? queryError instanceof Error ? queryError.message : "Could not load the library." : null);
+  const refresh = () => { setActionError(null); void client.invalidateQueries({ queryKey: ["library"] }); };
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => { const operation = new AbortController(); lifetime.current = operation; setEnqueuing(null); return () => operation.abort(); }, [origin, token, connected]);
 
-  useEffect(() => {
-    if (!connected) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    const read = async (path: string) => {
-      const response = await fetch(`${origin}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not load the library.");
-      return result;
-    };
-    void Promise.all([
-      read("/api/library/sources"),
-      read(`/api/library/items?${new URLSearchParams({ q: query, artistId: artist?.id ?? "", offset: String(offset), limit: String(pageSize) })}`),
-    ]).then(([folders, items]: [{ sources: LibrarySource[] }, LibrarySearch]) => {
-      if (controller.signal.aborted) return;
-      setSources(folders.sources);
-      setResults(items);
-    }).catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load the library.");
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [origin, token, connected, query, artist?.id, offset, refresh, revision]);
-
-  const search = (event: FormEvent) => { event.preventDefault(); setOffset(0); setQuery(draft.trim()); setRefresh(value => value + 1); };
+  const search = (event: FormEvent) => { event.preventDefault(); if (query === draft.trim() && offset === 0) void items.refetch(); else { setOffset(0); setQuery(draft.trim()); } };
   const enqueue = async (id: string, title: string, options?: { playNow?: boolean; fromStart?: boolean }) => {
+    const signal = lifetime.current?.signal;
     setEnqueuing({ id, playNow: !!options?.playNow });
-    setNotice(null);
-    setError(null);
-    try { if (await onEnqueue(id, options)) setNotice(options?.playNow ? `Starting ${title} on the TV.` : `Added ${title} to the queue.`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not queue this item."); }
-    finally { setEnqueuing(null); }
+    setNotice(null); setActionError(null);
+    try { if (await onEnqueue(id, options) && !signal?.aborted) setNotice(options?.playNow ? `Starting ${title} on the TV.` : `Added ${title} to the queue.`); }
+    catch (reason) { if (!signal?.aborted) setActionError(reason instanceof Error ? reason.message : "Could not queue this item."); }
+    finally { if (!signal?.aborted) setEnqueuing(null); }
   };
 
   return <section className="min-w-0 space-y-5" aria-label="Media library">
@@ -104,7 +92,6 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
             {host && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
             {source.error && <Alert variant="destructive"><AlertDescription>{source.error}</AlertDescription></Alert>}
             {source.warning && <p className="text-sm text-muted-foreground">{source.warning.replace(" Media is still playable.", "")}</p>}
-
           </Card>
         </li>)}</ul>
         <Button variant="outline" data-tv-local-only={host || undefined} onClick={() => { setFoldersOpen(false); onManage(); }}>Manage folders in Sources</Button>
@@ -112,7 +99,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     </Dialog>}
       </div>
     </div>
-    {error && <Alert variant="destructive" ><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={refresh}>Try again</Button></AlertDescription></Alert>}
     <Tabs value={view} onValueChange={setView} className="gap-4">
       <TabsList aria-label="Library view" className="grid h-auto w-full grid-cols-3 gap-1 md:grid-cols-6"><TabsTrigger value="all"><FolderOpen aria-hidden="true" />All media</TabsTrigger><TabsTrigger value="movies"><Film aria-hidden="true" />Movies</TabsTrigger><TabsTrigger value="shows"><Tv aria-hidden="true" />Shows</TabsTrigger><TabsTrigger value="artists"><MicVocal aria-hidden="true" />Artists</TabsTrigger><TabsTrigger value="albums"><Disc3 aria-hidden="true" />Albums</TabsTrigger><TabsTrigger value="collections">Collections</TabsTrigger></TabsList>
       {(["movies", "shows"] as const).map(videoView => <TabsContent key={videoView} value={videoView} forceMount hidden={view !== videoView}><VideoLibraryPanel canManage={canManage} origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} view={videoView} active={view === videoView} onEnqueue={onEnqueue} /></TabsContent>)}
@@ -137,7 +124,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
             <span className="mt-1 block break-words text-sm leading-relaxed text-muted-foreground">{[item.artist, item.album, duration(item.duration)].filter(Boolean).join(" · ") || (item.kind === "audio" ? "Audio" : "Video")}{!item.available && " · File unavailable"}</span>
             {!!item.progress?.position && <span className="mt-1 block text-xs text-primary">Continue from {progressTime(item.progress.position)}</span>}
           </div>
-          <ProgressActions origin={origin} token={token} connected={connected} mediaId={`library:${item.id}`} title={item.title} progress={item.progress} onUpdated={() => setRefresh(value => value + 1)} />
+          <ProgressActions origin={origin} token={token} connected={connected} mediaId={`library:${item.id}`} title={item.title} progress={item.progress} onUpdated={refresh} />
         </div>
         <div className="flex flex-wrap gap-2">
           <Button className="min-h-11" aria-label={`${item.progress?.position ? "Resume" : "Play"} ${item.title}`} disabled={!connected || !canPlay || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title, { playNow: true })}><Play aria-hidden="true" />{enqueuing?.id === item.id && enqueuing.playNow ? "Starting…" : item.progress?.position ? "Resume" : "Play"}</Button>
