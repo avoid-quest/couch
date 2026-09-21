@@ -1,21 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { QRCodeSVG } from "qrcode.react";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { controllersQuery } from "@/api/controllers";
-import { SetupQr } from "@/components/SetupQr";
+import { PairingDialog } from "@/components/PairingDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import type { ConnectionInfo } from "../../../../shared/protocol";
+import { Switch } from "@/components/ui/switch";
 import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
 
 const formatSeen = (at: number | null) => at ? new Date(at).toLocaleString() : "never";
 
-export function ConnectionsSettings({ credentials, connected, host, identity, administratorClaimed }: {
-  credentials: ApiCredentials; connected: boolean; host: ConnectionInfo | null;
-  identity: ControllerIdentity; administratorClaimed: boolean;
+export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, setRemoteControlEnabled, administratorClaimed }: {
+  credentials: ApiCredentials; connected: boolean; urls: string[]; identity: ControllerIdentity;
+  remoteControlEnabled: boolean; setRemoteControlEnabled: (enabled: boolean) => void; administratorClaimed: boolean;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.controller?.id;
@@ -34,7 +33,12 @@ export function ConnectionsSettings({ credentials, connected, host, identity, ad
   const [claimError, setClaimError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pairUrl = host?.urls[0];
+  const [pairingOpen, setPairingOpen] = useState(false);
+  const [sharingPending, setSharingPending] = useState(false);
+  const [sharingError, setSharingError] = useState<string | null>(null);
+  const pairingRef = useRef<HTMLButtonElement>(null);
+  const pairUrl = urls[0];
+  useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
 
   async function claim(event: FormEvent) {
     event.preventDefault();
@@ -61,33 +65,35 @@ export function ConnectionsSettings({ credentials, connected, host, identity, ad
     finally { setPending(false); }
   }
 
+  async function saveSharing(enabled: boolean) {
+    if (sharingPending) return;
+    setSharingPending(true); setSharingError(null);
+    try {
+      await apiFetch(credentials, "/api/settings/sharing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) });
+      setRemoteControlEnabled(enabled);
+    } catch (reason) { setSharingError(reason instanceof Error ? reason.message : "Could not save remote control."); }
+    finally { setSharingPending(false); }
+  }
+
   return (
     <div className="space-y-8">
-      <section aria-label="Pair a remote" className="flex flex-wrap items-start gap-6">
-        {connected && pairUrl
-          ? <>
-              <SetupQr url={pairUrl} credentials={credentials} />
-              <div className="min-w-0 space-y-2">
-                <h3 className="font-medium">Pair a new remote</h3>
-                <p className="text-sm text-muted-foreground">New devices pair as controllers. Promote one below to make it an administrator.</p>
-                <p className="pairing-display"><span>Pairing code</span><strong>{host!.pairingCode}</strong></p>
-              </div>
-            </>
-          : <p role="status" className="text-muted-foreground">{connected ? "No network address available. Connect the TV to the network and reload." : "Reconnecting to the TV. The pairing code returns when connected."}</p>}
-      </section>
+      {manager && <section aria-label="Pair a remote" className="space-y-3">
+        <h3 className="font-medium">Pair a new remote</h3>
+        <p className="text-sm text-muted-foreground">New devices pair as controllers. Promote one below to make it an administrator.</p>
+        <Button ref={pairingRef} disabled={!connected || !pairUrl || !remoteControlEnabled} onClick={() => setPairingOpen(true)}>Pair a remote</Button>
+        {!remoteControlEnabled && <p className="text-sm text-muted-foreground">Turn on remote control before pairing a device.</p>}
+        <PairingDialog credentials={credentials} urls={urls} connected={connected} open={pairingOpen} onOpenChange={setPairingOpen} openerRef={pairingRef} />
+      </section>}
+      {identity.authority === "host" && <section aria-label="Remote control" className="space-y-3">
+        <div className="flex items-center justify-between gap-4"><div><h3 className="font-medium">Allow remote control</h3><p className="text-sm text-muted-foreground">Let browsers and other Couch apps on your LAN pair with this computer.</p></div><Switch aria-label="Allow remote control" checked={remoteControlEnabled} disabled={sharingPending} onCheckedChange={saveSharing} /></div>
+        {sharingError && <p role="alert">{sharingError}</p>}
+      </section>}
       {identity.authority === "host" && !administratorClaimed && (
         <section aria-label="Administrator setup" data-administrator-setup className="space-y-3">
           <h3 className="font-medium">Set up your administrator remote</h3>
           {setupCode.isPending ? <p role="status" className="text-muted-foreground"><Spinner className="mr-2 inline size-3.5" />Loading setup code…</p>
             : setupCode.isError || !setupCode.data || !pairUrl ? <p role="alert">Could not load administrator setup. Reload this page on the TV.</p> : (
-              <div className="flex flex-wrap items-start gap-6">
-                <QRCodeSVG value={pairUrl} size={160} marginSize={4} level="M" title={`Open Couch at ${pairUrl}`} className="h-40 w-40 rounded-md" />
-                <div className="min-w-0 space-y-2">
-                  <p className="text-sm text-muted-foreground">Open this address on the remote, then enter its one-use code.</p>
-                  <a className="break-all underline" href={pairUrl}>{pairUrl}</a>
-                  <p className="font-mono text-2xl tracking-wider" data-administrator-code>{setupCode.data.code}</p>
-                </div>
-              </div>
+              <div className="min-w-0 space-y-2"><p className="text-sm text-muted-foreground">Pair the remote above, then enter this one-use administrator code.</p><a className="break-all underline" href={pairUrl}>{pairUrl}</a><p className="font-mono text-2xl tracking-wider" data-administrator-code>{setupCode.data.code}</p></div>
             )}
         </section>
       )}

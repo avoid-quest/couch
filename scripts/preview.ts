@@ -70,6 +70,7 @@ await run([
   ...(media ? ["--mount", `type=bind,source=${media},target=/media/host,readonly`, "--env", "COUCH_PREVIEW_MEDIA=1"] : []),
   "--env", "COUCH_DATA_DIR=/root/.local/share/quest.avoid.couch",
   "--env", `COUCH_ADVERTISE_URLS=${remoteUrls.join(",")}`,
+  "--env", "COUCH_PREVIEW_PROXY_LAN=1",
   image,
 ]);
 
