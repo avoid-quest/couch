@@ -10,7 +10,6 @@ import type { ProviderId, VideoQuality } from "../../../shared/providers";
 import { SearchOnlineResults, providerNames, type SearchResultSummary } from "./SearchOnlineResults";
 import { SearchSource } from "./SearchSource";
 import { SearchRadioResults } from "./SearchRadioResults";
-import { useInvalidation } from "./useInvalidation";
 import { QualityOptions } from "@/components/QualitySelect";
 import { supportsWebVideoQuality, useEnqueueVideoQuality } from "../../video-quality";
 import { createId } from "../../session/session";
@@ -106,7 +105,7 @@ export function SearchPanel(props: Props) {
     {search.query && <>
       {!url && filter !== "All" && !summaries[filter]?.count && <Button variant="outline" onClick={() => setFilter("All")}>Show all sources</Button>}
       {props.connected && !url && completed && total === 0 && !Object.values(summaries).some(summary => summary.error) && <p role="status">No results for "{search.query}". Try a station, title or artist.</p>}
-      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!showSource(providerNames[provider])}><SearchOnlineResults {...props} onResults={reportResults} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} url={url} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
+      {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!showSource(providerNames[provider])}><SearchOnlineResults {...props} retry={search.attempt} onResults={reportResults} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} url={url} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
         {(["avoid radio", "Radio playlists", "Radio directory"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source)}><SearchRadioResults {...props} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} /></div>)}
         {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source === "Library" ? "TV folders" : source)}><SearchSource {...props} onResults={reportResults} onChooseSource={source => { focusSource.current = source; setFilter(source); }} active={props.active && showSource(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
