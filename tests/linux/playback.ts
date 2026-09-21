@@ -245,6 +245,8 @@ try {
   const chapterPosition = clients[0]!.state!.player.chapters![1]!.position;
   await clients[1]!.command({ type: "seek", playbackId, position: chapterPosition });
   await until("native chapter seek reaches both remotes", () => all(state => Math.abs(state.player.position - chapterPosition) < 0.3));
+  await clients[0]!.command({ type: "enqueue", entry: { id: "keyboard-next", title: "Keyboard next fixture", source: "https://media.example/keyboard-next.mp3" } });
+  await until("transport keyboard coverage has a following queue item", () => all(state => state.queue.length === 2 && state.queue[1]?.title === "Keyboard next fixture"));
 
   const keyboardWindow = (await xdotool("search", "--onlyvisible", "--name", "^Couch$")).output.split("\n")[0]!;
   assert.equal((await xdotool("windowactivate", "--sync", keyboardWindow)).code, 0);
