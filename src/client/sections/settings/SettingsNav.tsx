@@ -9,10 +9,10 @@ type Props = { active: SettingsPage };
 
 export function SettingsNav({ active }: Props) {
   const navigate = useNavigate();
-  const { host, identity, nativeHost } = useShell();
+  const { identity, nativeHost } = useShell();
   const sourcePage = active.startsWith("source-");
-  const administrator = !!host || identity?.authority === "administrator";
-  const visible = (id: string) => id !== "tv-appearance" && (settingsPages[id as SettingsPage].manage === "always" || administrator);
+  const administrator = identity?.authority === "host" || identity?.authority === "administrator";
+  const visible = (id: string) => id !== "tv-appearance" && (settingsPages[id as SettingsPage].manage === "always" || administrator || id === "connection" && identity?.claimAvailable);
   const groups = [
     { label: "Playback", pages: ["playback", "appearance"] },
     { label: "Library", pages: ["sources"] },

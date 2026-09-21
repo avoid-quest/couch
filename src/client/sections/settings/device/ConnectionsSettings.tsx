@@ -13,16 +13,17 @@ import type { Controller, ControllerIdentity } from "../../../../shared/controll
 
 const formatSeen = (at: number | null) => at ? new Date(at).toLocaleString() : "never";
 
-export function ConnectionsSettings({ credentials, connected, host, selfId, identity, administratorClaimed = true }: {
-  credentials: ApiCredentials; connected: boolean; host: ConnectionInfo | null; selfId: string | null;
-  identity?: ControllerIdentity | null; administratorClaimed?: boolean;
+export function ConnectionsSettings({ credentials, connected, host, identity, administratorClaimed }: {
+  credentials: ApiCredentials; connected: boolean; host: ConnectionInfo | null;
+  identity: ControllerIdentity; administratorClaimed: boolean;
 }) {
   const queryClient = useQueryClient();
-  const manager = !identity || identity.authority === "administrator" || identity.authority === "host";
+  const selfId = identity.controller?.id;
+  const manager = identity.authority === "administrator" || identity.authority === "host";
   const controllers = useQuery({ ...controllersQuery(credentials), enabled: connected && manager });
   const setupCode = useQuery({
-    queryKey: ["controllers", "setup-code", credentials.origin, credentials.token],
-    enabled: connected && identity?.authority === "host" && !administratorClaimed, retry: false,
+    queryKey: ["controllers", "setup-code"],
+    enabled: connected && identity.authority === "host" && !administratorClaimed, retry: false,
     queryFn: async ({ signal }) => {
       const response = await apiFetch(credentials, "/api/controllers/claim-code", { signal });
       return await response.json() as { code: string };
@@ -74,7 +75,7 @@ export function ConnectionsSettings({ credentials, connected, host, selfId, iden
             </>
           : <p role="status" className="text-muted-foreground">{connected ? "No network address available. Connect the TV to the network and reload." : "Reconnecting to the TV. The pairing code returns when connected."}</p>}
       </section>
-      {identity?.authority === "host" && !administratorClaimed && (
+      {identity.authority === "host" && !administratorClaimed && (
         <section aria-label="Administrator setup" data-administrator-setup className="space-y-3">
           <h3 className="font-medium">Set up your administrator remote</h3>
           {setupCode.isPending ? <p role="status" className="text-muted-foreground"><Spinner className="mr-2 inline size-3.5" />Loading setup code…</p>
@@ -90,13 +91,13 @@ export function ConnectionsSettings({ credentials, connected, host, selfId, iden
             )}
         </section>
       )}
-      {identity?.authority === "controller" && !administratorClaimed && (
+      {identity.authority === "controller" && identity.claimAvailable && (
         <section aria-label="Claim administrator" className="space-y-3">
           <h3 className="font-medium">Claim administrator</h3>
           <form className="flex flex-wrap items-end gap-3" onSubmit={claim}>
             <div className="min-w-0 space-y-2"><Label htmlFor="administrator-code">Administrator code</Label>
-              <Input id="administrator-code" className="min-h-11" value={code} onChange={event => setCode(event.target.value)} inputMode="numeric" pattern="\d{10}" maxLength={10} required disabled={claiming} /></div>
-            <Button className="min-h-11" type="submit" disabled={claiming || code.trim().length !== 10}>{claiming ? "Claiming…" : "Claim administrator"}</Button>
+              <Input id="administrator-code" className="min-h-11" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming} /></div>
+            <Button className="min-h-11" type="submit" disabled={claiming || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming ? "Claiming…" : "Claim administrator"}</Button>
           </form>
           {claimError && <p role="alert">{claimError}</p>}
         </section>
