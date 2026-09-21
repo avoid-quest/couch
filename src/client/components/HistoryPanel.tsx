@@ -123,7 +123,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
 
   const artwork = (item: HistoryItem, className: string) => <span className={className} aria-hidden="true">{item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} /> : item.thumbnail ? <MediaArtwork thumbnail={item.thumbnail} title={item.title} /> : <History />}</span>;
 
-  const playbackActions = (item: HistoryItem) => <div className="catalog-row-actions flex flex-wrap gap-2">
+  const playbackActions = (item: HistoryItem) => <div className="flex shrink-0 flex-wrap gap-2">
     <Button disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`${item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"} ${item.title}`} onClick={() => void play(item)}><Play aria-hidden="true" />{pending === item.mediaId ? "Starting…" : item.position > 0 ? "Resume" : item.watched ? "Play again" : "Play"}</Button>
     {item.position > 0 && <Button variant="outline" disabled={!connected || !canPlay || !(item.playable || item.libraryItemId || item.queueEntryId) || pending !== null} aria-label={`Play ${item.title} from start`} onClick={() => void play(item, true)}><RotateCcw aria-hidden="true" />From start</Button>}
   </div>;
@@ -137,8 +137,8 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
     {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
     {!loading && !error && !entries.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
     <ul className="history-items space-y-3" aria-busy={loading}>{entries.map(entry => {
-      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key}><Card className="catalog-row gap-3 p-3">
-        <div className="catalog-row-main flex min-w-0 items-start gap-3">
+      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key}><Card className="flex flex-row flex-wrap items-center gap-3 p-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
           <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
         </div>
@@ -151,8 +151,8 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
         {artwork(item, "history-inspect-art")}
         <Button variant="ghost" className="history-inspect-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(item.mediaId); }}><strong>{item.title}</strong><small>{summary(item)}</small></Button>
       </li>;
-      return <li key={entry.key}><Card className="catalog-row gap-3 p-3">
-        <div className="catalog-row-main flex min-w-0 items-start gap-3">
+      return <li key={entry.key}><Card className="flex flex-row flex-wrap items-center gap-3 p-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary"><History aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-base font-medium">{item.title}</strong>{item.watched && <Badge variant="secondary"><Check aria-hidden="true" />Watched</Badge>}</div>
@@ -161,7 +161,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
           <ProgressActions origin={origin} token={token} connected={connected} mediaId={item.mediaId} title={item.title} progress={item} onUpdated={refreshHistory} />
         </div>
         {playbackActions(item)}
-        {!available && <p className="text-sm text-muted-foreground">Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
+        {!available && <p className="w-full text-sm text-muted-foreground">Open this file again on the TV to play it. Its resume point and watched mark are saved.</p>}
       </Card></li>;
     })}</ul>
     {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
