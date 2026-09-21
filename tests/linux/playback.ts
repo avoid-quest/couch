@@ -259,7 +259,7 @@ try {
   assert.equal((await xdotool("windowactivate", "--sync", keyboardWindow)).code, 0);
   await ui.controls();
   await until("native keyboard tests focus the actual GTK WebView", async () => await execute("return document.hasFocus()"));
-  await execute("window.__videoStageBeforeNavigation = document.querySelector('.video-stage'); document.querySelector('[aria-label=\"Stop playback\"]').focus()");
+  await execute("window.__videoStageBeforeNavigation = document.querySelector('.video-stage'); document.querySelector('.tv-playback-controls:not([hidden]) [aria-label=\"Stop playback\"]').focus()");
   await xdotool("key", "shift+Tab");
   await until("keyboard navigation moves focus between native transport controls", async () => await execute("return document.activeElement?.getAttribute('aria-label')") === "Next in queue");
   await until("native keyboard focus has a visible focus indicator", async () => await execute("const style = getComputedStyle(document.activeElement); return (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') || style.boxShadow !== 'none'"));
