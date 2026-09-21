@@ -31,12 +31,16 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     await phone.type("#radio-source-name", name);
     await phone.type("#radio-source-url", url);
     await phone.button("Import playlist", "[aria-labelledby=radio-settings-title]");
-    await until("source import completes and restores its form", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
+    await until("source import completes and restores its form", () => phone.execute("return document.querySelector('#radio-source-name:not(:disabled)')?.value === ''"), 20_000);
   };
   const sourceCard = (id: string) => `[data-radio-source-id="${id}"]`;
   const refresh = async (id: string) => {
+    const before = (await summaries()).find(source => source.id === id)!;
     await phone.button("Refresh playlist", sourceCard(id));
-    await until("source refresh completes", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
+    await until("source refresh completes", async () => {
+      const after = (await summaries()).find(source => source.id === id)!;
+      return (after.updatedAt !== before.updatedAt || after.error !== before.error) && await phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')");
+    }, 20_000);
   };
   const stop = async () => {
     await clients[0]!.command({ type: "stop" });
