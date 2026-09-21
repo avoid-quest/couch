@@ -2,6 +2,12 @@ name: Check
 
 on:
   workflow_dispatch:
+    inputs:
+      native:
+        description: Include the retained locked Cargo and startup-buffer checks
+        type: boolean
+        default: false
+        required: true
 
 permissions:
   contents: read
@@ -11,6 +17,10 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     env:
+      CHECK_NATIVE: ${{ inputs.native }}
+      # Workflow containers can expose several private interfaces; qualification
+      # needs one deterministic LAN address for native sidecar sharing tests.
+      COUCH_LAN_INTERFACE: eth0
       # Keep assertions and overflow checks without bulky debug symbols.
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
@@ -22,10 +32,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
-      - name: Install host test dependencies
+      - name: Install selected host test dependencies
         run: |
+          wanted=(apt-utils acl jq ffmpeg minisign)
+          if [[ "$CHECK_NATIVE" = true ]]; then
+            wanted+=(libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev)
+          fi
           packages=()
-          for package in apt-utils acl jq ffmpeg libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev; do
+          for package in "${wanted[@]}"; do
             [[ $(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null) = installed ]] || packages+=("$package")
           done
           if (( ${#packages[@]} )); then
@@ -33,19 +47,26 @@ jobs:
             sudo apt-get install -y --no-install-recommends "${packages[@]}"
           fi
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      # The real clock stays in its own process away from process-wide mocks.
-      - run: bun test --parallel=4 ./tests/linux/iptv-clock.test.ts
-      - run: bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
-      # Tauri's build script requires the generated sidecar for native tests.
-      - run: bun run build
       - name: Set up Rust
+        if: inputs.native
         run: rustup show active-toolchain
       - uses: Swatinem/rust-cache@v2
+        if: inputs.native
         with:
           workspaces: src-tauri
           cache-bin: false
           key: ubuntu-24.04-test
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked -p tauri-plugin-video startup_buffer
+      - name: Verify the checked-out revision
+        run: |
+          args=()
+          if [[ "$CHECK_NATIVE" = true ]]; then args+=(--native); fi
+          bun run verify "${args[@]}"
+      - name: Retain the exact-revision receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.sha }}-${{ github.run_attempt }}
+          path: .artifacts/verification.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,3 +1,4 @@
+import { remoteSocketUrl } from "./build";
 import { strict as assert } from "node:assert";
 import type { Action, SessionState } from "../../src/shared/protocol";
 import type { RadioStation } from "../../src/shared/radio";
@@ -40,7 +41,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
   };
   const addStation = async (mode: RadioMode, name: string, artist?: string) => {
     const stream = fixture.add(mode, artist);
-    const station: RadioStation = { id: crypto.randomUUID(), name, url: stream.url, homepage: null, countryCode: "IT", codec: "MP3", bitrate: 64, groupTitle: "Reliability fixtures", logoUrl: "http://127.0.0.1:4200/logo.svg" };
+    const station: RadioStation = { id: crypto.randomUUID(), name, url: stream.url, homepage: null, countryCode: "IT", codec: "MP3", bitrate: 64, groupTitle: "Reliability fixtures" };
     await api("/api/radio/favorites", { station });
     stations.push(station);
     await until(`${name} favorite is shared with the other controller`, async () => (await api("/api/radio/favorites", undefined, 1)).favorites.some((item: RadioStation) => item.id === station.id && item.groupTitle === station.groupTitle && item.logoUrl === station.logoUrl));
@@ -51,7 +52,24 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
     await clients[0]!.command({ type: "enqueueRadio", stationId: station.id, entryId, playNow });
     return entryId;
   };
-  const playing = (entryId: string) => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.position > 0.25 && state.player.tracks?.some(track => track.kind === "audio") === true);
+  const playing = (entryId: string) => all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.player.tracks?.some(track => track.kind === "audio") === true);
+  // Radio clock-only ticks intentionally do not broadcast. New subscribers
+  // receive the coordinator's current native observation.
+  const advancing = async (entryId: string) => {
+      const NativeWebSocket = WebSocket as typeof WebSocket & { new(url: string, options: Bun.WebSocketOptions): WebSocket };
+      const socket = new NativeWebSocket(await remoteSocketUrl(origin, clients[0]!.token), { headers: { origin } });
+      return await new Promise<boolean>((resolve, reject) => {
+        const timer = setTimeout(() => { socket.close(); reject(new Error("Radio snapshot timed out")); }, 5_000);
+        socket.onmessage = event => {
+          const message = JSON.parse(String(event.data));
+          if (message.type !== "state") return;
+          clearTimeout(timer); socket.close();
+          const state = message.state as SessionState;
+          observations.push({ at: Date.now(), position: state.player.position, entryId: state.currentEntryId, playbackId: state.player.playbackId, status: state.player.status, nowPlaying: state.player.nowPlaying ?? null, retry: state.radioRetry ?? null });
+          resolve(message.state.currentEntryId === entryId && message.state.player.position > 0.25);
+        };
+      });
+  };
   const backoff = (entryId: string, attempt = 1) => all(state => state.currentEntryId === entryId && state.player.status === "loading" && state.radioRetry?.attempt === attempt && typeof state.radioRetry.retryAt === "number" && state.radioRetry.retryAt > Date.now());
   const unchangedAfterDeadline = async (key: string, count: number, retryAt: number, action: string) => {
     await Bun.sleep(Math.max(0, retryAt - Date.now()) + 350);
@@ -64,26 +82,33 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
     const metadata = await addStation("metadata", "Acceptance changing radio", suppliedRadioArtist);
     const plain = await addStation("plain", "Acceptance untagged radio");
     await httpRemote.minimize();
-    await ui.section("Radio");
+    await ui.section("Saved");
     await ui.button(`Play ${metadata.station.name}`);
     let metadataEntryId = "";
     await until("TV station Play receives native ICY title and a genuinely supplied artist on both controllers", () => {
       metadataEntryId = first().currentEntryId ?? "";
       return !!metadataEntryId && playing(metadataEntryId) && all(state => state.queue.find(entry => entry.id === metadataEntryId)?.title === metadata.station.name && state.player.nowPlaying?.title === initialRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist);
     }, 25_000);
+    await until("native radio clock advances in a fresh authoritative snapshot", () => advancing(metadataEntryId));
     const playbackId = first().player.playbackId;
-    await until("native TV displays current-track metadata separately from its stable station name", async () => await ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${initialRadioTitle}`]));
+    await ui.section("Now");
+    // Current TV artwork keeps the station title; native ICY metadata is asserted
+    // in both session snapshots above and below, independently of presentation.
     await httpRemote.restore();
-    await httpRemote.ui.section("Radio");
-    await until("paired HTTP phone displays the same observed current radio track", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${initialRadioTitle}`]));
+    await httpRemote.ui.section("Now");
+    await until("paired HTTP phone displays the playing station", async () => await httpRemote.ui.execute("return document.querySelector('.media-title')?.textContent === arguments[0]", [metadata.station.name]));
+    await until("phone displays native ICY title and artist", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${initialRadioTitle}`]));
     fixture.setTitle(metadata.key, changedRadioTitle);
     await until("a second ICY title updates while the same native playback continues", () => all(state => state.player.playbackId === playbackId && state.player.nowPlaying?.title === changedRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist && state.queue.find(entry => entry.id === metadataEntryId)?.title === metadata.station.name), 15_000);
-    for (const driver of [ui, httpRemote.ui]) await until("radio metadata renders HTML-looking track text literally", async () => await driver.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0] && !document.querySelector('.radio-now-playing [data-radio-fixture]')", [`${suppliedRadioArtist} · ${changedRadioTitle}`]));
+    await until("phone displays the changed native ICY title", async () => await httpRemote.ui.execute("return document.querySelector('.radio-now-playing')?.textContent === arguments[0]", [`${suppliedRadioArtist} · ${changedRadioTitle}`]));
+    for (const driver of [ui, httpRemote.ui]) assert.equal(await driver.execute("return !!document.querySelector('[data-radio-fixture]')"), false, "Radio metadata never inserts HTML");
     await assertResponsive(httpRemote.ui, "Phone radio current track");
     await httpRemote.screenshot("http-radio-metadata");
     assert.ok(fixture.requests(metadata.key).every(request => request.icy), "Native mpv explicitly requests ICY metadata");
 
+    await httpRemote.ui.section("Saved");
     await httpRemote.ui.button(`Play ${plain.station.name}`);
+    await httpRemote.ui.section("Now");
     let plainEntryId = "";
     await until("phone station replacement plays an untagged stream and clears previous track metadata", () => {
       plainEntryId = first().currentEntryId ?? "";
@@ -145,6 +170,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
       // A following playable item makes accidental automatic queue advance visible.
       await enqueue(plain.station, false);
       await clients[0]!.command({ type: "play", entryId: brokenEntryId });
+      if (mode !== "stall") await until(`native radio ${mode} advances before disconnecting`, () => advancing(brokenEntryId));
       await until(`native radio ${mode} reaches a bounded reconnect without advancing the queue`, () => backoff(brokenEntryId) && fixture.requests(broken.key).length === 1, mode === "stall" ? 30_000 : 20_000);
       if (mode !== "stall") assert.ok(observations.some(value => value.entryId === brokenEntryId && value.status === "playing" && value.position > 0), `${mode} disconnect follows observed native playback`);
       const retryAt = first().radioRetry!.retryAt!;
@@ -163,6 +189,7 @@ export async function verifyRadio(context: RadioContext, fixture: RadioFixture) 
       assert.equal(response.status, 204);
     }
     await until("radio acceptance preserves the existing queue identities and order", () => all(state => JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(originalQueue.map(entry => entry.id))));
+    await httpRemote.restore();
     await httpRemote.ui.section("Queue");
     await httpRemote.minimize();
     await ui.section("Queue");

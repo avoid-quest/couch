@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential ca-certificates curl git pkg-config unzip \
+    build-essential ca-certificates curl git pkg-config unzip acl jq minisign \
     libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
     libmpv-dev libgl1-mesa-dri libgl-dev \
     ffmpeg xvfb xauth dbus-x11 openbox xdotool webkit2gtk-driver fonts-dejavu-core \
