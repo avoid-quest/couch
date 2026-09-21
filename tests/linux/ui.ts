@@ -52,8 +52,8 @@ export class UiDriver {
   async controls() {
     if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show TV controls");
     else if (await this.execute("return !!document.querySelector('.tv-playback-controls[hidden]')")) await this.key("i");
-    else if (await this.execute("return !!document.querySelector('.remote-browse, .remote-session') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
-    await this.waitFor("Playback controls become visible", () => this.execute("const native = document.querySelector('.tv-playback-controls:not([hidden]) .player-controls'); const remote = !document.querySelector('.tv-shell') && document.querySelector('.player-controls'); return !!(native || remote) && (native ?? remote).getClientRects().length > 0 && !(native ?? remote).closest('[hidden]')"));
+    else if (await this.execute("return !!document.querySelector('.remote-control') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
+    await this.waitFor("Playback controls become visible", () => this.execute("const native = document.querySelector('.tv-playback-controls:not([hidden]) .player-controls'); const remote = !document.querySelector('.tv-shell') && (document.querySelector('.remote-pad') || document.querySelector('.player-controls')); return !!(native || remote) && (native ?? remote).getClientRects().length > 0 && !(native ?? remote).closest('[hidden]')"));
   }
 
   async watching() {
