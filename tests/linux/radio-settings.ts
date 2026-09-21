@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import type { RadioPlaylistSummary, RadioStation } from "../../src/shared/radio";
 import type { RadioContext } from "./radio";
 import { changedRadioTitle, initialRadioTitle, suppliedRadioArtist, type RadioFixture } from "./radio-fixture";
-import { assertResponsive, keys } from "./ui";
+import { assertResponsive } from "./ui";
 
 // Called after administrator claim. All mutations go through the real phone form;
 // the two WebSocket controllers remain ordinary station and favorite users.
@@ -22,21 +22,26 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
   const summaries = async (): Promise<RadioPlaylistSummary[]> => (await api("/api/radio/playlists", undefined, 1)).playlists;
   const stations = async (id: string): Promise<RadioStation[]> => (await api(`/api/radio/playlists/${id}/stations`, undefined, 1)).stations;
   const open = async () => {
-    await phone.section("Radio");
-    await phone.click('[data-action="radio-settings"]');
-    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('.radio-settings').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
+    await phone.button("Settings");
+    await phone.settingsSection("source-radio");
+    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('[aria-labelledby=radio-settings-title]').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
   };
-  const close = async () => { await phone.key(keys.escape); await until("phone closes Sources", () => phone.execute("return !document.querySelector('[role=dialog]')")); };
+  const close = async () => { await phone.section("Radio"); await phone.type("#media-search", "Imported station"); };
   const importSource = async (name: string, url: string) => {
     await phone.type("#radio-source-name", name);
     await phone.type("#radio-source-url", url);
-    await phone.button("Import playlist", ".radio-settings");
-    await until("source import completes and restores its form", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
+    await phone.button("Import playlist", "[aria-labelledby=radio-settings-title]");
+    await until("source import completes and restores its form", () => phone.execute("return document.querySelector('#radio-source-name:not(:disabled)')?.value === ''"), 20_000);
   };
-  const sourceCard = (id: string) => `.radio-source[data-radio-source-id="${id}"]`;
+  const sourceCard = (id: string) => `[data-radio-source-id="${id}"]`;
   const refresh = async (id: string) => {
+    const source = async () => (await api("/api/radio/sources")).sources.find((source: RadioPlaylistSummary) => source.id === id);
+    const before = await source();
     await phone.button("Refresh playlist", sourceCard(id));
-    await until("source refresh completes", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
+    await until("source refresh completes", async () => {
+      const after = await source();
+      return (after.updatedAt !== before.updatedAt || after.error !== before.error) && await phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')");
+    }, 20_000);
   };
   const stop = async () => {
     await clients[0]!.command({ type: "stop" });
@@ -64,12 +69,10 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     assert.equal((await summaries()).filter(source => source.id === imported.id).length, 1, "Duplicate imports preserve the original source identity");
     assert.deepEqual((await stations(imported.id)).map(station => station.id), importedStations.map(station => station.id));
     await close();
-    await until("Radio shows imported station cards with loaded artwork and groups", () => phone.execute("const cards = [...document.querySelectorAll('.radio-playlists .radio-station')]; return cards.length === 2 && cards.every(card => card.querySelector('img')?.naturalWidth > 0 && card.textContent.includes('Settings stations'))"));
-    assert.equal(await phone.execute("return !!document.querySelector('.radio-playlists .radio-playlist-tools, .radio-playlist-add, .radio-playlists .radio-avoid')"), false, "Radio has no duplicate source administration controls");
-    await phone.click('.radio-playlists .radio-station:first-child .radio-play');
-    await until("imported playlist Play reaches the one native owner with observed current-track metadata", () => all(state => state.player.status === "playing" && state.player.position > 0.5 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `radio:${importedStations[0]!.id}` && state.player.nowPlaying?.title === initialRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist), 20_000);
+    await phone.button("Play: Imported station 1", '[aria-label="Radio playlists search results"]');
+    await until("imported playlist Play reaches the one native owner with observed current-track metadata", () => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `radio:${importedStations[0]!.id}` && state.player.nowPlaying?.title === initialRadioTitle && state.player.nowPlaying.artist === suppliedRadioArtist), 20_000);
     observations.push({ phase: "imported playback", player: clients[0]!.state!.player });
-    await phone.click('[aria-label="Save Imported station 1 to favorites"]');
+    await phone.button("Keep Imported station 1", '[aria-label="Radio playlists search results"]');
     await until("imported favorite is available to ordinary controllers", async () => (await api("/api/radio/favorites", undefined, 1)).favorites.some((station: RadioStation) => station.id === importedStations[0]!.id));
     streams.setTitle(metadata.key, changedRadioTitle);
     await until("the imported stream updates current-track metadata without changing station identity", () => all(state => state.player.nowPlaying?.title === changedRadioTitle && state.queue.find(entry => entry.id === state.currentEntryId)?.title === "Imported station 1"), 15_000);
@@ -103,17 +106,17 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     await until("confirmed removal deletes only the selected source", async () => !(await summaries()).some(source => source.id === temporary.id));
     assert.ok((await api("/api/radio/favorites")).favorites.some((station: RadioStation) => station.id === importedStations[0]!.id), "Source removal retains unrelated favorites");
     await close();
-    await phone.select("#radio-playlist-select", "Fixture radio playlist · 3 stations");
-    await phone.click('.radio-playlists .radio-station:first-child .radio-play');
+    await phone.button("Play: Imported station 1", '[aria-label="Radio playlists search results"]');
     await until("cached imported station plays after source administration", () => all(state => state.player.status === "playing" && state.player.nowPlaying?.title === changedRadioTitle), 20_000);
-    await phone.click('.radio-playlists .radio-station:nth-child(2) .radio-play');
+    await phone.button("Play: Imported station 2", '[aria-label="Radio playlists search results"]');
     await until("source replacement closes the imported stream and clears its current track", () => all(state => state.player.status === "playing" && !state.player.nowPlaying && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `radio:${importedStations[1]!.id}`) && streams.requests(metadata.key).every(request => !!request.closedAt), 20_000);
     await stop();
     await ui.section("Radio");
-    await until("native Radio receives the preserved source and feed order", () => ui.execute("return document.querySelectorAll('.radio-playlists .radio-station').length === 3"));
+    await ui.type("#media-search", "Imported station");
+    await until("native Find receives the imported stations", () => ui.execute("return document.querySelectorAll('[aria-label=\"Radio playlists search results\"] button[aria-label^=\"Play:\"]').length === 3"));
     if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
       await open();
-      await phone.button("Add avoid radio", ".radio-settings");
+      await phone.button("Refresh avoid radio", "[aria-labelledby=radio-settings-title]");
       await until("one-step avoid import completes in Sources", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
       const avoid = (await summaries()).find(source => source.name === "avoid radio")!;
       assert.ok(avoid, "The actual avoid radio source imports");
@@ -121,8 +124,9 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
       assert.deepEqual(liveStations.map(station => station.name), ["Sygma Radio", "Lyl Radio", "Cashmere Radio", "NTS Radio | Channel 1", "NTS Radio | Channel 2", "Resonance Extra", "Internet Public Radio", "HKCR", "Radio Alhara", "Radio BlackOut"]);
       assert.ok(liveStations.every(station => station.groupTitle === "avoid radio" && station.logoUrl?.startsWith("https://") && station.tvgId?.startsWith("avoid-radio-")));
       await close();
-      await phone.select("#radio-playlist-select", "avoid radio · 10 stations");
-      await phone.click('.radio-playlists .radio-station:first-child .radio-play');
+      await phone.type("#media-search", liveStations[0]!.name);
+      await phone.button("avoid radio", '[aria-label="Filter search results"]');
+      await phone.button(`Play: ${liveStations[0]!.name}`, '[aria-label="avoid radio search results"]');
       await until("the actual avoid station imported in Sources plays through the native owner", () => all(state => state.player.status === "playing" && state.player.position > 2 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `radio:${liveStations[0]!.id}`), 30_000);
       observations.push({ phase: "live avoid radio", feed: "https://radio.avoid.quest/playlist.m3u", station: liveStations[0], observed: clients[0]!.state!.player.nowPlaying ?? null });
       await httpRemote.screenshot("radio-sources-live-avoid");

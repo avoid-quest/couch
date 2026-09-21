@@ -1,131 +1,59 @@
-# Linux native playback tests
+# Linux qualification
 
-Run `bun run test:linux` with Docker running. The first run downloads the Ubuntu24.04 toolchain and builds Rust dependencies. Later runs reuse named Docker volumes. The source tree is mounted read-only and copied inside the disposable container, so Linux builds cannot overwrite host binaries or lockfiles.
+Run `bun run test:linux` with Docker available. The launcher requires a clean
+commit, creates a Git bundle, and checks that exact revision out in a disposable
+Ubuntu 24.04 container. It keeps Bun, Cargo, and build caches in named volumes;
+application data and artifacts are disposable.
 
-The tests launch the actual Tauri application through official `tauri-driver` and `WebKitWebDriver`, under Xvfb and Openbox. Bun sends W3C WebDriver requests directly, so there is no production automation plugin or application test endpoint. Two paired WebSocket clients and a separate WebKit HTTP browser check the same native player state. ffmpeg generates a 20-second clip with two audio tracks, subtitles and chapters, an MP3, and DASH fragments for an HTML5 media page resolved by the real yt-dlp executable.
+The default journey first runs `bun run check`, compiles the debug Tauri app and
+sidecar, runs the locked Rust coverage, then starts the compiled-browser remote
+journey. It next runs `playback.ts` against the actual Tauri/libmpv process.
+The first-use fixture leaves the operating-mode choice unset; the connection
+journey uses a configured-local fixture. They must not share application data.
 
-The HTTP browser pairs through the real form and tests a 390px phone viewport, touch targets, keyboard controls, dialogs and reconnects. Fractional GTK scaling supplies that viewport despite MiniBrowser's minimum window width. Pointer actions use actual X11 input and assert the clicked DOM target. The TV tests check directional keys, visible focus, Escape and focus restoration, retained browsing state and a continuously mounted VideoStage. Both builds must emit the generated shadcn Mira theme, Inter font and Tailwind utilities.
+The default journey retains browser transport, native subtitles and pixel
+checks, reconnect, radio metadata and real-clock retries, yt-dlp/DASH selection,
+library progress and restart, playback preferences, music/CUE, ReplayGain audio
+capture, source credentials and persistent catalog checks. Real
+Jellyfin qualification additionally requires the documented `--jellyfin` fixture.
+See [native coverage](native-coverage.md) for the retired UI checks and their
+current executable replacements. A successful individual helper or diagnostic
+iteration is not a passing default journey.
 
-The native window must retain X11 fullscreen state and fill its display at
-startup, while browsing, during playback, after Stop and after restart. The HTTP
-app must have no video surface. `tv-remote.ts` sends Home, Back, Info, directions
-and OK through the actual phone buttons, including native transport, sliders and
-Radix menus, while phone browsing remains independent. The test phone shares the
-virtual X11 display, so focus/pixel checks foreground the TV and restore the phone
-before further input. Physical phones do not take focus from the TV window.
+`bun run test:linux --built-remote` runs only the shared checks, production
+build, and `built-remote.ts`. Its browser talks to the compiled sidecar and
+checks exact Vite bytes, pairing, deep-link refresh, browser Play and Stop, and
+worker registration on loopback. Its native pipe peer is simulated. It is not
+libmpv, physical-display, or hardware-audio proof.
 
-`folder-settings.ts` registers the generated media under `/mnt` through the
-canonical Sources browser. The administrator HTTP phone adds and scans a folder,
-plays it on the native TV, rejects a duplicate, and recovers the original folder
-after an empty replacement is refused. After restart it tests the saved identity,
-plays again, and removes the source while preserving files, current playback,
-queue entries and watching history; a later Play must fail. The installed-T480
-phone demonstration remains a separate physical acceptance gate for issue #17.
+`bun run test:linux --connection` runs the same shared and built-browser checks,
+then `connection-journey.ts`. It starts a configured TV with disposable data
+and exercises Connection deep links while identity loads, ordinary-controller
+restrictions, UI promotion and demotion, revocation and visible pairing-required
+state, a fresh replacement credential, refresh-based reconnect, and a real
+browser recovery claim after restarting the native app. The first paired browser
+is intentionally the administrator; the focused
+`src/client/session/connection-lifetime.test.tsx` suite separately proves query
+cache retirement, stale-read cancellation, role/revocation transitions, and
+same-address installation replacement. It is client-state proof, not a second
+native installation at the same address.
 
-`claim.ts` opens the unclaimed TV's real Settings and verifies its address-only
-QR, ordinary pairing code and separate administrator code. The HTTP phone claims
-administration, saves the TV name, and retains its role and name after a desktop
-restart. The TV and two WebSocket controllers must observe the committed changes
-without changing the queue or watching profile. Unpaired/ordinary HTTP requests
-and reused claim codes must fail. Server tests separately cover competing claims,
-expiry, trusted-local recovery and exact legacy credential-hash migration.
+`bun run test:linux --diagnostics` uses the same build and environment, then runs
+`diagnostics.ts` with separate configured-local data. It checks native report and
+export facts, ordinary-controller denial, secret/path redaction and uninterrupted
+native playback.
 
-The same native gate pre-opens the actual Library folders and Jellyfin setup
-dialogs with physical input, then sends paired directional commands. Remote OK
-and arrows must not invoke their protected actions, while Back/Home can dismiss
-them. A separate DOM regression models a nested Radix portal, with an unguarded
-positive control proving the input reached it. It does not claim a shipped
-nested settings control. The gate saves `administrator-claim.json`,
-`administrator-setup-qr.svg` and the HTTP administrator screenshot in its artifact
-directory. First claiming uses disposable test data; the persistent development
-preview is left unclaimed for its owner.
-
-Local progress checks cover observed stop/resume, Play from start, rewind, source replacement, loading and paused profile guards, actual EOF, watched actions and History. Two watching profiles retain separate records across desktop restart. The Jellyfin option also tests Continue watching and native resume through its real host progress reports. It temporarily allows the generated short clip to remain resumable, then restores the server's duration policy. The native mpv resume regression verifies that the next load clears the previous start offset.
-
-External subtitle tests use the actual TV and HTTP phone file inputs, then
-observe libmpv track selection. SRT/ASS on/off X11 comparisons require visible
-subtitle glyphs and unchanged upper video pixels. Invalid/oversized uploads,
-private file permissions, source cleanup and profile/device preferences are
-checked too. Two profiles select different audio/subtitle defaults after a real
-desktop restart. Jellyfin's movie fixture has an external Italian SRT sidecar.
-The native `external_subtitles` regression additionally covers preload selection,
-missing files, reset and the blocking HTTP probe that requires Bun prefetch.
-
-Music fixtures live in `/mnt/music-fixtures`, separate from the existing video folder.
-Tagged MP3, FLAC and M4A files verify the maintained parser in the compiled Bun
-sidecar, compilation album artists, disc/track ordering and embedded artwork
-decoded in both native and HTTP views. A single without an album remains reachable
-from its artist. TV/phone tests cover album queue/play, saved playlist operations,
-stale revisions, shared invalidation, keyboard focus and restart without autoplay.
-
-Two adjacent FLAC files decode byte-for-byte to an unsplit nonperiodic PCM
-reference. `music-audio.ts` captures the actual native PulseAudio monitor, aligns
-reference samples on both sides of the transition, measures inserted silence and
-retains conservative bounds for missing/repeated samples. WAV, fixture hashes,
-observed playback IDs, waveform and JSON measurements accompany the run. These
-software-output measurements do not qualify physical sound or gapless playback.
-
-Artifacts go to `.artifacts/linux/`, including native screenshots, passed checks, toolchain versions, source and binary hashes, process RSS and debug binary sizes. Each run copies its compiled app and sidecar before launching, so another build cannot replace its executables. Screenshots hide temporary pairing and administrator codes. Pixel assertions check both the WebView and native video after seeking and resizing. The container uses Xvfb software rendering, the application's explicit `COUCH_BASIC_RENDERING=1` option, and a clocked PulseAudio null sink. That option sets mpv's `gpu-dumb-mode=yes`, disabling advanced scalers and custom shaders. Default mpv rendering produced black or corrupted frames even in standalone mpv on Ubuntu 24.04 and 26.04 in this Docker environment. The suite therefore qualifies the basic rendering path. It cannot qualify advanced GPU rendering, hardware decoding, physical audio output, HDMI behavior, HDR, CEC, or real Wi-Fi reliability. Debug binary sizes and software-renderer memory use are not release-build measurements.
-
-To include a real disposable Jellyfin server with generated credentials and media:
+The tests use Tauri WebDriver and WebKit WebDriver under Xvfb, Openbox, software
+rendering, and a PulseAudio null sink. They use no production test endpoint.
+Artifacts go to `.artifacts/linux/`; screenshots hide temporary pairing and
+claim codes. This environment does not qualify a physical display, HDMI audio,
+Wi-Fi, installed package, recovery over SSH, hardware decoding, HDR, CEC, or
+real appliance restart behavior. Public-provider checks stay opt-in:
 
 ```sh
-bun run test:linux --jellyfin
+bun run test:linux --providers tests/linux/providers.example.json
+bun run test:linux --provider-catalogs
 ```
 
-That option starts the official Jellyfin 10.11.11 image on an isolated Docker network, configures movie and music libraries, and tests the native app's login, catalog, authenticated playback and playback reports. Cleanup removes the temporary server, network and credential file while retaining downloaded images and generated media. `--jellyfin-config path/to/fixture.json` can reuse an already running test fixture instead.
-
-The default suite also imports a generated M3U playlist, checks its logos and groups, saves an imported favorite, refreshes its station list, and verifies restart persistence. It adds a local webpage through the native form with an empty title and a quality cap, verifies real yt-dlp title/artwork extraction and native DASH playback, then checks queue metadata and quality after restart. A second DASH fixture puts audio before blue 360p and red 720p video representations. Native form choices for Best, 480p and 720p must select the expected video for both remotes and paint its color across at least 98% of the sampled X11 pixels. Loading an ordinary multitrack file afterward must restore its tracks and video pixels. The suite also runs the native mpv DASH selection regression explicitly.
-
-The quality check opens Settings on the TV and two separate 390px HTTP browser
-sessions. It saves different browser defaults, reloads each remote, queues a
-saved Online card and pasted links, tests one-entry overrides and confirms that
-changing a default preserves existing queue entries. Bandcamp, known audio
-files and direct media retain their audio-only controls. Screenshots and
-`video-quality.json` accompany the binary and source hashes. Public Online
-search remains a separate live provider check.
-
-A saved YouTube card exercises native Online favorites, shared invalidation, removal, and restart without contacting YouTube. The Bun checks use real yt-dlp against local HTML/HLS fixtures to verify quality caps and audio-only fallback, and test verified media-tool installation and failed-update recovery.
-
-Add `--live-radio` to test a real station discovered through Radio Browser, import radio.avoid.quest's ten-station collection, and play its Sygma station. Those optional checks depend on the public directories and stations being reachable. The image includes yt-dlp 2026.08.19 and Deno 2.9.6 for provider checks. The local HTML/DASH test does not qualify YouTube or other public extractors.
-
-Run `bun run test:linux --providers tests/linux/providers.example.json` for separate YouTube, Twitch, RaiPlay and Sygma checks. You can supply another JSON array of `{ "name": "Public stream", "url": "https://example.com/video", "kind": "webpage", "video": true }`; use `"kind": "direct"` for a media URL and `"video": false` for audio-only streams. Optional `seekPosition` and `observeSeconds` control where playback is checked. Each case uses the native Add media form, two paired remotes, actual libmpv tracks and position, and an X11 screenshot. A failed provider does not prevent the remaining cases from running. Results are preserved by URL in `.artifacts/linux/providers/native-results.json`, with the test date, toolchain and binary hashes. Public streams can disappear or become unavailable after a successful test.
-
-Run `bun run test:linux --provider-catalogs` to exercise the native Online panel against public catalogs. It searches YouTube for Big Buck Bunny and Twitch for LofiGirl, browses RaiPlay live channels and news program episodes, searches RaiNews24, and follows the recent replay date/channel cards. Each selected card must provide artwork, save to both remotes, and start native audio/video through Play on TV with a 720p cap. Queue metadata, quality, favorites and existing remote pairing must survive a desktop restart. Results and screenshots go to `.artifacts/linux/providers/`, including `catalog-persistence.json`. These opt-in checks can fail when public search rankings, catalogs, stream availability or regional access change. Use either `--providers` or `--provider-catalogs` in one run.
-
-The provider catalog gate also opens two public Bandcamp tracks and Blazo's
-22-track album. It verifies ordered album queue/play from the TV and a real
-390px HTTP browser, artwork, Next, source replacement, Stop, reconnect and
-restart without autoplay. A deliberately missing track must show a failure
-without changing the queue. These checks qualify the played samples, not all
-tracks in an album or account-only content.
-
-The 2026-09-05 administrator/Settings run passed 450 native/HTTP checks, 295 Bun
-tests with two skipped and 2,295 assertions, twelve app Rust/ABI tests and five
-explicit native regressions. The separate provider gate passed all eleven cases
-with identical production binaries. Additional in-app browser recordings cover
-General and Connection at 320, 375, 390, 768, 1024, 1440 and 1920px widths, with
-visual inspection of the final frames and the native setup dialog. The
-[usage guide](../../docs/usage.md#check-and-build) records the remaining checks and
-qualification limits.
-
-The image and build caches remain for later runs. `docker run --rm` removes the disposable test container. Nothing is published and no host ports are exposed.
-
-Official references: [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/), [manual WebDriver setup](https://v2.tauri.app/develop/tests/webdriver/manual-setup/), [Tauri Selenium example and capabilities](https://v2.tauri.app/develop/tests/webdriver/example/selenium/).
-
-First-run setup has its own fresh-data journey in `onboarding.ts`. Run it with
-`COUCH_DATA_DIR` pointing to a missing disposable database, the joined native
-binaries in `/work/bin`, a virtual X11 output and a Pulse-compatible null sink.
-It uses the real phone claim/name, display preview/confirm and sound selection/test
-controls, captures non-silent test PCM, skips optional sources, and restarts both
-the browser and native app. After completion it adds a generated local video
-through normal Folder Settings, scans and plays it from the phone, checks native
-video pixels, stops playback and checks home after another app restart. Its screen/sound confirmation clicks represent only
-the virtual fixture. Installed-target picture, audible sound, local playback and
-machine reboot remain separate acceptance gates.
-
-The other native entrypoints call `seedConfiguredFixture()` before launch. This
-seeds only completion in a new disposable database and preserves their existing
-pairing and claim scenarios. It does not qualify first-run setup. Package fixtures
-also explicitly start configured. There is no production bypass or automatic
-completion in the shared HTTP pairing helper.
+Those checks depend on external services and are recorded separately from the
+deterministic local journeys.
