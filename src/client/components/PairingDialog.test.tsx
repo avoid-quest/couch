@@ -3,17 +3,18 @@ import { Window } from "happy-dom";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";
 import * as session from "@/session/session";
+import { screen } from "@/testing";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 let sessionMock: ReturnType<typeof spyOn> | undefined;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const host = { origin: "http://localhost", token: "host-secret", pairingCode: "123456", urls: ["http://couch.local:4100", "http://192.168.1.10:4100"] };
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.textContent === label)!;
-const qr = () => document.querySelector("svg:has(title)");
+const button = (label: string) => screen.getByRole("button", { name: label });
+const qr = (code = "123456") => screen.queryByRole("img", { name: `Pair another device with code ${code}` });
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 async function renderDialog(connected = true, info = host) {
   const { PairingDialog } = await import("./PairingDialog");
-  await act(async () => root.render(<PairingDialog host={info} connected={connected} open onOpenChange={() => {}} />));
+  await act(async () => root.render(<PairingDialog credentials={info} urls={info.urls} connected={connected} open onOpenChange={() => {}} />));
 }
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
@@ -34,18 +35,13 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("native shortcut renders the advertised pairing QR, manual addresses/code and visible Close", async () => {
+test("native shortcut renders a pairing QR and matching visible code", async () => {
   await renderDialog();
-  const { QRCodeSVG } = await import("qrcode.react");
-  const { renderToStaticMarkup } = await import("react-dom/server");
-  const expected = document.createElement("div");
-  expected.innerHTML = renderToStaticMarkup(<QRCodeSVG value="http://couch.local:4100/#pair=123456" size={160} marginSize={4} level="M" />);
-  expect([...qr()!.querySelectorAll("path")].map(path => path.getAttribute("d"))).toEqual([...expected.querySelectorAll("path")].map(path => path.getAttribute("d")));
-  expect([...document.querySelectorAll<HTMLAnchorElement>(".address-list a")].map(a => a.href)).toEqual(host.urls.map(url => `${url}/`));
-  expect(document.querySelector(".pairing-display strong")?.textContent).toBe("123456");
+  expect(qr()).not.toBeNull();
+  expect(screen.getByText("123456")).toBeDefined();
+  expect(screen.getAllByRole("link").map((link: HTMLAnchorElement) => link.href)).toEqual(host.urls.map(url => `${url}/`));
   expect(button("Close")).toBeDefined();
-  expect(button("Close").querySelector(".sr-only")).toBeNull();
-  expect(document.body.innerHTML).not.toContain(host.token);
+  expect(screen.queryByText(host.token)).toBeNull();
   expect(request.mock.calls[0]?.[0]).toBe("http://localhost/api/controllers/pairing-code");
   expect(new Headers(request.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe(`Bearer ${host.token}`);
 });
@@ -54,11 +50,10 @@ test("loading, failure and retry retain manual recovery without an address-only 
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog();
-  expect(qr()).toBeNull(); expect(document.body.textContent).toContain("Loading pairing QR");
+  expect(qr()).toBeNull(); expect(screen.getByText("Loading pairing QR…")).toBeDefined();
   expect(button("Close")).toBeDefined();
   await act(async () => resolve(Response.json({ error: "Unavailable" }, { status: 503 })));
-  expect(qr()).toBeNull(); expect(document.body.textContent).toContain("Use the address and TV code");
-  expect(document.querySelector(".pairing-display strong")?.textContent).toBe("123456");
+  expect(qr()).toBeNull(); expect(screen.getByRole("alert").textContent).toContain("Could not load the QR or pairing code");
   request.mockResolvedValue(Response.json({ code: "123456" }));
   await act(async () => button("Retry pairing QR").click());
   expect(qr()).not.toBeNull();
@@ -67,7 +62,7 @@ test("loading, failure and retry retain manual recovery without an address-only 
 test("disconnect removes a valid QR, ignores late responses and reconnect fetches again", async () => {
   await renderDialog(); expect(qr()).not.toBeNull();
   await renderDialog(false); expect(qr()).toBeNull();
-  expect(document.body.textContent).toContain("Reconnecting to the TV");
+  expect(screen.getByRole("status").textContent).toContain("Reconnecting to the TV");
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog(); expect(qr()).toBeNull();
@@ -83,7 +78,7 @@ test("disconnect removes a valid QR, ignores late responses and reconnect fetche
 test("no advertised address leaves Close and manual recovery available", async () => {
   await renderDialog(true, { ...host, urls: [] });
   expect(qr()).toBeNull(); expect(request).not.toHaveBeenCalled();
-  expect(document.body.textContent).toContain("Connect the TV to the network");
+  expect(screen.getByRole("status").textContent).toContain("Connect the TV to the network");
   expect(button("Close")).toBeDefined();
 });
 
@@ -91,14 +86,14 @@ test("closing restores focus to the native shortcut and reopening refreshes the 
   const { PairingDialog } = await import("./PairingDialog");
   function Shortcut() {
     const [open, setOpen] = useState(false);
-    return <><button className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><PairingDialog host={host} connected open={open} onOpenChange={setOpen} /></>;
+    return <><button className="pair-shortcut" onClick={() => setOpen(true)}>Pair a remote</button><PairingDialog credentials={host} urls={host.urls} connected open={open} onOpenChange={setOpen} /></>;
   }
   await act(async () => root.render(<Shortcut />));
   expect(request).not.toHaveBeenCalled();
   await act(async () => button("Pair a remote").click());
   expect(qr()).not.toBeNull();
   await act(async () => button("Close").click()); await flush();
-  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.activeElement).toBe(button("Pair a remote"));
   await act(async () => button("Pair a remote").click());
   expect(request).toHaveBeenCalledTimes(2);

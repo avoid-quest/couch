@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import type { Controller } from "../../../../shared/controllers";
+import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
 import { fireEvent, screen, within } from "../../../testing";
 
 let root: Root, window: Window;
@@ -13,13 +13,13 @@ let devices: Controller[];
 const button = (label: string) => screen.getByRole("button", { name: label });
 const flush = () => act(async () => { await Bun.sleep(20); });
 
-async function render() {
+async function render(identity: ControllerIdentity = { authority: "administrator", controller: self, claimAvailable: false }, remoteControlEnabled = false) {
   const { ConnectionsSettings } = await import("./ConnectionsSettings");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   await act(async () => root.render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        host={{ origin: "http://localhost", token: "admin", pairingCode: "246810", urls: ["http://localhost:4100"] }} identity={{ authority: "administrator", controller: self, claimAvailable: false }} administratorClaimed />
+        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={remoteControlEnabled} setRemoteControlEnabled={() => {}} administratorClaimed />
     </QueryClientProvider>
   ));
   await flush();
@@ -29,7 +29,7 @@ beforeEach(async () => {
   calls.length = 0;
   devices = [self, { id: "other", name: "Phone", role: "controller", createdAt: 1, lastSeenAt: 2 }];
   window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -68,14 +68,26 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("connections shows the pairing code and every device with its role, minus own-device actions", async () => {
+test("an administrator opens the pairing dialog, then sees every device with its role", async () => {
   await render();
-  expect(document.body.textContent).toContain("246810");
-  expect(document.body.textContent).toContain("Browser");
-  expect(document.body.textContent).toContain("(this device)");
-  expect(document.body.textContent).toContain("Phone");
+  await act(async () => { fireEvent.click(button("Pair a remote")); });
+  await flush();
+  expect(screen.getByRole("img", { name: "Pair another device with code 246810" })).toBeDefined();
+  await act(async () => { fireEvent.click(button("Close")); });
+  expect(screen.getByText("Browser")).toBeDefined();
+  expect(screen.getByText("(this device)")).toBeDefined();
+  expect(screen.getByText("Phone")).toBeDefined();
   expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
   expect(within(screen.getByText("(this device)").closest("li")!).queryAllByRole("button")).toHaveLength(0);
+});
+
+test("the host can change whether this computer accepts remotes", async () => {
+  await render({ authority: "host", controller: null, claimAvailable: false });
+  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remote control" })); });
+  await flush();
+  const write = calls.find(call => call.path === "/api/settings/sharing")!;
+  expect(write.method).toBe("POST");
+  expect(write.body).toEqual({ enabled: true });
 });
 
 test("promoting a controller writes the role and reloads the list", async () => {
