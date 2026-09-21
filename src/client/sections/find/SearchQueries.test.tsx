@@ -156,3 +156,22 @@ test("retiring a connection client cancels its browse while new credentials use 
   expect(screen.queryByRole("button", { name: "Play: Retired result" })).toBeNull();
   expect(previous.getQueryCache().getAll()).toEqual([]);
 });
+
+for (const source of ["Library", "Jellyfin"] as const) test(`${source} repeats the same search after a failed attempt`, async () => {
+  const { SearchSource } = await import("./SearchSource");
+  let fails = true;
+  fetchSpy.mockImplementation((async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/jellyfin") return Response.json({ connected: true });
+    if (path === "/api/library/sources") return Response.json({ sources: [{ name: "Movies", status: "ready" }] });
+    return fails ? Response.json({ error: "Search unavailable" }, { status: 503 }) : Response.json({ total: 0, items: [] });
+  }) as typeof fetch);
+  const renderSource = (attempt: number) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source={source} query="same" attempt={attempt} origin="http://localhost" token="paired" connected canPlay active onEnqueue={async () => true} onBrowse={() => {}} onResults={() => {}} onChooseSource={() => {}} /></QueryClientProvider>));
+  await renderSource(0);
+  await until(() => !!screen.queryByRole("alert"));
+  expect(screen.getByRole("alert").textContent).toContain("Search unavailable");
+  fails = false;
+  await renderSource(1);
+  await until(() => !!screen.queryByText("0 results"));
+  expect(screen.queryByRole("alert")).toBeNull();
+});
