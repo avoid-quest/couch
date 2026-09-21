@@ -247,7 +247,7 @@ try {
   httpRemote = await startHttpRemote(origin, code, artifactDir, until);
   assert.equal(httpRemote.theme.primary, nativeTheme.primary, "Static native and compiled HTTP app use the same primary theme");
   assert.equal(httpRemote.theme.background, nativeTheme.background, "Static native and compiled HTTP app use the same background theme");
-  await until("real HTTP browser receives the same queue and native pause", async () => await httpRemote!.ui.execute("return document.querySelector('.queue-entry-title')?.textContent === 'Linux multitrack fixture' && document.querySelector('.playback-status')?.textContent === 'Paused'"));
+  await until("real HTTP browser receives the same queue and native pause", async () => await httpRemote!.ui.execute("return document.querySelector('[aria-label=\"Now playing\"]')?.textContent.includes('Linux multitrack fixture') && document.querySelector('.playback-status')?.textContent === 'Paused'"));
   await httpRemote.ui.controls();
   await httpRemote.ui.execute("document.querySelector('[role=slider][aria-label=Volume]').focus()");
   await httpRemote.ui.key(keys.right);
