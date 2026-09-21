@@ -151,7 +151,7 @@ try {
   await until("provider playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Saved");
   await remote.refresh();
-  await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token')"));
+  await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !!document.querySelector('.primary-nav')"));
   await ui.section("Now");
   assert.equal(await ui.execute("return isSecureContext"), true, "Loopback supplies a supported secure context; ordinary HTTP LAN addresses do not");
   const registrations = () => ui.request(`/session/${ui.session()}/execute/async`, {

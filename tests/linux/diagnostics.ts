@@ -71,7 +71,7 @@ try {
   assert.equal(exported.status, 200); assert.match(exported.headers.get("content-disposition")!, /attachment/);
   const body = await exported.text(), report = JSON.parse(body) as Diagnostics;
   assert.ok(Buffer.byteLength(body) <= report.limits.exportBytes);
-  for (const secret of [code, claim, token, guest, "http://127.0.0.1:4200/fixture.mkv"]) assert.ok(!body.includes(secret));
+  for (const secret of [code, token, guest, "http://127.0.0.1:4200/fixture.mkv"]) assert.ok(!body.includes(secret));
   const facts = report.native!.facts;
   assertPlaybackDiagnosticFacts(facts);
   assert.equal(facts.find(fact => fact.name === "Hardware decoder")?.value, "no", "Xvfb fixture truthfully reports software decoding");

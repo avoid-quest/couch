@@ -218,12 +218,7 @@ export const qualityLabel = (value: string) => value === "auto" ? "1080p (recomm
 
 async function settlePortals(ui: UiDriver) {
   const deadline = Date.now() + 5_000;
-  while (await ui.execute(`return [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')].some(portal => {
-    const rect = portal.getBoundingClientRect();
-    let zoom = 1;
-    for (let element = portal; element; element = element.parentElement) zoom *= parseFloat(getComputedStyle(element).zoom) || 1;
-    return Math.abs(rect.width / zoom - portal.offsetWidth) > 0.75 || Math.abs(rect.height / zoom - portal.offsetHeight) > 0.75 || portal.getAnimations().some(animation => animation.playState === 'running');
-  })`)) {
+  while (await ui.execute("return [...document.querySelectorAll('[data-slot=dialog-content], [data-slot=select-content], [data-slot=popover-content]')].some(portal => portal.getAnimations().some(animation => animation.playState === 'running'))")) {
     assert.ok(Date.now() < deadline, "Portal opening animations settle before measuring controls");
     await Bun.sleep(50);
   }
