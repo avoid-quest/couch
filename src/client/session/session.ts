@@ -7,6 +7,7 @@ import { knownConnection, rememberConnection } from "./connection";
 export type Credentials = { origin: string; token: string; installationId?: string };
 export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
+const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
 // getRandomValues also works on the plain HTTP origins used by LAN remotes.
 export function createId() {
@@ -16,18 +17,25 @@ export function createId() {
 export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
+  const [owner, setOwner] = useState(credentials);
+  const currentCredentials = useRef(credentials);
+  currentCredentials.current = credentials;
   const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
   const [credentialRejected, setCredentialRejected] = useState(false);
   const [state, setState] = useState<SessionState | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const socket = useRef<WebSocket | null>(null);
+  const socketCredentials = useRef<Credentials | null>(null);
   const ready = useRef(false);
   const pending = useRef(new Map<string, Pending>());
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   useEffect(() => {
     setState(null);
-    setIdentity(null);
+    // Rechecking the same connection does not discard its browsing cache.
+    // Replacement credentials must not expose the old identity while effects run.
+    if (!sameCredentials(owner, credentials)) setIdentity(null);
+    setOwner(credentials);
     setCredentialRejected(false);
     ready.current = false;
     let disposed = false;
@@ -106,7 +114,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (asset) url.searchParams.set("build", asset);
       const connection = new WebSocket(url);
       socket.current = connection;
-      const isCurrent = () => !disposed && socket.current === connection;
+      socketCredentials.current = credentials;
+      const isCurrent = () => !disposed && socket.current === connection && sameCredentials(credentials, currentCredentials.current);
       handshake = setTimeout(() => connection.close(), 8_000);
 
       connection.onopen = () => {
@@ -141,6 +150,10 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       connection.onerror = () => connection.close();
       connection.onclose = event => {
         if (!isCurrent()) return;
+        // Retire the socket now, not only on effect cleanup or replacement.
+        // Captured callbacks from a closed/revoked connection must stay stale.
+        socket.current = null;
+        socketCredentials.current = null;
         clearTimeout(handshake);
         ready.current = false;
         rejectPending();
@@ -160,13 +173,17 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       rejectPending();
       socket.current?.close();
       socket.current = null;
+      socketCredentials.current = null;
     };
   }, [credentials?.origin, credentials?.token, credentials?.installationId, reconnectAttempt]);
 
+  const current = sameCredentials(owner, credentials);
+  const snapshot = current ? state : null;
+  const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
   const origin = credentials?.origin ?? location.origin;
   const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
-  const installationName = state?.installationName;
-  const player = state?.player.status;
+  const installationName = snapshot?.installationName;
+  const player = snapshot?.player.status;
   const details = useMemo(() => publicDetails ? { ...publicDetails, name: installationName ?? publicDetails.name, player: player ?? publicDetails.player } : null, [publicDetails, installationName, player]);
 
   useEffect(() => {
@@ -174,17 +191,27 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   }, [origin, details]);
 
   useEffect(() => {
-    if (status !== "connected" || !credentials) return;
+    // A new origin/installation must pass public discovery before sending its
+    // credential, even in the render between replacement and effect cleanup.
+    if (!current || status !== "connected" || !credentials) return;
     const controller = new AbortController();
-    void fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal: controller.signal }).then(async response => {
+    void (async () => {
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
+      const discovery = await fetch(`${credentials.origin}/api/connection`, { signal });
+      if (!discovery.ok) return;
+      const next = await discovery.json() as ConnectionDetails;
+      if (controller.signal.aborted || !sameCredentials(credentials, currentCredentials.current)) return;
+      setConnectionDetails({ origin: credentials.origin, details: next });
+      if (credentials.installationId && next.installationId !== credentials.installationId) { socket.current?.close(4001, "Pair again"); return; }
+      const response = await fetch(`${credentials.origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
       if (controller.signal.aborted) return;
       if (response.status === 401) { socket.current?.close(4001, "Pair again"); return; }
       if (!response.ok) return;
       const caller = await response.json() as ControllerIdentity;
-      if (!controller.signal.aborted) setIdentity(caller);
-    }).catch(() => {});
+      if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current)) setIdentity(caller);
+    })().catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, status, state?.controllerVersion]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.controllerVersion]);
 
   const reconnect = useCallback(() => {
     ready.current = false;
@@ -194,7 +221,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
 
   const command = useCallback((action: Action) => {
     const connection = socket.current;
-    if (!ready.current || connection?.readyState !== WebSocket.OPEN) {
+    if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("Wait for the player to reconnect before using controls."));
     }
     return new Promise<void>((resolve, reject) => {
@@ -213,7 +240,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         reject(error);
       }
     });
-  }, []);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId]);
 
-  return { state, status, details, identity, playerStatus: status === "connected" ? state?.player.status : status === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || credentialRejected, reachable: status === "connected" || status === "pairing-required" || status === "connection-rejected", connected: status === "connected" && !!credentials, command, reconnect };
+  return { state: snapshot, status: connectionStatus, details, identity: current ? identity : null, playerStatus: connectionStatus === "connected" ? snapshot?.player.status : connectionStatus === "pairing-required" ? publicDetails?.player : undefined, pairingRequired: !credentials || current && credentialRejected, reachable: connectionStatus === "connected" || connectionStatus === "pairing-required" || connectionStatus === "connection-rejected", connected: connectionStatus === "connected" && !!credentials, command, reconnect };
 }
