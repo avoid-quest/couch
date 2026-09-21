@@ -6,7 +6,7 @@ import { readSearchState, searchLocation } from "./search";
 import { frontendPaths } from "../shared/page-paths";
 
 test("every frontend path resolves to a registered route", () => {
-  const router = createRouter({ routeTree, context: { queryClient: new QueryClient() }, history: createMemoryHistory({ initialEntries: ["/"] }) });
+  const router = createRouter({ routeTree, context: { queryClient: new QueryClient(), identity: null, connected: false }, history: createMemoryHistory({ initialEntries: ["/"] }) });
   const ids = Object.keys(router.routesById);
   for (const path of frontendPaths) expect(ids).toContain(path);
 });
