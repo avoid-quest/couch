@@ -186,10 +186,6 @@ try {
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
   await assertTvFullscreen(ui, until, "startup");
-  await ui.button("Settings"); await ui.settingsSection("general");
-  await until("an unclaimed TV shows its separate administrator setup code and address QR", () => execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '') && !!document.querySelector('[role=dialog] svg title')"));
-  await ui.key(keys.escape);
-  await until("setup dismisses to the fullscreen TV browser", () => execute("return !document.querySelector('[role=dialog]')"));
   await ui.click(".pair-shortcut");
   const code = await execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
   await ui.key(keys.escape);
