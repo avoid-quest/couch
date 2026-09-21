@@ -133,7 +133,7 @@ export class UiDriver {
   async section(label: string) {
     await this.browse();
     if (await this.execute("return !!document.querySelector('.primary-nav')")) {
-      const destination = label === "For later" ? "Saved" : label === "Online" ? "Library" : label;
+      const destination = label === "For later" ? "Saved" : label === "Online" ? "Library" : label === "Queue" ? "Now" : label;
       const libraryLabel = ({ Files: "TV folders", Radio: "Radio", Guide: "Live TV", Jellyfin: "Jellyfin" } as Record<string, string>)[destination];
       await this.click(`.primary-nav a[data-source="${libraryLabel ? "Library" : destination}"]`);
       if (libraryLabel) {
