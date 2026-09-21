@@ -10,6 +10,7 @@ import { createNativeReadiness } from "./readiness-native";
 import { createUpdateIdle } from "./update-idle";
 import { createUpdates } from "./updates";
 import { createToolHealth } from "./tool-health";
+import { verifyTrialTools } from "./trial-tools";
 import { buildInfo } from "./build-info";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
@@ -84,7 +85,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
           finally { database.close(); }
         }
         const tools = createToolHealth({ packaged: buildInfo.packaged, helpers: buildInfo.helpers });
-        try { await tools.verify(false); } finally { await tools.close(); }
+        try { await verifyTrialTools(() => tools.verify(false)); } finally { await tools.close(); }
         await native.complete(null);
       }
     } catch (reason) { await native.complete(reason instanceof Error ? reason.message : "Startup verification failed.").catch(() => {}); }

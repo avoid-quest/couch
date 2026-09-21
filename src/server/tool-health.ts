@@ -137,7 +137,9 @@ export function createToolHealth(options: Options) {
     async verify(runtime: boolean) {
       const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(checkMilliseconds)]);
       const report = await collect(signal, true);
-      if (report.ffprobe.status !== "ready" || report.tools.some(tool => tool.installed.status !== "ready")) throw new Error("Package tools failed fresh hash/version checks.");
+      const checks: [string, ToolObservation][] = [["yt-dlp", report.tools[0]!.installed], ["Deno", report.tools[1]!.installed], ["ffprobe", report.ffprobe]];
+      const failures = checks.filter(([, result]) => result.status !== "ready");
+      if (failures.length) throw new Error(`Package tools failed fresh hash/version checks: ${failures.map(([name, result]) => `${name}: ${result.error || result.status}`).join(" ")}`);
       const command = options.command ?? runDiagnosticCommand;
       const safeEnv = { PATH: "/usr/bin:/bin", ...(env.LD_LIBRARY_PATH ? { LD_LIBRARY_PATH: env.LD_LIBRARY_PATH } : {}), LANG: "C", LC_ALL: "C" };
       // Fixed generated media exercises extraction without contacting a website

@@ -88,6 +88,11 @@ fi
 
 [[ $(dpkg-query -W -f='${Version}' couch 2>/dev/null) = "$version" ]] \
     || fail 'The installed version does not match the staged package.'
+runtime=/run/user/$uid
+if [[ -S $runtime/bus ]]; then
+    runuser -u "$user" -- env XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" systemctl --user daemon-reload \
+        || echo "package-update: could not reload $user's Couch unit; restart Couch after inspecting the journal." >&2
+fi
 digest=$(sha256sum "$work/couch.deb" | cut -d' ' -f1)
 install -m 0644 -o root -g root "$work/apt.log" "$request_dir/$user/apt.log"
 echo "package-update: installed Couch $version for $user."
