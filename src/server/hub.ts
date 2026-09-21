@@ -69,6 +69,7 @@ type HubOptions = {
   assets?: Record<string, Response>;
   development?: boolean;
   advertisedUrls?: string[];
+  publishedLan?: boolean;
   updateFeed?: UpdateFeed<UpdateRelease>;
   updater?: { request: (request: UpdateRequest) => Promise<unknown> };
   admitted?: () => boolean;
@@ -580,7 +581,7 @@ export function createHub(options: HubOptions) {
     ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port))
     : [origin];
   if (urls.length === 0) urls.push(origin);
-  const connectionUrls: string[] = [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
+  const connectionUrls: string[] = options.publishedLan ? [...urls] : [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
 
   if (options.managedLan) {
     lan = createLanListener({
