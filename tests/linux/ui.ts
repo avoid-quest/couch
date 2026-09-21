@@ -77,29 +77,26 @@ export class UiDriver {
   async clickElement(id: string, selector?: string) {
     await this.revealElement(id, selector);
     await settlePortals(this);
+    const scale = await this.execute("return devicePixelRatio");
+    if (scale === 1) {
+      const target = selector ? await this.element(selector) : id;
+      await this.waitFor("Click target is enabled", () => this.request(`/session/${this.session()}/element/${target}/enabled`));
+      return this.request(`/session/${this.session()}/element/${target}/click`, {});
+    }
+    // WebKitGTK element-click misses fractional-DPI targets; pointer actions take device pixels.
     const element = selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id };
-    const deadline = Date.now() + 5_000;
-    let previous = "";
-    while (true) {
-      const point = await this.execute(`
+    let point = "";
+    await this.waitFor("Click target is enabled and unobstructed", async () => {
+      point = await this.execute(`
         const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
         const rect = element.getBoundingClientRect();
         const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
-        const hit = document.elementFromPoint(x, y);
-        return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(hit) ? JSON.stringify([x, y, rect.width, rect.height]) : '';
+        return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y)) ? JSON.stringify([x, y]) : '';
       `, [element, selector]);
-      if (point && point === previous) break;
-      if (Date.now() >= deadline) {
-        const target = await this.execute("const el=arguments[1] ? document.querySelector(arguments[1]) : arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element, selector]);
-        assert.fail(`Click target becomes enabled, unobstructed and stable: ${JSON.stringify(target)}`);
-      }
-      previous = point;
-      await Bun.sleep(50);
-    }
-    // WebKitGTK pointer actions use device pixels at fractional display scales.
-    const [x, y] = JSON.parse(previous);
-    const scale = await this.execute("return devicePixelRatio");
+      return !!point;
+    });
+    const [x, y] = JSON.parse(point);
     await this.request(`/session/${this.session()}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", duration: 0, origin: "viewport", x: Math.round(x * scale), y: Math.round(y * scale) },
       { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
