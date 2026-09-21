@@ -37,7 +37,7 @@ async function settings(ui: UiDriver, until: Wait) {
   if (await ui.execute("return !!document.querySelector('.tv-shell')")) {
     await ui.controls();
     await ui.click('.tv-playback-controls:not([hidden]) [aria-label="Playback settings"]');
-  } else await ui.click('.remote-shell [aria-label="Playback settings"]');
+  } else await ui.execute("const button = [...document.querySelectorAll('.remote-shell [aria-label=\"Playback settings\"]')].find(value => value.getClientRects().length); if (!button) return false; button.click()");
   await until("playback settings exposes its subtitle upload control", async () => await ui.execute("return !!document.querySelector('[role=dialog] #playback-subtitle-file')"));
 }
 
