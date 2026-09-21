@@ -95,3 +95,26 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
   else { child.stdin.write(`${JSON.stringify({ type: "shutdown" } satisfies HostMessage)}\n`); await child.stdin.flush(); }
   expect(await child.exited).toBe(0);
 }, 15_000);
+
+test("the Docker preview admits its published origin without changing native LAN admission", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "couch-preview-proxy-"));
+  const token = crypto.randomUUID(), advertised = "http://192.168.10.2:4100";
+  const child = Bun.spawn([process.execPath, "src/main.ts"], { env: { ...process.env, NODE_ENV: "production", COUCH_NATIVE: "1", COUCH_PREVIEW_PROXY_LAN: "1", COUCH_ADVERTISE_URLS: advertised, COUCH_HOST: "127.0.0.1", COUCH_PORT: "0", COUCH_HOST_TOKEN: token, COUCH_DATA_DIR: dir }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  cleanup.push(async () => { child.kill(); await child.exited; await rm(dir, { recursive: true, force: true }); });
+  const reader = child.stdout.pipeThrough(new TextDecoderStream()).getReader();
+  let message = "";
+  while (!message.includes("\n")) {
+    const value = await reader.read();
+    if (value.done) throw new Error("Preview sidecar exited before readiness");
+    message += value.value;
+  }
+  const ready = JSON.parse(message.split("\n", 1)[0]!) as Extract<SidecarMessage, { type: "ready" }>;
+  expect(ready).toMatchObject({ type: "ready", urls: [advertised] });
+  const headers = { Host: new URL(advertised).host, Origin: advertised, "Content-Type": "application/json" };
+  expect((await fetch(`${ready.origin}/api/settings/sharing`, { method: "POST", headers: { ...headers, Authorization: `Bearer ${token}` }, body: JSON.stringify({ enabled: true }) })).status).toBe(200);
+  expect(await (await fetch(`${ready.origin}/api/connection`, { headers })).json()).toMatchObject({ urls: [advertised] });
+  expect((await fetch(`${ready.origin}/api/pair`, { method: "POST", headers, body: JSON.stringify({ code: ready.pairingCode, name: "Preview phone" }) })).status).toBe(200);
+  expect((await fetch(`${ready.origin}/api/connection`, { headers: { Host: "untrusted.example", Origin: "http://untrusted.example" } })).status).toBe(403);
+  child.stdin.end();
+  expect(await child.exited).toBe(0);
+}, 15_000);
