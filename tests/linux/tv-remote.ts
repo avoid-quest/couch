@@ -40,7 +40,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await httpRemote.restore();
   const phone = httpRemote.ui;
   await phone.section("Find");
-  await phone.button("Remote");
+  await phone.click('[aria-label="Remote"]');
   await until("HTTP phone remote dialog contains the D-pad", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
   await assertResponsive(phone, "Phone remote pad");
   await ui.execute("window.__dpadStage = document.querySelector('.video-stage')");
