@@ -59,7 +59,7 @@ test.each([
     expect(await readFile(log, "utf8")).toBe("");
     await writeFile(inventory, `eDP-1 connected primary 1920x1080+0+0\nHDMI-2 connected ${geometry}\n`);
     let commands = "";
-    for (let attempt = 0; attempt < 100 && !commands; attempt++) { await Bun.sleep(100); commands = await readFile(log, "utf8"); }
+    for (let attempt = 0; attempt < 100 && (!expected || commands !== expected); attempt++) { await Bun.sleep(100); commands = await readFile(log, "utf8"); }
     expect(commands).toBe(expected);
     expect(commands).not.toContain("--off");
     expect(commands).not.toContain("--primary");
