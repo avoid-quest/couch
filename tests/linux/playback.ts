@@ -138,11 +138,12 @@ try {
   // This playback journey deliberately selects the local device when an
   // isolated app starts with an empty choice; a seeded configured start is
   // already connecting.
-  if (await execute("return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'This computer')")) await ui.button("This computer");
+  await ui.button("This computer");
   await until("native UI connects to its Bun sidecar", async () => await execute("return document.querySelector('[role=status]')?.textContent") === "Connected", 30_000);
   await until("local first-use offers the sharing choice", () => execute("return document.querySelector('[role=dialog]')?.textContent?.includes('Allow remote control?') ?? false"));
   await ui.button("Allow remote control");
   await ui.button("Pair a remote");
+  await until("Pair a remote displays its pairing QR", () => execute("return document.querySelector('[role=dialog] svg title')?.textContent === 'Pair another device'"));
   // A WebDriver click would restore focus and hide an overlay-reparenting regression.
   await until("native WebKit owns keyboard focus before any controller or pointer input", () => execute("return document.hasFocus()"));
   await assertTvFullscreen(ui, until, "startup");
