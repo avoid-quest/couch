@@ -49,7 +49,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
     await target.type("#media-url", source);
     await target.type("#media-title", title);
     if (!quality) assert.equal(await target.execute("return !!document.querySelector('#media-quality')"), false, "Audio-only webpage hides video quality");
-    await target.click('.queue-add-form button[type=submit]');
+    await target.click('[role=dialog] form button[type=submit]');
     await until(`${title} reaches the shared queue with its intended quality`, () => clients.every(client => client.state!.queue.some(entry => entry.title === title && entry.quality === quality)));
     await until("Add media closes after the acknowledged enqueue", () => target.execute("return !document.querySelector('[role=dialog]')"));
   };
@@ -98,7 +98,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await phone.select("#media-quality", qualityLabel("720p"));
   await phone.type("#media-url", "http://127.0.0.1:4200/quality.html");
   await phone.type("#media-title", "Override link");
-  await phone.click('.queue-add-form button[type=submit]');
+  await phone.click('[role=dialog] form button[type=submit]');
   await until("paste-link override reaches both remotes", () => clients.every(client => client.state!.queue.some(entry => entry.title === "Override link" && entry.quality === "720p")));
   await until("override enqueue closes Add media", () => phone.execute("return !document.querySelector('[role=dialog]')"));
   await addLink(phone, "Default after override", "480p");
