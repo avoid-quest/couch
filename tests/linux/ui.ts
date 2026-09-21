@@ -365,7 +365,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     ui.clickElement = async id => {
       const target = { "element-6066-11e4-a52e-4f735466cecf": id };
       await ui.execute("window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { x: event.clientX, y: event.clientY, actual: event.target.getAttribute('aria-label') || event.target.textContent }; }, { once: true, capture: true })");
-      let point = "";
+      let point: { x: number; y: number; width: number; height: number } | null = null;
       // React may replace the node before any pointer is sent. Retrying this
       // preparation is safe; after xdotool dispatch below there is no retry.
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -374,20 +374,21 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
           await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
             await ui.execute("const element = arguments[0], rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
             await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-            const point = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
+            const measured = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
           const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
           return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
             ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [target]);
-            return !!point;
+            if (!measured) return false;
+            point = JSON.parse(measured);
+            return true;
           });
-          point = JSON.parse(point);
           break;
         } catch (error) {
           if (!String(error).includes("Node with identifier")) throw error;
           await Bun.sleep(50);
         }
       }
-      if (!point) assert.fail("HTTP click target resolves to a stable pre-dispatch node");
+      if (!point) assert.fail("HTTP click target resolves to an unobstructed pre-dispatch node");
       const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", `^${windowClass}$`], { stdout: "pipe", stderr: "inherit" });
       const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
       assert.equal(await search.exited, 0, "HTTP browser window exists for real pointer input");
