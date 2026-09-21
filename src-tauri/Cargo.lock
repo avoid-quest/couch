@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "couch"
-version = "0.1.5-preview.9"
+version = "0.1.5-preview.10"
 dependencies = [
  "base64 0.22.1",
  "bluer",
