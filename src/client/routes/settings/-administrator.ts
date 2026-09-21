@@ -1,13 +1,11 @@
 import { redirect } from "@tanstack/react-router";
-import type { QueryClient } from "@tanstack/react-query";
-import { identityQuery } from "@/api/controllers";
-import { isNativeHost } from "@/session/native-context";
+import type { ControllerIdentity } from "../../../shared/controllers";
 
-// beforeLoad gate for the pages the settings registry marks administrator-only.
-// The TV itself manages everything; remotes prove authority against
-// /api/controllers/me through the shared Query cache.
-export async function requireAdministrator({ context }: { context: { queryClient: QueryClient } }) {
-  if (isNativeHost()) return;
-  const identity = await context.queryClient.ensureQueryData(identityQuery()).catch(() => null);
-  if (identity?.authority !== "administrator") throw redirect({ href: "/settings", replace: true });
+// Bootstrap/pairing may render the shell while authority is unknown; reads and
+// controls remain disconnected. Once synchronized, native and browser routes
+// use the very same identity rendered by SessionGate. The server still enforces
+// every request independently.
+export async function requireAdministrator({ context }: { context: { identity: ControllerIdentity | null; connected: boolean } }) {
+  if (!context.connected || !context.identity) return;
+  if (context.identity.authority !== "administrator" && context.identity.authority !== "host") throw redirect({ href: "/settings", replace: true });
 }
