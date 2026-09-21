@@ -13,6 +13,7 @@ export function seedConfiguredFixture(directory = process.env.COUCH_DATA_DIR ?? 
   assert.equal(existsSync(path), false, "Seed only a fresh disposable qualification database");
   const db = new Database(path);
   db.run("CREATE TABLE installation_setup (id INTEGER PRIMARY KEY CHECK (id = 1), step TEXT NOT NULL); INSERT INTO installation_setup VALUES (1, 'complete')");
+  db.run("CREATE TABLE installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))); INSERT INTO installation_sharing VALUES (1, 1)");
   db.close();
   // Non-onboarding playback journeys exercise the configured local TV, not
   // first-use device selection; native startup reads this sidecar-side choice.
