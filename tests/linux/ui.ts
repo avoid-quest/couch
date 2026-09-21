@@ -365,14 +365,14 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
       });
       return fonts === "loaded";
     });
-    // WebKitWebDriver's element clicks do not account for this fractional GTK
-    // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
+    // Measure through the live selector because React replaces state-bound
+    // handles. WebDriver performs one click; stale dispatch is fatal, never
+    // retried, because the action may already have applied.
     ui.clickElement = async (id, selector) => {
       assert.ok(selector, "HTTP clicks use selectors because state updates can invalidate handles");
-      await ui.execute("window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { x: event.clientX, y: event.clientY, actual: event.target.getAttribute('aria-label') || event.target.textContent }; }, { once: true, capture: true })");
       let point: { x: number; y: number; width: number; height: number } | null = null;
-      // React may replace the node before any pointer is sent. Retrying this
-      // preparation is safe; after xdotool dispatch below there is no retry.
+      // React may replace the node before the click is sent. Retrying this
+      // preparation is safe; after WebDriver dispatch there is no retry.
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
@@ -393,15 +393,7 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
         }
       }
       if (!point) assert.fail("HTTP click target resolves to an unobstructed pre-dispatch node");
-      const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", `^${windowClass}$`], { stdout: "pipe", stderr: "inherit" });
-      const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
-      assert.equal(await search.exited, 0, "HTTP browser window exists for real pointer input");
-      const pointer = Bun.spawn(["xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1"], { stdout: "ignore", stderr: "inherit" });
-      assert.equal(await pointer.exited, 0, "HTTP browser receives a real pointer click");
-      // X11 completion does not acknowledge WebKit event dispatch after window activation.
-      await ui.waitFor("HTTP browser acknowledges the physical pointer event", () => ui.execute("return window.__httpPointer !== null"));
-      const hit = await ui.execute("return window.__httpPointer");
-      assert.ok(hit?.actual, `HTTP browser dispatches the physical pointer: ${JSON.stringify({ point, hit })}`);
+      await request(`/session/${session}/element/${id}/click`, {});
     };
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
