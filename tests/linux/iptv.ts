@@ -199,7 +199,6 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       const identity = await (await fetch(`${origin}/api/controllers/me`, { headers: { Origin: origin, Authorization: `Bearer ${client.token}` } })).json() as { authority: string };
       assert.equal(identity.authority, index === 0 ? "administrator" : "controller", "Source administration preserves the existing controller roles");
     }
-    await httpRemote.ui.section("Queue"); await httpRemote.minimize(); await ui.section("Queue");
     evidence.source = saved; evidence.completeBeforeRestart = true;
     return { verifyAfterRestart: async (nextClients: readonly Remote[], remote: HttpRemote) => {
       await until("IPTV restart stays stopped for both existing controllers", () => nextClients.every(client => client.state?.player.status === "idle" && client.state.currentEntryId === null));
