@@ -33,7 +33,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Bookmark, Compass, House, Settings2, CirclePlay } from "lucide-react";
 import { cn } from "cn";
-import { useNavigation } from "@/navigation";
 import { ShellContext } from "./shell-context";
 
 const radioHistoryKey = "couch.radio-recents";
@@ -200,16 +199,7 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome>{shell.nativeHost && <TvKeys onBack={() => { if (!shell.tv.dismissLayer()) shell.back(); }} />}</ShellContext.Provider></ShellErrorBoundary>;
-}
-
-// The TV shell is driven with arrows/select/back like a Big Picture UI; the web
-// keyboard path reaches the same spatial navigation the paired remotes use.
-function TvKeys({ onBack }: { onBack: () => void }) {
-  const back = useRef(onBack);
-  back.current = onBack;
-  useNavigation(() => back.current());
-  return null;
+  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
 function ShellChrome({ children }: PropsWithChildren) {
