@@ -31,7 +31,7 @@ function fixture(grouped: boolean) {
     }
     throw new Error(`Unexpected WebDriver call ${path}`);
   }, () => "test");
-  ui.clickElement = async id => { clicks.push(id); (document.getElementById(id)! as typeof document.body).click(); };
+  ui.clickElement = async (id, selector) => { const target = selector ? document.querySelector<HTMLElement>(selector)! : document.getElementById(id)!; clicks.push(target.id); target.click(); };
   ui.waitFor = async (description, predicate) => { waits.push(description); expect(await predicate()).toBe(true); };
   return { ui, clicks, waits, selected: () => document.querySelector('[aria-selected="true"]')?.id, close: () => window.happyDOM.abort() };
 }

@@ -62,7 +62,7 @@ try {
   socket.onmessage = event => { const message = JSON.parse(String(event.data)); if (message.type === "state") state = message.state; };
   await until("ordinary remote receives player state", () => state !== null);
   await tv.type("#media-url", "http://127.0.0.1:4200/fixture.mkv");
-  await tv.type("#media-title", "Diagnostic native fixture"); await tv.click("[role=dialog] form button[type=submit]");
+  await tv.type("#media-title", "Diagnostic native fixture"); await tv.click(".queue-add-form button[type=submit]");
   await until("native queue offers the diagnostic fixture", () => tv.execute(`return !!document.querySelector('[aria-label="Play Diagnostic native fixture"]')`));
   await tv.click('[aria-label="Play Diagnostic native fixture"]');
   await until("diagnostic fixture plays through native mpv", () => state?.player.status === "playing" && state.player.position > 0.5);
