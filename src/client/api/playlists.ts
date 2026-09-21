@@ -6,5 +6,5 @@ import { apiFetch } from "./client";
 export const playlistsQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["playlists"],
-    queryFn: () => apiFetch(credentials, "/api/playlists").then(r => r.json() as Promise<SavedPlaylistSummary[]>),
+    queryFn: ({ signal }) => apiFetch(credentials, "/api/playlists", { signal }).then(r => r.json() as Promise<SavedPlaylistSummary[]>),
   });

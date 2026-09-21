@@ -33,11 +33,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { Bookmark, Compass, House, Settings2, CirclePlay } from "lucide-react";
 import { cn } from "cn";
-import { useNavigation } from "@/navigation";
 import { ShellContext } from "./shell-context";
+import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 
-const radioHistoryKey = "couch.radio-recents";
-const radioHistory = (): RadioStation[] => { try { return JSON.parse(localStorage.getItem(radioHistoryKey) ?? "[]") as RadioStation[]; } catch { return []; } };
 const navItems: { name: string; label: string; icon: typeof House }[] = [
   { name: "Now", label: "Now", icon: CirclePlay },
   { name: "Find", label: "Find", icon: Compass },
@@ -61,7 +59,8 @@ function useShellValue() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
-  const [recentRadio, setRecentRadio] = useState<RadioStation[]>(radioHistory);
+  const installationId = credentials?.installationId ?? details?.installationId;
+  const [recentRadio, setRecentRadio] = useState<{ installationId: string | null; stations: RadioStation[] }>({ installationId: null, stations: [] });
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [pairingOpen, setPairingOpen] = useState(false);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
@@ -69,6 +68,7 @@ function useShellValue() {
   const playAttempt = useRef(0);
   playCredentials.current = credentials;
   useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
+  useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
   useEffect(() => {
     document.title = settingsSection ? `${settingsPages[settingsSection].label} · Settings · Couch` : section === "Now" ? "Couch" : `${section} · Couch`;
@@ -116,16 +116,17 @@ function useShellValue() {
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
     run({ type: "enqueueProvider", provider: item.provider, url: item.url, shape: providerShape(item), title: item.title, thumbnail: item.thumbnail, ...(item.provider === "bandcamp" ? {} : { quality }), playNow });
   const enqueueRadio = (station: RadioStation, playNow: boolean) => {
+    const owner = installationId;
     const result = run(station.sourceId
       ? { type: "enqueueRadio", stationId: station.id, entryId: createId(), playNow }
       : { type: "enqueue", entry: { id: createId(), title: station.name, source: station.url, kind: "radio" }, playNow });
     // Recents record what actually played, not what was queued or attempted.
     if (playNow) void result.then(ok => {
-      if (!ok) return;
+      if (!ok || !owner) return;
       setRecentRadio(current => {
-        const next = [station, ...current.filter(entry => entry.id !== station.id)].slice(0, 8);
-        try { localStorage.setItem(radioHistoryKey, JSON.stringify(next)); } catch { /* Recents are best-effort. */ }
-        return next;
+        const next = [station, ...(current.installationId === owner ? current.stations : readRadioRecents(owner)).filter(entry => entry.id !== station.id)].slice(0, 8);
+        writeRadioRecents(owner, next);
+        return { installationId: owner, stations: next };
       });
     });
     return result;
@@ -174,7 +175,7 @@ function useShellValue() {
   return {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
-    ...gate, credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, recentRadio,
+    ...gate, credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, browseSection, back, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
@@ -200,16 +201,7 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
-  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome>{shell.nativeHost && <TvKeys onBack={() => { if (!shell.tv.dismissLayer()) shell.back(); }} />}</ShellContext.Provider></ShellErrorBoundary>;
-}
-
-// The TV shell is driven with arrows/select/back like a Big Picture UI; the web
-// keyboard path reaches the same spatial navigation the paired remotes use.
-function TvKeys({ onBack }: { onBack: () => void }) {
-  const back = useRef(onBack);
-  back.current = onBack;
-  useNavigation(() => back.current());
-  return null;
+  return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
 function ShellChrome({ children }: PropsWithChildren) {

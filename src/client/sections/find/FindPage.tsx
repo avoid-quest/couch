@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Check, PencilLine } from "lucide-react";
 import { BrowseHome } from "./BrowseHome";
@@ -26,14 +26,6 @@ export function FindPage() {
     if (order) { const next = { ...layout, order }; setLayout(next); saveFindSections(next); }
   };
   useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
-  const draft = useRef(homeQuery);
-  draft.current = homeQuery;
-  // Leaving Find with an uncommitted draft keeps it in the address, like the
-  // debounce would have.
-  useEffect(() => () => {
-    const query = draft.current.trim();
-    if (query !== readSearchState(window.location.search).query) changeSearch({ query, source: readSearchState(window.location.search).source });
-  }, []);
   const onStage = section === "Find" && (!nativeHost || tv.browsing);
   return (
     <section data-page="Find">
