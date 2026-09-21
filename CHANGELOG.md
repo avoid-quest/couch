@@ -1,5 +1,11 @@
 # couch
 
+## 0.1.5-preview.10
+
+### Patch Changes
+
+- [#410](https://github.com/avoid-quest/couch/pull/410) [`684abad`](https://github.com/avoid-quest/couch/commit/684abad0369521ba834d451b80a24ff51d541cbe) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Reload the active Couch user unit after a signed package update. Retry the first post-update helper verification before asking for SSH recovery, and name a persistent helper failure in Updates.
+
 ## 0.1.5-preview.9
 
 ### Patch Changes
