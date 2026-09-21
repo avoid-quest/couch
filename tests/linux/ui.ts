@@ -13,17 +13,7 @@ export class UiDriver {
 
   async element(selector: string) {
     if (/^#media-(url|title|kind|quality)$/.test(selector)) await this.addMedia();
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
-      } catch (error) {
-        lastError = error;
-        if (!String(error).includes("no such element")) throw error;
-        await Bun.sleep(50);
-      }
-    }
-    throw lastError;
+    return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
   }
 
   async waitFor(description: string, predicate: () => Promise<boolean>) {
@@ -73,59 +63,51 @@ export class UiDriver {
     await this.waitFor("Add media dialog opens", () => this.execute("return !!document.querySelector('[role=dialog] #media-url')"));
   }
 
-  async revealElement(id: string) {
-    const location = await this.execute("const element = arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
+  async revealElement(id: string, selector?: string) {
+    const location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
     if (location.browser) await this.home();
     if (location.controls || location.pad) await this.controls();
   }
 
   async click(selector: string) {
-    // React can replace a stable-looking selector target before WebDriver
-    // resolves it. Retry only that lookup: after an element handle exists, a
-    // stale-node failure must stop because the click may already have applied.
-    let lastError: unknown;
-    let id: string | undefined;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try { id = await this.element(selector); break; }
-      catch (error) {
-        lastError = error;
-        if (!String(error).includes("Node with identifier")) throw error;
-        await Bun.sleep(50);
-      }
-    }
-    if (!id) throw lastError;
-    return await this.clickElement(id, selector);
+    await this.clickElement(await this.element(selector), selector);
   }
 
   async clickElement(id: string, selector?: string) {
-    await this.revealElement(id);
+    await this.revealElement(id, selector);
     await settlePortals(this);
-    const element = { "element-6066-11e4-a52e-4f735466cecf": id };
+    const element = selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id };
     const deadline = Date.now() + 5_000;
     let previous = "";
     while (true) {
       const point = await this.execute(`
-        const element = arguments[0];
+        const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
         const rect = element.getBoundingClientRect();
         const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
         const hit = document.elementFromPoint(x, y);
         return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(hit) ? JSON.stringify([x, y, rect.width, rect.height]) : '';
-      `, [element]);
+      `, [element, selector]);
       if (point && point === previous) break;
       if (Date.now() >= deadline) {
-        const target = await this.execute("const el=arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element]);
+        const target = await this.execute("const el=arguments[1] ? document.querySelector(arguments[1]) : arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element, selector]);
         assert.fail(`Click target becomes enabled, unobstructed and stable: ${JSON.stringify(target)}`);
       }
       previous = point;
       await Bun.sleep(50);
     }
-    await this.request(`/session/${this.session()}/element/${id}/click`, {});
+    // WebKitGTK pointer actions use device pixels at fractional display scales.
+    const [x, y] = JSON.parse(previous);
+    const scale = await this.execute("return devicePixelRatio");
+    await this.request(`/session/${this.session()}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", duration: 0, origin: "viewport", x: Math.round(x * scale), y: Math.round(y * scale) },
+      { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+    ] }] });
   }
 
   async type(selector: string, text: string) {
     const id = await this.element(selector);
-    await this.clickElement(id, selector);
+    await this.clickElement(id);
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});
     if (text) await this.request(`/session/${this.session()}/element/${id}/value`, { text });
   }
@@ -144,12 +126,7 @@ export class UiDriver {
     const matches = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     assert.equal(matches.length, 1, `One ${label} button exists in ${scope || "the page"}`);
-    const id = matches[0]!["element-6066-11e4-a52e-4f735466cecf"];
-    const selector = await this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
-      button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]).map(button => button.getAttribute('aria-label')
-        ? '[aria-label="' + button.getAttribute('aria-label').replaceAll('"', '\\\\"') + '"]'
-        : 'xpath=//button[normalize-space()="' + button.textContent.trim().replaceAll('"', '\\\\"') + '"]')[0];`, [scope, label]);
-    await this.clickElement(id, selector);
+    await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
   }
 
   async section(label: string) {
@@ -214,7 +191,7 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
-    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"], `xpath=//*[@role='option'][normalize-space()="${label.replaceAll('"', '\\"')}"]`);
+    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"]);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
       assert.ok(Date.now() < closeDeadline, `${selector} closes and displays ${label}`);
@@ -356,45 +333,9 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     const width = await ui.execute("return innerWidth");
     await request(`/session/${session}/window/rect`, { width: Math.round(rect.width * 390 / width), height: 900 });
     await until("HTTP remote viewport is phone sized", async () => await ui.execute("return innerWidth") === 390);
-    // WebKit can expose the new innerWidth before replacement fonts finish
-    // loading. Let those frames settle; overflow itself remains an assertion
-    // failure with named elements.
-    await ui.waitFor("Phone viewport fonts settle after resize", async () => {
-      const fonts = await request(`/session/${session}/execute/async`, {
-        script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(document.fonts.status))));", args: [],
-      });
-      return fonts === "loaded";
+    await request(`/session/${session}/execute/async`, {
+      script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(null))))", args: [],
     });
-    // Measure through the live selector because React replaces state-bound
-    // handles. WebDriver performs one click; stale dispatch is fatal, never
-    // retried, because the action may already have applied.
-    ui.clickElement = async (id, selector) => {
-      assert.ok(selector, "HTTP clicks use selectors because state updates can invalidate handles");
-      let point: { x: number; y: number; width: number; height: number } | null = null;
-      // React may replace the node before the click is sent. Retrying this
-      // preparation is safe; after WebDriver dispatch there is no retry.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          await ui.waitFor("HTTP click target becomes visible and unobstructed", async () => {
-            await ui.execute("const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) return false; const rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [selector]);
-            await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-            const measured = await ui.execute(`const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) return ''; const rect = element.getBoundingClientRect();
-          const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
-          return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
-            ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [selector]);
-            if (!measured) return false;
-            point = JSON.parse(measured);
-            return true;
-          });
-          break;
-        } catch (error) {
-          if (!String(error).includes("Node with identifier")) throw error;
-          await Bun.sleep(50);
-        }
-      }
-      if (!point) assert.fail("HTTP click target resolves to an unobstructed pre-dispatch node");
-      await ui.execute("const element = arguments[0].startsWith('xpath=') ? document.evaluate(arguments[0].slice(6), document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue : document.querySelector(arguments[0]); if (!element) throw new Error('Click target disappeared'); element.click();", [selector]);
-    };
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
     await until("HTTP pairing form enables Connect for a complete code", async () => await ui.execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
