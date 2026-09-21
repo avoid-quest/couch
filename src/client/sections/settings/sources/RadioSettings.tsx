@@ -37,7 +37,7 @@ export function RadioSettings({ credentials, connected, canManage }: Props) {
     setError(null);
     setNotice("");
     try {
-      const response = await apiFetch(credentials, `/api/radio/${path}`, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+      const response = await apiFetch(credentials, `/api/radio/${path}`, { method, ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
       const result = response.status === 204 ? null : await response.json() as { playlist?: RadioPlaylist };
       if (result?.playlist?.error) setError(result.playlist.error);
       else setNotice(method === "DELETE" ? "Source removed. Saved favorites remain available." : `${result?.playlist?.name} updated with ${result?.playlist?.stationCount} stations.`);
