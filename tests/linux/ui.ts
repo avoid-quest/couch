@@ -42,13 +42,13 @@ export class UiDriver {
   async controls() {
     if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show TV controls");
     else if (await this.execute("return !!document.querySelector('.tv-playback-controls[hidden]')")) await this.key("i");
-    else if (await this.execute("return !!document.querySelector('.remote-browse, .remote-session') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
-    await this.waitFor("Playback controls become visible", () => this.execute("const element = document.querySelector('.player-controls'); return !!element && element.getClientRects().length > 0 && !element.closest('[hidden]')"));
+    else if (await this.execute("return !!document.querySelector('.remote-control') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
+    await this.waitFor("Playback controls become visible", () => this.execute("const native = document.querySelector('.tv-playback-controls:not([hidden]) .player-controls'); const remote = !document.querySelector('.tv-shell') && (document.querySelector('.remote-pad') || document.querySelector('.player-controls')); return !!(native || remote) && (native ?? remote).getClientRects().length > 0 && !(native ?? remote).closest('[hidden]')"));
   }
 
   async watching() {
     if (!await this.execute("return !!document.querySelector('.tv-shell')")) return;
-    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show playback");
+    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.key(keys.escape);
     if (await this.execute("return !!document.querySelector('.tv-playback-controls:not([hidden])')")) await this.button("Hide playback controls");
     await this.waitFor("TV browser and playback overlay close before native pixel capture", () => this.execute("return !!document.querySelector('.tv-browser[hidden]') && !!document.querySelector('.tv-playback-controls[hidden]') && !document.querySelector('[role=dialog], [role=listbox], [data-slot=popover-content]')"));
     await Bun.sleep(350);
@@ -56,58 +56,53 @@ export class UiDriver {
 
   async addMedia() {
     await this.browse();
+    if (await this.execute("return !!document.querySelector('[role=dialog] #media-url')")) return;
     if (await this.execute("const input = document.querySelector('#media-url'); return !!input && input.getClientRects().length > 0 && !input.closest('[hidden]')")) return;
-    await this.section("Queue");
+    await this.section("Now");
     await this.button("Add media");
     await this.waitFor("Add media dialog opens", () => this.execute("return !!document.querySelector('[role=dialog] #media-url')"));
   }
 
-  async revealElement(id: string) {
-    const location = await this.execute("const element = arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [{ "element-6066-11e4-a52e-4f735466cecf": id }]);
+  async revealElement(id: string, selector?: string) {
+    const location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
     if (location.browser) await this.home();
     if (location.controls || location.pad) await this.controls();
   }
 
   async click(selector: string) {
-    // React can replace a stable-looking navigation node while playback state
-    // settles. Resolve again for that narrow stale-element race, not for real
-    // assertions or clicks that have already reached the browser.
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try { await this.clickElement(await this.element(selector)); return; }
-      catch (error) {
-        lastError = error;
-        if (!String(error).includes("Node with identifier")) throw error;
-        await Bun.sleep(50);
-      }
-    }
-    throw lastError;
+    await this.clickElement(await this.element(selector), selector);
   }
 
-  async clickElement(id: string) {
-    await this.revealElement(id);
+  async clickElement(id: string, selector?: string) {
+    await this.revealElement(id, selector);
     await settlePortals(this);
-    const element = { "element-6066-11e4-a52e-4f735466cecf": id };
+    const element = selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id };
     const deadline = Date.now() + 5_000;
     let previous = "";
     while (true) {
       const point = await this.execute(`
-        const element = arguments[0];
+        const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
         const rect = element.getBoundingClientRect();
         const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
         const hit = document.elementFromPoint(x, y);
         return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(hit) ? JSON.stringify([x, y, rect.width, rect.height]) : '';
-      `, [element]);
+      `, [element, selector]);
       if (point && point === previous) break;
       if (Date.now() >= deadline) {
-        const target = await this.execute("const el=arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element]);
+        const target = await this.execute("const el=arguments[1] ? document.querySelector(arguments[1]) : arguments[0], rect=el.getBoundingClientRect(); return { target:el.outerHTML, rect:rect.toJSON(), hit:document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.outerHTML.slice(0,500) };", [element, selector]);
         assert.fail(`Click target becomes enabled, unobstructed and stable: ${JSON.stringify(target)}`);
       }
       previous = point;
       await Bun.sleep(50);
     }
-    await this.request(`/session/${this.session()}/element/${id}/click`, {});
+    // WebKitGTK pointer actions use device pixels at fractional display scales.
+    const [x, y] = JSON.parse(previous);
+    const scale = await this.execute("return devicePixelRatio");
+    await this.request(`/session/${this.session()}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", duration: 0, origin: "viewport", x: Math.round(x * scale), y: Math.round(y * scale) },
+      { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+    ] }] });
   }
 
   async type(selector: string, text: string) {
@@ -196,7 +191,7 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
-    await this.clickElement(options[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    await this.clickElement(options[0]!["element-6066-11e4-a52e-4f735466cecf"]);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
       assert.ok(Date.now() < closeDeadline, `${selector} closes and displays ${label}`);
@@ -246,7 +241,11 @@ export async function assertResponsive(ui: UiDriver, description: string) {
   await settlePortals(ui);
   const layout = await ui.execute(`
     const visible = element => element.getClientRects().length && getComputedStyle(element).visibility === 'visible';
+    const describe = element => ({ label: element.getAttribute('aria-label') || element.textContent.trim().slice(0, 120),
+      selector: element.id ? '#' + element.id : element.tagName.toLowerCase() + [...element.classList].map(name => '.' + name).join(''),
+      rect: element.getBoundingClientRect().toJSON(), scrollWidth: element.scrollWidth, clientWidth: element.clientWidth });
     return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll('body *')].filter(visible).filter(element => element.getBoundingClientRect().right > innerWidth + 1 || element.scrollWidth > element.clientWidth + 2 && !element.closest('[hidden]')).slice(0, 20).map(describe),
       clipped: [...document.querySelectorAll('button')].filter(visible).filter(element =>
         element.scrollWidth > element.clientWidth + 2 && !element.matches('[role=combobox]') && !element.querySelector('.truncate')
       ).map(element => element.getAttribute('aria-label') || element.textContent.trim()),
@@ -334,35 +333,9 @@ export async function startHttpRemote(origin: string, code: string, artifacts: s
     const width = await ui.execute("return innerWidth");
     await request(`/session/${session}/window/rect`, { width: Math.round(rect.width * 390 / width), height: 900 });
     await until("HTTP remote viewport is phone sized", async () => await ui.execute("return innerWidth") === 390);
-    // WebKitWebDriver's element clicks do not account for this fractional GTK
-    // scale. Drive the actual X11 pointer using CSS geometry and browser chrome.
-    ui.clickElement = async id => {
-      await ui.revealElement(id);
-      const target = { "element-6066-11e4-a52e-4f735466cecf": id };
-      let previous = "";
-      await ui.waitFor("HTTP click target becomes visible, unobstructed and stable", async () => {
-        await ui.execute("const element = arguments[0], rect = element.getBoundingClientRect(); if (!element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) element.scrollIntoView({ block: 'center', inline: 'nearest' })", [target]);
-        await request(`/session/${session}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
-        const point = await ui.execute(`const element = arguments[0], rect = element.getBoundingClientRect();
-          const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
-          return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y))
-            ? JSON.stringify({ x: x * devicePixelRatio, y: outerHeight - innerHeight * devicePixelRatio + y * devicePixelRatio, width: rect.width, height: rect.height }) : '';`, [target]);
-        const stable = !!point && point === previous;
-        previous = point;
-        return stable;
-      });
-      const point = JSON.parse(previous);
-      await ui.execute("const target = arguments[0]; window.__httpPointer = null; document.addEventListener('pointerdown', event => { window.__httpPointer = { hit: target.contains(event.target), actual: event.target.getAttribute('aria-label') || event.target.textContent, intended: target.getAttribute('aria-label') || target.textContent }; }, { once: true, capture: true });", [target]);
-      const search = Bun.spawn(["xdotool", "search", "--onlyvisible", "--class", `^${windowClass}$`], { stdout: "pipe", stderr: "inherit" });
-      const window = (await new Response(search.stdout).text()).trim().split("\n")[0]!;
-      assert.equal(await search.exited, 0, "HTTP browser window exists for real pointer input");
-      const pointer = Bun.spawn(["xdotool", "windowactivate", "--sync", window, "mousemove", "--window", window, String(Math.round(point.x)), String(Math.round(point.y)), "click", "1"], { stdout: "ignore", stderr: "inherit" });
-      assert.equal(await pointer.exited, 0, "HTTP browser receives a real pointer click");
-      // X11 completion does not acknowledge WebKit event dispatch after window activation.
-      await ui.waitFor("HTTP browser acknowledges the physical pointer event", () => ui.execute("return window.__httpPointer !== null"));
-      const hit = await ui.execute("return window.__httpPointer");
-      assert.ok(hit?.hit, `HTTP pointer reaches its intended control: ${JSON.stringify({ point, hit })}`);
-    };
+    await request(`/session/${session}/execute/async`, {
+      script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => document.fonts.ready.then(() => done(null))))", args: [],
+    });
     await assertResponsive(ui, "Phone pairing");
     await ui.type("#pairing-code", code);
     await until("HTTP pairing form enables Connect for a complete code", async () => await ui.execute("return document.querySelector('#pairing-code')?.value.length === 6 && !document.querySelector('.pair-form button')?.disabled"));
