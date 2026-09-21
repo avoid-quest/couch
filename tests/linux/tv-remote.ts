@@ -44,6 +44,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await until("HTTP phone remote dialog contains the D-pad", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
   await assertResponsive(phone, "Phone remote pad");
   await ui.execute("window.__dpadStage = document.querySelector('.video-stage')");
+  await phone.button("TV back");
   await phone.button("TV info");
   await until("phone Info reveals transport controls and focuses Resume", () => ui.execute("return !!document.querySelector('.tv-playback-controls:not([hidden])') && document.activeElement?.getAttribute('aria-label') === 'Resume'"));
   await phone.button("TV select");
