@@ -549,7 +549,6 @@ try {
   const preferenceEntryId = crypto.randomUUID();
   await clients[0]!.command({ type: "enqueueLibrary", itemId: preferenceItem.id, entryId: preferenceEntryId });
   await until("preference fixture is queued through the scanned local library", () => all(state => state.queue.some(entry => entry.id === preferenceEntryId && entry.source === `library:${preferenceItem.id}`)));
-  const queueBeforeRestart = clients[0]!.state!.queue.map(entry => entry.id);
   const preferenceContext = { origin, ui, until, clients, httpRemote, otherRemote: secondHttpRemote, artifactDir, api, entryId: preferenceEntryId };
   const persistedPreferences = await verifyPlaybackPreferences({ ...preferenceContext, otherProfile: persistedProgress.otherProfile });
   const musicContext = { origin, ui, until, clients, api, httpRemote, artifactDir };
@@ -569,6 +568,7 @@ try {
   await httpRemote.ui.section("Queue");
   await httpRemote.ui.addMedia();
   await startShutdownPlayback?.();
+  const queueBeforeRestart = clients[0]!.state!.queue.map(entry => entry.id);
   clients.forEach(client => client.socket?.close());
   const exitStarted = performance.now();
   await webdriver(`/session/${sessionId}`, undefined, "DELETE");
