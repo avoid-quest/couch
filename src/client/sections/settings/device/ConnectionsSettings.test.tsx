@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
-import { act } from "react";
+import { act, useState } from "react";
 import type { Root } from "react-dom/client";
-import type { Controller } from "../../../../shared/controllers";
+import type { Controller, ControllerIdentity } from "../../../../shared/controllers";
 import { fireEvent, screen, within } from "../../../testing";
 
 let root: Root, window: Window;
@@ -10,26 +10,35 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 const self: Controller = { id: "self", name: "Browser", role: "administrator", createdAt: 1, lastSeenAt: 2 };
 let devices: Controller[];
+let sharingFailure = false;
+let setSharingFromHost: ((enabled: boolean) => void) | undefined;
+const sharingChanges: boolean[] = [];
 const button = (label: string) => screen.getByRole("button", { name: label });
 const flush = () => act(async () => { await Bun.sleep(20); });
 
-async function render() {
+async function render(identity: ControllerIdentity = { authority: "administrator", controller: self, claimAvailable: false }, remoteControlEnabled = true) {
   const { ConnectionsSettings } = await import("./ConnectionsSettings");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  await act(async () => root.render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  function SettingsHarness() {
+    const [sharing, setSharing] = useState(remoteControlEnabled);
+    setSharingFromHost = setSharing;
+    return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        host={{ origin: "http://localhost", token: "admin", pairingCode: "246810", urls: ["http://localhost:4100"] }} identity={{ authority: "administrator", controller: self, claimAvailable: false }} administratorClaimed />
-    </QueryClientProvider>
-  ));
+        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} setRemoteControlEnabled={enabled => { sharingChanges.push(enabled); setSharing(enabled); }} administratorClaimed />
+      </QueryClientProvider>;
+  }
+  await act(async () => root.render(<SettingsHarness />));
   await flush();
 }
 
 beforeEach(async () => {
   calls.length = 0;
+  sharingChanges.length = 0;
+  sharingFailure = false;
+  setSharingFromHost = undefined;
   devices = [self, { id: "other", name: "Phone", role: "controller", createdAt: 1, lastSeenAt: 2 }];
   window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
@@ -39,6 +48,7 @@ beforeEach(async () => {
     calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : null });
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin");
     if (path === "/api/controllers/pairing-code") return Response.json({ code: "246810" });
+    if (path === "/api/settings/sharing" && method === "POST") return sharingFailure ? Response.json({ error: "Unavailable" }, { status: 503 }) : Response.json({ enabled: JSON.parse(String(init?.body)).enabled });
     if (path === "/api/controllers" && method === "GET") return Response.json({ controllers: devices });
     if (/^\/api\/controllers\/other\/role$/.test(path)) {
       const device = devices.find(entry => entry.id === "other")!;
@@ -68,14 +78,61 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("connections shows the pairing code and every device with its role, minus own-device actions", async () => {
+test("an administrator opens the pairing dialog, then sees every device with its role", async () => {
   await render();
-  expect(document.body.textContent).toContain("246810");
-  expect(document.body.textContent).toContain("Browser");
-  expect(document.body.textContent).toContain("(this device)");
-  expect(document.body.textContent).toContain("Phone");
+  await act(async () => { fireEvent.click(button("Pair a remote")); });
+  await flush();
+  expect(screen.getByRole("img", { name: "Pair another device with code 246810" })).toBeDefined();
+  await act(async () => { fireEvent.click(button("Close")); });
+  expect(screen.getByText("Browser")).toBeDefined();
+  expect(screen.getByText("(this device)")).toBeDefined();
+  expect(screen.getByText("Phone")).toBeDefined();
   expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
   expect(within(screen.getByText("(this device)").closest("li")!).queryAllByRole("button")).toHaveLength(0);
+});
+
+test("the host can change whether this computer accepts remotes", async () => {
+  await render({ authority: "host", controller: null, claimAvailable: false }, false);
+  expect(button("Pair a remote").disabled).toBe(true);
+  expect(screen.getByText("Turn on remote control before pairing a device.")).toBeDefined();
+  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remote control" })); });
+  await flush();
+  const write = calls.find(call => call.path === "/api/settings/sharing")!;
+  expect(write.method).toBe("POST");
+  expect(write.body).toEqual({ enabled: true });
+  expect(sharingChanges).toEqual([true]);
+  expect(screen.getByRole("switch", { name: "Allow remote control" }).getAttribute("aria-checked")).toBe("true");
+  expect(button("Pair a remote").disabled).toBe(false);
+});
+
+test("a failed sharing save keeps pairing disabled and reports the error", async () => {
+  sharingFailure = true;
+  await render({ authority: "host", controller: null, claimAvailable: false }, false);
+  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remote control" })); });
+  await flush();
+  expect(sharingChanges).toEqual([]);
+  expect(screen.getByRole("alert").textContent).toContain("Unavailable");
+  expect(button("Pair a remote").disabled).toBe(true);
+});
+
+for (const close of ["Close", "Escape"] as const) test(`${close} restores the Connections pairing opener`, async () => {
+  await render();
+  await act(async () => { fireEvent.click(button("Pair a remote")); });
+  await flush();
+  await act(async () => { if (close === "Close") fireEvent.click(button("Close")); else fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape", code: "Escape" }); });
+  await flush();
+  expect(document.activeElement).toBe(button("Pair a remote"));
+});
+
+test("turning off remote control closes an open pairing dialog", async () => {
+  await render({ authority: "host", controller: null, claimAvailable: false });
+  await act(async () => { fireEvent.click(button("Pair a remote")); });
+  await flush();
+  expect(screen.getByRole("dialog")).toBeDefined();
+  await act(async () => { setSharingFromHost!(false); });
+  await flush();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(button("Pair a remote").disabled).toBe(true);
 });
 
 test("promoting a controller writes the role and reloads the list", async () => {
