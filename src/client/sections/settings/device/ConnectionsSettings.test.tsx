@@ -19,7 +19,7 @@ async function render() {
   await act(async () => root.render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        host={{ origin: "http://localhost", token: "admin", pairingCode: "246810", urls: ["http://localhost:4100"] }} selfId="self" />
+        host={{ origin: "http://localhost", token: "admin", pairingCode: "246810", urls: ["http://localhost:4100"] }} identity={{ authority: "administrator", controller: self, claimAvailable: false }} administratorClaimed />
     </QueryClientProvider>
   ));
   await flush();

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { useInvalidation } from "./useInvalidation";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { JellyfinItems, JellyfinStatus } from "../../../shared/jellyfin";
+import { apiFetch } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,55 +26,35 @@ const duration = (seconds: number | null) => seconds === null ? "" : seconds >= 
 const position = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 export function JellyfinPanel({ origin, token, host, connected, canPlay = true, onManage, onEnqueue }: Props) {
-  const revision = useInvalidation("jellyfin");
-  const [status, setStatus] = useState<JellyfinStatus | null>(null);
+  const client = useQueryClient();
+  const credentials = { origin, token };
   const [query, setQuery] = useState("");
-  const [search, setSearch] = useState({ query: "", startIndex: 0, attempt: 0, resume: false });
-  const [page, setPage] = useState<JellyfinItems | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState({ query: "", startIndex: 0, resume: false });
+  const statusQuery = useQuery({
+    queryKey: ["jellyfin", "status"], enabled: connected, retry: false,
+    queryFn: ({ signal }) => apiFetch(credentials, "/api/jellyfin", { signal }, 8_000).then(response => response.json() as Promise<JellyfinStatus>),
+  });
+  const status = statusQuery.data ?? null;
+  const result = useQuery({
+    queryKey: ["jellyfin", "browse", status?.serverName, status?.username, search], enabled: connected && status?.connected === true, retry: false,
+    queryFn: ({ signal }) => apiFetch(credentials, `/api/jellyfin/items?${new URLSearchParams({ q: search.query, startIndex: String(search.startIndex), resume: String(search.resume) })}`, { signal }).then(response => response.json() as Promise<JellyfinItems>),
+  });
+  const page = status?.connected ? result.data ?? null : null;
+  const loading = connected && (statusQuery.isFetching || result.isFetching);
   const [adding, setAdding] = useState<{ id: string; playNow: boolean } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error = actionError ?? (statusQuery.error || result.error ? message(statusQuery.error ?? result.error) : null);
   const [notice, setNotice] = useState("");
-
-  async function request<T>(path = "", init: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${origin}/api/jellyfin${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      signal: init.signal ?? AbortSignal.timeout(25_000),
-    });
-    const body = await response.json() as T & { error?: string };
-    if (!response.ok) throw new Error(body.error || "Could not reach Jellyfin.");
-    return body;
-  }
-
-  useEffect(() => {
-    if (!connected) return;
-    const controller = new AbortController();
-    void request<JellyfinStatus>("", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) })
-      .then(next => { if (!controller.signal.aborted) setStatus(next); })
-      .catch(reason => { if (!controller.signal.aborted) setError(message(reason)); });
-    return () => controller.abort();
-  }, [origin, token, connected, revision]);
-
-  useEffect(() => {
-    if (!connected || !status?.connected) { setPage(null); return; }
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({ q: search.query, startIndex: String(search.startIndex), resume: String(search.resume) });
-    void request<JellyfinItems>(`/items?${params}`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
-      .then(next => { if (!controller.signal.aborted) setPage(next); })
-      .catch(reason => { if (!controller.signal.aborted) { setPage(null); setError(message(reason)); } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [origin, token, connected, revision, status?.connected, status?.serverName, status?.username, search]);
+  const lifetime = useRef<AbortController | null>(null);
+  useEffect(() => { const operation = new AbortController(); lifetime.current = operation; setAdding(null); return () => operation.abort(); }, [origin, token, connected]);
 
   async function enqueue(id: string, title: string, options?: { playNow?: boolean; fromStart?: boolean }) {
+    const signal = lifetime.current?.signal;
     setAdding({ id, playNow: options?.playNow === true });
-    setNotice("");
-    try { if (await onEnqueue(id, options)) setNotice(options?.playNow ? `Starting ${title} on the TV.` : `Added ${title} to the queue.`); }
-    catch (reason) { setError(message(reason)); }
-    finally { setAdding(null); }
+    setNotice(""); setActionError(null);
+    try { if (await onEnqueue(id, options) && !signal?.aborted) setNotice(options?.playNow ? `Starting ${title} on the TV.` : `Added ${title} to the queue.`); }
+    catch (reason) { if (!signal?.aborted) setActionError(message(reason)); }
+    finally { if (!signal?.aborted) setAdding(null); }
   }
 
   return <section className="min-w-0 space-y-5" aria-label="Jellyfin library">
@@ -81,13 +62,13 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
       <div><h2 className="break-words text-2xl font-semibold">{status?.serverName || "Jellyfin"}</h2>{status?.connected && <p className="mt-1 text-sm text-muted-foreground">Jellyfin account <strong className="font-medium text-foreground">{status.username || "the connected Jellyfin account"}</strong></p>}</div>
       <Button variant="outline" data-action="jellyfin-settings" data-tv-local-only={host ? "" : undefined} disabled={!connected} onClick={onManage}><Settings2 aria-hidden="true" />Jellyfin settings</Button>
     </div>
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => { setActionError(null); void client.invalidateQueries({ queryKey: ["jellyfin"] }); }}>Try again</Button></AlertDescription></Alert>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {status === null ? <p className="text-sm text-muted-foreground" role="status">{connected ? "Checking Jellyfin connection…" : "Connect to the player to use Jellyfin."}</p> : !status.connected ? <Card className="p-5 text-sm leading-relaxed text-muted-foreground">An administrator can connect Jellyfin in Settings &gt; Sources. Every paired remote can then browse movies, episodes and music here.</Card> : <>
       <Tabs value={search.resume ? "resume" : "all"} onValueChange={value => setSearch({ ...search, resume: value === "resume", startIndex: 0 })}>
         <TabsList aria-label="Jellyfin library view" className="w-full"><TabsTrigger value="all">All</TabsTrigger><TabsTrigger value="resume">Continue watching</TabsTrigger></TabsList>
         <TabsContent value={search.resume ? "resume" : "all"} className="mt-3 space-y-5">
-      <form className="w-full space-y-2" role="search" onSubmit={event => { event.preventDefault(); setSearch({ ...search, query: query.trim(), startIndex: 0, attempt: search.attempt + 1 }); }}>
+      <form className="w-full space-y-2" role="search" onSubmit={event => { event.preventDefault(); if (query.trim() === search.query && search.startIndex === 0) void result.refetch(); else setSearch({ ...search, query: query.trim(), startIndex: 0 }); }}>
         <Label htmlFor="jellyfin-query">Search movies, episodes and music</Label>
         <div className="flex gap-2"><Input id="jellyfin-query" className="min-w-0" type="search" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} placeholder="Title or artist" disabled={!connected} /><Button variant="secondary" className="secondary-button" disabled={!connected || loading}>Search</Button></div>
       </form>
