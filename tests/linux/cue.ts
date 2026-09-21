@@ -70,6 +70,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await clients[0]!.command({ type: "play", entryId: entries[1]!.id, fromStart: true });
   await until("explicit cue restart clears its saved resume", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position > 0 && state.player.position < 1.9));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
+  await until("cue pauses before its final checkpoint seek", () => all(state => state.player.status === "paused"));
   await clients[1]!.command({ type: "seek", playbackId: first().player.playbackId!, position: 2 });
   await until("cue checkpoint is stored relative to the track before restart", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.08));
   await stop();
