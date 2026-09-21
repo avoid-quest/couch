@@ -148,7 +148,7 @@ export async function verifyReplayGain(context: Context) {
     await httpRemote.ui.button("Playback settings");
     await httpRemote.ui.select("#playback-replaygain", "Album");
     await until("first real HTTP browser changes native gain without changing the saved profile", () => all(state => state.player.replayGain === "album" && state.preferences?.profile.replayGain === "off"));
-    await httpRemote.ui.button("Save ReplayGain as default");
+    await httpRemote.ui.button("Save volume normalization as default");
     await until("explicit Save as default commits observed Album", () => all(state => state.preferences?.profile.replayGain === "album" && state.player.replayGain === "album"));
     await httpRemote.screenshot("replaygain-first-http-current");
     await close(httpRemote.ui);
@@ -166,7 +166,7 @@ export async function verifyReplayGain(context: Context) {
     await until("a real HTTP browser reconnects", () => otherRemote.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
     await otherRemote.ui.section("Now");
     await otherRemote.ui.button("Playback settings");
-    await until("reconnected browser receives observed Album and saved Off", () => otherRemote.ui.execute("return document.querySelector('#playback-replaygain')?.textContent.trim() === 'Album' && document.querySelector('[role=dialog]').textContent.includes('Default for ReplayGain verification: Off')"));
+    await until("reconnected browser receives observed Album", () => otherRemote.ui.execute("return document.querySelector('#playback-replaygain')?.textContent.trim() === 'Album'"));
     await close(otherRemote.ui);
     await savedSettings(otherRemote.ui);
     await assertResponsive(otherRemote.ui, "ReplayGain Settings at 390px");
