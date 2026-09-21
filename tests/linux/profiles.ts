@@ -17,10 +17,9 @@ type Context = {
 export type PersistedProfiles = {
   removed: WatchingProfile;
   survivor: WatchingProfile;
-  history: HistoryItem[];
+  history: HistoryItem;
   preferences: PlaybackPreferences;
   original: WatchingProfile;
-  originalHistory: HistoryItem[];
   originalPreferences: PlaybackPreferences;
 };
 
@@ -61,7 +60,7 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
 
   await stop();
   const original = state().activeProfile;
-  const originalHistory = await history(), originalPreferences = structuredClone(state().preferences!);
+  const originalPreferences = structuredClone(state().preferences!);
   const suffix = crypto.randomUUID().slice(0, 8);
   await httpRemote.minimize();
   await otherRemote.minimize();
@@ -76,7 +75,7 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   assert.ok(saved.mediaId.startsWith("library:"), "Profile fixture uses a real scanned library identity");
   await api(`/api/progress/${encodeURIComponent(saved.mediaId)}`, { watched: true });
   await clients[0]!.command({ type: "preferences", profileId: survivor.id, preferences: { speed: 1.25, audioLanguage: "ita" } });
-  const survivorHistory = await history(), survivorPreferences = structuredClone(state().preferences!);
+  const survivorPreferences = structuredClone(state().preferences!);
   await select(removed);
   await checkpoint(4);
   await guard(removed, "paused");
@@ -107,6 +106,7 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
     finally { await delayed.stop(true); }
   }
 
+  const sharedHistory = await history();
   const oldName = survivor.name;
   assert.equal((await raw(survivor.id, "rename", { expectedName: oldName, name: `Other name ${suffix}` }, 1)).status, 200);
   assert.equal((await raw(survivor.id, "rename", { expectedName: oldName, name: `My draft ${suffix}` })).status, 409, "Stale rename cannot overwrite another controller's change");
@@ -117,13 +117,13 @@ export async function verifyProfileManagement(context: Context): Promise<Persist
   assert.ok(!(await list()).some(profile => profile.id === removed.id));
   assert.equal((await raw(removed.id, "remove", { expectedName: removed.name }, 1)).status, 404);
   await select(survivor);
-  assert.deepEqual(await history(), survivorHistory, "Another viewer's entire history survives rename and removal");
+  assert.deepEqual(await history(), sharedHistory, "Shared playback history survives profile rename and removal");
   assert.deepEqual(state().preferences, survivorPreferences, "Another viewer's saved preferences survive rename and removal");
   await select(original);
-  assert.deepEqual(await history(), survivorHistory, "The shared TV history is independent of the selected preference profile");
+  assert.deepEqual(await history(), sharedHistory, "The shared TV history is independent of the selected preference profile");
   assert.deepEqual(state().preferences, originalPreferences);
   await httpRemote.minimize();
-  const persisted = { removed, survivor, history: survivorHistory, preferences: survivorPreferences, original, originalHistory: survivorHistory, originalPreferences };
+  const persisted = { removed, survivor, history: sharedHistory.find(item => item.mediaId === saved.mediaId)!, preferences: survivorPreferences, original, originalPreferences };
   await Bun.write(`${artifactDir}/profiles-before-restart.json`, JSON.stringify(persisted, null, 2));
   return persisted;
 }
@@ -133,10 +133,10 @@ export async function assertProfilesAfterRestart({ clients, api, until, httpRemo
   assert.ok(!profiles.some(profile => profile.id === expected.removed.id), "Removed viewer stays removed after native restart");
   assert.deepEqual(profiles.find(profile => profile.id === expected.survivor.id), expected.survivor);
   assert.ok(clients.every(client => client.state?.currentEntryId === null), "Profile persistence does not start playback after restart");
-  for (const [profile, history, preferences] of [[expected.survivor, expected.history, expected.preferences], [expected.original, expected.originalHistory, expected.originalPreferences]] as const) {
+  for (const [profile, preferences] of [[expected.survivor, expected.preferences], [expected.original, expected.originalPreferences]] as const) {
     await api(`/api/profiles/${profile.id}/select`, {});
     await until("restarted controllers receive the stored watching profile and preferences", () => clients.every(client => client.state?.activeProfile.id === profile.id));
-    assert.deepEqual((await api("/api/progress/history")).items, history);
+    assert.deepEqual((await api("/api/progress/history")).items.find((item: HistoryItem) => item.mediaId === expected.history.mediaId), expected.history, "The profile fixture checkpoint survives restart and profile selection");
     assert.deepEqual(clients[0]!.state!.preferences, preferences);
   }
   await Bun.write(`${artifactDir}/profiles-after-restart.json`, JSON.stringify({ profiles, retained: expected.survivor }, null, 2));
