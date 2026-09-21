@@ -491,6 +491,7 @@ export function createHub(options: HubOptions) {
                 if (inspections.get(webCommand.entryId) === controller) { inspections.delete(webCommand.entryId); idle.activity(); }
               });
             }
+            if (playIntent !== undefined) session.playIfCurrent(playIntent, webCommand.entryId, action.type === "enqueueWeb" ? action.fromStart : false, authorize, playedBy);
           } else if (action.type === "enqueueLibrary") {
             const media = await library.getPlayable(action.itemId);
             if (closed) return;
@@ -527,7 +528,7 @@ export function createHub(options: HubOptions) {
               await session.command(action, authorize, playedBy);
             }
           }
-          if (playIntent !== undefined && (action.type === "enqueueWeb" || action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
+          if (playIntent !== undefined && (action.type === "enqueueLibrary" || action.type === "enqueueJellyfin")) {
             session.playIfCurrent(playIntent, action.entryId, action.fromStart, authorize, playedBy);
           }
         } catch (error) {
