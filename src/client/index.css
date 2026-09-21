@@ -367,9 +367,6 @@ body.native-host {
 }
 body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { font-size: 24px; }
 body.native-host [data-slot="dialog-content"], body.native-host [data-slot="popover-content"] { font-size: 24px; }
-body.native-host .pairing-panel { width: min(900px, calc(100% - 80px)); max-width: none; padding: 28px; }
-body.native-host .pairing-options { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; }
-body.native-host .pairing-options svg { width: 200px; height: 200px; }
 body.native-host .play-button svg { width: 32px; height: 32px; }
 body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset: 4px; }
 .tv-shell .tv-playback-controls .volume-control > span { font-size: 20px; }
