@@ -254,6 +254,9 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
     if let Some(urls) = std::env::var_os("COUCH_ADVERTISE_URLS") {
         sidecar = sidecar.env("COUCH_ADVERTISE_URLS", urls);
     }
+    if let Some(proxy) = std::env::var_os("COUCH_PREVIEW_PROXY_LAN") {
+        sidecar = sidecar.env("COUCH_PREVIEW_PROXY_LAN", proxy);
+    }
     for (variable, name) in [
         ("COUCH_YT_DLP", "yt-dlp"),
         ("COUCH_DENO", "deno"),

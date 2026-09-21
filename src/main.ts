@@ -36,6 +36,9 @@ function send(message: SidecarMessage) {
 const appimage = native && process.env.COUCH_APPIMAGE === "1";
 const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
 const deb = native && process.env.COUCH_PACKAGE_UPDATE === "1";
+// Docker's published host port is a development-only proxy boundary: its LAN
+// address cannot be bound from inside the container.
+const previewProxyLan = native && process.env.COUCH_PREVIEW_PROXY_LAN === "1";
 const debUpdates = createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }));
 const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
@@ -50,7 +53,7 @@ await mkdir(dataDir, { recursive: true, mode: 0o700 });
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
 hub = createHub({
   updater,
-  managedLan: native,
+  managedLan: native && !previewProxyLan,
   onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
   ...(appimage || deb ? { restart: (appimage ? appimageUpdates : debUpdates).restart } : {}),
