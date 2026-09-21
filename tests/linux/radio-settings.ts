@@ -35,10 +35,11 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
   };
   const sourceCard = (id: string) => `[data-radio-source-id="${id}"]`;
   const refresh = async (id: string) => {
-    const before = (await summaries()).find(source => source.id === id)!;
+    const source = async () => (await api("/api/radio/sources")).sources.find((source: RadioPlaylistSummary) => source.id === id);
+    const before = await source();
     await phone.button("Refresh playlist", sourceCard(id));
     await until("source refresh completes", async () => {
-      const after = (await summaries()).find(source => source.id === id)!;
+      const after = await source();
       return (after.updatedAt !== before.updatedAt || after.error !== before.error) && await phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')");
     }, 20_000);
   };
