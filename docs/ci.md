@@ -9,9 +9,10 @@ bun run check                 # Fast iteration, including uncommitted changes
 bun run verify                # Committed revision: core checks and production build
 ```
 
-`check` runs the pinned TypeScript check and `test`. `test` starts the real-clock
-IPTV test in its own Bun process, then runs the remaining suite with per-file
-isolation and four-way parallelism. The same commands run locally and in hosted
+`check` runs the pinned TypeScript check and `test`. `test` runs the real-clock
+IPTV test in its own Bun process alongside the remaining suite, using Bun's
+built-in parallel script runner. Per-file isolation and four-way parallelism
+remain enabled. The same commands run locally and in hosted
 verification. Tests for media intake, connection lifetime and Query cancellation
 are part of that existing suite, not another harness. For focused iteration use
 `bun test --isolate --parallel=4 <test paths>`; run the real-clock test separately.
