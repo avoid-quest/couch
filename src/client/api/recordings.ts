@@ -6,5 +6,5 @@ import { apiFetch } from "./client";
 export const recordingsQuery = (credentials: Credentials) =>
   queryOptions({
     queryKey: ["recordings"],
-    queryFn: () => apiFetch(credentials, "/api/recordings").then(r => r.json() as Promise<RecordingsPage>),
+    queryFn: ({ signal }) => apiFetch(credentials, "/api/recordings", { signal }).then(r => r.json() as Promise<RecordingsPage>),
   });

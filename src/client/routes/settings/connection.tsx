@@ -4,6 +4,6 @@ import { ConnectionsPage } from "../../sections/settings/device/ConnectionsPage"
 
 // /settings/connection comes from settings-pages, the single path truth.
 export const Route = createFileRoute("/settings/connection")({
-  beforeLoad: requireAdministrator,
+  beforeLoad: ({ context }) => context.identity?.claimAvailable ? undefined : requireAdministrator({ context }),
   component: ConnectionsPage,
 });
