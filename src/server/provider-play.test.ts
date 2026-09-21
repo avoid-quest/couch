@@ -168,3 +168,101 @@ test("revoking the sender during generic provider atom resolution prevents nativ
     expect(commands.filter(command => command.type === "load")).toEqual([]);
   } finally { output.resolve({ source }); resolve.mockRestore(); }
 });
+
+// Retain these public-boundary characterizations when intake ownership changes.
+test.each(["atom", "playlist"] as const)("adding the same provider %s twice creates distinct occurrences without playing", async shape => {
+  const expand = spyOn(providers, "loadProviderList").mockResolvedValue(page);
+  try {
+    const { hub, commands, remote } = fixture();
+    const sender = await remote(), observer = await remote();
+    const action = shape === "atom" ? atom : list;
+    expect(await sender.command(action)).toMatchObject({ ok: true });
+    const first = hub.session.state.queue;
+    expect(await sender.command(action)).toMatchObject({ ok: true });
+    const queue = hub.session.state.queue;
+    expect(queue.map(entry => entry.source)).toEqual([...first, ...first].map(entry => entry.source));
+    expect(queue.slice(0, first.length)).toEqual(first);
+    expect(new Set(queue.map(entry => entry.id)).size).toBe(first.length * 2);
+    expect(queue.every(entry => entry.quality === "720p")).toBe(true);
+    expect(hub.session.state.currentEntryId).toBeNull();
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+    await observer.waitFor(message => message.type === "state" && message.state.queue.length === queue.length);
+    const snapshot = observer.messages.findLast(message => message.type === "state");
+    expect(snapshot).toMatchObject({ state: { queue, currentEntryId: null } });
+  } finally { expand.mockRestore(); }
+});
+
+test("provider list expansion failure preserves current playback and waiting queue", async () => {
+  const expand = spyOn(providers, "loadProviderList").mockRejectedValue(new Error("Provider unavailable"));
+  try {
+    const { hub, commands, remote } = fixture();
+    const sender = await remote();
+    expect(await sender.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "https://media.example/current" }, playNow: true })).toMatchObject({ ok: true });
+    expect(await sender.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: "https://media.example/waiting" } })).toMatchObject({ ok: true });
+    const previous = hub.session.state, sent = [...commands];
+    expect(await sender.command({ ...list, playNow: true })).toMatchObject({ ok: false, error: "Provider unavailable" });
+    expect(hub.session.state.queue).toEqual(previous.queue);
+    expect(hub.session.state.currentEntryId).toBe(previous.currentEntryId);
+    expect(hub.session.state.player.playbackId).toBe(previous.player.playbackId);
+    expect(commands).toEqual(sent);
+  } finally { expand.mockRestore(); }
+});
+
+test("a queue-only provider atom does not cancel another remote's pending list Play", async () => {
+  const entered = Promise.withResolvers<void>(), output = Promise.withResolvers<ProviderPage>();
+  const expand = spyOn(providers, "loadProviderList").mockImplementation(async () => { entered.resolve(); return output.promise; });
+  const resolve = spyOn(webMedia, "resolveWebMedia").mockResolvedValue({ source });
+  try {
+    const { hub, commands, remote, waitForLoad } = fixture();
+    const first = await remote(), second = await remote();
+    const pending = first.command({ ...list, playNow: true });
+    await entered.promise;
+    expect(await second.command({ ...atom, title: "Later", playNow: false })).toMatchObject({ ok: true });
+    expect(hub.session.state.currentEntryId).toBeNull();
+    output.resolve(page);
+    expect(await pending).toMatchObject({ ok: true });
+    await waitForLoad();
+    expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Episode 1", "Episode 2", "Later"]);
+    expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[0]!.id);
+    expect(commands.filter(command => command.type === "load")).toHaveLength(1);
+  } finally { output.resolve(page); expand.mockRestore(); resolve.mockRestore(); }
+});
+
+test("back-to-back provider atom and Stop keep the admitted atom but finish stopped", async () => {
+  const resolve = spyOn(webMedia, "resolveWebMedia").mockResolvedValue({ source });
+  try {
+    const { hub, commands, remote } = fixture();
+    const sender = await remote();
+    sender.socket.send(JSON.stringify({ type: "command", requestId: "ordered-atom", action: { ...atom, playNow: true } }));
+    sender.socket.send(JSON.stringify({ type: "command", requestId: "ordered-stop", action: { type: "stop" } }));
+    expect(await sender.waitFor(message => message.type === "result" && message.requestId === "ordered-atom")).toMatchObject({ ok: true });
+    expect(await sender.waitFor(message => message.type === "result" && message.requestId === "ordered-stop")).toMatchObject({ ok: true });
+    expect(hub.session.state.queue).toHaveLength(1);
+    expect(hub.session.state.queue[0]!.source).toBe(`web:${atom.url}`);
+    expect(hub.session.state.currentEntryId).toBeNull();
+    expect(hub.session.state.player.playbackId).toBeNull();
+    expect(commands.at(-1)).toEqual({ type: "stop" });
+  } finally { resolve.mockRestore(); }
+});
+
+test("shutdown aborts a generic list before its completion can append or play", async () => {
+  const entered = Promise.withResolvers<AbortSignal>(), finished = Promise.withResolvers<void>();
+  const expand = spyOn(providers, "loadProviderList").mockImplementation(async (_provider, _url, signal) => {
+    entered.resolve(signal!);
+    await new Promise<void>(resolve => signal!.addEventListener("abort", () => resolve(), { once: true }));
+    finished.resolve();
+    return page;
+  });
+  try {
+    const { hub, commands, remote } = fixture();
+    const sender = await remote();
+    sender.socket.send(JSON.stringify({ type: "command", requestId: "shutdown-list", action: { ...list, playNow: true } }));
+    const signal = await entered.promise;
+    await hub.close();
+    await finished.promise;
+    expect(signal.aborted).toBe(true);
+    expect(hub.session.state.queue).toEqual([]);
+    expect(hub.session.state.currentEntryId).toBeNull();
+    expect(commands.filter(command => command.type === "load")).toEqual([]);
+  } finally { expand.mockRestore(); }
+});
