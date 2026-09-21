@@ -325,7 +325,7 @@ try {
   await ui.select("#playback-speed", "1.5×");
   await until("native settings Select restores playback speed", () => all(state => state.player.speed === 1.5));
   await ui.key(keys.escape);
-  await until("Escape closes settings and restores its trigger while TV remains fullscreen", async () => await execute("return !document.querySelector('[role=dialog]') && document.activeElement?.textContent.trim() === 'Playback settings'") && all(state => state.player.status === "paused" && state.player.playbackId === playbackId));
+  await until("Escape closes settings and restores its trigger while TV remains fullscreen", async () => await execute("return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Playback settings'") && all(state => state.player.status === "paused" && state.player.playbackId === playbackId));
   await ui.watching();
   await assertTvFullscreen(ui, until, "Back to watching");
   await assertNativeVideoPixels(execute, artifactDir, "native-back-to-watching-video");
