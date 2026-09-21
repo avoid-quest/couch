@@ -138,8 +138,12 @@ export class UiDriver {
       const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
       const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
       await this.click(`.primary-nav a[data-source="${destination}"]`);
-      if (source) await this.type("#media-search", "");
-      if (source) await this.button(source, '[aria-label="Filter search results"]');
+      if (source) {
+        await this.type("#media-search", "");
+        await this.key(keys.enter);
+        await this.button(source, '[aria-label="Filter search results"]');
+        await this.waitFor(`${source} filter is selected`, () => this.execute("return document.querySelector('[data-search-scopes] [aria-pressed=true]')?.getAttribute('aria-label') === arguments[0]", [source]));
+      }
       await this.waitFor(`${label} page opens`, () => this.execute('return !!document.querySelector(arguments[0])', [`[data-page="${destination}"]:not([hidden])`]));
       return;
     }
