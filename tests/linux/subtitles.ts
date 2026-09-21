@@ -34,13 +34,17 @@ function controls({ clients, until }: Pick<Context, "clients" | "until">) {
 }
 
 async function settings(ui: UiDriver, until: Wait) {
-  await ui.button("Playback settings");
+  const native = await ui.execute("return !!window.__TAURI_INTERNALS__");
+  if (native) await ui.controls();
+  await ui.button("Playback settings", native ? ".tv-playback-controls:not([hidden])" : "");
   await until("playback settings exposes its subtitle upload control", async () => await ui.execute("return !!document.querySelector('[role=dialog] #playback-subtitle-file')"));
 }
 
 async function closeSettings(ui: UiDriver, until: Wait) {
   await ui.key(keys.escape);
-  await until("Escape closes playback settings and restores its trigger", async () => await ui.execute("return !document.querySelector('[role=dialog]') && document.activeElement?.textContent.trim() === 'Playback settings'"));
+  await until("Escape closes playback settings and restores its trigger", async () => await ui.execute(`
+    return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Playback settings';
+  `));
 }
 
 async function uploadFile(ui: UiDriver, path: string) {
