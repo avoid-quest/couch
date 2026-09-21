@@ -24,7 +24,7 @@ export function SetupQr({ url, credentials }: { url: string; credentials: { orig
   const code = pairing?.token === credentials.token && pairing.origin === credentials.origin ? pairing.code : null;
   const link = new URL(url);
   link.hash = code ? `pair=${code}` : "";
-  return <div className="shrink-0 space-y-2">
-    {code ? <><QRCodeSVG value={link.href} size={160} marginSize={4} level="M" title="Pair another device" className="h-40 w-40 rounded-md" /><p className="text-sm text-muted-foreground">Scan to pair a device</p></> : error ? <><p role="alert">Could not load the QR. Use the address and TV code, or retry.</p><Button variant="outline" className="min-h-11" onClick={() => setAttempt(value => value + 1)}>Retry pairing QR</Button></> : <p role="status" className="flex items-center gap-2"><Spinner className="size-3.5" />Loading pairing QR…</p>}
+  return <div className="shrink-0">
+    {code ? <div className="flex items-center justify-center gap-5 rounded-xl bg-muted/40 p-3"><div role="img" aria-label={`Pair another device with code ${code}`}><QRCodeSVG value={link.href} size={128} marginSize={4} level="M" title="Pair another device" aria-hidden="true" className="h-32 w-32 rounded-md" /></div><p className="pairing-display"><span>Pairing code</span><strong>{code}</strong></p></div> : error ? <><p role="alert">Could not load the QR or pairing code. Retry to pair a device.</p><Button variant="outline" className="min-h-11" onClick={() => setAttempt(value => value + 1)}>Retry pairing QR</Button></> : <p role="status" className="flex items-center gap-2"><Spinner className="size-3.5" />Loading pairing QR…</p>}
   </div>;
 }
