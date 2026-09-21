@@ -64,9 +64,4 @@ jobs:
           bun run verify "${args[@]}"
       - name: Retain the exact-revision receipt
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verification-${{ github.sha }}-${{ github.run_attempt }}
-          path: .artifacts/verification.json
-          if-no-files-found: warn
-          retention-days: 7
+        run: cat .artifacts/verification.json

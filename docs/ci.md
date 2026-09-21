@@ -85,8 +85,10 @@ It uses frozen dependencies and the same `bun run verify` entry point. Select th
 `native` input for native changes; ordinary source verification does not install
 native development packages or restore Cargo caches. Required native coverage is
 not waived by leaving that input false: the PR's applicable gates must be met.
-Receipts are retained as small seven-day artifacts. The built-browser gate is
-run through the existing Linux environment rather than adding another hosted
+The exact JSON receipt is printed in the downloadable job log. Retrieve it with
+`gh run view RUN_ID --log`; a missing receipt fails the retention step. This
+keeps qualification evidence available without artifact-storage quota. The
+built-browser gate runs through the existing Linux environment rather than adding another hosted
 browser harness or an automatic heavy job for every push.
 
 Workflow and packaging edits require `act` proof before hosted dispatch, using
