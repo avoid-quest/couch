@@ -40,8 +40,8 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await httpRemote.restore();
   const phone = httpRemote.ui;
   await phone.section("Find");
-  await phone.button("Remote", ".mode-switch");
-  await until("HTTP phone Remote mode contains controls and no video stage", () => phone.execute("return !!document.querySelector('.remote-control .remote-pad') && !document.querySelector('.video-stage, .remote-stage, .stage-caption, video')"));
+  await phone.button("Remote");
+  await until("HTTP phone remote dialog contains the D-pad", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
   await assertResponsive(phone, "Phone remote pad");
   await ui.execute("window.__dpadStage = document.querySelector('.video-stage')");
   await phone.button("TV info");
@@ -61,7 +61,7 @@ export async function verifyTvRemote({ ui, until, clients, httpRemote, artifactD
   await phone.button("TV home");
   await until("phone Home opens the TV browser and retains the mounted video stage", async () => await ui.execute("return !!document.querySelector('.tv-browser:not([hidden])') && window.__dpadStage === document.querySelector('.video-stage')") && all(state => state.player.playbackId === initial.playbackId && state.player.status === "paused"));
   await assertTvFullscreen(ui, until, "phone D-pad navigation");
-  await until("phone Remote pad remains available for the retained screenshot", () => phone.execute("return !!document.querySelector('.remote-control .remote-pad')"));
+  await until("phone remote dialog remains available for the retained screenshot", () => phone.execute("return !!document.querySelector('[role=dialog] .remote-pad')"));
   await httpRemote.screenshot("http-tv-remote");
   await Bun.write(`${artifactDir}/tv-remote.json`, JSON.stringify({ testedAt: new Date().toISOString(), controllers: clients.length, nativeViewport: [1600, 1000], phoneViewport: 390, nativeFullscreen: true, remoteVideoStages: 0, playbackId: initial.playbackId, checks: ["Remote pad", "Info transport focus", "OK transport", "directional focus", "slider adjustment", "mounted native stage"] }, null, 2));
 }
