@@ -205,7 +205,9 @@ export class UiDriver {
       if (!options.length) await Bun.sleep(50);
     }
     assert.equal(options.length, 1, `One ${label} select option exists`);
+    await this.waitFor("Select opens with option focus", () => this.execute("return document.activeElement?.getAttribute('role') === 'option'"));
     for (const character of label) await this.key(character);
+    await this.waitFor(`Select focuses ${label}`, () => this.execute("return document.activeElement?.getAttribute('role') === 'option' && document.activeElement.textContent.trim() === arguments[0]", [label]));
     await this.key(keys.enter);
     const closeDeadline = Date.now() + 5_000;
     while (!await this.execute("return !document.querySelector('[role=listbox]') && document.querySelector(arguments[0])?.textContent.trim() === arguments[1]", [selector, label])) {
