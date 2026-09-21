@@ -114,7 +114,7 @@ export async function verifyAppearance(context: Context) {
   await ui.watching();
   assert.deepEqual(await geometry(), original, "Native aperture is identical after confirming the largest size");
   await ui.controls();
-  const controls = await ui.execute<{ width: number; height: number; icon: number; time: number }>("const button=document.querySelector('.tv-playback-controls .play-button'), rect=button.getBoundingClientRect(); return {width:rect.width,height:rect.height,icon:button.querySelector('svg').getBoundingClientRect().width,time:parseFloat(getComputedStyle(document.querySelector('.time-labels')).fontSize)*Number(getComputedStyle(document.getElementById('root')).zoom)}");
+  const controls = await ui.execute("const button=document.querySelector('.tv-playback-controls .play-button'), rect=button.getBoundingClientRect(); return {width:rect.width,height:rect.height,icon:button.querySelector('svg').getBoundingClientRect().width,time:parseFloat(getComputedStyle(document.querySelector('.time-labels')).fontSize)*Number(getComputedStyle(document.getElementById('root')).zoom)}");
   assert.ok(Math.abs(controls.width - controls.height) < 1, "The native play button is circular at Largest");
   assert.ok(controls.icon >= 40 && controls.time >= 30, "Largest has TV-sized transport icons and time labels");
   await ui.watching();

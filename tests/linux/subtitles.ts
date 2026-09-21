@@ -307,6 +307,7 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   await assertPreferencesLoad(context, householdPreferences, first().preferences!.device.audioDelay, "Settings restores defaults for the following item");
   await httpRemote.restore();
   await settings(httpRemote.ui, until);
+  await httpRemote.ui.click("[role=dialog] details summary");
   await httpRemote.ui.type("#playback-audio-delay", String(audioDelay));
   const apply = await httpRemote.ui.execute("return document.querySelector('#playback-audio-delay').closest('form').querySelector('button')");
   await httpRemote.ui.clickElement(apply["element-6066-11e4-a52e-4f735466cecf"]);
