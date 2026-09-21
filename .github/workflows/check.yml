@@ -64,4 +64,4 @@ jobs:
           bun run verify "${args[@]}"
       - name: Retain the exact-revision receipt
         if: always()
-        run: cat .artifacts/verification.json
+        run: jq . .artifacts/verification.json
