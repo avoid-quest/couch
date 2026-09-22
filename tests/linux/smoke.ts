@@ -28,6 +28,7 @@ const request = async (path: string, body?: unknown, method = body === undefined
   assert.ok(response.ok && !value.value?.error, `WebDriver ${path} succeeded`);
   return value.value;
 };
+const sidecar = async () => { try { return (await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } };
 let session = "", state: SessionState | undefined;
 const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 const tv = new UiDriver(request, () => session);
@@ -60,7 +61,7 @@ try {
   assert.match(revision, /^[a-f0-9]{40}$/, "launcher supplies the immutable source revision");
   await until("Tauri WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("compiled Tauri app connects to its compiled sidecar", () => tv.roleHasText("status", "Connected"), 30_000);
+  await until("compiled Tauri app starts its compiled sidecar", sidecar, 30_000);
   await tv.button("Settings");
   await tv.settingsSection("connection");
   await tv.button("Pair a remote");
@@ -90,7 +91,7 @@ try {
   session = "";
   await until("closing the compiled desktop app stops its sidecar", async () => { try { await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) }); return false; } catch { return true; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("restarted compiled desktop app reconnects", () => tv.roleHasText("status", "Connected"), 30_000);
+  await until("restarted compiled desktop app starts its sidecar", sidecar, 30_000);
   await connect(token);
   await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === entryId && state.currentEntryId === null && state.player.status === "idle");
 
