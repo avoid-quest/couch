@@ -27,6 +27,5 @@ jobs:
             echo "Nothing to release."
             exit 0
           fi
-          notes=$(bun scripts/release-notes.ts)
           gh workflow run package.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f channel=preview -f publish=true -f notes="$notes"
+            -f channel=preview -f publish=true
