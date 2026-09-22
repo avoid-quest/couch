@@ -12,6 +12,7 @@ const image = process.env.COUCH_ACT_IMAGE ?? "debian:13-slim";
 const architecture = process.env.COUCH_ACT_ARCH ?? `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`;
 const source = await Bun.file(".github/workflows/package.yml").text();
 const workflow = Bun.YAML.parse(source) as any;
+const release = Bun.YAML.parse(await Bun.file(".github/workflows/release.yml").text()) as any;
 const names = {
   build: "Build and sign the selected package",
   qualify: "Qualify the exact signed bytes",
@@ -47,6 +48,9 @@ const receiptStep = workflow.jobs.release.steps.find((step: any) => step.name ==
 assert.equal(receiptStep["continue-on-error"], true);
 assert.ok(!receiptStep.with.path.includes("public") && !receiptStep.with.path.includes("inventory"));
 assert.equal(workflow.jobs.release.environment, "couch-release");
+assert.equal(workflow.on.workflow_dispatch.inputs.notes, undefined);
+assert.match(workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs").run, /release-notes\.ts "\$revision"/);
+assert.doesNotMatch(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /release-notes|notes=/);
 await mkdir(`${output}/home`, { recursive: true });
 await mkdir(`${output}/workspace`, { recursive: true });
 const results = [];
@@ -66,7 +70,7 @@ for (const test of cases) {
   });
   const path = `${output}/workspace/${test.name}`;
   await Bun.write(`${path}.yml`, Bun.YAML.stringify(mock, null, 2));
-  await Bun.write(`${path}.json`, JSON.stringify({ ref: scenario.ref ?? "refs/heads/main", repository: { full_name: "avoid-quest/couch", default_branch: "main" }, inputs: Object.fromEntries(Object.entries({ notes: "Local inert validation", ...test.inputs }).map(([key, value]) => [key, String(value)])) }));
+  await Bun.write(`${path}.json`, JSON.stringify({ ref: scenario.ref ?? "refs/heads/main", repository: { full_name: "avoid-quest/couch", default_branch: "main" }, inputs: Object.fromEntries(Object.entries(test.inputs).map(([key, value]) => [key, String(value)])) }));
   const command = [act, "workflow_dispatch", "-C", `${output}/workspace`, "-W", `${path}.yml`, "-e", `${path}.json`, "--env-file", "/dev/null", "--secret-file", "/dev/null", "--var-file", "/dev/null", "--input-file", "/dev/null", "--platform", `blacksmith-4vcpu-ubuntu-2404=${image}`, "--container-architecture", architecture, "--pull=false", "--network", "none", "--container-daemon-socket", "-", "--no-cache-server", "--rm", "--var", `COUCH_RELEASES_ENABLED=${scenario.enabled !== false}`, "--action-cache-path", `${output}/action-cache`];
   const start = performance.now();
   const child = Bun.spawn(command, { env: { PATH: process.env.PATH!, HOME: `${output}/home`, DOCKER_HOST: dockerHost }, stdout: "pipe", stderr: "pipe" });

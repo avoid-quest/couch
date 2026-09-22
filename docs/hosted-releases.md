@@ -112,25 +112,27 @@ A fresh build defaults to a Preview draft. Publication is explicit:
 ```sh
 # Build, sign, qualify and upload a native Preview draft.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
-  -f format=deb -f channel=preview -f publish=false -f notes='Describe this release'
+  -f format=deb -f channel=preview -f publish=false
 
 # Publish that completed draft using its signed receipts, without rebuilding.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f publish=true -f notes='Describe this release'
+  -f publish=true
 
 # Retry public verification after publication, without publishing again.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f readiness-only=true -f notes='Recheck publication'
+  -f readiness-only=true
 
 # Promote a final-version Preview whose readiness receipt passed.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=deb -f channel=stable -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f publish=true -f notes='Promote the tested Preview'
+  -f publish=true
 ```
 
-Here `RUN` and `ATTEMPT` select `release-receipts-RUN.ATTEMPT`. The workflow
+Here `RUN` and `ATTEMPT` select `release-receipts-RUN.ATTEMPT`. Package derives
+the notes from the selected build revision, so a later `main` commit cannot
+attach its changelog to earlier bytes. The workflow
 verifies both receipt signatures against the enrolled public key, checks the
 complete qualification identity, and checks the original main Package dispatch
 and source revision. A retry can use a receipt from a failed overall run if its

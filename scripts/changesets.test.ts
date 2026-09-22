@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { releaseNotes } from "./release-notes";
+import { releaseNotes, releaseNotesAtRevision } from "./release-notes";
 import { syncVersions } from "./sync-versions";
 
 const changelog = `# couch
@@ -31,6 +31,23 @@ describe("release notes", () => {
   });
   test("rejects non-release versions", () => {
     expect(() => releaseNotes("0.1.6+build.1.1", changelog)).toThrow();
+  });
+  test("keeps a candidate's notes when main advances before Package starts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "couch-release-notes-"));
+    const git = (args: string[]) => expect(Bun.spawnSync(["git", ...args], { cwd: directory }).exitCode).toBe(0);
+    try {
+      git(["init", "--initial-branch=main"]);
+      git(["config", "user.email", "test@example.com"]);
+      git(["config", "user.name", "Test"]);
+      await Bun.write(join(directory, "package.json"), JSON.stringify({ version: "0.1.6-preview.1" }));
+      await Bun.write(join(directory, "CHANGELOG.md"), "## 0.1.6-preview.1\n\n- Candidate notes\n");
+      git(["add", "."]); git(["-c", "commit.gpgSign=false", "commit", "-m", "candidate"]);
+      const candidate = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: directory }).stdout.toString().trim();
+      await Bun.write(join(directory, "package.json"), JSON.stringify({ version: "0.1.6-preview.2" }));
+      await Bun.write(join(directory, "CHANGELOG.md"), "## 0.1.6-preview.2\n\n- Later notes\n");
+      git(["add", "."]); git(["-c", "commit.gpgSign=false", "commit", "-m", "main advances"]);
+      await expect(releaseNotesAtRevision(candidate, directory)).resolves.toBe("- Candidate notes");
+    } finally { await rm(directory, { recursive: true, force: true }); }
   });
 });
 

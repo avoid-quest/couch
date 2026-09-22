@@ -28,10 +28,6 @@ name: Package
         type: boolean
         default: false
         description: Publish the qualified draft; false only uploads it
-      notes:
-        type: string
-        required: true
-        description: Release notes
 permissions:
   contents: read
 concurrency:
@@ -79,7 +75,6 @@ jobs:
           bun scripts/hosted-receipts.ts restore .artifacts/receipt-run.log .artifacts/hosted-release
       - name: Check the candidate inputs
         env:
-          NOTES: "${{ inputs.notes }}"
           BUILD_RUN: "${{ inputs.build-run }}"
           BUILD_ATTEMPT: "${{ inputs.build-attempt }}"
           CHANNEL: "${{ inputs.channel }}"
@@ -87,11 +82,12 @@ jobs:
           GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p .artifacts/hosted-release
-          printf '%s\n' "$NOTES" > .artifacts/hosted-release/notes.md
           if [ "$BUILD_RUN" = 0 ]; then
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
+            revision=$(git rev-parse HEAD)
           else
             bun scripts/hosted-release.ts verify-receipt .artifacts/hosted-release
+            revision=$(jq -er .revision .artifacts/hosted-release/manifest.json)
             test "$(jq -r '.format' .artifacts/hosted-release/manifest.json)" = "deb"
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/receipt-run.json
             source_run=$(jq -er '.buildRun.id' .artifacts/hosted-release/manifest.json)
@@ -102,6 +98,7 @@ jobs:
             done
             test "$(jq -r .revision .artifacts/hosted-release/manifest.json)" = "$(jq -r .head_sha .artifacts/source-run.json)"
           fi
+          bun scripts/release-notes.ts "$revision" > .artifacts/hosted-release/notes.md
       - name: Install supported Cloud CLI
         if: "${{ !inputs.readiness-only }}"
         uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
