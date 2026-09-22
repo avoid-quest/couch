@@ -53,6 +53,8 @@ try {
     "docker", "run", "--rm", "--init", "--shm-size=1g",
     "--mount", `type=bind,source=${join(snapshot, "source.bundle")},target=/source.bundle,readonly`,
     "--env", `COUCH_SOURCE_REVISION=${revision}`,
+    "--env", "COUCH_RELEASES_ENABLED=false",
+    ...(process.env.TAURI_VIDEO_TELEMETRY === "1" ? ["--env", "TAURI_VIDEO_TELEMETRY=1"] : []),
     "--mount", `type=bind,source=${artifacts},target=/artifacts`,
     "--mount", "type=volume,source=couch-linux-target,target=/cache/target",
     "--mount", "type=volume,source=couch-linux-registry,target=/root/.cargo/registry",

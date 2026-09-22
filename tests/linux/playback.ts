@@ -30,6 +30,9 @@ const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const artifactDir = "/artifacts";
 const checks: string[] = [];
+const commandLatency: { action: Action["type"]; elapsedMs: number; outcome: "ok" | "error" }[] = [];
+const telemetryEnabled = process.env.TAURI_VIDEO_TELEMETRY === "1";
+const stuckRenderPattern = "mpv_render_context_render() not being called or stuck";
 const radioFixture = await createRadioFixture();
 const guideFixture = await createGuideFixture(4202, "ffmpeg", artifactDir);
 const plainMediaAuth: boolean[] = [];
@@ -151,15 +154,41 @@ class Remote {
 
   command(action: Action) {
     const requestId = crypto.randomUUID();
+    const started = performance.now();
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error(`${action.type} acknowledgement timed out`)); }, 5_000);
+      const finish = (outcome: "ok" | "error") => commandLatency.push({ action: action.type, elapsedMs: performance.now() - started, outcome });
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        finish("error");
+        reject(new Error(`${action.type} acknowledgement timed out`));
+      }, 5_000);
       this.pending.set(requestId, {
-        resolve: () => { clearTimeout(timer); resolve(); },
-        reject: error => { clearTimeout(timer); reject(error); },
+        resolve: () => { clearTimeout(timer); finish("ok"); resolve(); },
+        reject: error => { clearTimeout(timer); finish("error"); reject(error); },
       });
       this.socket.send(JSON.stringify({ type: "command", requestId, action }));
     });
   }
+}
+
+async function telemetrySamples() {
+  const log = await Bun.file(`${artifactDir}/native.log`).text();
+  return [...log.matchAll(/mpv telemetry: presented=(\d+) dropped=(\d+) fps=([\d.]+)/g)].map(([, presented, dropped, fps]) => ({
+    presented: Number(presented), dropped: Number(dropped), fps: Number(fps),
+  }));
+}
+
+async function writeThreadingEvidence() {
+  const log = await Bun.file(`${artifactDir}/native.log`).text();
+  const samples = await telemetrySamples();
+  await Bun.write(`${artifactDir}/gtk-mpv-threading.json`, JSON.stringify({
+    sourceRevision: process.env.COUCH_SOURCE_REVISION,
+    telemetryEnabled,
+    commandLatency,
+    frameTelemetry: samples,
+    uiChecks: checks.filter(check => check.includes("Phone") || check.includes("native video") || check.includes("WebView pixels")),
+    stuckRenderLog: { pattern: stuckRenderPattern, found: log.includes(stuckRenderPattern) },
+  }, null, 2));
 }
 
 const all = (predicate: (state: SessionState) => boolean) => clients.every(client => client.state && predicate(client.state));
@@ -204,6 +233,12 @@ try {
   await click('[aria-label="Play Linux multitrack fixture"]');
   await until("native libmpv playback observed by both remotes", () => all(state => state.player.status === "playing" && state.player.position > 0));
   assert.ok((await Bun.file(`${artifactDir}/native.log`).text()).includes("Couch: basic GPU rendering enabled (COUCH_BASIC_RENDERING=1)"), "the explicit software-display renderer is active");
+  if (telemetryEnabled) {
+    await until("libmpv telemetry shows presented frames advancing", async () => {
+      const samples = await telemetrySamples();
+      return samples.length >= 2 && samples.at(-1)!.presented > samples[0]!.presented && samples.some(sample => sample.fps > 0);
+    }, 10_000);
+  }
   const playbackId = clients[0]!.state!.player.playbackId!;
   await clients[0]!.command({ type: "pause", playbackId, paused: true });
   await until("first remote pauses native playback for all clients", () => all(state => state.player.status === "paused"));
@@ -642,6 +677,7 @@ try {
   await Promise.all(clients.map(client => client.connect()));
   await radioAcceptance.assertAfterRestart();
 
+  await writeThreadingEvidence();
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {
   await screenshot("native-failure").catch(() => {});
@@ -660,6 +696,7 @@ try {
   await Bun.write(`${artifactDir}/failure.txt`, String(error));
   throw error;
 } finally {
+  await writeThreadingEvidence().catch(() => {});
   await secondHttpRemote?.close();
   await httpRemote?.close();
   clients.forEach(client => client.socket?.close());
