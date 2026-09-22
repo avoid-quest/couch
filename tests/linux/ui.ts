@@ -17,6 +17,7 @@ export class UiDriver {
   }
 
   async text(id: string) { return this.request(`/session/${this.session()}/element/${id}/text`); }
+  async attribute(id: string, name: string) { return this.request(`/session/${this.session()}/element/${id}/attribute/${name}`); }
 
   async roleHasText(role: string, text: string) {
     for (const element of await this.elements("css selector", `[role="${role}"]`)) try {
@@ -26,10 +27,10 @@ export class UiDriver {
   }
 
   async pairingCode() {
-    const [dialog] = await this.elements("css selector", '[role="dialog"]');
-    assert.ok(dialog, "Pairing dialog exists");
-    const code = (await this.text(dialog["element-6066-11e4-a52e-4f735466cecf"])).match(/\b\d{6}\b/)?.[0];
-    assert.ok(code, "Pairing dialog presents a six-digit code");
+    const [qr] = await this.elements("xpath", '//*[@role="img" and starts-with(@aria-label, "Pair another device with code ")]');
+    assert.ok(qr, "Pairing QR exists");
+    const code = (await this.attribute(qr["element-6066-11e4-a52e-4f735466cecf"], "aria-label")).match(/\b\d{6}\b/)?.[0];
+    assert.ok(code, "Pairing QR exposes a six-digit code");
     return code;
   }
 
