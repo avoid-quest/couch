@@ -79,6 +79,25 @@ test("revocation prevents a delayed admitted album from appending or starting pl
   } finally { album.resolve(bandcampAlbum); lookup.mockRestore(); }
 });
 
+test("revocation during source-list saving leaves no playlist or change notification", async () => {
+  const started = Promise.withResolvers<void>(), list = Promise.withResolvers<ProviderPage>();
+  const resolve = spyOn(providersModule, "loadProviderList").mockImplementation(async () => { started.resolve(); return list.promise; });
+  try {
+    const { hub } = fixture();
+    const ownerToken = await pair(hub), guestToken = await pair(hub);
+    await claimAdministrator(hub, ownerToken);
+    const { controller } = await (await controllerApi(hub, guestToken, "/api/controllers/me")).json() as { controller: { id: string } };
+    const playlistVersion = hub.session.state.playlistVersion;
+    const saving = controllerApi(hub, guestToken, "/api/playlists", "POST", { source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" } });
+    await started.promise;
+    expect((await controllerApi(hub, ownerToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
+    list.resolve({ title: "Late list", items: [{ id: "video", title: "Video", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });
+    expect((await saving).status).toBe(401);
+    expect(await (await controllerApi(hub, ownerToken, "/api/playlists")).json()).toEqual({ playlists: [] });
+    expect(hub.session.state.playlistVersion).toBe(playlistVersion);
+  } finally { list.resolve({ items: [] }); resolve.mockRestore(); }
+});
+
 test("revocation during source resolution prevents the late native load and metadata change", async () => {
   const started = Promise.withResolvers<void>(), source = Promise.withResolvers<{ source: string; metadata: { title: string } }>();
   const resolve = spyOn(webMediaModule, "resolveWebMedia").mockImplementation(async () => { started.resolve(); return source.promise; });
@@ -1396,6 +1415,21 @@ test("YouTube playlist queue is atomic, ordered and applies the selected quality
     expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
     expect(hub.session.state.queue).toHaveLength(2);
   } finally { playlist.mockRestore(); }
+});
+
+test("source-list saves preserve repeated media as separate ordered occurrences", async () => {
+  const page: ProviderPage = { title: "Repeated", items: ["first", "second"].map(title => ({ id: "same-video", title, provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" })) };
+  const list = spyOn(providersModule, "loadProviderList").mockResolvedValue(page);
+  try {
+    const { hub } = fixture();
+    const token = await pair(hub);
+    const saved = await (await controllerApi(hub, token, "/api/playlists", "POST", { source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" } })).json() as { playlist: { id: string; revision: number; entries: Array<{ id: string; title: string }> } };
+    expect(saved.playlist.entries.map(entry => entry.title)).toEqual(["first", "second"]);
+    expect(new Set(saved.playlist.entries.map(entry => entry.id)).size).toBe(2);
+    expect((await controllerApi(hub, token, `/api/playlists/${saved.playlist.id}/load`, "POST", { revision: saved.playlist.revision, mode: "replace" })).status).toBe(200);
+    expect(hub.session.state.queue.map(entry => [entry.title, entry.source])).toEqual(page.items.map(item => [item.title, `web:${item.url}`]));
+    expect(new Set(hub.session.state.queue.map(entry => entry.id)).size).toBe(2);
+  } finally { list.mockRestore(); }
 });
 
 test("saved provider references queue atoms and expand lists without exposing the resolver", async () => {
