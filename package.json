@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
-    "client:dev": "vite",
+    "client:dev": "bun --bun vite",
     "build": "bun scripts/build.ts",
     "desktop": "bun scripts/desktop.ts dev --config src-tauri/tauri.dev.conf.json",
     "desktop:build": "bun scripts/desktop.ts build",
