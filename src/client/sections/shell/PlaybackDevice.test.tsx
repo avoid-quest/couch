@@ -180,10 +180,12 @@ test("an unreachable remote cannot prevent this installation's update controls",
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const credentials = { origin: "http://127.0.0.1:54321", token: "own-installation" };
-  await act(async () => root.render(<QueryClientProvider client={client!}><UpdatesSettings credentials={credentials} connected showTools={false} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client!}><UpdatesSettings credentials={credentials} connected /></QueryClientProvider>));
   await flush();
   expect(document.body.textContent).toContain("Hosted update");
   expect(button("Install update").disabled).toBe(false);
+  expect(screen.queryByLabelText("Release channel")).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   expect(choice.mode).toBe("remote");

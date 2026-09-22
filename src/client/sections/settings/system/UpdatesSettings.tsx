@@ -5,15 +5,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "../../../update-request";
 import { verificationFailure, type UpdateState } from "../../../../shared/updates";
-import { ToolsSettings } from "./ToolsSettings";
 
-type Props = { credentials: ApiCredentials; connected: boolean; showTools?: boolean };
+type Props = { credentials: ApiCredentials; connected: boolean };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
-export function UpdatesSettings({ credentials, connected, showTools = true }: Props) {
+export function UpdatesSettings({ credentials, connected }: Props) {
   const [state, setState] = useState<UpdateState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -108,11 +106,8 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       {candidate && <div className="space-y-2">
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
-        <p className="text-muted-foreground">{candidate.bytes ? `Verified size: ${(candidate.bytes / 1024 / 1024).toFixed(1)} MB` : "The size and source commit will be verified after download."}</p>
-        {!state.currentCheck && <p className="text-muted-foreground">This release has not been confirmed by a successful current check.</p>}
       </div>}
       {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
-      {state.installation?.enabled && !installing && state.status !== "ready" && <p className="text-muted-foreground">Download a verified release to enable Install update.</p>}
       {!retry && !installing && confirming === "install" && <div className="space-y-2">
           <p>Install {candidate?.version} and restart Couch. Other remotes will disconnect; viewing data is preserved.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
@@ -129,37 +124,13 @@ export function UpdatesSettings({ credentials, connected, showTools = true }: Pr
       <p className="font-medium">Manual installation is not enabled on this installation.</p>
       <p className="text-muted-foreground">From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects.</p>
     </Card>}
-    {state && <Card className="min-w-0 gap-3 p-4 text-sm">
-      <div className="space-y-2">
-        <Label htmlFor="release-channel">Release channel</Label>
-        <Select value={state.channel} disabled={busy || state.status === "unavailable"} onValueChange={channel => void update("channel", { channel })}>
-          <SelectTrigger id="release-channel" className="min-h-11 w-full"><SelectValue>{state.channel === "stable" ? "Stable" : "Preview"}</SelectValue></SelectTrigger>
-          <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
-        </Select>
-        <p className="text-muted-foreground">Changing channels checks for a newer release. Switching to Stable cannot downgrade Couch.</p>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="update-policy">Install updates</Label>
-        <Select value={state.policy} disabled={busy || state.status === "unavailable"} onValueChange={policy => void update("policy", { policy })}>
-          <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
-          <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
-        </Select>
-        <p className="text-muted-foreground">Auto downloads verified updates, then waits for ten continuous idle minutes. Pausing and radio reconnects keep waiting.</p>
-        {state.policy === "idle" && <p role="status">{state.waiting || "Waiting for ten continuous idle minutes."}</p>}
-      </div>
-      <p className="text-xs text-muted-foreground">Running {state.running.version}, commit {state.running.revision || "unknown"} · Last successful check {state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "none yet"}. Checks run at startup and every 15 minutes.</p>
+    {state?.installation?.enabled && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
+      <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>
+      {confirming === "repair" ? <>
+        <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect.</p>
+        <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
+        <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
+        </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button></div>}
     </Card>}
-    {showTools && <ToolsSettings credentials={credentials} connected={connected} revision={transaction?.phase === "succeeded" ? transaction.updateId : undefined}>
-      {state?.installation?.enabled && state.installation.repairAvailable === false && <p>Retained recovery is available through couch-recover. Keep the previous verified AppImage and backup; an old hosted download may expire.</p>}
-      {state?.installation?.enabled && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
-        <p className="text-muted-foreground">Repair reinstalls enrolled Couch {state.installation.current.version}. It preserves preferences, pairings, media data, custom overrides and any newer staged release. It does not download a newer extractor.</p>
-        {confirming === "repair" ? <>
-          <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect; viewing data is backed up first. Missing authenticated current archives cause a failure.</p>
-          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <p className="text-muted-foreground">Repair reinstalls Couch files. The machine administrator maintains Debian host packages.</p>
-          <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
-          </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button></div>}
-      </Card>}
-    </ToolsSettings>}
   </div>;
 }

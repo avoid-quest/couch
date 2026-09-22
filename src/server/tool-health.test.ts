@@ -177,33 +177,6 @@ test("a timed-out check stays the only unfinished job even after cache expiry", 
   expect((await next).status).toBe(503);
 }, 15_000);
 
-test("repair verification ignores the health cache and effective overrides, and requires bounded package smoke", async () => {
-  const f = await fixture(), calls: { path: string; args: string[] }[] = [];
-  const health = createToolHealth({ ...f.options, env: { ...f.options.env, COUCH_DENO: "/custom/unchanged-deno" }, command: async (path, args, env) => {
-    calls.push({ path, args });
-    if (args.includes("--version")) return path.endsWith("yt-dlp") ? "2026.08.19" : "deno 2.9.6";
-    if (args.includes("--get-url")) return args.at(-1)!;
-    if (args[0] === "eval") return "42";
-    if (args[0] === "-version") return "ffprobe version 7.1.5-0+deb13u1";
-    expect(env).toEqual({ PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" });
-    return "pcm_s16le";
-  } });
-  try {
-    await health.verify(true);
-    expect(calls.map(call => call.path)).not.toContain("/custom/unchanged-deno");
-    expect(calls.some(call => call.path === join(f.directory, "ffprobe") && call.args.includes("-show_entries"))).toBe(true);
-    await health.handle(request(), () => administrator);
-    await writeFile(join(f.directory, "deno"), "corrupt after cached health");
-    calls.length = 0;
-    await expect(health.verify(false)).rejects.toThrow("fresh hash/version");
-    expect(calls.some(call => call.path === join(f.directory, "deno"))).toBe(false);
-  } finally { await health.close(); }
-  const valid = await fixture();
-  const smokeFailure = createToolHealth({ ...valid.options, command: async (path, args) => args.includes("--version") ? path.endsWith("yt-dlp") ? "2026.08.19" : "deno 2.9.6" : args.includes("--get-url") ? args.at(-1)! : args.includes("-version") ? "ffprobe version 7.1.5-0+deb13u1" : "wrong" });
-  await expect(smokeFailure.verify(false)).rejects.toThrow("runtime smoke");
-  await smokeFailure.close();
-});
-
 test("System package status is a bounded fixed read, remains separate and never accepts package selectors", async () => {
   const f = await fixture(); let calls = 0;
   const health = createToolHealth({ ...f.options, packageStatus: async () => {

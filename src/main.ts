@@ -6,7 +6,6 @@ import { createNativeDisplay } from "./server/display-native";
 import { Database } from "bun:sqlite";
 type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 import { createNativeReadiness } from "./server/readiness-native";
-import { verifyTrialTools } from "./server/trial-tools";
 import { loadedBuild } from "./shared/build";
 import { chmod, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -126,8 +125,6 @@ if (appimage || deb) void (async () => {
       if (JSON.stringify(running) !== JSON.stringify(loadedBuild)) throw new Error("The native and server builds do not match.");
       const db = new Database(join(dataDir, "couch.sqlite"), { readonly: true });
       try { if (db.query<{ quick_check: string }, []>("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error("The database integrity check failed."); } finally { db.close(); }
-      const repairRuntime = status.transaction.repairRuntime === true;
-      await verifyTrialTools(() => hub.verifyTools(repairRuntime));
       await updates.complete(null);
     }
   } catch (error) { await updates.complete(error instanceof Error ? error.message : "Startup verification failed.").catch(() => {}); }
