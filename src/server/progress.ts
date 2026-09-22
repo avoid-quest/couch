@@ -79,17 +79,17 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       else if (checkpoint) flush();
     },
     finish(nearEnd = false, commit?: (save: () => void) => void) {
-      const save = () => {
+      const save = (notify = true) => {
         if (active?.observed && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
           active.item.watched = true;
           active.item.position = 0;
         }
-        flush();
+        return flush(notify);
       };
       if (commit) {
         const previous = structuredClone({ active, pending });
         let saved = false;
-        try { commit(() => { saved = flush(false); }); if (saved) committed(); }
+        try { commit(() => { saved = save(false); }); if (saved) committed(); }
         catch (error) { ({ active, pending } = previous); throw error; }
       } else save();
       // Keep observing until all writes, including an enclosing transaction, commit.
