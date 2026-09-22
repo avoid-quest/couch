@@ -65,7 +65,8 @@ export class UiDriver {
   }
 
   async revealElement(id: string, selector?: string) {
-    const location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
+    let location: { browser: boolean; controls: boolean; pad: boolean } | undefined;
+    await this.waitFor(`Click target ${selector ?? id} is rendered`, async () => !!(location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; if (!element) return null; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector])));
     if (location.browser) await this.home();
     if (location.controls || location.pad) await this.controls();
   }
