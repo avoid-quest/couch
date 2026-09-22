@@ -149,6 +149,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
           // Resolve source lists before opening the write transaction so a vanished
           // playlist or a failed resolver leaves no partial save behind.
           const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: queue() };
+          if (source) authorize();
           const name = playlistName(resolution.name);
           const entries = capturePlaylistEntries(resolution.entries);
           const row = db.transaction(() => {

@@ -13,7 +13,7 @@ import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
 import type { Action, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
-import type { ProviderId, VideoQuality } from "../shared/providers";
+import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
 import { openStore } from "./store";
@@ -80,6 +80,7 @@ type HubOptions = {
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const tauriOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
 type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
+const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
 export function createHub(options: HubOptions) {
   if (options.hostToken.length < 32) throw new Error("The private host token must contain at least 32 characters.");
@@ -159,7 +160,7 @@ export function createHub(options: HubOptions) {
   const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
-      return { name: page.title ?? "Playlist", entries: page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })) };
+      return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
     } });
   const folders = createMediaFolders();
   const library = createLibrary({ folders, ffprobePath: buildInfo.packaged ? process.env.COUCH_FFPROBE ?? null : undefined, databasePath: options.databasePath, onChange: () => { idle.activity(); session.invalidate("library"); } });
@@ -309,7 +310,7 @@ export function createHub(options: HubOptions) {
     };
     const list = async (provider: ProviderId, url: string, quality?: VideoQuality): Promise<Intake> => {
       const page = await loadProviderList(provider, url, shutdown.signal);
-      return { entries: page.items.map(item => ({ id: item.id, title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) })) };
+      return { entries: providerListEntries(page, quality) };
     };
     let prepare: () => Intake | null | Promise<Intake | null>;
     switch (action.type) {
