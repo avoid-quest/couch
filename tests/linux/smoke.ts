@@ -25,7 +25,7 @@ const request = async (path: string, body?: unknown, method = body === undefined
     method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000),
   });
   const value = await response.json() as { value: any };
-  assert.ok(response.ok && !value.value?.error, `WebDriver ${path} succeeded`);
+  assert.ok(response.ok && !value.value?.error, `WebDriver ${path} succeeded: ${JSON.stringify(value.value)}`);
   return value.value;
 };
 const sidecar = async () => { try { return (await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } };
