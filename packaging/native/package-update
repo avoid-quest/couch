@@ -68,12 +68,14 @@ version=$(dpkg-deb -f "$work/couch.deb" Version)
 [[ $(dpkg-deb -f "$work/couch.deb" Architecture) = amd64 ]] || fail 'The staged package architecture is not amd64.'
 
 installed=$(dpkg-query -W -f='${Version}' couch 2>/dev/null || true)
+preview_to_final=false
 if [[ -n $installed ]]; then
     if ! dpkg --compare-versions "$installed" lt "$version"; then
         # Debian orders -preview.N above its own final; the accumulating
         # preview channel relies on SemVer, where the final supersedes.
         [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $installed =~ ^${version//./\\.}-preview\.[0-9]+$ ]] \
             || fail "The staged package $version is not newer than the installed $installed."
+        preview_to_final=true
     fi
 fi
 
@@ -81,7 +83,20 @@ fi
 [[ $ID = debian && $VERSION_ID = 13 && $(dpkg --print-architecture) = amd64 ]] \
     || fail 'This host is not the supported Debian 13 amd64.'
 
-if ! apt-get install -y --no-install-recommends --no-remove "$work/couch.deb" >"$work/apt.log" 2>&1; then
+if [[ $preview_to_final = true ]]; then
+    # APT resolves dependencies without a downgrade override, then dpkg limits
+    # Debian's opposite prerelease ordering exception to Couch itself.
+    for field in Pre-Depends Depends; do
+        dependencies=$(dpkg-deb -f "$work/couch.deb" "$field" 2>/dev/null || true)
+        [[ -z $dependencies ]] && continue
+        apt-get satisfy -y --no-install-recommends --no-remove "$dependencies" >>"$work/apt.log" 2>&1 \
+            || { error="apt failed: $(tail -n 3 "$work/apt.log" | tr '\n' ' ')"; fail 'Package dependency installation failed.'; }
+    done
+    if ! dpkg --install --force-downgrade "$work/couch.deb" >>"$work/apt.log" 2>&1; then
+        error="dpkg failed: $(tail -n 3 "$work/apt.log" | tr '\n' ' ')"
+        fail 'Package installation failed.'
+    fi
+elif ! apt-get install -y --no-install-recommends --no-remove "$work/couch.deb" >"$work/apt.log" 2>&1; then
     error="apt failed: $(tail -n 3 "$work/apt.log" | tr '\n' ' ')"
     fail 'Package installation failed.'
 fi
