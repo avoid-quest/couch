@@ -1,0 +1,198 @@
+use crate::Host;
+use std::sync::atomic::Ordering;
+use tauri::{Manager, PhysicalPosition, PhysicalSize};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
+pub(crate) fn show(app: &tauri::AppHandle) {
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = main.unminimize();
+    let _ = main.show();
+    let _ = main.set_focus();
+    if let Some(remote) = app.get_webview_window("remote") {
+        let _ = remote.show();
+        let _ = remote.set_focus();
+    } else {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = crate::operating_mode::reopen_selected(&app).await {
+                log::warn!("Cannot reopen selected playback device: {error}");
+            }
+        });
+    }
+}
+
+pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
+    api.prevent_close();
+    if let Some(remote) = app.get_webview_window("remote") {
+        let _ = remote.hide();
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        #[cfg(target_os = "macos")]
+        let result = main.hide();
+        #[cfg(not(target_os = "macos"))]
+        let result = main.minimize();
+        if let Err(error) = result {
+            log::warn!("Cannot close Couch window: {error}");
+        }
+    }
+}
+
+pub(crate) fn request_quit(app: &tauri::AppHandle) {
+    let host = app.state::<Host>();
+    if host.quit_pending.swap(true, Ordering::SeqCst) {
+        log::info!("Quit request is already pending");
+        return;
+    }
+    log::info!("Checking whether Quit interrupts local work");
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let reason = match crate::operating_mode::quit_interruption(&app).await {
+            Ok(None) => {
+                log::info!("Quit has no local interruption");
+                app.state::<Host>().quit_confirmed.store(true, Ordering::SeqCst);
+                app.exit(0);
+                return;
+            }
+            Ok(Some("playback")) => "Local playback is active. Quit Couch and stop playback?".to_string(),
+            Ok(Some("sharing")) => "Remote control is enabled. Quit Couch and disconnect controllers?".to_string(),
+            Ok(Some(_)) => "Local playback and remote control are active. Quit Couch and stop both?".to_string(),
+            Err(error) => format!("Couch cannot check local playback or sharing ({error}). Quit and stop the local host?"),
+        };
+        log::info!("Showing Quit confirmation");
+        show(&app);
+        let Some(main) = app.get_webview_window("main") else {
+            app.state::<Host>()
+                .quit_pending
+                .store(false, Ordering::SeqCst);
+            return;
+        };
+        let answer_app = app.clone();
+        app.dialog()
+            .message(reason)
+            .title("Quit Couch?")
+            .parent(&main)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Quit".into(),
+                "Cancel".into(),
+            ))
+            .show(move |confirmed| {
+                log::info!("Quit confirmation: {confirmed}");
+                let host = answer_app.state::<Host>();
+                if confirmed {
+                    host.quit_confirmed.store(true, Ordering::SeqCst);
+                    answer_app.exit(0);
+                } else {
+                    host.quit_pending.store(false, Ordering::SeqCst);
+                }
+            });
+    });
+}
+
+fn visible_area(
+    position: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+    monitor: PhysicalPosition<i32>,
+    bounds: PhysicalSize<u32>,
+) -> u64 {
+    let left = i64::from(position.x).max(i64::from(monitor.x));
+    let top = i64::from(position.y).max(i64::from(monitor.y));
+    let right = (i64::from(position.x) + i64::from(size.width))
+        .min(i64::from(monitor.x) + i64::from(bounds.width));
+    let bottom = (i64::from(position.y) + i64::from(size.height))
+        .min(i64::from(monitor.y) + i64::from(bounds.height));
+    (right - left).max(0) as u64 * (bottom - top).max(0) as u64
+}
+
+pub(crate) fn recover_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let position = window.outer_position()?;
+    let size = window.outer_size()?;
+    let monitors = window.available_monitors()?;
+    let Some(monitor) = window
+        .current_monitor()?
+        .or_else(|| monitors.first().cloned())
+    else {
+        return Ok(());
+    };
+    if !window.is_maximized()?
+        && (size.width > monitor.size().width || size.height > monitor.size().height)
+    {
+        window.set_size(PhysicalSize::new(
+            size.width.min(monitor.size().width),
+            size.height.min(monitor.size().height),
+        ))?;
+    }
+    if monitors.iter().any(|monitor| {
+        visible_area(position, size, *monitor.position(), *monitor.size()) >= 160 * 100
+    }) {
+        return Ok(());
+    }
+    window.center()
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn install_mac_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let menu = Menu::default(app)?;
+    if let Some(application) = menu
+        .items()?
+        .first()
+        .and_then(|item| item.as_submenu())
+        .cloned()
+    {
+        let last = application.items()?.len() - 1;
+        application.remove_at(last)?;
+        application.insert(
+            &MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?,
+            0,
+        )?;
+        application.append(&MenuItem::with_id(
+            app,
+            "quit-couch",
+            "Quit Couch",
+            true,
+            Some("Cmd+Q"),
+        )?)?;
+    }
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| match event.id().as_ref() {
+        "show-couch" => show(app),
+        "quit-couch" => request_quit(app),
+        _ => {}
+    });
+    let show_item = MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit-couch", "Quit Couch", true, None::<&str>)?;
+    let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+    let mut tray = TrayIconBuilder::new().tooltip("Couch").menu(&tray_menu);
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_requires_a_usable_piece_of_a_current_display() {
+        let window = PhysicalSize::new(900, 700);
+        let display = PhysicalSize::new(1920, 1080);
+        assert_eq!(
+            visible_area((-2000, 100).into(), window, (0, 0).into(), display),
+            0
+        );
+        assert_eq!(
+            visible_area((-850, 100).into(), window, (0, 0).into(), display),
+            35_000
+        );
+        assert_eq!(
+            visible_area((-890, 100).into(), window, (0, 0).into(), display),
+            7_000
+        );
+    }
+}

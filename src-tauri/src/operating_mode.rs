@@ -81,7 +81,13 @@ pub fn bundled_origin(url: &Url) -> bool {
             && url.port().is_none()
 }
 pub fn app_origin(config: &tauri::Config, url: &Url) -> bool {
-    if cfg!(dev) && config.build.dev_url.as_ref().is_some_and(|dev| dev.origin() == url.origin()) {
+    if cfg!(dev)
+        && config
+            .build
+            .dev_url
+            .as_ref()
+            .is_some_and(|dev| dev.origin() == url.origin())
+    {
         return true;
     }
     bundled_origin(url)
@@ -106,7 +112,10 @@ pub fn desktop_interface_size(
         && choice.mode == Some(Mode::Remote)
         && choice.address.as_deref().is_some_and(|address| {
             target(address).ok().is_some_and(|url| {
-                window.url().ok().is_some_and(|current| current.origin() == url.origin())
+                window
+                    .url()
+                    .ok()
+                    .is_some_and(|current| current.origin() == url.origin())
             })
         });
     if trusted(&window).is_err() && !remote {
@@ -122,8 +131,11 @@ pub fn desktop_interface_size(
         std::fs::rename(temporary, &path).map_err(error)?;
         return Ok(size);
     }
-    Ok(std::fs::read_to_string(path).ok().and_then(|value| value.parse().ok())
-        .filter(|size| [1.0, 1.15, 1.3].contains(size)).unwrap_or(1.0))
+    Ok(std::fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|size| [1.0, 1.15, 1.3].contains(size))
+        .unwrap_or(1.0))
 }
 
 fn target(input: &str) -> Result<Url, String> {
@@ -230,7 +242,7 @@ async fn preflight(url: &Url) -> Result<(), String> {
     Ok(())
 }
 
-fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, String> {
+pub(crate) fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, String> {
     let status = details["player"]
         .as_str()
         .ok_or("Cannot check local playback. Retry before switching.")?;
@@ -244,6 +256,32 @@ fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, Str
         (false, true) => Some("sharing"),
         (false, false) => None,
     })
+}
+
+pub(crate) async fn quit_interruption(
+    app: &tauri::AppHandle,
+) -> Result<Option<&'static str>, String> {
+    let host = app.state::<Host>();
+    if !host.local_running.load(Ordering::Relaxed) {
+        return Ok(None);
+    }
+    let connection = host
+        .connection
+        .borrow()
+        .clone()
+        .ok_or("The local host is still starting.")??;
+    let details: serde_json::Value = connection_client()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .map_err(error)?
+        .get(format!("{}/api/connection", connection.origin))
+        .send()
+        .await
+        .map_err(error)?
+        .json()
+        .await
+        .map_err(error)?;
+    interruption(&details)
 }
 
 async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String> {
@@ -446,6 +484,24 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
     Ok(())
 }
 
+pub(crate) async fn reopen_selected(app: &tauri::AppHandle) -> Result<(), String> {
+    let modes = app.state::<Modes>();
+    let _guard = modes.operation.lock().await;
+    let choice = modes.current();
+    if choice.mode == Some(Mode::Remote) && app.get_webview_window("remote").is_none() {
+        crate::start_coordinator(app, false)?;
+        open_remote(
+            app,
+            choice
+                .address
+                .as_deref()
+                .ok_or("Choose another Couch's address.")?,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn playback_device(
     window: tauri::WebviewWindow,
@@ -553,9 +609,23 @@ mod tests {
     fn main_navigation_accepts_only_packaged_or_exact_development_origin() {
         let mut config = tauri::Config::default();
         config.build.dev_url = Some(Url::parse("http://localhost:1420").unwrap());
-        assert!(app_origin(&config, &Url::parse("tauri://localhost/settings").unwrap()));
-        assert_eq!(app_origin(&config, &Url::parse("http://localhost:1420/settings").unwrap()), cfg!(dev));
-        for url in ["http://localhost:1421", "https://localhost:1420", "http://localhost.evil:1420", "http://192.168.1.10:4100"] {
+        assert!(app_origin(
+            &config,
+            &Url::parse("tauri://localhost/settings").unwrap()
+        ));
+        assert_eq!(
+            app_origin(
+                &config,
+                &Url::parse("http://localhost:1420/settings").unwrap()
+            ),
+            cfg!(dev)
+        );
+        for url in [
+            "http://localhost:1421",
+            "https://localhost:1420",
+            "http://localhost.evil:1420",
+            "http://192.168.1.10:4100",
+        ] {
             assert!(!app_origin(&config, &Url::parse(url).unwrap()), "{url}");
         }
     }
@@ -666,6 +736,11 @@ mod tests {
             interruption(&serde_json::json!({"player":"unavailable","remoteControlEnabled":false}))
                 .unwrap(),
             None
+        );
+        assert_eq!(
+            interruption(&serde_json::json!({"player":"unavailable","remoteControlEnabled":true}))
+                .unwrap(),
+            Some("sharing")
         );
         assert!(interruption(&serde_json::json!({})).is_err());
     }
