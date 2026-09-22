@@ -24,7 +24,7 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
   let active: ActiveProgress | null = null;
   let pending: ActiveProgress[] = [];
   const snapshot = (progress: ActiveProgress) => JSON.stringify([progress.item.position, progress.item.duration, progress.item.watched]);
-  const flush = () => {
+  const flush = (notify = true) => {
     let saved = false;
     for (const progress of [...pending, active].filter((value): value is ActiveProgress => value !== null && value.observed)) {
       const value = snapshot(progress);
@@ -35,11 +35,13 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       saved = true;
     }
     pending = pending.filter(progress => snapshot(progress) !== progress.lastSaved);
-    if (saved) committed();
+    if (saved && notify) committed();
+    return saved;
   };
   return {
     get mediaId() { return active?.item.mediaId ?? null; },
     forgetProfile(id: string) { if (active?.profileId === id) active = null; pending = pending.filter(progress => progress.profileId !== id); },
+    discard(mediaId: string) { pending = pending.filter(progress => progress.item.mediaId !== mediaId); },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
     begin(entry: QueueEntry, playbackId: string, profileId: string, playedBy?: PlaybackActor) {
@@ -85,9 +87,10 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
         flush();
       };
       if (commit) {
-        const previous = active && structuredClone(active);
-        try { commit(save); }
-        catch (error) { active = previous; throw error; }
+        const previous = structuredClone({ active, pending });
+        let saved = false;
+        try { commit(() => { saved = flush(false); }); if (saved) committed(); }
+        catch (error) { ({ active, pending } = previous); throw error; }
       } else save();
       // Keep observing until all writes, including an enclosing transaction, commit.
       active = null;

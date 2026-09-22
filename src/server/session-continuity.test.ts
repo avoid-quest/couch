@@ -193,6 +193,46 @@ test("failed predecessor completions survive consecutive prepared transitions an
   } finally { save.mockRestore(); f.close(); }
 });
 
+test("manual history changes discard a failed predecessor checkpoint", async () => {
+  const f = fixture();
+  const originalSave = f.store.saveProgress.bind(f.store);
+  let unavailable = true;
+  const save = spyOn(f.store, "saveProgress").mockImplementation((...args) => {
+    if (unavailable) throw new Error("Disk full");
+    originalSave(...args);
+  });
+  try {
+    await tick();
+    const next = f.commands.find(command => command.type === "prepare" && command.next);
+    if (next?.type !== "prepare" || !next.next) throw new Error("Missing successor");
+    f.session.observe({ ...idle, playbackId: next.next.playbackId, status: "playing", position: 0.1, duration: 3 });
+    unavailable = false;
+    f.session.editProgress("library:first", { watched: false }, { title: "first", libraryItemId: "first" });
+    f.session.checkpoint();
+    expect(f.store.progress("household", "library:first")).toMatchObject({ watched: false, position: 2 });
+  } finally { save.mockRestore(); f.close(); }
+});
+
+test("removing history discards a failed predecessor checkpoint", async () => {
+  const f = fixture();
+  const originalSave = f.store.saveProgress.bind(f.store);
+  let unavailable = true;
+  const save = spyOn(f.store, "saveProgress").mockImplementation((...args) => {
+    if (unavailable) throw new Error("Disk full");
+    originalSave(...args);
+  });
+  try {
+    await tick();
+    const next = f.commands.find(command => command.type === "prepare" && command.next);
+    if (next?.type !== "prepare" || !next.next) throw new Error("Missing successor");
+    f.session.observe({ ...idle, playbackId: next.next.playbackId, status: "playing", position: 0.1, duration: 3 });
+    unavailable = false;
+    f.session.removeHistory("library:first");
+    f.session.checkpoint();
+    expect(f.store.progress("household", "library:first")).toBeNull();
+  } finally { save.mockRestore(); f.close(); }
+});
+
 test("a prepared successor keeps its shared history owner and existing watched mark", async () => {
   const f = fixture();
   try {
