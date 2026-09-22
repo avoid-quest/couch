@@ -6,10 +6,11 @@ import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
 import { frontendPaths } from "./src/shared/page-paths";
+import tauri from "./src-tauri/tauri.conf.json" with { type: "json" };
 
 // scripts/build.ts writes the release identity before the client build runs;
-// a standalone `vite build` or the dev server falls back to the unsigned shape
-// shared/build.ts already tolerates at runtime.
+// a standalone `vite build` falls back to an unsigned identity. Development
+// always uses an unsigned identity so old release output cannot block its API.
 const buildInfo = (() => {
   try {
     return readFileSync("src-tauri/build-info.json", "utf8");
@@ -18,7 +19,8 @@ const buildInfo = (() => {
   }
 })();
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  clearScreen: false,
   root: "src/client",
   // Both the Tauri asset protocol and the sidecar serve the application at /.
   // Relative asset/worker URLs would instead resolve below a refreshed route.
@@ -59,7 +61,10 @@ export default defineConfig({
       },
     }),
   ],
-  define: { "COUCH_BUILD_INFO": JSON.stringify(buildInfo) },
+  define: {
+    "COUCH_BUILD_INFO": JSON.stringify(command === "serve" ? JSON.stringify({ version: tauri.version, revision: null, dataFormat: 1, target: null, packaged: false }) : buildInfo),
+    "COUCH_DEV_ORIGIN": JSON.stringify(command === "serve" ? new URL(tauri.build.devUrl).origin : null),
+  },
   // Browser clients are same-origin with couch-server; the dev proxy supplies
   // that origin so `vite` (and browser-driven loops) pair with `bun src/main.ts`.
   server: {
@@ -67,12 +72,12 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:4100",
+        target: `http://127.0.0.1:${process.env.COUCH_PORT ?? 4100}`,
         ws: true,
         changeOrigin: true,
         // The server admits its own advertised origins only; present the
         // proxied loopback requests as the target origin.
-        headers: { origin: "http://127.0.0.1:4100" },
+        headers: { origin: `http://127.0.0.1:${process.env.COUCH_PORT ?? 4100}` },
         // src/client/api/*.ts modules are served from the same URL prefix as
         // the backend; only forward requests that are not module files.
         bypass: request => (/\.(ts|tsx|js|jsx|css|png|svg|woff2?)(\?|$)/.test(request.url ?? "") ? request.url : undefined),
@@ -80,4 +85,4 @@ export default defineConfig({
     },
   },
   build: { outDir: "../../dist", emptyOutDir: true },
-});
+}));

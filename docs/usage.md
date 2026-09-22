@@ -81,6 +81,68 @@ your media folder and limiting access to this computer.
 
 Build on a development machine. The installed T480 only runs released packages.
 
+### Native Mac development
+
+Install Bun 1.4.x and Rust stable with [rustup](https://rustup.rs).
+For [Tauri's macOS prerequisites](https://v2.tauri.app/start/prerequisites/#macos),
+desktop development needs Apple's command-line tools, installed once with
+`xcode-select --install`. Full Xcode is not required for this desktop loop.
+
+```sh
+bun install --frozen-lockfile
+bun run desktop
+```
+
+On first launch, choose **This computer** and keep remote control off unless
+you need LAN clients. The app starts its own Bun coordinator from source with
+the existing private native pipe and owner token. Home, library, settings and
+queue are real; **native playback currently requires Linux**. Mac playback is
+separate work. There is no sidecar compilation, production frontend build,
+container, signing setup or media-helper installation needed to start this UI.
+Providers that need external helpers still need `bun run setup:media`.
+
+Tauri owns the development loop through its
+[Vite hook and dev URL](https://v2.tauri.app/start/frontend/vite/) and
+[source watcher](https://v2.tauri.app/develop/#reacting-to-source-code-changes):
+
+- Edit `src/client`: Vite updates the running webview automatically.
+- Edit `src/server`, `src/shared`, `src/main.ts` or `src/frontend.ts`: Tauri's
+  `additionalWatchFolders` restarts the app and its source-mode Bun server.
+  Unchanged Rust stays cached. Shared edits can also update the frontend.
+- Edit Rust under `src-tauri`: Tauri incrementally rebuilds and restarts the app.
+- Stop with **Ctrl+C in the launching terminal**, then rerun `bun run desktop`.
+  The app, Bun server and Vite exit together. Keep `src-tauri/target` for fast
+  restarts. After editing the launcher or its environment, stop and start it.
+
+Use one desktop development instance at a time. Vite uses port 1420; the local
+API uses 4100, or `COUCH_PORT` when set. Vite proxies HTTP and WebSocket traffic
+to that API. Do not also run `bun run dev` on the same API port.
+
+Development uses the current account's persistent Tauri data at
+`~/Library/Application Support/quest.avoid.couch`, including `couch.sqlite`
+and `operating-mode.json`. `COUCH_DATA_DIR` selects another persistent directory.
+Restarting does not reset it; the default is shared with any installed Couch
+using the same identity.
+
+The launching terminal shows Vite, Cargo and coordinator errors. Native and
+coordinator runtime logs also go to `~/Library/Logs/quest.avoid.couch/Couch.log`.
+Use **Cmd+Option+I** inside Couch for webview errors and network inspection.
+During an app restart Vite may briefly report a refused API connection until
+the coordinator is ready again.
+
+```sh
+bun run typecheck
+bun test --isolate --parallel=4 src/client/sections/shell/PlaybackDevice.test.tsx src/server/hub.test.ts src/server/maintenance-mode.test.ts
+PATH="$HOME/.cargo/bin:$PATH" cargo test --manifest-path src-tauri/Cargo.toml --locked
+bun run check
+```
+
+See [development checks](ci.md) for the additional production build and Linux
+gates before merging. Passing these Mac checks does not qualify Linux playback
+or installed packages.
+
+### Linux development
+
 Install Bun 1.4.x, Rust stable and the [official Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
 On Ubuntu 24.04 the build dependencies are:
 
@@ -93,8 +155,8 @@ bun run desktop
 
 The project pins Bun 1.4.2 and Tauri 2.x packages in its lockfiles. Project
 scripts use the pinned Bun runtime and do not need Node.js. The desktop command
-builds the UI and compiled Bun sidecar before starting Tauri. Frontend changes
-currently require restarting that command; Rust changes use Tauri's watcher.
+uses Tauri's Vite development server and runs the Bun coordinator from source.
+Frontend changes hot reload; backend and Rust changes use Tauri's watcher.
 
 Use **Up next > Open file** on the TV, browse **Library > Radio**, or add a
 local/mounted NAS folder or Jellyfin connection through **Settings > Sources**

@@ -4,10 +4,7 @@
   "version": "0.1.5-preview.11",
   "identifier": "quest.avoid.couch",
   "build": {
-    "beforeDevCommand": {
-      "script": "bun run client:dev",
-      "wait": true
-    },
+    "beforeDevCommand": "bun run client:dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"

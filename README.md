@@ -101,12 +101,16 @@ Couch uses React for the TV and browser remote, Bun for the shared queue and
 SQLite storage, and Tauri with libmpv for native playback.
 
 ```sh
+bun run desktop   # Native development app, Vite hot reload and owned Bun server
 bun run dev       # Browser UI and server, without native playback
 bun run typecheck # TypeScript; see docs/ci.md for isolated test commands
 bun run build     # Frontend assets and native Bun sidecar
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux
 ```
+
+Start here for the [native Mac development workflow](docs/usage.md#native-mac-development),
+including prerequisites, stop/restart, logs and checks.
 
 | Directory | Responsibility |
 | --- | --- |

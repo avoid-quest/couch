@@ -40,6 +40,7 @@ beforeEach(async () => {
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 afterEach(async () => {
+  Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
   await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
   invoke.mockRestore(); request.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
@@ -74,6 +75,27 @@ test("an external Tauri page uses browser UI without accessing local commands", 
 
 test("a native marker on an external origin never grants local presentation", () => {
   window.happyDOM.setURL("http://192.168.1.10:4100");
+  expect(isNativeHost()).toBe(false);
+});
+
+test("the configured dev origin opens the native chooser only with the native marker", async () => {
+  Object.assign(globalThis, { COUCH_DEV_ORIGIN: "http://localhost:1420" });
+  window.happyDOM.setURL("http://localhost:1420");
+  await render();
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeDefined();
+  expect(invoke.mock.calls.map(([name]) => name)).toEqual(["playback_device"]);
+  Object.assign(window, { __COUCH_NATIVE_HOST__: undefined });
+  expect(isNativeHost()).toBe(false);
+});
+
+test("development presentation rejects other origins and is absent from production", () => {
+  Object.assign(globalThis, { COUCH_DEV_ORIGIN: "http://localhost:1420" });
+  for (const url of ["http://localhost:1421", "https://localhost:1420", "http://localhost.evil:1420", "http://192.168.1.10:4100"]) {
+    window.happyDOM.setURL(url);
+    expect(isNativeHost()).toBe(false);
+  }
+  Object.assign(globalThis, { COUCH_DEV_ORIGIN: null });
+  window.happyDOM.setURL("http://localhost:1420");
   expect(isNativeHost()).toBe(false);
 });
 
