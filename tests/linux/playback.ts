@@ -179,15 +179,14 @@ async function telemetrySamples() {
 }
 
 async function writeThreadingEvidence() {
-  const log = await Bun.file(`${artifactDir}/native.log`).text();
   const samples = await telemetrySamples();
   await Bun.write(`${artifactDir}/gtk-mpv-threading.json`, JSON.stringify({
     sourceRevision: process.env.COUCH_SOURCE_REVISION,
     telemetryEnabled,
     commandLatency,
     frameTelemetry: samples,
-    uiChecks: checks.filter(check => check.includes("Phone") || check.includes("native video") || check.includes("WebView pixels")),
-    stuckRenderLog: { pattern: stuckRenderPattern, found: log.includes(stuckRenderPattern) },
+    uiChecks: checks.filter(check => check.includes("Phone") || check.includes("native video") || check.includes("WebView pixels") || check.includes("replacement pixels")),
+    stuckRenderLog: { pattern: stuckRenderPattern, observation: "unavailable", reason: "The vendored libmpv binding does not subscribe to mpv log messages." },
   }, null, 2));
 }
 
@@ -252,14 +251,19 @@ try {
   await clients[0]!.command({ type: "enqueue", entry: { id: replacementId, title: "GTK threading replacement fixture", source: "http://127.0.0.1:4200/multitrack.mkv" } });
   await clients[1]!.command({ type: "play", entryId: replacementId });
   await until("native replacement plays through the retained GtkGLArea", () => all(state => state.currentEntryId === replacementId && state.player.status === "playing" && state.player.playbackId !== initialPlaybackId));
-  const playbackId = clients[0]!.state!.player.playbackId!;
-  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  const replacementPlaybackId = clients[0]!.state!.player.playbackId!;
+  await clients[0]!.command({ type: "pause", playbackId: replacementPlaybackId, paused: true });
   await until("replacement pauses before the remaining control checks", () => all(state => state.player.status === "paused"));
   await ui.watching();
   await assertNativeVideoPixels(execute, artifactDir, "gtk-threading-replacement");
   await screenshot("gtk-threading-replacement");
   checks.push("native replacement pixels remain visible after Stop and seek");
   console.log("PASS native replacement pixels remain visible after Stop and seek");
+  await clients[0]!.command({ type: "play", entryId: initialEntryId });
+  await until("original fixture resumes after GTK replacement", () => all(state => state.currentEntryId === initialEntryId && state.player.status === "playing" && state.player.playbackId !== replacementPlaybackId));
+  const playbackId = clients[0]!.state!.player.playbackId!;
+  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  await until("original fixture pauses before the remaining control checks", () => all(state => state.currentEntryId === initialEntryId && state.player.status === "paused"));
   await clients[0]!.command({ type: "volume", volume: 37 });
   await until("native volume update reaches both remotes", () => all(state => state.player.volume === 37));
 

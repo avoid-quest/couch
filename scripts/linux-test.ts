@@ -37,7 +37,7 @@ const git = (...args: string[]) => {
 if (git("status", "--porcelain")) throw new Error("Commit the tested changes before Linux qualification. Use preview:linux for an uncommitted visual preview.");
 const revision = git("rev-parse", "HEAD");
 await mkdir(artifacts, { recursive: true });
-if (!providersConfig && !providerCatalogs) for (const name of ["results.json", "failure.txt", "diagnostics.json", "native-failure.png"]) await rm(resolve(artifacts, name), { force: true });
+if (!providersConfig && !providerCatalogs) for (const name of ["results.json", "failure.txt", "diagnostics.json", "native-failure.png", "gtk-mpv-threading.json"]) await rm(resolve(artifacts, name), { force: true });
 await run(["docker", "info", "--format", "Docker {{.ServerVersion}} / {{.Architecture}}"]);
 await run(["docker", "build", "--progress", "plain", "-t", image, "tests/linux"]);
 const snapshot = await mkdtemp(join(tmpdir(), "couch-linux-source-"));

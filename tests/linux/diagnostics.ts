@@ -85,7 +85,6 @@ try {
   await phone.ui.button("Export diagnostics");
   await until("phone starts its explicit diagnostic download", () => phone!.ui.execute("return document.querySelector('[data-advanced-settings]')?.textContent.includes('Diagnostic download started.')"));
   await Bun.write(`${artifacts}/diagnostics-bundle.json`, body);
-  const nativeLog = await Bun.file(`${artifacts}/diagnostics-native.log`).text();
   await Bun.write(`${artifacts}/diagnostics-acceptance.json`, JSON.stringify({
     sourceRevision: process.env.COUCH_SOURCE_REVISION,
     telemetryEnabled: process.env.TAURI_VIDEO_TELEMETRY === "1",
@@ -94,7 +93,7 @@ try {
     collectionMs: report.collectionMs,
     collectionRequestMs,
     bytes: Buffer.byteLength(body),
-    stuckRenderLog: { pattern: "mpv_render_context_render() not being called or stuck", found: nativeLog.includes("mpv_render_context_render() not being called or stuck") },
+    stuckRenderLog: { pattern: "mpv_render_context_render() not being called or stuck", observation: "unavailable", reason: "The vendored libmpv binding does not subscribe to mpv log messages." },
     physicalHardware: false,
   }, null, 2));
 } finally {
