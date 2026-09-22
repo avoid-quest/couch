@@ -494,8 +494,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
-      available();
       if (mediaId.startsWith("recording:")) throw new ViewingError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
+      available();
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
       const saved = existing ?? store.historySource(mediaId);

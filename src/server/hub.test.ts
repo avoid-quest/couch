@@ -1229,6 +1229,11 @@ test("legacy recording state survives startup without backend work or playback a
   const history = await controllerApi(hub, hostToken, `/api/progress/${encodeURIComponent(source)}/play`, "POST", { profileId: "household" });
   expect(history.status).toBe(410);
   expect((await history.json()).error).toContain("Couch recordings are no longer supported");
+  hub.session.observe({ ...idle, status: "unavailable" });
+  const disconnectedHistory = await controllerApi(hub, hostToken, `/api/progress/${encodeURIComponent(source)}/play`, "POST", { profileId: "household" });
+  expect(disconnectedHistory.status).toBe(410);
+  expect((await disconnectedHistory.json()).error).toContain("Open the saved media file");
+  hub.session.observe(idle);
   expect(hub.session.state.queue).toContainEqual(entry);
   hub.session.command({ type: "enqueue", entry: { id: "file", title: "Retained file", source: new URL(`file://${mediaPath}`).href }, playNow: true });
   expect(commands.at(-1)).toMatchObject({ type: "load", source: new URL(`file://${mediaPath}`).href });
