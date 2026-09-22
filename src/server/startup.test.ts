@@ -42,7 +42,7 @@ test("OS rejection and effective override never claim success; successful write 
   reject = override = false;
   const saved = await settings.handle(request({ enabled: false }), admin);
   expect(saved.status).toBe(200);
-  expect(await saved.json()).toEqual({ enabled: false, fullscreenAtLaunch: true, fullscreenNow: false, applies: "next-session" });
+  expect(await saved.json()).toEqual({ enabled: false, fullscreenAtLaunch: false, fullscreenNow: false, applies: "next-session" });
 });
 
 test("concurrent startup mutations reject and failed writes release admission", async () => {

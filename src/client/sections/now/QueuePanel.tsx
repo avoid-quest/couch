@@ -77,7 +77,7 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
     return <li ref={drag?.setNodeRef} style={drag?.style} className={`queue-entry min-h-[72px] flex-nowrap gap-2.5 px-2 py-2.5 ${current ? "bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] shadow-[inset_3px_0_var(--primary)]" : ""}`} key={entry.id} data-queue-entry-id={entry.id} aria-current={current ? "true" : undefined}>
       <Button variant="ghost" size="icon" className="queue-play min-h-11 min-w-11 shrink-0" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
       {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork size-12" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork size-12" />}
-      <div className="queue-entry-copy"><span className="queue-entry-title" title={entry.title}>{entry.title}</span><span className="source-label" title={label}>{current && <span className="queue-current-label">On TV · </span>}{label}</span></div>
+      <div className="queue-entry-copy"><span className="queue-entry-title" title={entry.title}>{entry.title}</span><span className="source-label" title={label}>{current && <span className="queue-current-label">Playing · </span>}{label}</span></div>
       <QueueActions credentials={credentials} entry={entry} index={index} queue={queue} connected={connected} canPlay={available} run={run} />
       {drag?.handle}
     </li>;

@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { StartupState } from "../shared/startup";
 import { ControllerError, settingField } from "./controllers";
-import tauriConfig from "../../src-tauri/tauri.conf.json";
 
 const help = "From SSH, run sudo lightdm --show-config and inspect sudo journalctl -u 'couch-autostart@*'. Repair the couch-appliance installation or conflicting LightDM overrides, then refresh.";
 const command = (file: string, args: string[]): Promise<string> => new Promise((resolve, reject) => {
@@ -80,7 +79,7 @@ export function createStartup(fullscreen: Backend["fullscreen"], backend?: Backe
         } else enabled = await os.read();
         const fullscreenNow = await os.fullscreen().catch(() => null);
         authorize();
-        return json({ enabled, fullscreenAtLaunch: tauriConfig.app.windows[0]!.fullscreen, fullscreenNow, applies: "next-session" } satisfies StartupState);
+        return json({ enabled, fullscreenAtLaunch: process.env.COUCH_TV_PRESENTATION === "1", fullscreenNow, applies: "next-session" } satisfies StartupState);
       } catch (error) { return json({ error: error instanceof Error ? error.message : `TV startup is unavailable. ${help}` }, error instanceof ControllerError ? error.status : 503); }
     },
   };

@@ -14,6 +14,7 @@
     "allow-retry-playback-device",
     "allow-complete-local-setup",
     "allow-show-playback-device",
+    "allow-desktop-interface-size",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen",
     "core:window:allow-set-cursor-visible"

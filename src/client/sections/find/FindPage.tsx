@@ -10,7 +10,7 @@ import { useShell } from "@/sections/shell/AppShell";
 
 export function FindPage() {
   const shell = useShell();
-  const { nativeHost, credentials, state, connected, run, available, active, tv, section, browseSection, changeSearch, openSources, playHistory, enqueueCatalog, enqueueRadio, enqueueProvider, recentRadio, videoQualityPreference } = shell;
+  const { tvPresentation, credentials, state, connected, run, available, active, tv, section, browseSection, changeSearch, openSources, playHistory, enqueueCatalog, enqueueRadio, enqueueProvider, recentRadio, videoQualityPreference } = shell;
   const location = useLocation();
   const searchState = readSearchState(location.searchStr);
   const [homeQuery, setHomeQuery] = useState(searchState.query);
@@ -26,7 +26,7 @@ export function FindPage() {
     if (order) { const next = { ...layout, order }; setLayout(next); saveFindSections(next); }
   };
   useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
-  const onStage = section === "Find" && (!nativeHost || tv.browsing);
+  const onStage = section === "Find" && (!tvPresentation || tv.browsing);
   return (
     <section data-page="Find">
       <SearchPanel draftQuery={homeQuery} onManageSources={openSources} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />

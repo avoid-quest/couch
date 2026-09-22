@@ -46,7 +46,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
   const programme = connected && radio && state?.radioProgramme?.playbackId === player?.playbackId ? state?.radioProgramme : null;
   const artwork = programme?.artworkUrl || current?.thumbnail;
   const session = presentation === "session";
-  const { nativeHost } = useOptionalShell() ?? { nativeHost: false };
+  const { tvPresentation } = useOptionalShell() ?? { tvPresentation: false };
   const volume = state && <PlaybackVolume state={state} connected={connected} run={run} />;
   const settings = player && state?.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />;
 
@@ -63,18 +63,18 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
           <h1 className="media-title" title={current?.title}>{current.title}</h1>
           <p className="source-label">{sourceLabel(current.source)} · <span className="playback-status">{!connected ? "Reconnecting" : state?.radioRetry && player?.status === "loading" ? "Reconnecting" : player ? playbackLabels[player.status] : "Connecting"}</span>{current.live && " · LIVE"}</p>
           {programme && <figure className="radio-programme">
-            <figcaption className={cn("text-muted-foreground", session && nativeHost && "text-lg")}>Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!nativeHost && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
+            <figcaption className={cn("text-muted-foreground", session && tvPresentation && "text-lg")}>Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!tvPresentation && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
           </figure>}
         </div>
       </div>
     ) : <>
       <h1 className="media-title" title={current?.title}>{current?.title || (session ? "What would you like to play?" : "Nothing playing")}</h1>
-      <p className="source-label">{!connected ? "Reconnecting to your TV. You can still browse." : player?.status === "unavailable" ? "Your TV player is offline. Playback resumes when it reconnects." : "Search or paste a link, or play something you saved."}</p>
+      <p className="source-label">{!connected ? "Reconnecting to the selected playback host. You can still browse." : player?.status === "unavailable" ? `Playback is unavailable on ${state?.installationName || "the selected host"}.` : "Search or paste a link, or play something you saved."}</p>
       {programme && <figure className="radio-programme">
-        {!nativeHost && programme.artworkUrl && <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} />}
-        <figcaption className="text-sm text-muted-foreground">Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!nativeHost && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
+        {!tvPresentation && programme.artworkUrl && <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} />}
+        <figcaption className="text-sm text-muted-foreground">Programme: {programme.title}{programme.description && <p className="radio-programme-description mt-1 line-clamp-2">{programme.description}</p>}{!tvPresentation && programme.programmeUrl && <small><a href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a></small>}</figcaption>
       </figure>}
-      {radio && player?.nowPlaying && !nativeHost && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
+      {radio && player?.nowPlaying && !tvPresentation && <p className="radio-now-playing" role="status">{[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ")}</p>}
     </>}
     {state?.radioRetry && ["loading", "error"].includes(player?.status ?? "") && <Alert className="radio-retry" role="status"><AlertDescription>
       <p>{player?.status === "loading" ? `Reconnecting, attempt ${state.radioRetry.attempt} of ${state.radioRetry.maximum}. Stop cancels reconnecting.` : `Could not reconnect after ${state.radioRetry.maximum} attempts.`}</p>
@@ -90,7 +90,7 @@ export function PlaybackControls({ state, credentials, connected, run, onExpand,
     {state && <PlaybackTimeline state={state} connected={connected} run={run} />}
     {hasMedia && <div className="transport-row">
       {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} onExpand={onExpand} />}
-      {session ? <div className="session-volume-row">{volume}{onRemote && !nativeHost && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
+      {session ? <div className="session-volume-row">{volume}{onRemote && !tvPresentation && <Button variant="outline" className="session-remote-button" onClick={onRemote}><Icon name="remote" />Remote</Button>}</div> : volume}
     </div>}
     {state?.progressError && <Alert variant="destructive" className="playback-error"><AlertDescription>{state.progressError}</AlertDescription></Alert>}
     {!session && !hasMedia && <div className="player-settings">{settings}</div>}

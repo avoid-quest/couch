@@ -1,7 +1,7 @@
 import type { PlayerState } from "./protocol";
 
 export type ConnectionDetails = {
-  lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1 };
+  lanError?: string | null; name: string; installationId?: string; urls: string[]; player: PlayerState["status"]; remoteControlEnabled?: boolean; desktopRemoteUi?: 1; tvPresentation?: boolean };
 
 export type Controller = {
   id: string;

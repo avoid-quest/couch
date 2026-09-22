@@ -94,6 +94,38 @@ fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub fn desktop_interface_size(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    size: Option<f64>,
+) -> Result<f64, String> {
+    let modes = app.state::<Modes>();
+    let choice = modes.current();
+    let remote = window.label() == "remote"
+        && choice.mode == Some(Mode::Remote)
+        && choice.address.as_deref().is_some_and(|address| {
+            target(address).ok().is_some_and(|url| {
+                window.url().ok().is_some_and(|current| current.origin() == url.origin())
+            })
+        });
+    if trusted(&window).is_err() && !remote {
+        return Err("Desktop appearance belongs to this Couch client.".into());
+    }
+    let path = modes.path.with_file_name("desktop-interface-size");
+    if let Some(size) = size {
+        if ![1.0, 1.15, 1.3].contains(&size) {
+            return Err("Choose a supported interface size.".into());
+        }
+        let temporary = path.with_extension("tmp");
+        std::fs::write(&temporary, size.to_string()).map_err(error)?;
+        std::fs::rename(temporary, &path).map_err(error)?;
+        return Ok(size);
+    }
+    Ok(std::fs::read_to_string(path).ok().and_then(|value| value.parse().ok())
+        .filter(|size| [1.0, 1.15, 1.3].contains(size)).unwrap_or(1.0))
+}
+
 fn target(input: &str) -> Result<Url, String> {
     let input = input.trim();
     let url = Url::parse(&if input.contains("://") {

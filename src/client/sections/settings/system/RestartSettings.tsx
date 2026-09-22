@@ -30,7 +30,7 @@ export function RestartSettings({ credentials, connected }: { credentials: { ori
   };
   return <div className="space-y-3">
     <h3>Restart Couch</h3>
-    <p className="text-muted-foreground">Save viewing progress and restart the TV application. Paired remotes reconnect automatically. Playback stays stopped.</p>
+    <p className="text-muted-foreground">Save viewing progress and restart the selected playback computer's Couch host. Paired remotes reconnect automatically. Playback stays stopped.</p>
     <Button variant="outline" className="min-h-11" disabled={!connected || pending} onClick={() => setConfirm(true)}>{pending ? "Restarting…" : "Restart Couch"}</Button>
     {notice && <p role="status">{notice}</p>}
     <Dialog open={confirm} onOpenChange={setConfirm}><DialogContent><DialogHeader><DialogTitle>Restart Couch?</DialogTitle><DialogDescription>This interrupts current playback and briefly disconnects every remote. Your queue, preferences and pairing are kept.</DialogDescription></DialogHeader>

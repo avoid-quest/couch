@@ -19,8 +19,8 @@
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "fullscreen": true,
-        "decorations": false,
+        "fullscreen": false,
+        "decorations": true,
         "backgroundColor": "#0b1119",
         "dragDropEnabled": false
       }

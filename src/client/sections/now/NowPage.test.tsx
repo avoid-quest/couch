@@ -16,7 +16,7 @@ const state: SessionState = {
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 40, seekable: true, error: null },
 };
 const shell = {
-  nativeHost: true, credentials: { origin: "http://localhost", token: "paired" }, state, connected: true,
+  nativeHost: true, tvPresentation: true, credentials: { origin: "http://localhost", token: "paired" }, state, connected: true,
   run: async () => true, available: true, tv: { browsing: true, dismissLayer() {} },
   browseSection: () => {}, playHistory: async () => true, enqueueRadio: async () => true,
   videoQualityPreference: { quality: "auto" }, gotoSearch: () => {}, setRemoteOpen: () => {}, recentRadio: [],

@@ -6,21 +6,21 @@ import { saveRemoteInterfaceSize, useRemoteInterfaceSize } from "../../../interf
 import { InterfaceSizeChoices } from "./InterfaceSizeChoices";
 import { TvInterfaceSize } from "./TvInterfaceSize";
 
-type Props = { native: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance; scope?: "all" | "device" | "tv" };
+type Props = { tvPresentation: boolean; credentials: Credentials | null; connected: boolean; administrator: boolean; appearance?: TvAppearance; scope?: "all" | "device" | "tv"; hostName?: string };
 
-export function AppearanceSettings({ native, credentials, connected, administrator, appearance = defaultTvAppearance, scope = "all" }: Props) {
+export function AppearanceSettings({ tvPresentation, credentials, connected, administrator, appearance = defaultTvAppearance, scope = "all", hostName = "Couch" }: Props) {
   const size = useRemoteInterfaceSize();
   const [notice, setNotice] = useState<string | null>(null);
-  const change = (value: InterfaceSize) => setNotice(saveRemoteInterfaceSize(value) ? null : "Changed for this visit. Allow browser storage to keep this size after reloading.");
+  const change = async (value: InterfaceSize) => setNotice(await saveRemoteInterfaceSize(value) ? null : "Changed for this visit. This client could not save the size.");
   return (
     <div className="space-y-5">
-      {(native || scope !== "device") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={native} />}
-      {!native && scope !== "tv" && (
+      {(tvPresentation || scope === "tv" || scope === "all") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} hostName={hostName} />}
+      {!tvPresentation && scope !== "tv" && (
         <section className="space-y-3" aria-labelledby="remote-interface-size">
-          <h3 id="remote-interface-size">This remote interface size</h3>
-          <p className="text-muted-foreground">Text and controls in this browser. Other remotes keep their own size.</p>
-          <InterfaceSizeChoices label="This remote interface size" value={size} onChange={change} />
-          <Button variant="outline" className="min-h-11" onClick={() => change(1)}>Reset this remote to default</Button>
+          <h3 id="remote-interface-size">This client interface size</h3>
+          <p className="text-muted-foreground">Text and controls on this client. Other clients keep their own size.</p>
+          <InterfaceSizeChoices label="This client interface size" value={size} onChange={value => void change(value)} />
+          <Button variant="outline" className="min-h-11" onClick={() => void change(1)}>Reset this client to default</Button>
           {notice && <p role="status">{notice}</p>}
         </section>
       )}

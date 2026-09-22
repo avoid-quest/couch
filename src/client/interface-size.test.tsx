@@ -31,7 +31,7 @@ test("saved Largest applies the same scale on the TV and on remotes", async () =
   await act(async () => root.render(<Size native appearance={appearance} />));
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.3");
   expect(measurements).toBe(1);
-  await act(async () => { saveRemoteInterfaceSize(1.3); root.render(<Size native={false} appearance={appearance} />); });
+  await act(async () => { await saveRemoteInterfaceSize(1.3); root.render(<Size native={false} appearance={appearance} />); });
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.3");
   // The same choice on TV and remote applies one scale: no redundant event.
   expect(measurements).toBe(1);

@@ -15,11 +15,11 @@ export function PlaybackPage() {
     <SettingsLayout section="playback">
       <div className="space-y-6">
         <QualitySelect id="playback-default-quality" value={videoQualityPreference.quality} disabled={!connected} onChange={videoQualityPreference.save}
-          description="Stored in this browser. The TV uses it for the next video you play or add." />
+          description="Stored on this client. The selected playback host uses it for the next video you play or add." />
         <Separator />
         {profile && preferences && credentials
           ? <PlaybackPreferences key={profile.id} profile={profile} preferences={preferences} connected={connected} onCommand={run} />
-          : <p className="text-muted-foreground">Connect to the TV to load playback defaults.</p>}
+          : <p className="text-muted-foreground">Connect to the selected playback host to load playback defaults.</p>}
       </div>
     </SettingsLayout>
   );

@@ -35,7 +35,7 @@ Section "Screen"
 EndSection
 CONF
 Xorg :99 -config /tmp/xorg.conf -noreset -nolisten tcp > /artifacts/xorg.log 2>&1 &
-export DISPLAY=:99 XDG_SESSION_TYPE=x11 COUCH_DATA_DIR=/work/display-data COUCH_ADMIN_RECOVERY_CODE=1234567890abcdef1234567890abcdef
+export DISPLAY=:99 XDG_SESSION_TYPE=x11 COUCH_DATA_DIR=/work/display-data COUCH_ADMIN_RECOVERY_CODE=1234567890abcdef1234567890abcdef COUCH_TV_PRESENTATION=1
 sleep 2
 xrandr --query > /artifacts/outputs-before.txt
 xrandr --addmode DUMMY1 1920x1080

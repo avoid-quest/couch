@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Action, ConnectionInfo, NavigationKey, SessionState } from "../../shared/protocol";
 import { loadedBuild } from "../../shared/build";
 import { applyTvNavigation, useNavigation } from "../navigation";
-import { isNativeHost } from "./native-context";
+import { isNativeHost, isTvPresentation } from "./native-context";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useIdleCursor } from "../useIdleCursor";
@@ -19,6 +19,7 @@ const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
 const remoteNameKey = "couch.remote-name";
 const nativeHost = isNativeHost();
+const tvPresentation = isTvPresentation();
 let cacheSequence = 0;
 
 function storedCredentials(): Credentials | null {
@@ -46,6 +47,7 @@ type SessionBag = ReturnType<typeof useSession>;
 type SessionGateValue = SessionBag & {
   queryClient: QueryClient;
   nativeHost: boolean;
+  tvPresentation: boolean;
   credentials: Credentials | null;
   setCredentials: (credentials: Credentials | null) => void;
   host: ConnectionInfo | null;
@@ -101,7 +103,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   useEffect(() => { try { localStorage.setItem(remoteNameKey, remoteName); } catch { /* Pairing still works without remembering the name. */ } }, [remoteName]);
 
   function handleNavigation(key: NavigationKey) {
-    if (!nativeHost) return;
+    if (!tvPresentation) return;
     document.documentElement.setAttribute("data-keyboard", "");
     if (key === "home") {
       const goHome = (remaining: number) => {
@@ -161,11 +163,11 @@ export function SessionGate({ children }: PropsWithChildren) {
     revisions.current = { client: queryClient, state };
   }, [state, connected, queryClient]);
 
-  useInterfaceSize(nativeHost, state?.appearance);
-  const tv = useTvPresentation({ enabled: nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
-  useIdleCursor(nativeHost);
+  useInterfaceSize(tvPresentation, state?.appearance);
+  const tv = useTvPresentation({ enabled: tvPresentation, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
+  useIdleCursor(tvPresentation);
   useNavigation(() => {
-    if (nativeHost && tv.dismissLayer()) return;
+    if (tvPresentation && tv.dismissLayer()) return;
     backHandler.current();
   });
 
@@ -191,7 +193,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle("native-host", nativeHost);
+    document.body.classList.toggle("tv-presentation", tvPresentation);
     if (!nativeHost) return;
     let disposed = false;
     setBooting(true);
@@ -209,7 +211,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [hostAttempt, setCredentials]);
 
   useEffect(() => {
-    if (!nativeHost) return;
+    if (!tvPresentation) return;
     const appWindow = getCurrentWindow();
     let disposed = false;
     let unlisten: (() => void) | undefined;
@@ -285,7 +287,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   };
 
   const value: SessionGateValue = {
-    queryClient, nativeHost, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
+    queryClient, nativeHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, reconnect, pair, unpair,
     pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
     tv, registerBackHandler: handler => { backHandler.current = handler; },

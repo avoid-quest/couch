@@ -25,7 +25,7 @@ else
   bun tests/linux/replaygain-fixtures.ts /replaygain-fixtures
 fi
 mkdir -p /root/.config /artifacts
-export COUCH_DATA_DIR=$(mktemp -d /tmp/couch-native-data.XXXXXX)
+export COUCH_DATA_DIR=$(mktemp -d /tmp/couch-native-data.XXXXXX) COUCH_TV_PRESENTATION=1
 pulseaudio --start --exit-idle-time=-1 --log-target=file:/artifacts/pulseaudio.log
 pactl load-module module-null-sink sink_name=couch > /artifacts/pulseaudio-module.txt
 pactl load-module module-null-sink sink_name=couch-replaygain format=float32le rate=48000 channels=2 > /artifacts/replaygain-pulseaudio-module.txt

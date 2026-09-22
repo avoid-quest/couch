@@ -16,7 +16,7 @@ import { SessionBar } from "@/components/SessionBar";
 
 export function NowPage() {
   const shell = useShell();
-  const { nativeHost, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
+  const { tvPresentation, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
   const [nowDraft, setNowDraft] = useState("");
   const [layout, setLayout] = useState<ReturnType<typeof readNowSections>>(readNowSections);
   const { order, hidden } = layout;
@@ -32,9 +32,9 @@ export function NowPage() {
     const next = { order, hidden: hiddenNext };
     setLayout(next); saveNowSections(next);
   };
-  const onStage = !nativeHost || tv.browsing;
+  const onStage = !tvPresentation || tv.browsing;
   const sections: Record<NowSectionId, ReactNode> = {
-    playing: <NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />,
+    playing: <><NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />{state?.player.status === "unavailable" && <p className="px-6 text-sm text-muted-foreground" role="status">{state.player.error || `Playback is unavailable on ${state.installationName || "this computer"}. Browsing and the queue still work.`}</p>}</>,
     queue: <NowPlaying embedded part="next" state={state} credentials={credentials} connected={connected} run={run} active={onStage} />,
     history: <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} stations={recentRadio} onRadio={station => enqueueRadio(station, true)} />,
     radio: <LiveNow rail heading="Live radio" credentials={credentials} connected={connected} canPlay={available} onEnqueue={enqueueRadio} active={onStage} />,
@@ -75,7 +75,7 @@ export function NowPage() {
           })}
           {/* A customized Now page can hide its Now playing section. This bar is
               the TV's remaining transport route while browsing that page. */}
-          {nativeHost && tv.browsing && hidden.includes("playing") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tv.dismissLayer()} />}
+          {tvPresentation && tv.browsing && hidden.includes("playing") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tv.dismissLayer()} />}
         </section>
       </SortableContext>
     </DndContext>
