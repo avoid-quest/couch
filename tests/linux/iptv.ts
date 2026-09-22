@@ -28,7 +28,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
   };
   const stop = async () => { await clients[0]!.command({ type: "stop" }); await until("IPTV Stop clears the current native load on both controllers", () => all(state => state.player.status === "idle" && state.currentEntryId === null)); };
   // Live clock-only ticks do not broadcast; the captured frames below prove advancement.
-  const playing = (id: string) => all(state => state.player.status === "playing" && state.player.speed === 1 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
+  const playing = (id: string, normalSpeed = true) => all(state => state.player.status === "playing" && (!normalSpeed || state.player.speed === 1) && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
   const observations: unknown[] = [];
   let previous = "";
   const observe = setInterval(() => {
@@ -204,16 +204,22 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       evidence.restart = true; await write();
       if (process.env.COUCH_TEST_IPTV_PUBLIC_SAMPLE !== "1") return;
       const publicChannel = (await page()).channels.find(channel => channel.tvgId === "apple")!;
+      const queueBeforePublic = first().queue.map(entry => entry.id);
       try {
         assert.equal((await api(`channels/${publicChannel.id}/play`, "POST", undefined, clients[1]!.token)).status, 200);
-        await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id), 45_000);
+        await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id, false), 45_000);
         evidence.publicObserved = { playback: first().player, channel: publicChannel, testedAt: new Date().toISOString() };
-        evidence.externalQualification = { status: "passed", observed: evidence.publicObserved };
-        await httpRemote.minimize(); await screenshot("native-iptv-apple-sample"); await stop();
+        await httpRemote.minimize(); await screenshot("native-iptv-apple-sample");
       } catch (error) {
         evidence.externalQualification = { status: "failed", error: error instanceof Error ? error.message : String(error) };
         throw new Error(`External IPTV qualification failed: ${error instanceof Error ? error.message : String(error)}`);
-      } finally { await write(); }
+      } finally {
+        await stop();
+        for (const entry of first().queue.filter(entry => !queueBeforePublic.includes(entry.id))) await clients[0]!.command({ type: "remove", entryId: entry.id });
+        assert.deepEqual(first().queue.map(entry => entry.id), queueBeforePublic, "Public IPTV qualification restores the existing queue");
+        if (!evidence.externalQualification) evidence.externalQualification = { status: "passed", observed: evidence.publicObserved };
+        await write();
+      }
     } };
   } catch (error) { evidence.failure = error instanceof Error ? error.message : String(error); throw error; } finally {
     clearInterval(observe);

@@ -19,6 +19,7 @@ const connection = process.argv.includes("--connection");
 const diagnostics = process.argv.includes("--diagnostics");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
 if (providersConfig && providerCatalogs) throw new Error("Use either --providers or --provider-catalogs");
+if (iptvPublicSample && (providersConfig || providerCatalogs)) throw new Error("Use --iptv-public-sample without provider qualification options.");
 if (autoJellyfin && jellyfinConfig) throw new Error("Use either --jellyfin or --jellyfin-config");
 if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || iptvPublicSample || process.argv.includes("--live-radio"))) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
 if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || iptvPublicSample || process.argv.includes("--live-radio"))) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
