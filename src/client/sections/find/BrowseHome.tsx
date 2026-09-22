@@ -21,6 +21,7 @@ import { ProgressActions, progressTime, type HistoryPlayback } from "@/component
 import { mergeRecent } from "@/recent";
 import type { Credentials } from "../../session/session";
 import { SaveForLater } from "@/components/SaveForLater";
+import { MetadataEditor } from "@/components/MetadataEditor";
 
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
@@ -28,11 +29,12 @@ const asHistory = (item: LibraryItem): HistoryItem => ({
   watched: item.progress?.watched ?? false, lastPlayedAt: item.progress?.lastPlayedAt ?? null,
 });
 
-export function BrowseHome({ state, credentials, connected, canPlay, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio, editing = false, order, hiddenSections = [], onToggleSection, onMoveSection }: {
+export function BrowseHome({ state, credentials, connected, canPlay, canManageMetadata = false, active, onBrowse, onProvider, onAddSource, onPlay, onAdd, recentRadio, onRadio, editing = false, order, hiddenSections = [], onToggleSection, onMoveSection }: {
   state: SessionState | null;
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;
+  canManageMetadata?: boolean;
   playing: boolean;
   active: boolean;
   onBrowse: (section: string) => void;
@@ -192,6 +194,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, active, onB
         {selected?.available === false && <p>This file is unavailable. Check its TV folder.</p>}
         {playbackActions(detail)}
         <ProgressActions origin={origin} token={token} connected={connected && currentProfile && !loading} mediaId={detail.mediaId} title={detail.title} progress={detail} onUpdated={() => setRefresh(value => value + 1)} />
+        {selected?.kind === "video" && canManageMetadata && <MetadataEditor key={selected.id} origin={origin} token={token} id={selected.id} connected={connected} onSaved={() => setRefresh(value => value + 1)} />}
         {notice && <p role="status" className="mb-4 text-[13px] text-[#d3c7a5]">{notice}</p>}
         {error && <p role="alert">{error}</p>}
       </>}

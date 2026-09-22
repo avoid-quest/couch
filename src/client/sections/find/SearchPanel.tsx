@@ -18,7 +18,7 @@ import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 type Source = "Library" | "Jellyfin";
 type Options = { playNow?: boolean; fromStart?: boolean };
 export type Props = {
-  origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean;
+  origin: string; token: string; connected: boolean; canPlay: boolean; active: boolean; canManageMetadata?: boolean;
   defaultQuality?: VideoQuality;
   onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;

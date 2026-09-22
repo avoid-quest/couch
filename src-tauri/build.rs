@@ -9,6 +9,7 @@ fn main() {
             "set_video_rect",
             "choose_media",
             "choose_folder",
+            "save_metadata_export",
             "playback_device",
             "select_playback_device",
             "retry_playback_device",

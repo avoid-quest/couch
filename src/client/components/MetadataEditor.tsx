@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import { isNativeHost } from "@/session/native-context";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -61,10 +62,16 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
     try {
       const response = await apiFetch({ origin, token }, `/api/metadata/items/${id}/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (action === "export") {
-        const url = URL.createObjectURL(await response.blob()), link = document.createElement("a");
-        link.href = url; link.download = `couch-metadata-${id}.tar`; document.body.append(link); link.click(); link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1_000);
-        setNotice("Export sent to this browser's download destination. Open the archive's placement.json before replacing any sidecars.");
+        const archive = await response.arrayBuffer().catch(() => { throw new Error("Metadata transfer stopped before the archive was complete. No file was saved."); });
+        if (native) {
+          const saved = await invoke<boolean>("save_metadata_export", new Uint8Array(archive), { headers: { "X-Couch-Item-Id": id } });
+          setNotice(saved ? "Metadata archive saved. Open its placement.json before replacing any sidecars." : "Export canceled. No file was saved.");
+        } else {
+          const url = URL.createObjectURL(new Blob([archive], { type: "application/x-tar" })), link = document.createElement("a");
+          link.href = url; link.download = `couch-metadata-${id}.tar`; document.body.append(link); link.click(); link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1_000);
+          setNotice("Export sent to this browser's download destination. Open the archive's placement.json before replacing any sidecars.");
+        }
         return;
       }
       const value = await response.json();
@@ -78,7 +85,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
         await queryClient.invalidateQueries({ queryKey: ["library"] });
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not update metadata.");
+      setError(reason instanceof Error ? reason.message : typeof reason === "string" ? reason : action === "export" ? "Could not save metadata archive. No complete file was saved." : "Could not update metadata.");
     } finally {
       setPending(false);
     }
@@ -144,7 +151,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
             <p className="text-sm">Applying replaces all previewed fields and artwork, including manual corrections. A missing preview image clears artwork. Preview expires at {new Date(preview.expiresAt).toLocaleTimeString()}.</p>
             <Button className="min-h-11" disabled={busy} onClick={() => void update("match", { revision: metadata.revision, previewId: preview.id })} type="button">Apply this match</Button>
           </div>}
-          <div className="space-y-2 border-t pt-3"><h4 className="font-medium">Export saved metadata</h4>{native ? <p className="text-sm">On your paired administrator phone or browser, open Library → Movies or Shows → this video's details → Edit metadata → Download saved metadata.</p> : <><p className="text-sm">Download a TAR archive to this browser's download destination. It contains saved NFO, artwork and placement instructions. Unsaved edits are excluded. Review it before replacing any sidecars.</p><Button className="min-h-11" disabled={busy} onClick={() => void update("export", { revision: metadata.revision })} type="button" variant="outline">Download saved metadata</Button></>}</div>
+          <div className="space-y-2 border-t pt-3"><h4 className="font-medium">Export saved metadata</h4><p className="text-sm">{native ? "Choose where to save a TAR archive." : "Download a TAR archive to this browser's download destination."} It contains saved NFO, artwork and placement instructions. Unsaved edits are excluded. Review it before replacing any sidecars.</p><Button className="min-h-11" disabled={busy} onClick={() => void update("export", { revision: metadata.revision })} type="button" variant="outline">{native ? "Save metadata archive" : "Download saved metadata"}</Button></div>
         </>}
       </>}
     </section>

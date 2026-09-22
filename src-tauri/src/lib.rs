@@ -3,6 +3,7 @@ mod bluetooth;
 mod deb_update;
 mod diagnostics;
 mod display;
+mod metadata_export;
 mod operating_mode;
 mod player;
 mod protocol;
@@ -535,6 +536,7 @@ pub fn run() {
             set_video_rect,
             choose_media,
             choose_folder,
+            metadata_export::save_metadata_export,
             operating_mode::playback_device,
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
