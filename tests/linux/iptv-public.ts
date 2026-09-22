@@ -9,6 +9,7 @@ import { UiDriver, keys, type Wait } from "./ui";
 
 // Public playback is opt-in evidence. The ordinary smoke never reaches this URL.
 const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444", artifacts = "/artifacts";
+const revision = process.env.COUCH_SOURCE_REVISION!;
 const checks: string[] = [];
 const until: Wait = async (description, predicate, timeout = 30_000) => {
   const deadline = Date.now() + timeout;
@@ -38,9 +39,10 @@ const connect = async (token: string) => {
 };
 const start = async () => {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("public IPTV desktop app connects", () => tv.execute("return document.querySelector('[role=status]')?.textContent === 'Connected'"));
+  await until("public IPTV desktop app connects", () => tv.roleHasText("status", "Connected"));
 };
 
+await Bun.write(`${artifacts}/iptv.json`, JSON.stringify({ externalQualification: "running", revision }, null, 2));
 try {
   await guide.startStreams();
   const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file(`${artifacts}/iptv-public-driver.log`), stderr: Bun.file(`${artifacts}/iptv-public-native.log`) });
@@ -49,9 +51,9 @@ try {
     await start();
     await tv.button("Settings");
     await tv.settingsSection("connection");
-    await tv.button("Pair a remote", 'section[aria-label="Settings"]');
-    await until("public IPTV pairing code is visible", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent || '')"));
-    const code = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong')?.textContent") as string;
+    await tv.button("Pair a remote");
+    await until("public IPTV pairing code is visible", async () => /^\d{6}$/.test(await tv.pairingCode().catch(() => "")));
+    const code = await tv.pairingCode();
     await tv.key(keys.escape);
     const paired = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
     assert.equal(paired.status, 200);
@@ -75,6 +77,7 @@ try {
     controller.close();
     await request(`/session/${session}`, undefined, "DELETE");
     session = "";
+    await until("public IPTV desktop app shutdown releases its sidecar", async () => { try { await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) }); return false; } catch { return true; } });
     await start();
     await connect(token);
     await until("generated IPTV source persists across restart", async () => state?.player.status === "idle" && (await (await api("guide")).json() as { channels: unknown[] }).channels.length === 4);
@@ -82,11 +85,14 @@ try {
     await until("authorized Apple Bip Bop sample plays native audio and video", () => state?.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${apple.id}` && state.player.status === "playing" && state.player.tracks?.some(track => track.kind === "video") && state.player.tracks?.some(track => track.kind === "audio"), 45_000);
     await tv.watching();
     await Bun.write(`${artifacts}/native-iptv-apple-sample.png`, Buffer.from(await tv.request(`/session/${session}/screenshot`), "base64"));
-    await Bun.write(`${artifacts}/iptv.json`, JSON.stringify({ externalQualification: "passed", generated: guide.hashes, publicSample: "Apple Bip Bop", checks, limitations: "Opt-in external evidence under Xvfb and a null sink, not physical audio or display qualification." }, null, 2));
+    await Bun.write(`${artifacts}/iptv.json`, JSON.stringify({ externalQualification: "passed", revision, generated: guide.hashes, publicSample: "Apple Bip Bop", checks, limitations: "Opt-in external evidence under Xvfb and a null sink, not physical audio or display qualification." }, null, 2));
   } finally {
     controller?.close();
     if (session) await request(`/session/${session}`, undefined, "DELETE").catch(() => {});
     driver.kill();
     await driver.exited;
   }
+} catch (error) {
+  await Bun.write(`${artifacts}/iptv.json`, JSON.stringify({ externalQualification: "failed", revision, checks, error: String(error) }, null, 2));
+  throw error;
 } finally { await guide.close(); }

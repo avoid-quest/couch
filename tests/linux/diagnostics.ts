@@ -8,7 +8,7 @@ import { assertPlaybackDiagnosticFacts } from "./diagnostics-facts";
 import { UiDriver, assertResponsive, keys, startHttpRemote, type Wait } from "./ui";
 
 // Focused qualification, run under the same disposable Xvfb/PulseAudio setup
-// as smoke.ts after building this tree. It does not use the installed TV.
+// as playback.ts after building this tree. It does not use the installed TV.
 const origin = "http://127.0.0.1:4100", artifacts = "/artifacts";
 const checks: string[] = [];
 const until: Wait = async (description, predicate, timeout = 15_000) => {

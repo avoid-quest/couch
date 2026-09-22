@@ -440,7 +440,6 @@ bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
 bun run build
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux
-bun run test:linux --jellyfin --live-radio
 bun run test:linux --provider-catalogs
 bun run test:linux --iptv-public-sample
 ```

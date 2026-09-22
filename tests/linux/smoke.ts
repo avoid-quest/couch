@@ -60,12 +60,12 @@ try {
   assert.match(revision, /^[a-f0-9]{40}$/, "launcher supplies the immutable source revision");
   await until("Tauri WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("compiled Tauri app connects to its compiled sidecar", () => tv.execute("return document.querySelector('[role=status]')?.textContent === 'Connected'"), 30_000);
+  await until("compiled Tauri app connects to its compiled sidecar", () => tv.roleHasText("status", "Connected"), 30_000);
   await tv.button("Settings");
   await tv.settingsSection("connection");
-  await tv.button("Pair a remote", 'section[aria-label="Settings"]');
-  await until("native app presents a pairing code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent || '')"));
-  const code = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong')?.textContent") as string;
+  await tv.button("Pair a remote");
+  await until("native app presents a pairing code", async () => /^\d{6}$/.test(await tv.pairingCode().catch(() => "")));
+  const code = await tv.pairingCode();
   await tv.key(keys.escape);
   const paired = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   assert.equal(paired.status, 200);
@@ -76,9 +76,7 @@ try {
   assert.equal(build.revision, revision, "running sidecar identifies the launched revision");
   assert.equal(build.dirty, false, "native smoke starts from a clean build");
 
-  await tv.type("#media-url", "http://127.0.0.1:4200/generated-local-media.mkv");
-  await tv.type("#media-title", "Generated local smoke media");
-  await tv.click("[role=dialog] form button[type=submit]");
+  await tv.addDirectMedia("http://127.0.0.1:4200/generated-local-media.mkv", "Generated local smoke media");
   await until("native app queues generated local media", () => state?.queue.length === 1 && state.queue[0]?.title === "Generated local smoke media");
   const entryId = state!.queue[0]!.id;
   await command({ type: "play", entryId, fromStart: true });
@@ -92,7 +90,7 @@ try {
   session = "";
   await until("closing the compiled desktop app stops its sidecar", async () => { try { await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) }); return false; } catch { return true; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("restarted compiled desktop app reconnects", () => tv.execute("return document.querySelector('[role=status]')?.textContent === 'Connected'"), 30_000);
+  await until("restarted compiled desktop app reconnects", () => tv.roleHasText("status", "Connected"), 30_000);
   await connect(token);
   await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === entryId && state.currentEntryId === null && state.player.status === "idle");
 
