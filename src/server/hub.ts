@@ -318,8 +318,6 @@ export function createHub(options: HubOptions) {
       case "enqueueProvider":
         prepare = action.shape === "atom" ? () => web({ ...action, entryId: crypto.randomUUID() }) : () => list(action.provider, action.url, action.quality);
         break;
-      case "enqueueProviderAlbum": prepare = () => list("bandcamp", action.url); break;
-      case "enqueueProviderPlaylist": prepare = () => list("youtube", action.url, action.quality); break;
       case "enqueueLibrary":
         prepare = async () => {
           const media = await library.getPlayable(action.itemId);

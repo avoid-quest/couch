@@ -91,8 +91,6 @@ async function elapse(milliseconds: number) {
 const slow: Array<[string, Action]> = [];
 for (const playNow of [false, true]) {
   slow.push([`generic playlist playNow=${playNow}`, { ...playlist, playNow }]);
-  slow.push([`legacy YouTube playlist playNow=${playNow}`, { type: "enqueueProviderPlaylist", provider: "youtube", url: playlist.url, playNow }]);
-  slow.push([`legacy Bandcamp album playNow=${playNow}`, { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/evening", playNow }]);
 }
 slow.push(["video quality", { type: "videoQuality", playbackId: "playing", quality: "720p" }]);
 

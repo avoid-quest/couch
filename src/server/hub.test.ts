@@ -67,7 +67,7 @@ test("revocation prevents a delayed admitted album from appending or starting pl
     const owner = new Peer(hub, ownerToken), guest = new Peer(hub, guestToken);
     await Promise.all([owner.ready(), guest.ready()]);
     const { controller } = await (await controllerApi(hub, guestToken, "/api/controllers/me")).json() as { controller: { id: string } };
-    guest.socket.send(JSON.stringify({ type: "command", requestId: "late-album", action: { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true } }));
+    guest.socket.send(JSON.stringify({ type: "command", requestId: "late-album", action: { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true } }));
     await started.promise;
     expect((await controllerApi(hub, ownerToken, `/api/controllers/${controller.id}`, "DELETE")).status).toBe(200);
     album.resolve(bandcampAlbum);
@@ -173,7 +173,7 @@ test("Bandcamp albums append once in order, play through the host resolver and p
     const token = await pair(initial.hub);
     const first = new Peer(initial.hub, token), second = new Peer(initial.hub, await pair(initial.hub));
     await Promise.all([first.ready(), second.ready()]);
-    expect(await first.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true })).toMatchObject({ ok: true });
+    expect(await first.command({ type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true })).toMatchObject({ ok: true });
     const load = await initial.waitForCommand(command => command.type === "load");
     expect(load).toMatchObject({ source: "https://private-stream.example/signed", headers: { Authorization: "private-stream-token" } });
     await second.waitFor(message => message.type === "state" && message.state.currentEntryId === message.state.queue[0]?.id);
@@ -204,8 +204,8 @@ test.each(["album", "playlist"] as const)("provider %s Play now keeps its tracks
     const remote = new Peer(hub, await pair(hub)); await remote.ready();
     await remote.command({ type: "enqueue", entry: { id: "current", title: "Current", source: "https://media.example/current" }, playNow: true });
     await remote.command({ type: "enqueue", entry: { id: "waiting", title: "Waiting", source: "https://media.example/waiting" } });
-    const action: Action = kind === "album" ? { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true }
-      : { type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true };
+    const action: Action = kind === "album" ? { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true }
+      : { type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true };
     expect(await remote.command(action)).toMatchObject({ ok: true });
     expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Current", ...page.items.map(item => item.title), "Waiting"]);
     expect(hub.session.state.currentEntryId).toBe(hub.session.state.queue[1]!.id);
@@ -224,7 +224,7 @@ test("Bandcamp album failure or insufficient capacity leaves the queue unchanged
     const remote = new Peer(hub, await pair(hub));
     await remote.ready();
     const queue = remote.state.queue;
-    const action = { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album" } as const;
+    const action = { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album" } as const;
     expect(await remote.command(action)).toMatchObject({ ok: false, error: expect.stringContaining("500") });
     expect(remote.state.queue).toEqual(queue);
     album.mockRejectedValueOnce(new Error("This album is unavailable."));
@@ -243,7 +243,7 @@ for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement
     hub.session.command({ type: "enqueue", entry: { id: "replacement", title: "Replacement", source: "https://media.example/replacement" } });
     const first = new Peer(hub, await pair(hub)), second = new Peer(hub, await pair(hub));
     await Promise.all([first.ready(), second.ready()]);
-    const pending = first.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true });
+    const pending = first.command({ type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true });
     await started.promise;
     expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
     output.resolve(bandcampAlbum);
@@ -267,7 +267,7 @@ test("hub shutdown aborts pending Bandcamp extraction before a queue change", as
     const { hub } = fixture();
     const remote = new Peer(hub, await pair(hub));
     await remote.ready();
-    remote.socket.send(JSON.stringify({ type: "command", requestId: "shutdown-album", action: { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album" } }));
+    remote.socket.send(JSON.stringify({ type: "command", requestId: "shutdown-album", action: { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album" } }));
     const signal = await started.promise;
     await hub.close();
     await finished.promise;
@@ -1100,7 +1100,7 @@ test("maintenance admission cancels a delayed album before queue writes or nativ
     hub.session.observe(idle);
     const remote = new Peer(hub, await pair(hub));
     await remote.ready();
-    const result = remote.command({ type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://artist.bandcamp.com/album/album", playNow: true });
+    const result = remote.command({ type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://artist.bandcamp.com/album/album", playNow: true });
     await entered.promise;
     open = false;
     album.resolve(bandcampAlbum);
@@ -1408,11 +1408,11 @@ test("YouTube playlist queue is atomic, ordered and applies the selected quality
   try {
     const { hub } = fixture(); hub.session.observe(idle);
     const remote = new Peer(hub, await pair(hub)); await remote.ready();
-    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "720p" })).toMatchObject({ ok: true });
+    expect(await remote.command({ type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "720p" })).toMatchObject({ ok: true });
     expect(hub.session.state.queue.map(entry => [entry.title, entry.source, entry.quality])).toEqual(page.items.map(item => [item.title, `web:${item.url}`, "720p"]));
     expect(hub.session.state.currentEntryId).toBeNull();
     playlist.mockRejectedValue(new Error("Playlist unavailable"));
-    expect(await remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
+    expect(await remote.command({ type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toMatchObject({ ok: false });
     expect(hub.session.state.queue).toHaveLength(2);
   } finally { playlist.mockRestore(); }
 });
@@ -1451,7 +1451,7 @@ test("a later Stop cancels playlist play intent without losing resolved queue en
   try {
     const { hub } = fixture(); hub.session.observe(idle);
     const remote = new Peer(hub, await pair(hub)); await remote.ready();
-    const pending = remote.command({ type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true });
+    const pending = remote.command({ type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", playNow: true });
     await started.promise;
     expect(await remote.command({ type: "stop" })).toMatchObject({ ok: true });
     loading.resolve({ items: [{ id: "first", title: "First", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });

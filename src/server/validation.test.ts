@@ -4,9 +4,9 @@ import { parseCommand } from "./validation";
 const parse = (action: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "test", action }), false);
 
 test("provider albums accept a public link and discard client-supplied track lists and secrets", () => {
-  const action = { type: "enqueueProviderAlbum", provider: "bandcamp", url: "https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1", playNow: true } as const;
+  const action = { type: "enqueueProvider", provider: "bandcamp", shape: "playlist", url: "https://blazo.bandcamp.com/album/jazz-format-mixtape-vol-1", playNow: true } as const;
   expect(parse({ ...action, entries: [{ source: "file:///private" }], headers: { Authorization: "secret" } }).action).toEqual(action);
-  for (const change of [{ provider: "youtube" }, { url: "file:///private" }, { url: "https://user:secret@blazo.bandcamp.com/album/test" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
+  for (const change of [{ provider: "unknown" }, { url: "file:///private" }, { url: "https://user:secret@blazo.bandcamp.com/album/test" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
 });
 
 test("TV navigation accepts only remote keys and strips unrelated command fields", () => {
@@ -84,10 +84,14 @@ test("web queue accepts automatic quality alongside explicit unrestricted playba
 
 
 test("YouTube playlist commands validate quality and play intent", () => {
-  const action = { type: "enqueueProviderPlaylist", provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "1080p", playNow: true } as const;
+  const action = { type: "enqueueProvider", provider: "youtube", shape: "playlist", url: "https://www.youtube.com/playlist?list=PL1234567890", quality: "1080p", playNow: true } as const;
   const parse = (value: unknown) => parseCommand(JSON.stringify({ type: "command", requestId: "playlist", action: value }), false);
   expect(parse(action).action).toEqual(action);
-  for (const change of [{ provider: "twitch" }, { url: "file:///private" }, { quality: "4k" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
+  for (const change of [{ provider: "unknown" }, { url: "file:///private" }, { quality: "4k" }, { playNow: "true" }]) expect(() => parse({ ...action, ...change })).toThrow();
+});
+
+test.each(["enqueueProviderPlaylist", "enqueueProviderAlbum"])("%s is rejected", type => {
+  expect(() => parse({ type, provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" })).toThrow("Invalid command or unsupported media source.");
 });
 
 test("provider references validate their atom or playlist shape and preserve public metadata", () => {
