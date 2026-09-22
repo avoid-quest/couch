@@ -74,7 +74,7 @@ export function AvoidRadioHome(props: Props) {
         </Card></li>;
       })}
     </ul>}
-    <Dialog open={detailId === "one"} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active !== false) trigger.current?.focus({ preventScroll: true }); }}>
+    <Dialog open={detailId !== null && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active !== false) trigger.current?.focus({ preventScroll: true }); }}>
       <DialogHeader><DialogTitle>{detail?.name}</DialogTitle><DialogDescription>Live radio · avoid radio</DialogDescription></DialogHeader>
       {detail && (() => {
         const current = props.connected ? radio.programmes[detail.id] : undefined;

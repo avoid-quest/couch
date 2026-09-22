@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioStationList } from "./RadioStationList";
-import { radioPlaylistStationsQuery, radioPlaylistsQuery } from "./radioQueries";
+import { radioPlaylistStationsQuery, radioPlaylistsQuery } from "@/api/radio";
 
 type Props = {
   credentials: Credentials;
@@ -27,11 +27,11 @@ type Props = {
 export function PlaylistRadioPanel({ credentials, connected, canPlay, host, onManage, favorites, busyId, onPlay, onQueue, onFavorite }: Props) {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
-  const playlists = useQuery(radioPlaylistsQuery(credentials, connected));
+  const playlists = useQuery({ ...radioPlaylistsQuery(credentials), enabled: connected });
   const custom = (playlists.data?.playlists ?? []).filter(playlist => playlist.id !== avoidRadioPlaylistId);
   const [selectedId, setSelectedId] = useState("");
   const selectedIdOrFirst = selectedId && custom.some(playlist => playlist.id === selectedId) ? selectedId : custom[0]?.id ?? "";
-  const stations = useQuery(radioPlaylistStationsQuery(credentials, selectedIdOrFirst, query, connected && !!selectedIdOrFirst));
+  const stations = useQuery({ ...radioPlaylistStationsQuery(credentials, selectedIdOrFirst, query), enabled: connected && !!selectedIdOrFirst });
   const selected = custom.find(playlist => playlist.id === selectedIdOrFirst);
   const error = playlists.error?.message ?? stations.error?.message ?? null;
 
