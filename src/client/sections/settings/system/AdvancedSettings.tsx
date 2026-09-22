@@ -3,9 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import type { Diagnostics } from "../../../../shared/diagnostics";
+import type { UpdateState } from "../../../../shared/updates";
 import { DiagnosticFacts } from "./DiagnosticFacts";
+import { ToolsSettings } from "./ToolsSettings";
 
 const diagnosticTime = (at: string) => at.replace("T", " ").replace("Z", " UTC");
 
@@ -37,6 +41,57 @@ function useExportDiagnostics({ credentials, connected, enabled }: { credentials
   }, [enabled, exporting, connected, origin, token]);
 
   return { exporting, setExporting, error, notice };
+}
+
+function UpdatePreferences({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["updates", credentials.origin, credentials.token];
+  const updates = useQuery({
+    queryKey,
+    enabled: connected,
+    queryFn: async () => {
+      const response = await apiFetch(credentials, "/api/updates");
+      if (!response.ok) throw new Error();
+      return response.json() as Promise<UpdateState>;
+    },
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const state = updates.data;
+  async function save(path: "channel" | "policy", value: "stable" | "preview" | "manual" | "idle") {
+    setError(null);
+    try {
+      const response = await apiFetch(credentials, `/api/updates/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [path]: value }) });
+      if (!response.ok) throw new Error((await response.json() as { error?: string }).error);
+      await queryClient.invalidateQueries({ queryKey });
+    } catch (reason) { setError(reason instanceof Error && reason.message || "Could not save update preferences."); }
+  }
+  if (!connected) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Connect to the TV to manage update preferences.</p></section>;
+  if (!state && !updates.error) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Loading update preferences…</p></section>;
+  if (!state) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Could not load update preferences.</p></section>;
+  const disabled = updates.isFetching || ["unavailable", "checking", "downloading"].includes(state.status);
+  return <section className="space-y-3 border-t pt-4">
+    <h3 className="font-medium">Update preferences</h3>
+    <div className="space-y-2">
+      <Label htmlFor="release-channel">Release channel</Label>
+      <Select value={state.channel} disabled={disabled} onValueChange={value => void save("channel", value as "stable" | "preview")}>
+        <SelectTrigger id="release-channel" className="min-h-11 w-full"><SelectValue>{state.channel === "stable" ? "Stable" : "Preview"}</SelectValue></SelectTrigger>
+        <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
+      </Select>
+    </div>
+    <div className="space-y-2">
+      <Label htmlFor="update-policy">Install updates</Label>
+      <Select value={state.policy} disabled={disabled} onValueChange={value => void save("policy", value as "manual" | "idle")}>
+        <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
+        <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
+      </Select>
+      {state.policy === "idle" && <p role="status">{state.waiting || "Waiting until Couch is idle."}</p>}
+    </div>
+    <p className="text-xs text-muted-foreground">Running {state.running.version}, commit {state.running.revision || "unknown"}. Last check: {state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "none yet"}.</p>
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+  </section>;
 }
 
 export function AdvancedSettings({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
@@ -96,5 +151,7 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
         </li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}
       </section>
     </>}
+    <UpdatePreferences credentials={credentials} connected={connected} />
+    <ToolsSettings credentials={credentials} connected={connected} />
   </div>;
 }

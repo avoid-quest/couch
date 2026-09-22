@@ -134,33 +134,6 @@ export function createToolHealth(options: Options) {
   }
 
   return {
-    async verify(runtime: boolean) {
-      const signal = AbortSignal.any([shutdown.signal, AbortSignal.timeout(checkMilliseconds)]);
-      const report = await collect(signal, true);
-      const checks: [string, ToolObservation][] = [["yt-dlp", report.tools[0]!.installed], ["Deno", report.tools[1]!.installed], ["ffprobe", report.ffprobe]];
-      const failures = checks.filter(([, result]) => result.status !== "ready");
-      if (failures.length) throw new Error(`Package tools failed fresh hash/version checks: ${failures.map(([name, result]) => `${name}: ${result.error || result.status}`).join(" ")}`);
-      const command = options.command ?? runDiagnosticCommand;
-      const safeEnv = { PATH: "/usr/bin:/bin", ...(env.LD_LIBRARY_PATH ? { LD_LIBRARY_PATH: env.LD_LIBRARY_PATH } : {}), LANG: "C", LC_ALL: "C" };
-      // Fixed generated media exercises extraction without contacting a website
-      // or using the effective tool overrides. No browser can choose these inputs.
-      const wav = Buffer.alloc(46);
-      wav.write("RIFF"); wav.writeUInt32LE(38, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16);
-      wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(2, 40);
-      const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: request => new URL(request.url).pathname === "/couch-tool-smoke.wav" ? new Response(wav, { headers: { "Content-Type": "audio/wav" } }) : new Response(null, { status: 404 }) });
-      const source = `http://127.0.0.1:${server.port}/couch-tool-smoke.wav`;
-      try {
-        signal.throwIfAborted();
-        if (await command(join(directory, "yt-dlp"), ["--ignore-config", "--no-plugin-dirs", "--no-cache-dir", "--force-generic-extractor", "--skip-download", "--get-url", source], safeEnv) !== source) throw new Error("Package extractor smoke failed.");
-        if (await command(join(directory, "deno"), ["eval", "--no-config", "--no-lock", "console.log(6 * 7)"], safeEnv) !== "42") throw new Error("Package runtime smoke failed.");
-        if (runtime) {
-          await probeMediaHelper("ffprobe", join(directory, "ffprobe"), safeEnv, command);
-          const value = await command(join(directory, "ffprobe"), ["-v", "error", "-show_entries", "stream=codec_name", "-of", "default=noprint_wrappers=1:nokey=1", source], safeEnv);
-          if (value !== "pcm_s16le") throw new Error("Bundled ffprobe runtime smoke failed.");
-        }
-        signal.throwIfAborted();
-      } finally { server.stop(true); }
-    },
     // Filesystem reads may ignore cancellation. Root stops the service and
     // verifies its empty cgroup before taking any maintenance snapshot.
     async close() { shutdown.abort(); },

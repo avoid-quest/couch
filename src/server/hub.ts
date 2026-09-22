@@ -631,7 +631,7 @@ export function createHub(options: HubOptions) {
   })();
 
   return {
-    server, session, pairingCode, urls, origin, idleReason, idleAdmission, updateWork, verifyTools: toolHealth.verify,
+    server, session, pairingCode, urls, origin, idleReason, idleAdmission, updateWork,
     close: () => close(),
     prepareRestart: () => {
       if (!admitted()) throw new Error("The TV is already preparing an update or restart.");

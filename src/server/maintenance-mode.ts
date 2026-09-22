@@ -9,9 +9,6 @@ import { createManualUpdate } from "./manual-update";
 import { createNativeReadiness } from "./readiness-native";
 import { createUpdateIdle } from "./update-idle";
 import { createUpdates } from "./updates";
-import { createToolHealth } from "./tool-health";
-import { verifyTrialTools } from "./trial-tools";
-import { buildInfo } from "./build-info";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
 // It opens no media catalog, recording scheduler, player, LAN listener or pairing endpoint.
@@ -84,8 +81,6 @@ export async function runMaintenanceMode(directory: string, token: string, forma
           try { if (database.query<{ quick_check: string }, []>("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error("The retained database failed its integrity check."); }
           finally { database.close(); }
         }
-        const tools = createToolHealth({ packaged: buildInfo.packaged, helpers: buildInfo.helpers });
-        try { await verifyTrialTools(() => tools.verify(false)); } finally { await tools.close(); }
         await native.complete(null);
       }
     } catch (reason) { await native.complete(reason instanceof Error ? reason.message : "Startup verification failed.").catch(() => {}); }

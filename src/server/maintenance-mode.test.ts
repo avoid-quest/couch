@@ -65,11 +65,11 @@ test("remote maintenance owns only a private installation API and retains playba
   expect((await readdir(f.directory)).some(name => name.includes("wal"))).toBe(false);
 });
 
-for (const corrupt of [false, true]) test(`remote startup trial reports ${corrupt ? "failed" : "successful"} local readiness without contacting a remote`, async () => {
-  const f = await fixture(true, corrupt);
+test("remote startup trial reports local readiness without probing media tools", async () => {
+  const f = await fixture(true, true);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "wrong" } })).status).toBe(409);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build })).status).toBe(204);
   const complete = await f.wait(m => m.action?.type === "complete");
-  expect(complete.action.error).toEqual(corrupt ? expect.stringContaining("Package tools failed fresh hash/version checks: Deno:") : null);
+  expect(complete.action.error).toBeNull();
   expect(await Bun.file(join(f.directory, "couch.sqlite")).bytes()).toEqual(f.database);
 });

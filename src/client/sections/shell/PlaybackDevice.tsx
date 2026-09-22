@@ -132,7 +132,7 @@ function InstallationUpdates() {
     <DialogContent>
       <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      {credentials ? <UpdatesSettings credentials={credentials} connected showTools={false} /> : <p role="status">Connecting to this installation…</p>}
+      {credentials ? <UpdatesSettings credentials={credentials} connected /> : <p role="status">Connecting to this installation…</p>}
     </DialogContent>
   </Dialog>;
 }
