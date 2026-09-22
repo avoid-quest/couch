@@ -11,7 +11,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { ProviderPanel } from "@/components/ProviderPanel";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { LocalSharingPrompt } from "@/sections/shell/PlaybackDevice";
+import { LocalSharingPrompt, PlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
@@ -234,6 +234,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (tvPresentation) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <div className="header-status">
           {!tvPresentation && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
+          {nativeHost && !tvPresentation && <PlaybackDevice />}
           {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !tvPresentation && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}

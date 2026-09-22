@@ -234,7 +234,7 @@ fn interruption(details: &serde_json::Value) -> Result<Option<&'static str>, Str
     let status = details["player"]
         .as_str()
         .ok_or("Cannot check local playback. Retry before switching.")?;
-    let active = !matches!(status, "idle" | "stopped" | "ended" | "error");
+    let active = !matches!(status, "idle" | "stopped" | "ended" | "error" | "unavailable");
     let sharing = details["remoteControlEnabled"]
         .as_bool()
         .ok_or("Cannot check local remote control. Retry before switching.")?;
@@ -659,6 +659,11 @@ mod tests {
         );
         assert_eq!(
             interruption(&serde_json::json!({"player":"idle","remoteControlEnabled":false}))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            interruption(&serde_json::json!({"player":"unavailable","remoteControlEnabled":false}))
                 .unwrap(),
             None
         );

@@ -14,7 +14,7 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 beforeEach(async () => {
   window = new Window({ url: "tauri://localhost/find" });
   Object.defineProperty(window, "__COUCH_NATIVE_HOST__", { configurable: true, value: true });
-  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async () => undefined } });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "local", address: null, targets: [], localSetupComplete: true } : undefined } });
   for (const key of ["CSS", "window", "document", "location", "navigator", "localStorage", "scrollTo", "HTMLElement", "HTMLFormElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
@@ -33,6 +33,7 @@ afterEach(async () => {
 
 async function render(status: "playing" | "unavailable") {
   const { ShellChrome } = await import("./AppShell");
+  const { NativeModeGate } = await import("./PlaybackDevice");
   const state: SessionState = {
     installationName: "Desk Couch",
     activeProfile: { id: "household", name: "Household" },
@@ -50,7 +51,7 @@ async function render(status: "playing" | "unavailable") {
     sectionUrl: () => "/find",
     videoQualityPreference: { quality: "auto" },
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider> });
+  const base = createRootRoute({ component: () => <NativeModeGate><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></NativeModeGate> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <p>Find view</p> });
   const router = createRouter({ routeTree: base.addChildren([find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
   await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
@@ -64,6 +65,7 @@ test("local desktop playback retains a measured video area outside TV presentati
 
 test("a playback backend error remains visible while browsing Find", async () => {
   await render("unavailable");
+  expect(screen.getByRole("button", { name: "Play on: This computer" })).toBeDefined();
   expect(screen.getByRole("alert").textContent).toContain("Video backend missing");
   expect(screen.getByText("Find view")).toBeDefined();
 });
