@@ -38,6 +38,10 @@ impl LayoutQueue {
 
 const RECONCILE_STARTED_LOAD: &str = "Native load started after its reply wait. Observing playback before retrying.";
 
+fn is_rejected_control(command: &PlaybackCommand) -> bool {
+    !matches!(command, PlaybackCommand::Load { .. } | PlaybackCommand::Stop)
+}
+
 // One worker preserves command order. The plugin dispatches GPU work onto GTK.
 pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     let mut player = Player::default();
@@ -83,7 +87,7 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 let replacement = matches!(&command, PlaybackCommand::Load { .. });
                 match player.command(&app, command) {
                     Err(error) if replacement && error == RECONCILE_STARTED_LOAD => player.observe(&app),
-                    Err(error) if !replacement => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
+                    Err(error) if is_rejected_control(&command) => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
                     result => result,
                 }
             }
@@ -121,6 +125,11 @@ mod layout_queue_tests {
         assert!(!queue.push(VideoRect { width: 200.0, ..VideoRect::default() }));
         assert_eq!(queue.take().unwrap().width, 200.0);
         assert!(queue.push(VideoRect { width: 300.0, ..VideoRect::default() }));
+    }
+
+    #[test]
+    fn stop_errors_reach_the_forced_state_report() {
+        assert!(!is_rejected_control(&PlaybackCommand::Stop));
     }
 }
 
