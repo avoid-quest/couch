@@ -124,7 +124,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       <p className="font-medium">Manual installation is not enabled on this installation.</p>
       <p className="text-muted-foreground">From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects.</p>
     </Card>}
-    {state?.installation?.enabled && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
+    {state?.installation?.enabled && state.installation.repairAvailable && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>
       {confirming === "repair" ? <>
         <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect.</p>

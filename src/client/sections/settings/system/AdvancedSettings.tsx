@@ -49,7 +49,13 @@ function UpdatePreferences({ credentials, connected }: { credentials: ApiCredent
   const updates = useQuery({
     queryKey,
     enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/updates").then(response => response.json() as Promise<UpdateState>),
+    queryFn: async () => {
+      const response = await apiFetch(credentials, "/api/updates");
+      if (!response.ok) throw new Error();
+      return response.json() as Promise<UpdateState>;
+    },
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: false,
     retry: false,
   });
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +71,7 @@ function UpdatePreferences({ credentials, connected }: { credentials: ApiCredent
   if (!connected) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Connect to the TV to manage update preferences.</p></section>;
   if (!state && !updates.error) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Loading update preferences…</p></section>;
   if (!state) return <section className="space-y-2 border-t pt-4"><h3 className="font-medium">Update preferences</h3><p role="status">Could not load update preferences.</p></section>;
-  const disabled = updates.isFetching || state.status === "unavailable";
+  const disabled = updates.isFetching || ["unavailable", "checking", "downloading"].includes(state.status);
   return <section className="space-y-3 border-t pt-4">
     <h3 className="font-medium">Update preferences</h3>
     <div className="space-y-2">

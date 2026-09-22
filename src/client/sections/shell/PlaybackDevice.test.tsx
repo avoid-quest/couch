@@ -173,7 +173,7 @@ test("an unreachable remote cannot prevent this installation's update controls",
     expect(String(input)).toStartWith("http://127.0.0.1:54321/");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer own-installation");
     if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
-    return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, repairAvailable: false, transaction: null } });
+    return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, current: { candidateId: "d".repeat(64), version: "0.1.0-preview.1", revision: "a".repeat(40) }, repairAvailable: false, transaction: null } });
   }) as typeof fetch);
   // Render UpdatesSettings directly: the Radix portal strips QueryClient context in happy-dom.
   const { UpdatesSettings } = await import("@/sections/settings/system/UpdatesSettings");
@@ -186,6 +186,7 @@ test("an unreachable remote cannot prevent this installation's update controls",
   expect(button("Install update").disabled).toBe(false);
   expect(screen.queryByLabelText("Release channel")).toBeNull();
   expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Repair current release" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   expect(choice.mode).toBe("remote");
