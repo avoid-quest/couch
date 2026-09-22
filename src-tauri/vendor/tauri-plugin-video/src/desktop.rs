@@ -1,5 +1,11 @@
 use serde::de::DeserializeOwned;
-use std::{sync::mpsc, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        mpsc, Arc,
+    },
+    time::Duration,
+};
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
 use crate::models::{
@@ -35,6 +41,25 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 #[cfg(target_os = "linux")]
 type MainJob<R> = Box<dyn FnOnce(&AppHandle<R>) + Send + 'static>;
 
+const QUEUED: u8 = 0;
+const STARTED: u8 = 1;
+const EXPIRED: u8 = 2;
+
+#[derive(Clone)]
+struct QueuedCall(Arc<AtomicU8>);
+
+impl QueuedCall {
+    fn new() -> Self { Self(Arc::new(AtomicU8::new(QUEUED))) }
+
+    fn start(&self) -> bool {
+        self.0.compare_exchange(QUEUED, STARTED, Ordering::AcqRel, Ordering::Acquire).is_ok()
+    }
+
+    fn expire(&self) -> bool {
+        self.0.compare_exchange(QUEUED, EXPIRED, Ordering::AcqRel, Ordering::Acquire).is_ok()
+    }
+}
+
 pub struct DesktopVideo<R: Runtime> {
     _app: AppHandle<R>,
     #[cfg(target_os = "linux")]
@@ -64,7 +89,6 @@ impl<R: Runtime> DesktopVideo<R> {
     pub fn layout_native(&self, payload: NativeLayoutRequest) -> crate::Result<()> {
         // The WebView publishes its matching transparent aperture after this
         // command resolves, so completion must mean GTK received the move.
-        // The guest serializes layout calls, keeping this dispatcher bounded.
         self.run_on_main(move |_| linux::layout(payload))
     }
 
@@ -183,17 +207,21 @@ impl<R: Runtime> DesktopVideo<R> {
         F: FnOnce(&AppHandle<R>) -> crate::Result<T> + Send + 'static,
     {
         let (sender, receiver) = mpsc::sync_channel(1);
+        let call = QueuedCall::new();
+        let queued_call = call.clone();
         self.main_sender
-            .send(Box::new(move |context| {
-                let _ = sender.send(operation(context));
+            .try_send(Box::new(move |context| {
+                if queued_call.start() { let _ = sender.send(operation(context)); }
             }))
             .map_err(|error| {
-                crate::Error::Pipeline(format!("native UI dispatcher is unavailable: {error}"))
+                crate::Error::Pipeline(format!("native UI dispatcher is unavailable or busy: {error}"))
             })?;
         receiver
             .recv_timeout(Duration::from_secs(15))
-            .map_err(|error| {
-                crate::Error::Pipeline(format!("native UI thread timed out: {error}"))
+            .map_err(|error| if call.expire() {
+                crate::Error::Pipeline(format!("native UI operation expired before it started: {error}"))
+            } else {
+                crate::Error::DispatcherInFlight
             })?
     }
 
@@ -227,6 +255,22 @@ impl<R: Runtime> DesktopVideo<R> {
     #[cfg(not(any(target_os = "linux", windows)))]
     pub fn close_native(&self, _: NativeSessionRequest) -> crate::Result<()> {
         self.unsupported()
+    }
+}
+
+#[cfg(test)]
+mod dispatcher_tests {
+    use super::*;
+
+    #[test]
+    fn expired_queued_call_does_not_start_after_dispatcher_delay() {
+        let call = QueuedCall::new();
+        let delayed = call.clone();
+        let (release, wait) = mpsc::sync_channel(0);
+        let worker = std::thread::spawn(move || { wait.recv().unwrap(); delayed.start() });
+        assert!(call.expire());
+        release.send(()).unwrap();
+        assert!(!worker.join().unwrap());
     }
 }
 

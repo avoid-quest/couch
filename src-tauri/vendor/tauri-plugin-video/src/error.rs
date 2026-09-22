@@ -18,6 +18,8 @@ pub enum Error {
     RuntimeUnavailable(String),
     #[error("media pipeline failed: {0}")]
     Pipeline(String),
+    #[error("native UI operation started; playback must be observed before retrying")]
+    DispatcherInFlight,
     #[cfg(mobile)]
     #[error(transparent)]
     PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
@@ -30,13 +32,14 @@ impl Error {
             Self::InvalidRequest(_) => "INVALID_REQUEST",
             Self::RuntimeUnavailable(_) => "RUNTIME_UNAVAILABLE",
             Self::Pipeline(_) => "PIPELINE_FAILED",
+            Self::DispatcherInFlight => "DISPATCHER_IN_FLIGHT",
             #[cfg(mobile)]
             Self::PluginInvoke(_) => "MOBILE_PLUGIN_ERROR",
         }
     }
 
     fn recoverable(&self) -> bool {
-        matches!(self, Self::Pipeline(_))
+        matches!(self, Self::Pipeline(_) | Self::DispatcherInFlight)
     }
 }
 
@@ -61,7 +64,7 @@ impl Serialize for Error {
             recoverable: self.recoverable(),
             stage: match self {
                 Self::ProtocolMismatch { .. } => Some("protocol"),
-                Self::Pipeline(_) => Some("pipeline"),
+                Self::Pipeline(_) | Self::DispatcherInFlight => Some("pipeline"),
                 _ => None,
             },
         }
