@@ -9,17 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { GuideSources, type GuideRequest } from "@/components/GuideSources";
-import { RecordingsPanel } from "@/components/RecordingsPanel";
 import { guidePageQuery, iptvLiveEdgeQuery } from "@/api/iptv";
 import { apiFetch } from "../../api/client";
-import { recordingsQuery } from "../../api/recordings";
 import { createId, type Credentials } from "../../session/session";
 import { GuideLogo } from "./GuideLogo";
 import { GuideProgramDialog } from "./GuideProgramDialog";
 
 type Props = { credentials: Credentials; connected: boolean; canPlay: boolean; host: boolean; currentSource?: string; onGoLive: () => void; active: boolean; run: (action: Action) => Promise<boolean> };
 
-// The guide owns discovery and live-edge status; schedules live in their dialog.
+// The guide owns discovery and live-edge status.
 export function GuidePanel({ credentials, connected, canPlay, host, currentSource, onGoLive, active, run }: Props) {
   const queryClient = useQueryClient();
   const [queryDraft, setQueryDraft] = useState(""); const query = useDeferredValue(queryDraft);
@@ -33,16 +31,6 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
   const page = guide.data;
   const liveChannelId = active && connected && currentSource?.startsWith("iptv:") ? currentSource.slice(5) : null;
   const liveEdge = useQuery(iptvLiveEdgeQuery(credentials, liveChannelId));
-  const recordings = useQuery({ ...recordingsQuery(credentials), enabled: connected && active });
-  const recordingsRemote = {
-    page: recordings.data ?? null,
-    error: recordings.error instanceof Error ? recordings.error.message : recordings.error ? "Could not load recordings." : null,
-    request: useCallback(async (path: string, init: RequestInit = {}) => {
-      const timeout = path === "setup" ? 180_000 : path === "schedule" ? 90_000 : path.endsWith("/cancel") ? 60_000 : 30_000;
-      return apiFetch(credentials, `/api/recordings${path ? `/${path}` : ""}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers }, signal: AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(timeout)]) });
-    }, [credentials]),
-    reload: useCallback(() => { void queryClient.invalidateQueries({ queryKey: ["recordings"] }); }, [queryClient]),
-  };
 
   useEffect(() => {
     const timer = setInterval(() => { void queryClient.invalidateQueries({ queryKey: ["iptv", "guide"] }); }, 60_000);
@@ -68,7 +56,6 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
     <div className="guide-heading flex flex-wrap items-center justify-between gap-3">
       <div><h2 id="guide-title" className="mb-1 text-2xl font-semibold">TV guide</h2><p className="text-sm text-muted-foreground">Choose a channel to watch on the TV.</p></div>
       <div className="flex flex-wrap gap-2">
-        <RecordingsPanel remote={recordingsRemote} channels={page?.channels ?? []} {...{ connected, canPlay, host, origin: credentials.origin, token: credentials.token, controllerVersion: 0 }} />
         <GuideSources {...{ request, origin: credentials.origin, token: credentials.token, host, connected, controllerVersion: 0 }} sources={page?.sources ?? []} />
       </div>
     </div>
@@ -106,7 +93,7 @@ export function GuidePanel({ credentials, connected, canPlay, host, currentSourc
         <Button variant="outline" disabled={offset + 50 >= page.total} onClick={() => setOffset(value => value + 50)}>Next</Button>
       </nav>}
     </>}
-    {selected && <GuideProgramDialog credentials={credentials} connected={connected} canPlay={canPlay} channel={selected} recordings={recordingsRemote} onEnqueue={enqueue} onClose={() => setSelected(null)} returnFocus={() => returnFocus.current?.focus()} />}
+    {selected && <GuideProgramDialog credentials={credentials} connected={connected} canPlay={canPlay} channel={selected} onEnqueue={enqueue} onClose={() => setSelected(null)} returnFocus={() => returnFocus.current?.focus()} />}
   </section>;
 }
 

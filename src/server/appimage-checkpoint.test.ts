@@ -20,7 +20,7 @@ test("disk failure and incomplete writer acknowledgement prohibit replacement an
 });
 
 
-test.each(["Active recording", "Library scan", "Import request"])("manual interruption cannot stop %s", async reason => {
+test.each(["Source inspection", "Library scan", "Import request"])("manual interruption cannot stop %s", async reason => {
   let closed = false;
   const result = await checkpointAppImage({ whenIdle: false, confirmInterrupt: true, work: () => reason, idle: () => null, player: () => "playing", closeAdmission: () => { closed = true; }, quiesce: async () => { throw new Error("Must remain running"); } });
   expect(result).toEqual({ closed: false, error: reason });

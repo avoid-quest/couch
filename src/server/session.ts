@@ -60,7 +60,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
-  const invalidate = (kind: "library" | "radio" | "iptv" | "recordings" | "provider" | "jellyfin" | "playlist" | "forLater" | "controller") => {
+  const invalidate = (kind: "library" | "radio" | "iptv" | "provider" | "jellyfin" | "playlist" | "forLater" | "controller") => {
     if (!admitted()) return;
     if (kind === "controller") {
       state.installationName = store.installationName();
@@ -494,6 +494,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
+      if (mediaId.startsWith("recording:")) throw new ViewingError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
       available();
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);

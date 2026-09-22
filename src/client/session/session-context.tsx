@@ -152,7 +152,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     const previous = revisions.current;
     if (!previous || previous.client !== queryClient) void queryClient.invalidateQueries();
     else {
-      const domains = { library: "library", radio: "radio", iptv: "iptv", recordings: "recordings", provider: "providers", jellyfin: "jellyfin", playlist: "playlists", forLater: "for-later", controller: "controllers" } as const;
+      const domains = { library: "library", radio: "radio", iptv: "iptv", provider: "providers", jellyfin: "jellyfin", playlist: "playlists", forLater: "for-later", controller: "controllers" } as const;
       for (const [domain, key] of Object.entries(domains)) {
         const field = `${domain}Version` as `${keyof typeof domains}Version`;
         if ((state[field] ?? 0) !== (previous.state[field] ?? 0)) void queryClient.invalidateQueries({ queryKey: [key] });

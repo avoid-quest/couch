@@ -41,7 +41,6 @@ import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
 import { createGuide } from "./iptv";
-import { createRecordings } from "./recordings";
 
 import { createSoundRouting } from "./sound-routing";
 import { bluetoothSettings } from "./bluetooth";
@@ -139,7 +138,7 @@ export function createHub(options: HubOptions) {
       if (entry.source.startsWith("web:")) return resolveWebMedia(entry.source.slice(4), signal, entry.quality, store.streamingCommunityOrigin());
       if (entry.source.startsWith("jellyfin:")) return jellyfin.resolve(entry.source.slice(9), playbackId, signal, fromStart, preparing).then(media => preparing ? media : subtitles.prepare(media, playbackId, signal));
       if (entry.source.startsWith("library:")) return library.getPlayable(entry.source.slice(8));
-      if (entry.source.startsWith("recording:")) return recordings.resolve(entry.source.slice(10), signal);
+      if (entry.source.startsWith("recording:")) throw new Error("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.");
       if (entry.source.startsWith("iptv:")) return goLive ? guide.getLivePlayable(entry.source.slice(5), signal) : guide.getPlayable(entry.source.slice(5), signal);
       if (entry.source.startsWith("radio:")) {
         const station = radio.getPlayable(entry.source.slice(6));
@@ -179,15 +178,6 @@ export function createHub(options: HubOptions) {
       const existing = session.state.queue.find(entry => entry.source === `iptv:${channel.id}`);
       if (existing) { if (playNow) session.command({ type: "play", entryId: existing.id, fromStart: true }, authorize, playedBy); }
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
-    },
-  });
-  const recordings = createRecordings({ databasePath: options.databasePath, admitted, selection: guide.recordingSelection, channel: guide.recordingChannel,
-    onChange: () => session.invalidate("recordings"),
-    onConnectionChanged: () => { if (session.state.queue.find(entry => entry.id === session.state.currentEntryId)?.source.startsWith("recording:")) session.command({ type: "stop" }); },
-    enqueue: (job, authorize, playedBy) => {
-      const existing = session.state.queue.find(entry => entry.source === `recording:${job.id}`);
-      if (existing) session.command({ type: "play", entryId: existing.id }, authorize, playedBy);
-      else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: job.title, source: `recording:${job.id}` }, playNow: true }, authorize, playedBy);
     },
   });
   const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
@@ -242,8 +232,7 @@ export function createHub(options: HubOptions) {
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const updateWork = () => {
-    const recording = recordings.snapshot().jobs.some(job => job.status === "running" || job.status === "checking" || job.status === "pending" && job.start <= Date.now());
-    return idle.workReason() ?? (library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : recording ? "Waiting for active or unconfirmed recordings to finish." : null);
+    return idle.workReason() ?? (library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : null);
   };
   const idleReason = () => idle.reason(updateWork());
   const idleAdmission = () => manual?.needsRefresh() ? "Check the AppImage installation through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
@@ -502,7 +491,6 @@ export function createHub(options: HubOptions) {
         if (!websocket && /^\/api\/diagnostics(?:\/|$)/.test(url.pathname)) return cors(request, await diagnostics.handle(request, currentIdentity));
         if (!websocket && /^\/api\/metadata(?:\/|$)/.test(url.pathname)) return cors(request, await library.metadata.handle(request, currentIdentity));
         if (!websocket && /^\/api\/appearance(?:\/|$)/.test(url.pathname)) return cors(request, await appearance.handle(request, currentIdentity));
-        if (!websocket && /^\/api\/recordings(?:\/|$)/.test(url.pathname)) return cors(request, await recordings.handle(request, currentIdentity, playedBy));
         if (!websocket && /^\/api\/iptv(?:\/|$)/.test(url.pathname)) return cors(request, await guide.handle(request, currentIdentity, playedBy));
         if (!websocket && (/^\/api\/controllers(?:\/|$)/.test(url.pathname) || (url.pathname === "/api/settings" || url.pathname === "/api/settings/setup"))) return cors(request, await controllers.handle(request, currentIdentity));
         if (!websocket && /^\/api\/jellyfin(?:\/(?:connection|test))?$/.test(url.pathname)) return cors(request, await jellyfinSettings.handle(request, currentIdentity));
@@ -603,7 +591,6 @@ export function createHub(options: HubOptions) {
     requiredCheckpoint = requiredProgress;
     closed = true;
     shutdown.abort();
-    const recordingShutdown = recordings.close();
     for (const controller of inspections.values()) controller.abort();
     let progressError: unknown;
     try { if (requiredProgress) session.quiesce(); else session.close(); }
@@ -621,7 +608,7 @@ export function createHub(options: HubOptions) {
     radioProgramme?.close();
     radio.close();
     // Start every producer's shutdown before waiting for any one producer.
-    const results = await Promise.allSettled([recordingShutdown, toolsStopped, updates.close(), library.close(), jellyfin.close(), lan?.close(), server.stop(true)]);
+    const results = await Promise.allSettled([toolsStopped, updates.close(), library.close(), jellyfin.close(), lan?.close(), server.stop(true)]);
     diagnostics.close();
     store.close();
     if (progressError) throw progressError;

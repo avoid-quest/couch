@@ -33,7 +33,7 @@ test("radio reconnect and background work completion restart the interval", () =
   idle.playback("error", true); now += minutes(20);
   expect(idle.reason()).toContain("radio reconnect");
   idle.playback("idle", false); now += minutes(10);
-  expect(idle.reason("Waiting for recordings")).toContain("recordings");
+  expect(idle.reason("Waiting for a library scan")).toContain("library scan");
   now += minutes(10); expect(idle.reason()).not.toBeNull();
   now += minutes(10); expect(idle.reason()).toBeNull();
   idle.playback("idle", false); expect(idle.reason()).toBeNull();
