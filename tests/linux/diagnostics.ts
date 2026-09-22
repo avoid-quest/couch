@@ -67,7 +67,9 @@ try {
   const before = state!.player;
   // The idle report is cached for five seconds. Wait for a fresh observation.
   await Bun.sleep(Math.max(0, Date.parse(idle.collectedAt) + 5_050 - Date.now()));
+  const collectionStarted = performance.now();
   const exported = await api("/api/diagnostics/export");
+  const collectionRequestMs = performance.now() - collectionStarted;
   assert.equal(exported.status, 200); assert.match(exported.headers.get("content-disposition")!, /attachment/);
   const body = await exported.text(), report = JSON.parse(body) as Diagnostics;
   assert.ok(Buffer.byteLength(body) <= report.limits.exportBytes);
@@ -83,7 +85,17 @@ try {
   await phone.ui.button("Export diagnostics");
   await until("phone starts its explicit diagnostic download", () => phone!.ui.execute("return document.querySelector('[data-advanced-settings]')?.textContent.includes('Diagnostic download started.')"));
   await Bun.write(`${artifacts}/diagnostics-bundle.json`, body);
-  await Bun.write(`${artifacts}/diagnostics-acceptance.json`, JSON.stringify({ checks, observed: facts, collectionMs: report.collectionMs, bytes: Buffer.byteLength(body), physicalHardware: false }, null, 2));
+  await Bun.write(`${artifacts}/diagnostics-acceptance.json`, JSON.stringify({
+    sourceRevision: process.env.COUCH_SOURCE_REVISION,
+    telemetryEnabled: process.env.TAURI_VIDEO_TELEMETRY === "1",
+    checks,
+    observed: facts,
+    collectionMs: report.collectionMs,
+    collectionRequestMs,
+    bytes: Buffer.byteLength(body),
+    stuckRenderLog: { pattern: "mpv_render_context_render() not being called or stuck", observation: "unavailable", reason: "The vendored libmpv binding does not subscribe to mpv log messages." },
+    physicalHardware: false,
+  }, null, 2));
 } finally {
   socket?.close(); await phone?.close();
   if (session) await request(`/session/${session}`, undefined, "DELETE").catch(() => {});

@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { startJellyfinFixture } from "../tests/linux/jellyfin-fixture";
 
 const root = resolve(import.meta.dir, "..");
-const artifacts = resolve(root, ".artifacts/linux");
+const artifacts = resolve(root, process.env.COUCH_LINUX_ARTIFACTS || ".artifacts/linux");
 const image = "couch-linux-test:ubuntu24.04";
 const configArgument = process.argv.indexOf("--jellyfin-config");
 const jellyfinConfig = configArgument === -1 ? null : process.argv[configArgument + 1];
@@ -37,7 +37,7 @@ const git = (...args: string[]) => {
 if (git("status", "--porcelain")) throw new Error("Commit the tested changes before Linux qualification. Use preview:linux for an uncommitted visual preview.");
 const revision = git("rev-parse", "HEAD");
 await mkdir(artifacts, { recursive: true });
-if (!providersConfig && !providerCatalogs) for (const name of ["results.json", "failure.txt", "diagnostics.json", "native-failure.png"]) await rm(resolve(artifacts, name), { force: true });
+if (!providersConfig && !providerCatalogs) for (const name of ["results.json", "failure.txt", "diagnostics.json", "native-failure.png", "gtk-mpv-threading.json"]) await rm(resolve(artifacts, name), { force: true });
 await run(["docker", "info", "--format", "Docker {{.ServerVersion}} / {{.Architecture}}"]);
 await run(["docker", "build", "--progress", "plain", "-t", image, "tests/linux"]);
 const snapshot = await mkdtemp(join(tmpdir(), "couch-linux-source-"));
@@ -53,6 +53,8 @@ try {
     "docker", "run", "--rm", "--init", "--shm-size=1g",
     "--mount", `type=bind,source=${join(snapshot, "source.bundle")},target=/source.bundle,readonly`,
     "--env", `COUCH_SOURCE_REVISION=${revision}`,
+    "--env", "COUCH_RELEASES_ENABLED=false",
+    ...(process.env.TAURI_VIDEO_TELEMETRY === "1" ? ["--env", "TAURI_VIDEO_TELEMETRY=1"] : []),
     "--mount", `type=bind,source=${artifacts},target=/artifacts`,
     "--mount", "type=volume,source=couch-linux-target,target=/cache/target",
     "--mount", "type=volume,source=couch-linux-registry,target=/root/.cargo/registry",

@@ -30,6 +30,9 @@ const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const artifactDir = "/artifacts";
 const checks: string[] = [];
+const commandLatency: { action: Action["type"]; elapsedMs: number; outcome: "ok" | "error" }[] = [];
+const telemetryEnabled = process.env.TAURI_VIDEO_TELEMETRY === "1";
+const stuckRenderPattern = "mpv_render_context_render() not being called or stuck";
 const radioFixture = await createRadioFixture();
 const guideFixture = await createGuideFixture(4202, "ffmpeg", artifactDir);
 const plainMediaAuth: boolean[] = [];
@@ -151,15 +154,40 @@ class Remote {
 
   command(action: Action) {
     const requestId = crypto.randomUUID();
+    const started = performance.now();
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(requestId); reject(new Error(`${action.type} acknowledgement timed out`)); }, 5_000);
+      const finish = (outcome: "ok" | "error") => commandLatency.push({ action: action.type, elapsedMs: performance.now() - started, outcome });
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        finish("error");
+        reject(new Error(`${action.type} acknowledgement timed out`));
+      }, 5_000);
       this.pending.set(requestId, {
-        resolve: () => { clearTimeout(timer); resolve(); },
-        reject: error => { clearTimeout(timer); reject(error); },
+        resolve: () => { clearTimeout(timer); finish("ok"); resolve(); },
+        reject: error => { clearTimeout(timer); finish("error"); reject(error); },
       });
       this.socket.send(JSON.stringify({ type: "command", requestId, action }));
     });
   }
+}
+
+async function telemetrySamples() {
+  const log = await Bun.file(`${artifactDir}/native.log`).text();
+  return [...log.matchAll(/mpv telemetry: presented=(\d+) dropped=(\d+) fps=([\d.]+)/g)].map(([, presented, dropped, fps]) => ({
+    presented: Number(presented), dropped: Number(dropped), fps: Number(fps),
+  }));
+}
+
+async function writeThreadingEvidence() {
+  const samples = await telemetrySamples();
+  await Bun.write(`${artifactDir}/gtk-mpv-threading.json`, JSON.stringify({
+    sourceRevision: process.env.COUCH_SOURCE_REVISION,
+    telemetryEnabled,
+    commandLatency,
+    frameTelemetry: samples,
+    uiChecks: checks.filter(check => check.includes("Phone") || check.includes("native video") || check.includes("WebView pixels") || check.includes("replacement pixels")),
+    stuckRenderLog: { pattern: stuckRenderPattern, observation: "unavailable", reason: "The vendored libmpv binding does not subscribe to mpv log messages." },
+  }, null, 2));
 }
 
 const all = (predicate: (state: SessionState) => boolean) => clients.every(client => client.state && predicate(client.state));
@@ -204,12 +232,38 @@ try {
   await click('[aria-label="Play Linux multitrack fixture"]');
   await until("native libmpv playback observed by both remotes", () => all(state => state.player.status === "playing" && state.player.position > 0));
   assert.ok((await Bun.file(`${artifactDir}/native.log`).text()).includes("Couch: basic GPU rendering enabled (COUCH_BASIC_RENDERING=1)"), "the explicit software-display renderer is active");
-  const playbackId = clients[0]!.state!.player.playbackId!;
-  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  if (telemetryEnabled) {
+    await until("libmpv telemetry shows presented frames advancing", async () => {
+      const samples = await telemetrySamples();
+      return samples.length >= 2 && samples.at(-1)!.presented > samples[0]!.presented && samples.some(sample => sample.fps > 0);
+    }, 10_000);
+  }
+  const initialPlaybackId = clients[0]!.state!.player.playbackId!;
+  const initialEntryId = clients[0]!.state!.currentEntryId!;
+  await clients[0]!.command({ type: "pause", playbackId: initialPlaybackId, paused: true });
   await until("first remote pauses native playback for all clients", () => all(state => state.player.status === "paused"));
   await until("native UI shows remote pause", async () => await execute("return document.querySelector('.playback-status')?.textContent") === "Paused");
-  await clients[1]!.command({ type: "seek", playbackId, position: 6 });
+  await clients[1]!.command({ type: "seek", playbackId: initialPlaybackId, position: 6 });
   await until("second remote seek is confirmed by native playback", () => all(state => Math.abs(state.player.position - 6) < 0.3));
+  await clients[0]!.command({ type: "stop" });
+  await until("early native Stop clears playback before replacement", () => all(state => state.player.status === "idle"));
+  const replacementId = crypto.randomUUID();
+  await clients[0]!.command({ type: "enqueue", entry: { id: replacementId, title: "GTK threading replacement fixture", source: "http://127.0.0.1:4200/multitrack.mkv" } });
+  await clients[1]!.command({ type: "play", entryId: replacementId });
+  await until("native replacement plays through the retained GtkGLArea", () => all(state => state.currentEntryId === replacementId && state.player.status === "playing" && state.player.playbackId !== initialPlaybackId));
+  const replacementPlaybackId = clients[0]!.state!.player.playbackId!;
+  await clients[0]!.command({ type: "pause", playbackId: replacementPlaybackId, paused: true });
+  await until("replacement pauses before the remaining control checks", () => all(state => state.player.status === "paused"));
+  await ui.watching();
+  await assertNativeVideoPixels(execute, artifactDir, "gtk-threading-replacement");
+  await screenshot("gtk-threading-replacement");
+  checks.push("native replacement pixels remain visible after Stop and seek");
+  console.log("PASS native replacement pixels remain visible after Stop and seek");
+  await clients[0]!.command({ type: "play", entryId: initialEntryId });
+  await until("original fixture resumes after GTK replacement", () => all(state => state.currentEntryId === initialEntryId && state.player.status === "playing" && state.player.playbackId !== replacementPlaybackId));
+  const playbackId = clients[0]!.state!.player.playbackId!;
+  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  await until("original fixture pauses before the remaining control checks", () => all(state => state.currentEntryId === initialEntryId && state.player.status === "paused"));
   await clients[0]!.command({ type: "volume", volume: 37 });
   await until("native volume update reaches both remotes", () => all(state => state.player.volume === 37));
 
@@ -642,6 +696,7 @@ try {
   await Promise.all(clients.map(client => client.connect()));
   await radioAcceptance.assertAfterRestart();
 
+  await writeThreadingEvidence();
   await Bun.write(`${artifactDir}/results.json`, JSON.stringify({ passed: checks, runtime: { bun: Bun.version, platform: process.platform, arch: process.arch, rendering: "libmpv gpu-dumb-mode=yes" }, limitations: "Xvfb software rendering, the explicit basic GPU option, and a clocked PulseAudio null sink. The advanced renderer, hardware decoding, HDMI audio, HDR and real Wi-Fi were not qualified." }, null, 2));
 } catch (error) {
   await screenshot("native-failure").catch(() => {});
@@ -660,6 +715,7 @@ try {
   await Bun.write(`${artifactDir}/failure.txt`, String(error));
   throw error;
 } finally {
+  await writeThreadingEvidence().catch(() => {});
   await secondHttpRemote?.close();
   await httpRemote?.close();
   clients.forEach(client => client.socket?.close());
