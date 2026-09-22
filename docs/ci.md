@@ -72,11 +72,14 @@ bun run test:linux
 ```
 
 `--native` adds the locked Cargo tests and the retained startup-buffer test after
-the sidecar build. The full Linux journey retains its native feature tests and
-actual Tauri/libmpv playback checks; it also runs the same built-remote journey.
-Neither simulated playback nor software rendering qualifies physical TV, speaker
-or hardware behavior. The launcher still accepts its existing Jellyfin/provider
-options. Use `preview:linux` for an uncommitted visual preview, not qualification.
+the sidecar build. `test:linux` runs the compiled-browser check, then the short
+native smoke: compiled Tauri/libmpv startup, one paired-controller Play command
+for generated local media, a native-pixel capture, one restart/persistence check,
+and a receipt tied to the running revision. Focused tests own feature behavior;
+the Debian package/update gate remains separate. Neither simulated playback nor
+software rendering qualifies physical TV, speaker or hardware behavior. The
+launcher still accepts its existing Jellyfin/provider options. Use `preview:linux`
+for an uncommitted visual preview, not qualification.
 
 ## Hosted execution and budget
 
