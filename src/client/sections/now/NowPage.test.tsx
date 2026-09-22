@@ -30,7 +30,7 @@ beforeEach(async () => {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
   window.localStorage.setItem("couch.now-sections", JSON.stringify({ order: ["playing", "queue", "history", "radio"], hidden: ["playing"] }));
-  request = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ items: [], sources: [], stations: [], playlists: [], playlist: { error: null } })) as unknown as typeof fetch);
+  request = spyOn(globalThis, "fetch").mockImplementation((async () => Response.json({ items: [], sources: [], stations: [], playlists: [], playlist: { error: null }, programmes: {} })) as unknown as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });

@@ -1,28 +1,60 @@
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylistSummary, type RadioProgrammeDetails, type RadioStation } from "../../shared/radio";
 import type { Credentials } from "../session/session";
 import { apiFetch } from "./client";
 
-export const radioCatalogQuery = (credentials: Credentials) =>
+export const radioRequest = (credentials: Credentials, path: string, init: RequestInit = {}) =>
+  apiFetch(credentials, `/api/radio/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
+
+export const radioCatalogQuery = (credentials: Credentials, refresh = 0) =>
   queryOptions({
-    queryKey: ["radio", "avoid"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/avoid", { signal }).then(r => r.json() as Promise<AvoidRadioCatalog>),
+    queryKey: ["radio", "avoid", credentials.origin, credentials.token, refresh] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, `avoid${refresh ? "?refresh=true" : ""}`, { signal }).then(r => r.json() as Promise<AvoidRadioCatalog>),
     staleTime: 60_000,
   });
 
 // One response shape per cache key, even when a caller wants only the list.
 export const radioFavoritesListQuery = (credentials: Credentials) =>
   queryOptions({
-    queryKey: ["radio", "favorites", credentials.origin] as const,
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
+    queryKey: ["radio", "favorites", credentials.origin, credentials.token] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, "favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
   });
 
 export const radioProgrammesQuery = (credentials: Credentials) =>
   queryOptions({
-    queryKey: ["radio", "avoid", "programmes"],
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/radio/avoid/programmes", { signal }).then(r => r.json() as Promise<Record<string, RadioProgrammeDetails>>),
+    queryKey: ["radio", "avoid", "programmes", credentials.origin, credentials.token] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, "avoid/programmes", { signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]) }).then(r => r.json() as Promise<{ programmes: Record<string, RadioProgrammeDetails> }>).then(({ programmes }) => programmes),
     staleTime: 30_000,
   });
+
+export const cancelRadioReads = (client: QueryClient, credentials: Credentials, refresh = 0) =>
+  Promise.all([radioCatalogQuery(credentials, refresh), radioProgrammesQuery(credentials)].map(query => client.cancelQueries({ queryKey: query.queryKey })));
+
+export const radioPlaylistsQuery = (credentials: Credentials) =>
+  queryOptions({
+    queryKey: ["radio", "playlists", credentials.origin, credentials.token] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, "playlists", { signal }).then(response => response.json() as Promise<{ playlists: RadioPlaylistSummary[] }>),
+  });
+
+export const radioPlaylistStationsQuery = (credentials: Credentials, playlistId: string, query: string) =>
+  queryOptions({
+    queryKey: ["radio", "playlists", credentials.origin, credentials.token, playlistId, query] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, `playlists/${encodeURIComponent(playlistId)}/stations?${new URLSearchParams({ q: query })}`, { signal }).then(response => response.json() as Promise<{ stations: RadioStation[] }>),
+  });
+
+export const searchRadioStations = async (credentials: Credentials, query: string, country: string, signal: AbortSignal) => {
+  const params = new URLSearchParams({ q: query.trim(), countrycode: country.trim() });
+  const response = await radioRequest(credentials, `stations?${params}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
+  return (await response.json() as { stations: RadioStation[] }).stations;
+};
+
+export const saveRadioFavorite = async (credentials: Credentials, station: RadioStation, saved: boolean, signal: AbortSignal) => {
+  await radioRequest(credentials, saved ? `favorites/${station.id}` : "favorites", {
+    method: saved ? "DELETE" : "POST",
+    body: saved ? undefined : JSON.stringify({ station }),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+  });
+};
 
 export const radioSearchQuery = (credentials: Credentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>
   queryOptions({

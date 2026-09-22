@@ -8,7 +8,7 @@ import { RadioDirectory } from "./RadioDirectory";
 import { RadioStationList } from "./RadioStationList";
 import { AvoidRadioHome } from "./AvoidRadioHome";
 import { PlaylistRadioPanel } from "./PlaylistRadioPanel";
-import { radioFavoritesQuery, saveRadioFavorite } from "./radioQueries";
+import { radioFavoritesListQuery, saveRadioFavorite } from "@/api/radio";
 
 type Props = {
   credentials: { origin: string; token: string };
@@ -26,7 +26,7 @@ export function RadioPanel({ credentials, connected, host, onManage, canPlay, on
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const favorites = useQuery(radioFavoritesQuery(credentials, connected));
+  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const favoriteStations = favorites.data?.favorites ?? [];
 
   const favorite = async (station: RadioStation, saved: boolean) => {

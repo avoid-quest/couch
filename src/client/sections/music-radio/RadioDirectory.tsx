@@ -8,7 +8,7 @@ import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioStationList } from "./RadioStationList";
-import { searchRadioStations } from "./radioQueries";
+import { searchRadioStations } from "@/api/radio";
 
 type Props = {
   credentials: Credentials;

@@ -1,51 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RadioProgrammeDetails, RadioStation } from "../../../shared/radio";
+import type { RadioStation } from "../../../shared/radio";
 import type { Credentials } from "../../session/session";
-import { avoidRadioQuery, radioFavoritesQuery, radioRequest, saveRadioFavorite } from "./radioQueries";
+import { cancelRadioReads, radioCatalogQuery, radioFavoritesListQuery, radioProgrammesQuery, saveRadioFavorite } from "@/api/radio";
 
 type AvoidAction = (station: RadioStation, kind: "play" | "queue" | "favorite") => Promise<void>;
 
 export function useAvoidRadio(credentials: Credentials, connected: boolean, active: boolean, onEnqueue: (station: RadioStation, playNow: boolean) => Promise<boolean>) {
   const queryClient = useQueryClient();
   const [refresh, setRefresh] = useState(0);
-  const [programmes, setProgrammes] = useState<Record<string, RadioProgrammeDetails>>({});
+  const [now, setNow] = useState(Date.now());
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
-  const catalog = useQuery(avoidRadioQuery(credentials, connected && active, refresh));
-  const favorites = useQuery(radioFavoritesQuery(credentials, connected && active));
-  const stations = catalog.data?.stations ?? [];
+  const catalog = useQuery({ ...radioCatalogQuery(credentials, refresh), enabled: connected && active });
+  const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && active });
+  const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && active, refetchInterval: 60_000 });
+
+  useEffect(() => {
+    if (connected && active) return;
+    void cancelRadioReads(queryClient, credentials, refresh);
+  }, [active, connected, credentials, queryClient, refresh]);
+
+  useEffect(() => {
+    const expiresAt = Math.min(...Object.values(programmes.data ?? {}).map(programme => programme.expiresAt).filter(expiresAt => expiresAt > now));
+    if (!Number.isFinite(expiresAt)) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(1, expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [now, programmes.data]);
 
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
     return () => controller.abort();
   }, []);
-
-  useEffect(() => {
-    if (!connected || !active || !stations.length) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function poll() {
-      try {
-        const response = await radioRequest(credentials, "avoid/programmes", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45_000)]) });
-        const body = await response.json() as { programmes: Record<string, RadioProgrammeDetails> };
-        if (!controller.signal.aborted) setProgrammes(body.programmes);
-      } catch { /* Stations remain playable when programme data is unavailable. */ }
-      finally { if (!controller.signal.aborted) timer = setTimeout(() => { void poll(); }, 60_000); }
-    }
-    void poll();
-    return () => { controller.abort(); if (timer) clearTimeout(timer); };
-  }, [credentials, connected, active, stations.length]);
-
-  useEffect(() => {
-    if (!connected || !active || !Object.keys(programmes).length) return;
-    const expiresAt = Math.min(...Object.values(programmes).map(programme => programme.expiresAt));
-    const timer = setTimeout(() => setProgrammes(current => Object.fromEntries(Object.entries(current).filter(([, programme]) => programme.expiresAt > Date.now()))), Math.max(1, expiresAt - Date.now()));
-    return () => clearTimeout(timer);
-  }, [programmes, connected, active]);
 
   useEffect(() => {
     if (!notice) return;
@@ -74,7 +63,7 @@ export function useAvoidRadio(credentials: Credentials, connected: boolean, acti
   return {
     catalog: catalog.data ?? null,
     favorites: favorites.data?.favorites ?? [],
-    programmes,
+    programmes: programmes.data ?? {}, now,
     loading: catalog.isFetching && !catalog.data,
     error: catalog.error?.message ?? catalog.data?.playlist.error ?? "",
     actionError, notice, busy, refresh: () => setRefresh(value => value + 1),
