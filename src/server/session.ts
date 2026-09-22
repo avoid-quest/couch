@@ -33,7 +33,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let activePlayIntent = 0;
   let expiry: MediaSource["expiry"];
   let webRecovery: { paused: boolean } | null = null;
-  let webAuthorize = () => {};
   let pendingPause: boolean | null = null;
   let pendingSeek: { playbackId: string; position: number; from: number } | null = null;
   let webRetried = false;
@@ -200,7 +199,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const recoverWeb = (failure: PlayerState) => {
     if (!expiry || Date.now() < expiry.at || activePlayIntent !== playIntent) return false;
     const recover = expiry.recover;
-    const authorize = webAuthorize;
     expiry = undefined; // One replacement transport per explicit Play, including failed checks.
     const previous = state.player;
     const recovery = { paused: pendingPause ?? previous.status === "paused" };
@@ -222,9 +220,8 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     };
     try { send({ type: "stop" }); } catch { return true; }
     broadcast();
-    void Promise.resolve().then(() => { if (!current()) return null; authorize(); return recover(controller.signal); }).then(fresh => {
+    void Promise.resolve().then(() => { if (!current()) return null; return recover(controller.signal); }).then(fresh => {
       if (!current()) return;
-      authorize();
       if (!fresh) throw new Error(failure.error || "This stream failed without a confirmed expiry. Play the track to try again.");
       const { metadata: _metadata, expiry: _expiry, ...media } = fresh;
       webRecovery = null;
@@ -247,13 +244,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     finishProgress();
     state.radioRetry = activePlayIntent === playIntent ? radioRetry.schedule(() => {
       if (!admitted()) return;
-      try { authorize(); } catch (error) {
-        cancelRadioRetry();
-        state.player = { ...state.player, status: "error", error: error instanceof Error ? error.message : "Radio reconnect canceled. Play the station from a paired remote." };
-        broadcast();
-        return;
-      }
-      try { play(entry!.id, true, true, authorize, false, playedBy); } catch { /* The attempt already published its failure. */ }
+      try { play(entry!.id, true, true, () => {}, false, playedBy); } catch { /* The attempt already published its failure. */ }
     }) : null;
     // Ignore all later native observations and controls for the failed load, including Stop's idle acknowledgement.
     state.player = {
@@ -288,7 +279,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     webRecovery = null;
     state.webRetry = null;
     expiry = undefined;
-    webAuthorize = authorize;
     pendingPause = null;
     webRetried = false;
     resolution?.abort();
@@ -367,7 +357,6 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       resolution = controller;
       qualityResolution = null;
       activePlayIntent = ++playIntent;
-      webAuthorize = authorize;
       webRecovery = null;
       state.webRetry = null;
       webRetried = false;

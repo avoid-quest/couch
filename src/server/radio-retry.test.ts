@@ -88,16 +88,15 @@ test("synchronous and asynchronous resolver failures share the same bounded retr
   expect(attempts).toBe(4);
 });
 
-test("revocation during radio backoff publishes cancellation and leaves another remote able to play", async () => {
+test("revocation during radio backoff keeps reconnecting the accepted station", async () => {
   const store = openStore(":memory:");
   const token = store.pair("Revoked remote");
   const survivor = store.pair("Surviving remote");
   const commands: PlaybackCommand[] = [];
-  const published: PlayerState[] = [];
   let attempts = 0;
-  const session = createSession(store, command => commands.push(command), state => published.push({ ...state.player }), {
+  const session = createSession(store, command => commands.push(command), () => {}, {
     now: () => time,
-    resolveSource: entry => { attempts++; return entry.id === station.id ? Promise.reject(new Error("Station unavailable")) : { source: entry.source }; },
+    resolveSource: entry => { attempts++; return entry.id === station.id && attempts === 1 ? Promise.reject(new Error("Station unavailable")) : { source: entry.source }; },
   });
   cleanups.push(() => { session.close(); store.close(); });
   const authorize = (credential: string) => () => { if (!store.isPaired(credential)) throw new Error("This remote's access was revoked. Pair again."); };
@@ -108,12 +107,11 @@ test("revocation during radio backoff publishes cancellation and leaves another 
   await flush();
   expect(session.state.radioRetry?.retryAt).toBe(time + 1000);
   store.revokeController(store.controllerForToken(token)!.id);
+  expect(() => session.command({ type: "pause", playbackId: session.state.player.playbackId!, paused: true }, authorize(token))).toThrow("revoked");
   advance(1000);
-  expect(session.state.radioRetry).toBeNull();
-  expect(published.at(-1)).toMatchObject({ status: "error", error: "This remote's access was revoked. Pair again." });
-  advance(60_000);
-  expect(attempts).toBe(1);
-  expect(commands.filter(command => command.type === "load")).toHaveLength(0);
+  expect(session.state.radioRetry).toEqual({ attempt: 1, maximum: 3, retryAt: null });
+  expect(commands.at(-1)).toMatchObject({ type: "load", source: station.source, radio: true });
+  expect(attempts).toBe(2);
   session.command({ type: "play", entryId: following.id }, authorize(survivor));
   expect(commands.at(-1)).toMatchObject({ type: "load", source: following.source });
 });

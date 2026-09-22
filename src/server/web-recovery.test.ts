@@ -5,7 +5,7 @@ import { playbackMediaId } from "./progress";
 import type { Action, PlaybackCommand, PlayerState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
-function fixture() {
+function fixture(authorize = () => {}) {
   const store = openStore(":memory:");
   const commands: PlaybackCommand[] = [];
   const pending = Promise.withResolvers<MediaSource | null>();
@@ -16,13 +16,28 @@ function fixture() {
   session.observe(idle);
   session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "web:https://artist.bandcamp.com/track/one", quality: "480p", automaticTitle: true } });
   session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://media.example/two" } });
-  session.command({ type: "play", entryId: "one" }, undefined, { deviceId: "phone", name: "Phone" });
+  session.command({ type: "play", entryId: "one" }, authorize, { deviceId: "phone", name: "Phone" });
   const playbackId = session.state.player.playbackId!;
   session.observe({ ...idle, playbackId, status: "paused", position: 47.25, duration: 120, seekable: true, speed: 1.25, replayGain: "track" });
   const fail = () => session.observe({ ...idle, playbackId, status: "error", error: "Native transport failed" });
   const fresh: MediaSource = { ...source, source: "https://private.example/new?token=new-secret", metadata: { title: "Changed", duration: 120 } };
   return { store, session, commands, pending, fail, fresh, playbackId, calls: () => calls, signal: () => signal };
 }
+
+test("revocation after an accepted play leaves verified expiry recovery running", async () => {
+  let revoked = false;
+  const authorize = () => { if (revoked) throw new Error("This remote's access was revoked. Pair again."); };
+  const f = fixture(authorize);
+  revoked = true;
+  expect(() => f.session.command({ type: "pause", playbackId: f.playbackId, paused: false }, authorize)).toThrow("revoked");
+  f.fail();
+  await Bun.sleep(0);
+  expect(f.calls()).toBe(1);
+  f.pending.resolve(f.fresh);
+  await Bun.sleep(0);
+  expect(f.commands.at(-1)).toMatchObject({ type: "load", source: f.fresh.source });
+  f.store.close();
+});
 
 test("one private recovery preserves observed position, settings, queue metadata and paused choice", async () => {
   const f = fixture();
