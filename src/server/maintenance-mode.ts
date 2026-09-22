@@ -11,7 +11,7 @@ import { createUpdateIdle } from "./update-idle";
 import { createUpdates } from "./updates";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
-// It opens no media catalog, recording scheduler, player, LAN listener or pairing endpoint.
+// It opens no media catalog, player, LAN listener or pairing endpoint.
 export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "deb" | null): Promise<never> {
   const send = (message: SidecarMessage) => { process.stdout.write(`${JSON.stringify(message)}\n`); };
   const native = format === "deb"

@@ -1,4 +1,12 @@
-# Completed recordings
+# Historical recording qualification
+
+> Historical qualification record. Couch no longer offers recording setup,
+> scheduling, status, cancellation, or completed-recording playback. Upgrades
+> retain Couch's recording database rows and media files without cancelling
+> existing Tvheadend jobs. Open an accessible media file through Open file or a
+> folder source for ordinary playback.
+
+The rest of this document records the former feature and its dated checks.
 
 Couch records a selected future guide programme through Tvheadend's HTTP DVR API. Guide imports remain the source of channel and airing identity. An administrator maps the exact source, channel and tvg-id to an enabled backend channel with an assigned service. Scheduling uses the selected programme's UTC times, not an unverified backend event match.
 

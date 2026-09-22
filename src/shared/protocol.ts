@@ -49,7 +49,6 @@ export type SessionState = {
   libraryVersion?: number;
   radioVersion?: number;
   iptvVersion?: number;
-  recordingsVersion?: number;
   providerVersion?: number;
   jellyfinVersion?: number;
   playlistVersion?: number;

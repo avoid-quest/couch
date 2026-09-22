@@ -8,7 +8,6 @@ import type { RadioPlaylist, RadioStation } from "../shared/radio";
 import { createHub, type Hub } from "./hub";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
-import * as recordingsModule from "./recordings";
 import * as foldersModule from "./media-folders";
 import * as libraryModule from "./library";
 import * as youtubeModule from "./providers/youtube";
@@ -1177,34 +1176,6 @@ test("packaged control connections reject missing or stale asset identity before
 });
 
 
-test.each([false, true])("quiesce starts and awaits recording shutdown, propagating failure=%s", async failing => {
-  const create = recordingsModule.createRecordings, gate = Promise.withResolvers<void>();
-  let started = false, finished = false;
-  const mocked = spyOn(recordingsModule, "createRecordings").mockImplementation(options => {
-    const recordings = create(options);
-    return { ...recordings, close: async () => {
-      started = true;
-      expect(options.admitted?.()).toBe(false);
-      const closing = recordings.close();
-      await gate.promise; await closing;
-      if (failing) throw new Error("recording drain failed");
-    } };
-  });
-  const { hub } = fixture();
-  const pending = hub.quiesce().then(result => { finished = true; return result; }, error => { finished = true; return error; });
-  try {
-    expect(started).toBe(true);
-    await Bun.sleep(0);
-    expect(finished).toBe(false);
-  } finally { gate.resolve(); mocked.mockRestore(); }
-  const result = await pending;
-  if (failing) {
-    expect(result).toBeInstanceOf(Error);
-    expect(result.message).toBe("recording drain failed");
-    hubs.splice(hubs.indexOf(hub), 1);
-  } else expect(result).toEqual({ progressSaved: true, admissionClosed: true });
-});
-
 test("either remote's input resets idle time, while authenticated status polling does not", async () => {
   let now = 0;
   const { hub } = fixture(undefined, undefined, undefined, { idleNow: () => now });
@@ -1225,26 +1196,48 @@ test("either remote's input resets idle time, while authenticated status polling
   expect(hub.idleReason()).not.toBeNull();
 });
 
-test("active and uncertain recordings defer idle updates, while confirmed future backend jobs do not", () => {
+test("legacy recording state survives startup without backend work or playback access", async () => {
+  const first = fixture();
+  const source = "recording:00000000-0000-4000-8000-000000000001";
+  const entry = { id: "legacy", title: "Saved broadcast", source };
+  first.hub.session.command({ type: "enqueue", entry });
+  await first.hub.close();
+  const mediaPath = `${first.databasePath}.ts`;
+  writeFileSync(mediaPath, "retained media");
+  const database = new Database(first.databasePath);
+  database.run(`CREATE TABLE recording_setup (id INTEGER PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE recording_jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE recording_qualification (id INTEGER PRIMARY KEY, data TEXT NOT NULL);`);
+  database.query("INSERT INTO recording_setup VALUES (1, ?)").run('{"revision":1}');
+  database.query("INSERT INTO recording_jobs VALUES (?, ?)").run(source.slice(10), '{"status":"running"}');
+  database.query("INSERT INTO recording_qualification VALUES (1, ?)").run('{"phase":"submitted"}');
+  database.query("INSERT INTO viewing_progress (profileId, mediaId, title, position, watched, lastPlayedAt) VALUES ('household', ?, ?, 15, 0, ?)").run(source, entry.title, Date.now());
+  database.query("INSERT INTO history_sources VALUES (?, ?)").run(source, JSON.stringify(entry));
+  const stored = ["recording_setup", "recording_jobs", "recording_qualification"].map(table => database.query(`SELECT * FROM ${table}`).all());
+  database.close();
+
   let now = 0;
-  const { hub, databasePath } = fixture(undefined, undefined, undefined, { idleNow: () => now });
+  const { hub, commands } = fixture(first.databasePath, undefined, undefined, { idleNow: () => now });
   hub.session.observe(idle);
-  const db = new Database(databasePath);
-  const job = { id: "recording", status: "pending", start: Date.now() + 3_600_000, end: Date.now() + 7_200_000, title: "Future recording", channelName: "Fixture", programId: "program", channelId: "channel", cause: null, revision: 1, cancelRequested: false };
-  const save = () => db.query("INSERT OR REPLACE INTO recording_jobs VALUES (?, ?)").run(job.id, JSON.stringify(job));
+  expect(hub.session.state.queue).toContainEqual(entry);
+  now = 600_000;
+  expect(hub.updateWork()).toBeNull();
+  expect(hub.idleReason()).toBeNull();
+  expect((await controllerApi(hub, hostToken, "/api/recordings")).status).toBe(404);
+  expect(() => hub.session.command({ type: "play", entryId: entry.id })).toThrow("Couch recordings are no longer supported");
+  expect(hub.session.state.player.error).toContain("Open the saved media file");
+  const history = await controllerApi(hub, hostToken, `/api/progress/${encodeURIComponent(source)}/play`, "POST", { profileId: "household" });
+  expect(history.status).toBe(410);
+  expect((await history.json()).error).toContain("Couch recordings are no longer supported");
+  expect(hub.session.state.queue).toContainEqual(entry);
+  hub.session.command({ type: "enqueue", entry: { id: "file", title: "Retained file", source: new URL(`file://${mediaPath}`).href }, playNow: true });
+  expect(commands.at(-1)).toMatchObject({ type: "load", source: new URL(`file://${mediaPath}`).href });
+  await hub.close();
+  const preserved = new Database(first.databasePath, { readonly: true });
   try {
-    save(); now = 600_000; expect(hub.idleReason()).toBeNull();
-    for (const status of ["running", "checking", "pending"]) {
-      job.status = status; job.start = Date.now() - 1; save();
-      expect(hub.idleReason()).toContain("recordings");
-      expect(hub.updateWork()).toContain("recordings");
-      now += 600_000; expect(hub.idleReason()).toContain("recordings");
-    }
-    job.status = "completed"; save();
-    expect(hub.updateWork()).toBeNull();
-    expect(hub.idleReason()).toContain("ten continuous");
-    now += 600_000; expect(hub.idleReason()).toBeNull();
-  } finally { db.close(); }
+    expect(["recording_setup", "recording_jobs", "recording_qualification"].map(table => preserved.query(`SELECT * FROM ${table}`).all())).toEqual(stored);
+    expect(await Bun.file(mediaPath).text()).toBe("retained media");
+  } finally { preserved.close(); }
 });
 
 test("General restart requires an administrator confirmation and installed supervisor", async () => {

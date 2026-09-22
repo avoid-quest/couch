@@ -135,8 +135,8 @@ their tested builds, not the current release.
 
 Implemented software includes shared search and history, controller
 administration, phone source setup, profiles, local/NAS and Jellyfin playback,
-subtitles, CUE albums, ReplayGain, NFO metadata, collections, IPTV guides,
-scheduling and completed recordings. Provider and format limits still apply.
+subtitles, CUE albums, ReplayGain, NFO metadata, collections and IPTV guides.
+Provider and format limits still apply.
 Software captures do not qualify every physical display, speaker or media source.
 
 Growing timeshift is [deferred #67](https://github.com/avoid-quest/couch/issues/67).

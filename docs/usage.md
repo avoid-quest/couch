@@ -641,7 +641,9 @@ stream headers stay on the host.
 
 Implemented work includes profile editing/removal, CUE albums, ReplayGain,
 measured lossless continuity, local NFO/artwork and metadata corrections,
-collections, IPTV guides and Tvheadend scheduling/completed recordings. Read the
+collections and IPTV guides. Existing Couch recording entries remain stored but
+cannot be played through Couch; use Open file or a folder source for accessible
+media files. Existing Tvheadend jobs remain under Tvheadend's control. Read the
 [dated capability and acceptance record](qualification/current-status-2026-09-14.md)
 for evidence and the remaining display, sound, sizing, real-folder, first-run and
 YouTube rendering checks. Existing software evidence does not finish those gates.
