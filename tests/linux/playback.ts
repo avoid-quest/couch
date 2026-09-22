@@ -255,6 +255,11 @@ try {
   const playbackId = clients[0]!.state!.player.playbackId!;
   await clients[0]!.command({ type: "pause", playbackId, paused: true });
   await until("replacement pauses before the remaining control checks", () => all(state => state.player.status === "paused"));
+  await ui.watching();
+  await assertNativeVideoPixels(execute, artifactDir, "gtk-threading-replacement");
+  await screenshot("gtk-threading-replacement");
+  checks.push("native replacement pixels remain visible after Stop and seek");
+  console.log("PASS native replacement pixels remain visible after Stop and seek");
   await clients[0]!.command({ type: "volume", volume: 37 });
   await until("native volume update reaches both remotes", () => all(state => state.player.volume === 37));
 
