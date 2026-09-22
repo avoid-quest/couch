@@ -4,11 +4,13 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { RadioStation } from "../../../shared/radio";
+import { fireEvent, screen } from "@/testing";
 
 let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const station: RadioStation = { id: "station", name: "Evening radio", url: "https://radio.example/stream", homepage: null, countryCode: "IT", codec: "MP3", bitrate: 128 };
 let catalogueFailures = 0;
+let programmes: Record<string, { title: string; expiresAt: number }> = {};
 const flush = () => act(async () => { await Bun.sleep(20); });
 async function render() {
   const { LiveNow } = await import("./LiveNow");
@@ -17,6 +19,7 @@ async function render() {
 }
 beforeEach(async () => {
   catalogueFailures = 0;
+  programmes = {};
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -27,7 +30,7 @@ beforeEach(async () => {
     const path = new URL(String(input)).pathname;
     if (path === "/api/radio/avoid" && catalogueFailures > 0) { catalogueFailures -= 1; return new Response(JSON.stringify({ error: "catalogue unavailable" }), { status: 503 }); }
     if (path === "/api/radio/avoid") return Response.json({ playlist: { error: null }, stations: [station] });
-    if (path === "/api/radio/avoid/programmes") return Response.json({ programmes: {} });
+    if (path === "/api/radio/avoid/programmes") return Response.json({ programmes });
     throw new Error(`Unexpected request: ${path}`);
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
@@ -46,11 +49,18 @@ afterEach(async () => {
 test("a failed catalogue load offers a retry that reloads it", async () => {
   catalogueFailures = 1;
   await render();
-  const alert = () => document.querySelector("[role=alert]")?.textContent ?? "";
+  const alert = () => screen.queryByRole("alert")?.textContent ?? "";
   expect(alert()).toContain("catalogue unavailable");
-  const retry = [...document.querySelectorAll("button")].find(node => node.textContent === "Retry")!;
-  await act(async () => retry.click());
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
   await flush();
   expect(alert()).toBe("");
-  expect(document.body.textContent).toContain("Evening radio");
+  expect(screen.getByText("Evening radio")).toBeDefined();
+});
+
+test("expired programmes return to the station before polling", async () => {
+  programmes = { station: { title: "Closing set", expiresAt: Date.now() + 30 } };
+  await render();
+  expect(screen.getByText("Closing set")).toBeDefined();
+  await act(async () => { await Bun.sleep(40); });
+  expect(screen.queryByText("Closing set")).toBeNull();
 });

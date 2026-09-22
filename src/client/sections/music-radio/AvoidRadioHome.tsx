@@ -62,7 +62,7 @@ export function AvoidRadioHome(props: Props) {
     {radio.catalog && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))]">
       {radio.catalog.stations.slice(0, props.limit).map(station => {
         const current = props.connected ? radio.programmes[station.id] : undefined;
-        const live = current && current.expiresAt > Date.now() ? current : undefined;
+        const live = current && current.expiresAt > radio.now ? current : undefined;
         return <li key={station.id} className="min-w-0"><Card className="h-full justify-between gap-3 p-3">
           <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-3 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(station.id); }}>
             <AvoidRadioArtwork key={live?.artworkUrl || station.logoUrl || station.id} station={station} programme={live} />
@@ -78,7 +78,7 @@ export function AvoidRadioHome(props: Props) {
       <DialogHeader><DialogTitle>{detail?.name}</DialogTitle><DialogDescription>Live radio · avoid radio</DialogDescription></DialogHeader>
       {detail && (() => {
         const current = props.connected ? radio.programmes[detail.id] : undefined;
-        const programme = current && current.expiresAt > Date.now() ? current : undefined;
+        const programme = current && current.expiresAt > radio.now ? current : undefined;
         return <>
           <AvoidRadioArtwork key={programme?.artworkUrl || detail.logoUrl || detail.id} station={detail} programme={programme} expanded />
           {programme ? <div className="space-y-2"><h3 className="text-lg font-medium">{programme.title}</h3>{programme.description && <p className="text-sm text-muted-foreground">{programme.description}</p>}{programme.programmeUrl && <a className="inline-flex min-h-11 items-center text-sm underline underline-offset-4" href={programme.programmeUrl} target="_blank" rel="noreferrer">Programme details</a>}</div> : <p className="text-sm text-muted-foreground">Programme information is unavailable. You can still play this station.</p>}

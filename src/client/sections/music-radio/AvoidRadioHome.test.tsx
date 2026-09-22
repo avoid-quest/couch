@@ -14,6 +14,7 @@ const credentials = { origin: "http://localhost", token: "paired" };
 let programmes: Record<string, { title: string; description?: string; artworkUrl?: string; expiresAt: number }> = {};
 let pendingProgrammeSignal: AbortSignal | undefined;
 let holdProgrammes = false;
+let catalogueError: string | null = null;
 const flush = () => act(async () => { await Bun.sleep(10); });
 const click = async (label: string, scope: HTMLElement = document.body) => { await act(async () => fireEvent.click(within(scope).getByRole("button", { name: label }))); await flush(); };
 
@@ -29,6 +30,7 @@ beforeEach(async () => {
   programmes = {};
   pendingProgrammeSignal = undefined;
   holdProgrammes = false;
+  catalogueError = null;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
@@ -45,7 +47,7 @@ beforeEach(async () => {
       if (holdProgrammes) return new Promise<Response>(() => {});
       return Response.json({ programmes });
     }
-    return Response.json({ playlist: { id: "avoid", name: "avoid radio", error: null }, stations: [station] });
+    return Response.json({ playlist: { id: "avoid", name: "avoid radio", error: catalogueError }, stations: [station] });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div");
@@ -70,7 +72,7 @@ test("avoid radio reads through Query and playback stays on the session callback
   expect(screen.getByRole("button", { name: "Play: Station one" })).toBeDefined();
   await click("Play: Station one");
   expect(queued).toEqual([["station-713", true]]);
-  expect(document.body.textContent).toContain("Starting Station one.");
+  expect(screen.getByRole("status").textContent).toContain("Starting Station one.");
   expect(request.mock.calls.some(([input]) => String(input).endsWith("/api/radio/avoid"))).toBe(true);
 });
 
@@ -104,6 +106,24 @@ test("expired programme data falls back to the station", async () => {
   await render();
   expect(screen.queryByText("Expired show")).toBeNull();
   expect(screen.getAllByText("Station one")).toHaveLength(2);
+});
+
+test("expiry removes programme metadata before the next poll", async () => {
+  programmes = { "station-713": { title: "About to expire", expiresAt: Date.now() + 20 } };
+  await render();
+  expect(screen.getByText("About to expire")).toBeDefined();
+  await act(async () => { await Bun.sleep(30); });
+  expect(screen.queryByText("About to expire")).toBeNull();
+});
+
+test("retry forces a fresh avoid radio request", async () => {
+  catalogueError = "Source unavailable";
+  await render();
+  await click("Retry avoid radio");
+  expect(request.mock.calls.some(([input]) => {
+    const url = new URL(String(input));
+    return url.pathname === "/api/radio/avoid" && url.searchParams.get("refresh") === "true";
+  })).toBe(true);
 });
 
 test("retiring the connection cancels the shared programme read", async () => {

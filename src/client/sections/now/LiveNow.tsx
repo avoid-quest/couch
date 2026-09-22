@@ -28,6 +28,7 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const enabled = connected && active;
   const { data: catalog, isPending: loading, error: catalogueError } = useQuery({ ...radioCatalogQuery(credentials), enabled });
   const { data: programmes = {} } = useQuery({ ...radioProgrammesQuery(credentials), enabled, refetchInterval: 60_000 });
@@ -35,6 +36,12 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
     if (enabled) return;
     void cancelRadioReads(queryClient, credentials);
   }, [credentials, enabled, queryClient]);
+  useEffect(() => {
+    const expiresAt = Math.min(...Object.values(programmes).map(programme => programme.expiresAt).filter(expiresAt => expiresAt > now));
+    if (!Number.isFinite(expiresAt)) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(1, expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [now, programmes]);
   const loadError = catalogueError instanceof Error ? catalogueError.message : catalogueError ? "Could not load the radio catalogue." : "";
   const message = loadError || catalog?.playlist.error || error;
 
@@ -57,11 +64,11 @@ export function LiveNow({ credentials, connected, canPlay, onEnqueue, limit, act
   const entries: LiveEntry[] = [];
   for (const station of catalog?.stations ?? []) {
     const programme = programmes[station.id];
-    if (programme?.expiresAt && programme.expiresAt > Date.now()) entries.push({ station, programme });
+    if (programme?.expiresAt && programme.expiresAt > now) entries.push({ station, programme });
   }
   for (const station of catalog?.stations ?? []) {
     const programme = programmes[station.id];
-    if (!programme || programme.expiresAt <= Date.now()) entries.push({ station });
+    if (!programme || programme.expiresAt <= now) entries.push({ station });
   }
   const shown = limit ? entries.slice(0, limit) : entries;
 

@@ -6,10 +6,10 @@ import { apiFetch } from "./client";
 export const radioRequest = (credentials: Credentials, path: string, init: RequestInit = {}) =>
   apiFetch(credentials, `/api/radio/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
 
-export const radioCatalogQuery = (credentials: Credentials) =>
+export const radioCatalogQuery = (credentials: Credentials, refresh = 0) =>
   queryOptions({
-    queryKey: ["radio", "avoid", credentials.origin, credentials.token] as const,
-    queryFn: ({ signal }) => radioRequest(credentials, "avoid", { signal }).then(r => r.json() as Promise<AvoidRadioCatalog>),
+    queryKey: ["radio", "avoid", credentials.origin, credentials.token, refresh] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, `avoid${refresh ? "?refresh=true" : ""}`, { signal }).then(r => r.json() as Promise<AvoidRadioCatalog>),
     staleTime: 60_000,
   });
 
@@ -27,8 +27,8 @@ export const radioProgrammesQuery = (credentials: Credentials) =>
     staleTime: 30_000,
   });
 
-export const cancelRadioReads = (client: QueryClient, credentials: Credentials) =>
-  Promise.all([radioCatalogQuery(credentials), radioFavoritesListQuery(credentials), radioProgrammesQuery(credentials)].map(query => client.cancelQueries({ queryKey: query.queryKey })));
+export const cancelRadioReads = (client: QueryClient, credentials: Credentials, refresh = 0) =>
+  Promise.all([radioCatalogQuery(credentials, refresh), radioProgrammesQuery(credentials)].map(query => client.cancelQueries({ queryKey: query.queryKey })));
 
 export const radioPlaylistsQuery = (credentials: Credentials) =>
   queryOptions({

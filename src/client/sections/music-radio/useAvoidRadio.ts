@@ -8,18 +8,27 @@ type AvoidAction = (station: RadioStation, kind: "play" | "queue" | "favorite") 
 
 export function useAvoidRadio(credentials: Credentials, connected: boolean, active: boolean, onEnqueue: (station: RadioStation, playNow: boolean) => Promise<boolean>) {
   const queryClient = useQueryClient();
+  const [refresh, setRefresh] = useState(0);
+  const [now, setNow] = useState(Date.now());
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const lifetime = useRef<AbortController | null>(null);
-  const catalog = useQuery({ ...radioCatalogQuery(credentials), enabled: connected && active });
+  const catalog = useQuery({ ...radioCatalogQuery(credentials, refresh), enabled: connected && active });
   const favorites = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected && active });
   const programmes = useQuery({ ...radioProgrammesQuery(credentials), enabled: connected && active, refetchInterval: 60_000 });
 
   useEffect(() => {
     if (connected && active) return;
-    void cancelRadioReads(queryClient, credentials);
-  }, [active, connected, credentials, queryClient]);
+    void cancelRadioReads(queryClient, credentials, refresh);
+  }, [active, connected, credentials, queryClient, refresh]);
+
+  useEffect(() => {
+    const expiresAt = Math.min(...Object.values(programmes.data ?? {}).map(programme => programme.expiresAt).filter(expiresAt => expiresAt > now));
+    if (!Number.isFinite(expiresAt)) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(1, expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [now, programmes.data]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -54,10 +63,10 @@ export function useAvoidRadio(credentials: Credentials, connected: boolean, acti
   return {
     catalog: catalog.data ?? null,
     favorites: favorites.data?.favorites ?? [],
-    programmes: programmes.data ?? {},
+    programmes: programmes.data ?? {}, now,
     loading: catalog.isFetching && !catalog.data,
     error: catalog.error?.message ?? catalog.data?.playlist.error ?? "",
-    actionError, notice, busy, refresh: () => void queryClient.invalidateQueries({ queryKey: radioCatalogQuery(credentials).queryKey }),
+    actionError, notice, busy, refresh: () => setRefresh(value => value + 1),
     action,
   };
 }
