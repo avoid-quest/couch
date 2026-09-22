@@ -6,7 +6,7 @@ import { join } from "node:path";
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
-async function fixture(trial = false, corrupt = false) {
+async function fixture({ trial = false, corrupt = false, development = false, packagedWithoutUpdater = false } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "couch-maintenance-"));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const db = new Database(join(directory, "couch.sqlite"));
@@ -21,10 +21,12 @@ async function fixture(trial = false, corrupt = false) {
     await Bun.write(join(directory, name!), script!); await chmod(join(directory, name!), 0o700);
     helpers[name!] = { version: version!, sha256: new Bun.CryptoHasher("sha256").update(script!).digest("hex") };
   }
-  const build = { version: "0.3.0", revision: "a".repeat(40), dataFormat: 1, packaged: true, helpers };
+  const build = { version: "0.3.0", revision: "a".repeat(40), dataFormat: 1, packaged: !development, helpers };
   if (corrupt) await Bun.write(join(directory, "deno"), "changed");
   const messages: any[] = [];
-  const process = Bun.spawn([Bun.which("bun") ?? "bun", "--define", `COUCH_BUILD_INFO=${JSON.stringify(JSON.stringify(build))}`, "-e", `import { runMaintenanceMode } from ${JSON.stringify(join(import.meta.dir, "maintenance-mode.ts"))}; await runMaintenanceMode(${JSON.stringify(directory)}, "local-secret", "appimage");`], { env: { ...globalThis.process.env, COUCH_BUNDLED_TOOLS: directory }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+  const format = development || packagedWithoutUpdater ? "null" : '"appimage"';
+  const script = `import { runMaintenanceMode } from ${JSON.stringify(join(import.meta.dir, "maintenance-mode.ts"))}; await runMaintenanceMode(${JSON.stringify(directory)}, "local-secret", ${format}, "http://localhost:1420");`;
+  const process = Bun.spawn([Bun.which("bun") ?? "bun", "--define", `COUCH_BUILD_INFO=${JSON.stringify(JSON.stringify(build))}`, "-e", script], { env: { ...globalThis.process.env, COUCH_BUNDLED_TOOLS: directory }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const send = (message: unknown) => process.stdin.write(JSON.stringify(message) + "\n");
   cleanup.push(async () => { send({ type: "shutdown" }); const timeout = setTimeout(() => process.kill(), 2000); await process.exited; clearTimeout(timeout); });
   void (async () => {
@@ -53,6 +55,7 @@ test("remote maintenance owns only a private installation API and retains playba
   expect(f.ready.urls).toEqual([]); expect(f.ready.pairingCode).toBe("");
   expect((await f.fetchLocal("/api/updates", undefined, { Authorization: "Bearer remote-token" })).status).toBe(401);
   expect((await f.fetchLocal("/api/updates", undefined, { Origin: "https://other-couch.example" })).status).toBe(403);
+  expect((await f.fetchLocal("/api/updates", undefined, { Origin: "http://localhost:1420" })).status).toBe(403);
   expect((await f.fetchLocal("/api/sources")).status).toBe(404);
   expect((await f.fetchLocal("/api/updates/channel", { channel: "preview" })).status).toBe(202);
   await f.wait(m => m.action?.type === "check");
@@ -66,10 +69,26 @@ test("remote maintenance owns only a private installation API and retains playba
 });
 
 test("remote startup trial reports local readiness without probing media tools", async () => {
-  const f = await fixture(true, true);
+  const f = await fixture({ trial: true, corrupt: true });
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "wrong" } })).status).toBe(409);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build })).status).toBe(204);
   const complete = await f.wait(m => m.action?.type === "complete");
   expect(complete.action.error).toBeNull();
   expect(await Bun.file(join(f.directory, "couch.sqlite")).bytes()).toEqual(f.database);
+});
+
+test("development maintenance accepts only its configured local webview origin and private token", async () => {
+  const f = await fixture({ development: true });
+  const build = { build: f.build };
+  expect((await fetch(f.ready.origin + "/api/maintenance/frontend", { method: "OPTIONS", headers: { Origin: "http://localhost:1420", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type" } })).status).toBe(204);
+  expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://localhost:1420" })).status).toBe(204);
+  expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://localhost:1420", Authorization: "Bearer remote-token" })).status).toBe(401);
+  expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://192.168.1.10:4100" })).status).toBe(403);
+  expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "other" } }, { Origin: "http://localhost:1420" })).status).toBe(409);
+});
+
+test("a packaged maintenance server ignores an inherited development origin without a native updater", async () => {
+  const f = await fixture({ packagedWithoutUpdater: true });
+  expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build }, { Origin: "http://localhost:1420" })).status).toBe(403);
+  expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build }, { Origin: "tauri://localhost" })).status).toBe(204);
 });

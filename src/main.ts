@@ -27,7 +27,7 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
-if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null);
+if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null, process.env.COUCH_DEV_ORIGIN);
 
 function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);

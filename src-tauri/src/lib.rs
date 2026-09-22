@@ -99,14 +99,9 @@ async fn connection_info(_app: tauri::AppHandle, host: tauri::State<'_, Host>) -
     tokio::time::timeout(Duration::from_secs(15), async move {
         loop {
             if let Some(result) = connection.borrow().clone() {
-                // The dev frontend uses Vite's same-origin API/WebSocket proxy.
+                // The local player uses Vite's fixed proxy; maintenance has its own ephemeral port.
                 #[cfg(dev)]
-                let result = result.map(|mut info| {
-                    if let Some(url) = &_app.config().build.dev_url {
-                        info.origin = url.origin().ascii_serialization();
-                    }
-                    info
-                });
+                let result = result.map(|info| frontend_connection(info, host.local_running.load(Ordering::Relaxed), _app.config().build.dev_url.as_ref()));
                 return result;
             }
             connection
@@ -117,6 +112,31 @@ async fn connection_info(_app: tauri::AppHandle, host: tauri::State<'_, Host>) -
     })
     .await
     .map_err(|_| "Media server did not become ready within 15 seconds".to_string())?
+}
+
+#[cfg(dev)]
+fn frontend_connection(mut info: ConnectionInfo, local_running: bool, dev_url: Option<&tauri::Url>) -> ConnectionInfo {
+    if local_running {
+        if let Some(url) = dev_url {
+            info.origin = url.origin().ascii_serialization();
+        }
+    }
+    info
+}
+
+#[cfg(all(test, dev))]
+mod connection_tests {
+    use super::*;
+
+    #[test]
+    fn local_dev_uses_vite_while_maintenance_keeps_its_ephemeral_origin() {
+        let info = ConnectionInfo { origin: "http://127.0.0.1:52345".into(), token: "local-secret".into(), pairing_code: String::new(), urls: Vec::new() };
+        let dev_url = tauri::Url::parse("http://localhost:1420").unwrap();
+        assert_eq!(frontend_connection(info.clone(), true, Some(&dev_url)).origin, "http://localhost:1420");
+        let maintenance = frontend_connection(info, false, Some(&dev_url));
+        assert_eq!(maintenance.origin, "http://127.0.0.1:52345");
+        assert_eq!(maintenance.token, "local-secret");
+    }
 }
 
 #[tauri::command]
@@ -269,6 +289,10 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
             "COUCH_PORT",
             std::env::var("COUCH_PORT").unwrap_or_else(|_| "4100".into()),
         );
+    #[cfg(dev)]
+    if let Some(url) = &app.config().build.dev_url {
+        sidecar = sidecar.env("COUCH_DEV_ORIGIN", url.origin().ascii_serialization());
+    }
     if let Some(urls) = std::env::var_os("COUCH_ADVERTISE_URLS") {
         sidecar = sidecar.env("COUCH_ADVERTISE_URLS", urls);
     }
