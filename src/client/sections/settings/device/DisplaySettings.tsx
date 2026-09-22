@@ -16,14 +16,14 @@ export function DisplaySettings({ credentials, connected }: { credentials: ApiCr
     retry: false,
   });
   const changeMutation = useMutation({
-    mutationFn: ({ op, body }: { op: string; body: unknown }) => apiFetch(credentials, `/api/display/${op}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    }).then(response => response.json() as Promise<DisplayState>),
-    onSuccess: result => {
-      queryClient.setQueryData(queryKey, result);
+    mutationFn: async ({ op, body }: { op: string; body: unknown }) => {
+      await apiFetch(credentials, `/api/display/${op}`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }).then(response => response.json() as Promise<DisplayState>);
+      await queryClient.invalidateQueries({ queryKey });
     },
   });
-  const state = display.data;
+  const state = connected ? display.data : undefined;
   const pending = changeMutation.isPending;
   const error = changeMutation.error instanceof Error ? changeMutation.error.message : changeMutation.error ? "Display change failed." : null;
   const [now, setNow] = useState(Date.now());
