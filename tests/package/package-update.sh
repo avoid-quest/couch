@@ -6,25 +6,19 @@ set -euo pipefail
 root=$(mktemp -d)
 socket_pid=
 trap '[[ -z ${socket_pid:-} ]] || kill "$socket_pid" 2>/dev/null || true; rm -rf "$root"' EXIT
-mkdir -p "$root/bin"
 mkdir -p /usr/lib/couch /usr/lib/systemd/system /usr/share/polkit-1/rules.d
 cp packaging/native/package-update /usr/lib/couch/package-update
 cp packaging/native/couch-package-update@.service /usr/lib/systemd/system/
 cp packaging/native/50-couch-package-update.rules /usr/share/polkit-1/rules.d/
 chmod 0755 /usr/lib/couch/package-update
-command -v minisign >/dev/null || { apt-get update -qq && apt-get install -y -qq minisign; }
+apt-get update -qq
+command -v minisign >/dev/null || apt-get install -y -qq minisign
 
-# package-update runs in a child shell, so the fixture must put its fake APT
-# executable on PATH rather than defining an unexported shell function.
-cat > "$root/bin/apt-get" <<'EOF'
-#!/bin/bash
-[[ $1 = install ]] && dpkg -i "${@: -1}" >/dev/null || { echo "unexpected apt call: $*" >&2; exit 64; }
-EOF
+mkdir -p "$root/bin"
 cat > "$root/bin/systemctl" <<EOF
 #!/bin/bash
 printf '%s\n' "\$*" > "$root/systemctl.args"
 EOF
-chmod 0755 "$root/bin/apt-get"
 chmod 0755 "$root/bin/systemctl"
 chmod 0755 "$root"
 export PATH="$root/bin:$PATH"
@@ -43,12 +37,15 @@ socket_pid=$!
 printf '\n\n' | minisign -G -p "$root/test.pub" -s "$root/test.key" 2>/dev/null
 cp "$root/test.pub" /usr/lib/couch/couch-updater.pub
 
-# A minimal real package: name, version and architecture are what the helper checks.
+# A minimal real package that exposes its installed build for the fixture.
 build() {
-    local version=$1 directory=$2
+    local version=$1 directory=$2 dependency=${3:-} package=${4:-couch}
     rm -f "$inbox/couch.deb" "$inbox/couch.deb.sig"
-    mkdir -p "$directory/DEBIAN" "$directory/usr/share/couch"
-    printf 'Package: couch\nVersion: %s\nArchitecture: amd64\nMaintainer: test <test@invalid>\nDescription: fixture package\n' "$version" > "$directory/DEBIAN/control"
+    mkdir -p "$directory/DEBIAN" "$directory/usr/bin" "$directory/usr/share/couch"
+    printf 'Package: %s\nVersion: %s\nArchitecture: amd64\nMaintainer: test <test@invalid>\nDescription: fixture package\n' "$package" "$version" > "$directory/DEBIAN/control"
+    [[ -z $dependency ]] || printf 'Depends: %s\n' "$dependency" >> "$directory/DEBIAN/control"
+    printf '#!/bin/sh\nprintf "%%s\\n" "%s"\n' "$version" > "$directory/usr/bin/couch"
+    chmod 0755 "$directory/usr/bin/couch"
     printf fixture > "$directory/usr/share/couch/fixture"
     head -c 1M /dev/urandom > "$directory/usr/share/couch/pad"
     dpkg-deb -b --root-owner-group "$directory" "$inbox/couch.deb" >/dev/null
@@ -65,6 +62,12 @@ reject() {
     if update "${@:2}" > "$root/failure" 2>&1; then cat "$root/failure"; exit 1; fi
     grep -q "$message" "$root/failure" || { echo "Missing '$message' in:"; cat "$root/failure"; exit 1; }
 }
+helper() {
+    local version=$1 directory=$2 output=$3
+    mkdir -p "$directory/DEBIAN"
+    printf 'Package: couch-helper\nVersion: %s\nArchitecture: amd64\nMaintainer: test <test@invalid>\nDescription: fixture dependency\n' "$version" > "$directory/DEBIAN/control"
+    dpkg-deb -b --root-owner-group "$directory" "$output" >/dev/null
+}
 
 # Today's live release is 0.1.2 stable. A signed 0.1.3 upgrade installs and
 # writes a root-owned receipt the app can read.
@@ -75,6 +78,19 @@ grep -q 'version=0.1.2' "/var/lib/couch-package-update/couchtest/receipt"
 [[ $(dpkg-query -W -f='${Version}' couch) = 0.1.2 ]]
 [[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
 grep -qx -- '--user daemon-reload' "$root/systemctl.args"
+install -d -m 0700 -o couchtest -g couchtest "$home/.local/share/couch/data"
+printf 'preserved data\n' > "$home/.local/share/couch/data/keep.txt"
+chown couchtest:couchtest "$home/.local/share/couch/data/keep.txt"
+sha256sum "$home/.local/share/couch/data/keep.txt" > "$root/data.sha256"
+mkdir "$root/repo"
+helper 1.0 "$root/helper-1" "$root/repo/couch-helper_1.0_amd64.deb"
+helper 2.0 "$root/helper-2" "$root/repo/couch-helper_2.0_amd64.deb"
+apt-get install -y -qq apt-utils
+(cd "$root/repo" && apt-ftparchive packages . > Packages)
+chmod 0755 "$root" "$root/repo"
+printf 'deb [trusted=yes] file:%s ./\n' "$root/repo" > /etc/apt/sources.list.d/couch-fixture.list
+apt-get update -qq
+dpkg -i "$root/repo/couch-helper_1.0_amd64.deb" >/dev/null
 
 # Preview accumulation installs a signed -preview.N over the stable, and the
 # final 0.1.3 supersedes its own previews even though Debian orders the suffix
@@ -88,11 +104,17 @@ grep -q 'version=0.1.3-preview.1' "/var/lib/couch-package-update/couchtest/recei
 [[ $(dpkg-query -W -f='${Version}' couch) = 0.1.3-preview.1 ]]
 [[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
 
-stage 0.1.3
+build 0.1.3 "$root/pkg" 'hello, couch-helper (>= 2.0)'
+sign
+chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
 update couchtest >/dev/null
 grep -q 'outcome=installed' "/var/lib/couch-package-update/couchtest/receipt"
 grep -q 'version=0.1.3' "/var/lib/couch-package-update/couchtest/receipt"
 [[ $(dpkg-query -W -f='${Version}' couch) = 0.1.3 ]]
+dpkg-query -W hello >/dev/null
+[[ $(dpkg-query -W -f='${Version}' couch-helper) = 2.0 ]]
+sha256sum -c "$root/data.sha256"
+[[ $(/usr/bin/couch) = 0.1.3 ]]
 [[ $(stat -c %U "/var/lib/couch-package-update/couchtest/receipt") = root ]]
 
 # A downgrade back to 0.1.2 is rejected even with a valid signature.
@@ -101,6 +123,13 @@ sign
 chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
 reject 'not newer' couchtest
 grep -q 'outcome=failed' "/var/lib/couch-package-update/couchtest/receipt"
+
+# A valid signature cannot authorize a package with another identity.
+build 0.1.4 "$root/pkg" '' not-couch
+sign
+chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
+reject 'not Couch' couchtest
+[[ $(dpkg-query -W -f='${Version}' couch) = 0.1.3 ]]
 
 # Tampered staged bytes fail the signature and never install.
 build 0.1.3 "$root/pkg"
@@ -127,5 +156,16 @@ rm "$inbox/couch.deb" && cp "$root/real.deb" "$inbox/couch.deb" && chown couchte
 
 # An unknown account instance fails without touching anything.
 reject 'Unknown account' nobody-here
+
+# A preview-to-final promotion cannot downgrade a dependency. The local fixture
+# repository makes version 1.0 available while the machine has version 2.0.
+stage 0.1.4-preview.1
+update couchtest >/dev/null
+build 0.1.4 "$root/pkg" 'couch-helper (= 1.0)'
+sign
+chown couchtest:couchtest "$inbox/couch.deb" "$inbox/couch.deb.sig"
+reject 'Package dependency installation failed' couchtest
+[[ $(dpkg-query -W -f='${Version}' couch-helper) = 2.0 ]]
+[[ $(dpkg-query -W -f='${Version}' couch) = 0.1.4-preview.1 ]]
 
 echo "package-update fixture: passed"
