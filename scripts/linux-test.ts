@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { startJellyfinFixture } from "../tests/linux/jellyfin-fixture";
 
 const root = resolve(import.meta.dir, "..");
-const artifacts = resolve(root, ".artifacts/linux");
+const artifacts = resolve(root, process.env.COUCH_LINUX_ARTIFACTS || ".artifacts/linux");
 const image = "couch-linux-test:ubuntu24.04";
 const configArgument = process.argv.indexOf("--jellyfin-config");
 const jellyfinConfig = configArgument === -1 ? null : process.argv[configArgument + 1];
