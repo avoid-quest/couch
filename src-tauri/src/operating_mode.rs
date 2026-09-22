@@ -80,8 +80,14 @@ pub fn bundled_origin(url: &Url) -> bool {
             && url.host_str() == Some("tauri.localhost")
             && url.port().is_none()
 }
+pub fn app_origin(config: &tauri::Config, url: &Url) -> bool {
+    if cfg!(dev) && config.build.dev_url.as_ref().is_some_and(|dev| dev.origin() == url.origin()) {
+        return true;
+    }
+    bundled_origin(url)
+}
 fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() == "main" && bundled_origin(&window.url().map_err(error)?) {
+    if window.label() == "main" && app_origin(window.config(), &window.url().map_err(error)?) {
         Ok(())
     } else {
         Err("Playback device controls belong to the bundled app.".into())
@@ -510,6 +516,17 @@ pub async fn show_playback_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn main_navigation_accepts_only_packaged_or_exact_development_origin() {
+        let mut config = tauri::Config::default();
+        config.build.dev_url = Some(Url::parse("http://localhost:1420").unwrap());
+        assert!(app_origin(&config, &Url::parse("tauri://localhost/settings").unwrap()));
+        assert_eq!(app_origin(&config, &Url::parse("http://localhost:1420/settings").unwrap()), cfg!(dev));
+        for url in ["http://localhost:1421", "https://localhost:1420", "http://localhost.evil:1420", "http://192.168.1.10:4100"] {
+            assert!(!app_origin(&config, &Url::parse(url).unwrap()), "{url}");
+        }
+    }
 
     #[test]
     fn remote_geometry_keeps_the_recovery_header_on_moved_and_scaled_displays() {

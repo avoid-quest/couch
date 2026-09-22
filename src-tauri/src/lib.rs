@@ -94,11 +94,19 @@ fn prepare_data_dir(path: &std::path::Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-async fn connection_info(host: tauri::State<'_, Host>) -> Result<ConnectionInfo, String> {
+async fn connection_info(_app: tauri::AppHandle, host: tauri::State<'_, Host>) -> Result<ConnectionInfo, String> {
     let mut connection = host.connection.subscribe();
     tokio::time::timeout(Duration::from_secs(15), async move {
         loop {
             if let Some(result) = connection.borrow().clone() {
+                // The dev frontend uses Vite's same-origin API/WebSocket proxy.
+                #[cfg(dev)]
+                let result = result.map(|mut info| {
+                    if let Some(url) = &_app.config().build.dev_url {
+                        info.origin = url.origin().ascii_serialization();
+                    }
+                    info
+                });
                 return result;
             }
             connection
@@ -219,10 +227,17 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     );
-    let mut sidecar = app
+    #[cfg(dev)]
+    let sidecar = app.shell().command(std::env::var_os("COUCH_DEV_BUN")
+        .ok_or("Start development with bun run desktop so Couch can locate Bun.")?)
+        .args(["run", "src/main.ts"])
+        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap());
+    #[cfg(not(dev))]
+    let sidecar = app
         .shell()
         .sidecar("couch-server")
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    let mut sidecar = sidecar
         .env("COUCH_NATIVE", "1")
         .env("COUCH_MAINTENANCE_ONLY", if playback { "0" } else { "1" })
         .env(
@@ -546,11 +561,12 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let config = app.config().app.windows[0].clone();
+            let handle = app.handle().clone();
             tauri::WebviewWindowBuilder::from_config(app, &config)?
                 .initialization_script(
                     "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', { value: true });",
                 )
-                .on_navigation(|url| operating_mode::bundled_origin(url))
+                .on_navigation(move |url| operating_mode::app_origin(handle.config(), url))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;
             Ok(())
