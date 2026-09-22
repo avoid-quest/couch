@@ -205,7 +205,7 @@ export function AppShell() {
   return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
-function ShellChrome({ children }: PropsWithChildren) {
+export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const { nativeHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
   const { section, statusLabel, available, active, programme, current } = shell;
@@ -213,6 +213,10 @@ function ShellChrome({ children }: PropsWithChildren) {
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const player = state?.player;
   const pairingRef = useRef<HTMLButtonElement>(null);
+  const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const videoStage = nativeHost && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
+    subtitle={programme ? `Programme: ${programme.title}` : undefined}
+    artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />;
 
   return (
     <div className={cn("app-shell couch-shell", tvPresentation
@@ -224,10 +228,7 @@ function ShellChrome({ children }: PropsWithChildren) {
       <main id="main">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
-        {tvPresentation && <VideoStage active={active} title={current?.title || "Your media"}
-          audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
-          subtitle={programme ? `Programme: ${programme.title}` : undefined}
-          artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
+        {tvPresentation && videoStage}
         <div className={tvPresentation ? "tv-browser" : "remote-browser"} hidden={tvPresentation && !tv.browsing} data-tv-navigation-scope={tvPresentation && tv.browsing ? "" : undefined}>
       <header className="app-header">
         <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (tvPresentation) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
@@ -269,11 +270,13 @@ function ShellChrome({ children }: PropsWithChildren) {
         ) : (
           <>
             {!connected && <p className="notice" role="status">Connecting to the player.</p>}
+            {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
                 {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined} aria-label={label}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
               </nav>
               <div className="media-browser">
+                {nativeHost && !tvPresentation && active && !audioOnly && videoStage}
                 {children}
               </div>
             </div>

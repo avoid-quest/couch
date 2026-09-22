@@ -193,6 +193,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    document.body.classList.toggle("native-host", nativeHost);
     document.body.classList.toggle("tv-presentation", tvPresentation);
     if (!nativeHost) return;
     let disposed = false;

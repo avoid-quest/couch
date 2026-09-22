@@ -34,7 +34,7 @@ export function NowPage() {
   };
   const onStage = !tvPresentation || tv.browsing;
   const sections: Record<NowSectionId, ReactNode> = {
-    playing: <><NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />{state?.player.status === "unavailable" && <p className="px-6 text-sm text-muted-foreground" role="status">{state.player.error || `Playback is unavailable on ${state.installationName || "this computer"}. Browsing and the queue still work.`}</p>}</>,
+    playing: <NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />,
     queue: <NowPlaying embedded part="next" state={state} credentials={credentials} connected={connected} run={run} active={onStage} />,
     history: <HistoryPanel origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} onPlay={playHistory} active={onStage} stations={recentRadio} onRadio={station => enqueueRadio(station, true)} />,
     radio: <LiveNow rail heading="Live radio" credentials={credentials} connected={connected} canPlay={available} onEnqueue={enqueueRadio} active={onStage} />,

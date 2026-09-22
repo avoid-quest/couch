@@ -81,7 +81,7 @@
 
 /* styles.css */
 body { margin: 0; min-width: 320px; }
-html:has(body.tv-presentation), body.tv-presentation { background: transparent; }
+html:has(body.native-host), body.native-host { background: transparent; }
 [hidden] { display: none !important; }
 button, a, input { -webkit-tap-highlight-color: transparent; }
 a { text-underline-offset: 4px; }
@@ -101,7 +101,7 @@ h3 { font-weight: 600; }
 .playback-status-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
 .workspace { min-width: 0; }
 .video-stage { aspect-ratio: 16 / 9; background: var(--background); position: relative; display: grid; place-items: center; }
-.tv-presentation .video-stage.has-video { background: transparent; }
+.native-host .video-stage.has-video { background: transparent; }
 .stage-caption { padding: 40px 28px; text-align: center; max-width: 480px; }
 .stage-icon, .pair-icon { display: inline-grid; place-items: center; width: 60px; height: 60px; color: var(--foreground); background: var(--secondary); border-radius: var(--radius-xl); margin-bottom: 20px; }
 .stage-icon svg { width: 30px; height: 30px; }
@@ -246,7 +246,7 @@ body.tv-presentation [data-slot="tabs-list"] { height: auto; min-height: 54px; }
   border-radius: 0;
   background: var(--background);
 }
-.tv-presentation .tv-shell .video-stage.has-video { background: transparent; }
+.native-host .tv-shell .video-stage.has-video { background: transparent; }
 .tv-shell .stage-caption { max-width: 900px; padding: var(--tv-gutter); }
 .tv-shell .stage-icon { width: 80px; height: 80px; margin-bottom: 30px; background: color-mix(in srgb, var(--primary) 10%, var(--card)); }
 .tv-shell .stage-icon svg { width: 36px; height: 36px; }
@@ -389,6 +389,7 @@ body.tv-presentation :focus-visible { outline: 4px solid var(--ring); outline-of
 .couch-shell .primary-nav [data-source][aria-current="page"] { background: var(--muted); }
 .couch-shell .primary-nav svg { width: 20px; height: 20px; }
 .couch-shell .media-browser { min-width: 0; padding: 32px var(--shell-gutter) calc(var(--shell-footer) + 32px); gap: 0; border: 0; border-radius: 0; background: transparent; }
+.native-host .remote-shell .video-stage { width: min(100%, 960px); margin: 0 auto 24px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--radius-xl); }
 .couch-shell .media-browser > section { min-width: 0; }
 .couch-shell .media-browser [hidden] { display: none; }
 .couch-shell .browse-back { margin-bottom: 18px; }

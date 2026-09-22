@@ -53,7 +53,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
   }, []);
 
   return (
-    <div ref={element} className={`video-stage${nativeHost && active && !audioOnly ? " has-video" : ""}${active && audioOnly ? " audio-stage" : ""}`} aria-label="TV playback">
+    <div ref={element} className={`video-stage${nativeHost && active && !audioOnly ? " has-video" : ""}${active && audioOnly ? " audio-stage" : ""}`} aria-label="Video playback">
       {active && audioOnly && !error ? (
         <div className="audio-stage-caption flex h-full w-full flex-nowrap items-center justify-center gap-16 px-[6vw]">
           <div className={`audio-stage-artwork h-[75%] max-h-[720px] w-auto shrink-0${artwork ? "" : " without-artwork"}`} aria-hidden="true">{artwork || <Music2 />}</div>

@@ -11,13 +11,23 @@ const read = (): InterfaceSize => {
   } catch { return 1; }
 };
 let current = read();
-let nativeLoaded = false;
+let subscribers = 0;
+let nativeRequest = 0;
+const refreshNative = () => {
+  if (!isTauri()) return;
+  const request = ++nativeRequest;
+  void invoke<InterfaceSize>("desktop_interface_size").then(value => {
+    if (request === nativeRequest && isInterfaceSize(value) && current !== value) {
+      current = value;
+      window.dispatchEvent(new Event(changed));
+    }
+  }).catch(() => {});
+};
 const subscribe = (listener: () => void) => {
-  if (isTauri() && !nativeLoaded) {
-    nativeLoaded = true;
-    void invoke<InterfaceSize>("desktop_interface_size").then(value => {
-      if (isInterfaceSize(value)) { current = value; window.dispatchEvent(new Event(changed)); }
-    }).catch(() => {});
+  const native = isTauri();
+  if (native && subscribers++ === 0) {
+    refreshNative();
+    window.addEventListener("focus", refreshNative);
   }
   const storage = (event: StorageEvent) => {
     if (event.key !== key && event.key !== null) return;
@@ -26,10 +36,15 @@ const subscribe = (listener: () => void) => {
   };
   window.addEventListener("storage", storage);
   window.addEventListener(changed, listener);
-  return () => { window.removeEventListener("storage", storage); window.removeEventListener(changed, listener); };
+  return () => {
+    window.removeEventListener("storage", storage);
+    window.removeEventListener(changed, listener);
+    if (native && --subscribers === 0) window.removeEventListener("focus", refreshNative);
+  };
 };
 
 export async function saveRemoteInterfaceSize(value: InterfaceSize) {
+  nativeRequest++;
   current = value;
   let saved = true;
   try {
