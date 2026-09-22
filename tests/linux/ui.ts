@@ -12,6 +12,41 @@ export class UiDriver {
 
   execute = (script: string, args: unknown[] = []) => this.request(`/session/${this.session()}/execute/sync`, { script, args });
 
+  async elements(using: "css selector" | "xpath", value: string) {
+    return this.request(`/session/${this.session()}/elements`, { using, value }) as Promise<Array<{ "element-6066-11e4-a52e-4f735466cecf": string }>>;
+  }
+
+  async text(id: string) { return this.request(`/session/${this.session()}/element/${id}/text`); }
+  async attribute(id: string, name: string) { return this.request(`/session/${this.session()}/element/${id}/attribute/${name}`); }
+
+  async roleHasText(role: string, text: string) {
+    for (const element of await this.elements("css selector", `[role="${role}"]`)) try {
+      if ((await this.text(element["element-6066-11e4-a52e-4f735466cecf"])).trim() === text) return true;
+    } catch { /* Status nodes can re-render between lookup and read. */ }
+    return false;
+  }
+
+  async pairingCode() {
+    const [qr] = await this.elements("xpath", '//*[@role="img" and starts-with(@aria-label, "Pair another device with code ")]');
+    assert.ok(qr, "Pairing QR exists");
+    const code = (await this.attribute(qr["element-6066-11e4-a52e-4f735466cecf"], "aria-label")).match(/\b\d{6}\b/)?.[0];
+    assert.ok(code, "Pairing QR exposes a six-digit code");
+    return code;
+  }
+
+  async typeByLabel(label: string, text: string) {
+    const [input] = await this.elements("xpath", `//label[normalize-space(.)="${label}"]/following::input[1]`);
+    assert.ok(input, `${label} input exists`);
+    return this.typeElement(input["element-6066-11e4-a52e-4f735466cecf"], text);
+  }
+
+  async addDirectMedia(url: string, title: string) {
+    await this.addMedia();
+    await this.typeByLabel("Direct media URL", url);
+    await this.typeByLabel("Title optional", title);
+    await this.button("Up next", '[role="dialog"]');
+  }
+
   async element(selector: string) {
     if (/^#media-(url|title|kind|quality)$/.test(selector)) await this.addMedia();
     return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
@@ -105,6 +140,10 @@ export class UiDriver {
 
   async type(selector: string, text: string) {
     const id = await this.element(selector);
+    return this.typeElement(id, text);
+  }
+
+  async typeElement(id: string, text: string) {
     await this.clickElement(id);
     if (!text) { await this.key(keys.home); await this.key(keys.end, true); await this.key("\uE003"); return; }
     await this.request(`/session/${this.session()}/element/${id}/clear`, {});

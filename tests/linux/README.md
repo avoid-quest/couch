@@ -6,19 +6,17 @@ Ubuntu 24.04 container. It keeps Bun, Cargo, and build caches in named volumes;
 application data and artifacts are disposable.
 
 The default journey first runs `bun run check`, compiles the debug Tauri app and
-sidecar, runs the locked Rust coverage, then starts the compiled-browser remote
-journey. It next runs `playback.ts` against the actual Tauri/libmpv process.
-The first-use fixture leaves the operating-mode choice unset; the connection
-journey uses a configured-local fixture. They must not share application data.
+sidecar, runs locked Rust tests, then starts the compiled-browser remote journey.
+It finishes with `smoke.ts`: the compiled Tauri/libmpv app starts, one paired
+controller plays generated local media, native pixels are captured, and the
+paired queue survives one restart without autoplay. Its receipt records the
+exact clean source revision returned by the running sidecar.
 
-The default journey retains browser transport, native subtitles and pixel
-checks, reconnect, radio metadata and real-clock retries, yt-dlp/DASH selection,
-library progress and restart, playback preferences, music/CUE, ReplayGain audio
-capture, source credentials and persistent catalog checks. Real
-Jellyfin qualification additionally requires the documented `--jellyfin` fixture.
-See [native coverage](native-coverage.md) for the retired UI checks and their
-current executable replacements. A successful individual helper or diagnostic
-iteration is not a passing default journey.
+The smoke uses a configured-local fixture. It is deliberately not an all-feature
+desktop journey. [Native coverage](native-coverage.md) maps every removed broad
+check to its focused suite, separate narrow native command, package gate, or
+opt-in external run. A passing helper or diagnostic iteration is not a smoke
+receipt.
 
 `bun run test:linux --built-remote` runs only the shared checks, production
 build, and `built-remote.ts`. Its browser talks to the compiled sidecar and
@@ -57,6 +55,5 @@ bun run test:linux --iptv-public-sample
 ```
 
 Those checks depend on external services and are recorded separately from the
-deterministic local journeys. The IPTV option keeps generated HLS frame,
-freshness, recovery and restart checks in the ordinary journey, then records
-the Apple sample result in `iptv.json` as external qualification.
+deterministic smoke. The IPTV option records its public Apple sample result in
+`iptv.json` as external qualification.

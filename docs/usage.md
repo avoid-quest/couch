@@ -440,7 +440,6 @@ bun test --parallel=4 --path-ignore-patterns 'tests/linux/iptv-clock.test.ts'
 bun run build
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux
-bun run test:linux --jellyfin --live-radio
 bun run test:linux --provider-catalogs
 bun run test:linux --iptv-public-sample
 ```
@@ -465,16 +464,17 @@ into `couch-preview-data`, retaining the old volume, queue, pairings, profiles a
 catalogs. That describes the original operator checkout, not a new installation.
 
 `bun run test:linux` uses Docker and the official Tauri WebDriver. It builds the
-actual Linux app, generates media fixtures and controls its native window plus
-two paired remotes and an actual HTTP browser at phone width. Cargo and package caches use named volumes; the repository
-is mounted read-only. Logs, screenshots and version details go to
-`.artifacts/linux/`. The container is removed after the run.
+actual Linux app, generates local media and controls its native window plus one
+paired controller. The smoke records compiled Tauri/libmpv startup, controller
+Play, native video pixels, one queue restart check, and the exact running
+revision. Cargo and package caches use named volumes; the repository is mounted
+read-only. Logs, screenshots and the receipt go to `.artifacts/linux/`. The
+container is removed after the run.
 
-The tests cover persistent queues and catalogs, native playback observations,
-stale controls, track selection, subtitles, chapters, speed and timing offsets,
-local resume/history and watching profiles, Jellyfin resume, keyboard/focus and
-portal rendering, provider sessions, credential isolation and shutdown. Radio directory tests use
-controlled HTTP responses; public station searches were also checked manually.
+Feature behaviour remains in the ordinary focused suites and the documented
+optional native checks. Debian package/update qualification remains independent.
+The smoke does not qualify physical display, audio, Wi-Fi, external media, or
+installed-package behaviour.
 
 The 2026-09-05 administrator/Settings integration run passed 450 native/HTTP
 checks with Jellyfin and live radio. Linux also passed 295 Bun tests with two

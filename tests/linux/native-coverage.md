@@ -1,31 +1,30 @@
-# Native coverage after the four-destination UI
+# Native qualification coverage
 
-`playback.ts` runs the retained helpers against the compiled Tauri app. A passing
-run must reach its final receipt and exit zero. `connection-journey.ts` is a
-separate configured-local run. `built-remote.ts` uses a simulated native pipe peer
-and does not qualify libmpv. `diagnostics.ts` is a separate native run.
+`smoke.ts` is the routine desktop-process proof. It starts the compiled
+Tauri/libmpv app, pairs one controller, plays generated local media once,
+captures actual X11 pixels, restarts, and records the exact running revision.
+It is intentionally short. This ledger accounts for every area removed from the
+former `playback.ts` journey without inventing a new runner.
 
-| Area | Retained execution | Retired UI assertions |
-| --- | --- | --- |
-| Transport and queue | Native play/pause/seek/volume, independent HTTP remotes, inline upcoming removal, native pixel checks | Queue popover and full queue rows; current Now shows upcoming occurrences |
-| Pairing | First-use UI and QR, Close/Escape opener focus, separate connection/role/revocation journey | General-settings pairing card |
-| Radio | Native HTTP/ICY metadata, phone track label, replacement, bounded retries and real-clock cancellation; fresh subscriber snapshots prove clock advancement | TV track label, which is intentionally absent on the native host; old Radio source page |
-| Progress | Find result Resume and detail From start, native checkpoints/EOF, Now history, shared history across profile changes and restart | Library History tab and profile picker focus |
-| Profiles | Paired API create/select/rename/remove, stale rename rejection, native loading/paused/playing guards, persistent history/preferences | Removed profile picker, rename draft and removal confirmation presentation |
-| Music and CUE | Existing album commands, Find track Play, native relative seek/EOF/next/replacement, audio transitions and restart | Artist/album drill-down, album-card Back focus and removed Move up/down buttons. Saved-list reorder uses the existing API; current drag-handle keyboard/pointer gestures are not qualified by this journey. Browser rename/remove/load/play remain exercised |
-| Video library | Find artwork/details/Play, native movie/episode playback, resume, source rescans/offline state, authenticated artwork and restart | Movies/Shows tabs, season drill-down and Back focus; metadata refresh remains checked through the catalog API |
-| IPTV | Authorized coordinator import/play, generated native HLS color/clock captures, Go live, delayed/stalled segment cancellation, source replacement and cached guide persistence. `--iptv-public-sample` separately checks the Apple sample after restart. | Removed Guide source page, channel search, program dialog and channel-card logos |
-| Source administration | Current Sources routes, folder picker/scan, radio import/refresh/failure, Jellyfin login/replacement/revocation and password clearing | Browse-page source-settings shortcuts |
-| Authority | Native protected folder control and server authorization; connection journey handles role/revocation | Retired source-tab focus traversal, nested Library dialog and Open file button from the unmounted QueuePanel |
-| Preferences | Routed Playback settings, independent browser defaults, native audio/subtitle/speed and ReplayGain capture | Saved preferences as a dialog; saved-provider per-item quality selector. Add-media overrides remain exercised |
-| Diagnostics | Native report/export, ordinary-controller denial, secret/path redaction, playback continuity | General pairing codes and Advanced tab |
+| Removed broad check | Current owner |
+| --- | --- |
+| First-use mode, sharing, QR presentation, focus restoration and theme | `configured-fixture.test.ts`, `PairingDialog.test.tsx`, `ConnectionsSettings.test.tsx`, `session.test.tsx` and `connection-journey.ts` |
+| Two-controller transport, queue editing, play/pause/seek/volume, attribution, reconnect, EOF and source errors | `hub.test.ts`, `session*.test.ts`, `PlaybackControls.test.tsx`, `QueuePanel*.test.tsx` and `built-remote.ts` |
+| Browser routes, deep-link refresh, phone controls, stale controls and service worker | `routes.test.tsx`, `connection-lifetime.test.tsx`, `NowPage.test.tsx`, `built-remote.ts` |
+| Native video overlay, fullscreen, portal layering and real pixels | `smoke.ts` owns the one routine real-pixel assertion; component tests own layout and controls. A regression that needs more real pixels belongs in a narrow native command, not the smoke. |
+| GTK/libmpv render-thread responsiveness | Issue #421 remains a separate telemetry measurement with repeated seek, Stop, replacement and diagnostics. The smoke's pixel capture does not close that investigation. |
+| Tracks, subtitles, chapters, speed, audio/subtitle delay and playback defaults | `playback-languages.test.ts`, `preferences.test.ts`, `subtitles.test.ts`, `subtitle-lifecycle.test.ts` and `PlaybackControls.test.tsx` |
+| Local folders, scans, library search, progress/history, music, CUE, video metadata and profiles | `folder-settings.test.ts`, `library*.test.ts`, `progress.test.ts`, `music-metadata.test.ts`, `cue.test.ts`, `video-metadata.test.ts`, `profiles.test.ts` and their client panels |
+| Radio metadata, favorites, retries, shutdown cancellation and settings | `radio*.test.ts`, `RadioSettings.test.tsx`, `AvoidRadioHome.test.tsx` |
+| Jellyfin authentication, credentials, subtitles, resume, disconnect and retained settings | `jellyfin*.test.ts`, `jellyfin-settings.test.ts`, `SettingsSources.test.tsx` |
+| Web extraction, DASH quality, provider favorites and source privacy | `yt-dlp.test.ts`, `web-media.test.ts`, `provider-play.test.ts`, `providers/*.test.ts`, `video-quality.test.ts`; `--providers` and `--provider-catalogs` remain opt-in external evidence |
+| Generated IPTV import, live clocks, stalls, source replacement and cache restart | `iptv.test.ts`, `iptv-clock.test.ts`, `iptv-native-clock.test.ts`, `iptv-start.test.ts`; `--iptv-public-sample` runs the focused `iptv-public.ts` source/restart/Apple evidence |
+| Source administration, authority, claims and connection recovery | `authorization.test.ts`, `controllers*.test.ts`, `folder-settings.test.ts`, `connection-lifetime.test.tsx`, `connection-journey.ts` |
+| Diagnostics, redaction and playback continuity during collection | `diagnostics*.test.ts`, `diagnostics.ts` |
+| ReplayGain routing and audio capture | `replaygain*.test.ts`, `replaygain-audio.test.ts`; a future audio-only device question needs its own narrow native check |
+| Debian installation, signed package bytes, upgrade, retained release state and remote updater | `hosted-qualify.sh`, `hosted-desktop.sh`, `package.yml`, `deb-update-native.test.ts`, `apt-package-status.test.ts`, `updates.test.ts` and issue #424's independent qualification |
 
-IPTV progression and stall recovery use captured frame clocks because live position-only
-updates do not broadcast. This wall-clock fixture uses normal playback speed and
-restores the previously saved speed afterward. Generated HLS fixtures prove advancing
-frames and recovery timing. The optional Apple sample checks native startup with
-audio/video tracks after the ordinary restart coverage.
-
-The final evidence must list which commands actually passed. This mapping is not
-a qualification receipt. Null-sink audio capture and Xvfb pixels do not qualify
-physical T480 audio, display, Wi-Fi, or an installed package.
+External providers, public IPTV, real devices, physical audio, HDMI, Wi-Fi and
+the Debian installed-update path are outside the ordinary smoke. Xvfb pixels
+prove that the native process rendered generated local media. They do not prove
+a physical display or speaker.
