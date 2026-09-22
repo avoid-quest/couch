@@ -442,6 +442,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked
 bun run test:linux
 bun run test:linux --jellyfin --live-radio
 bun run test:linux --provider-catalogs
+bun run test:linux --iptv-public-sample
 ```
 
 `bun run build` creates static UI assets in `dist/` and a native-target Bun
