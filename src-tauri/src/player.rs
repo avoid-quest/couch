@@ -42,6 +42,22 @@ fn is_rejected_control(command: &PlaybackCommand) -> bool {
     !matches!(command, PlaybackCommand::Load { .. } | PlaybackCommand::Stop)
 }
 
+enum CommandError {
+    Reconcile,
+    Ignore(String),
+    Report(String),
+}
+
+fn command_error(replacement: bool, rejected_control: bool, error: String) -> CommandError {
+    if replacement && error == RECONCILE_STARTED_LOAD {
+        CommandError::Reconcile
+    } else if rejected_control {
+        CommandError::Ignore(error)
+    } else {
+        CommandError::Report(error)
+    }
+}
+
 // One worker preserves command order. The plugin dispatches GPU work onto GTK.
 pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     let mut player = Player::default();
@@ -85,10 +101,14 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             }
             Ok(Request::Command(command)) => {
                 let replacement = matches!(&command, PlaybackCommand::Load { .. });
+                let rejected_control = is_rejected_control(&command);
                 match player.command(&app, command) {
-                    Err(error) if replacement && error == RECONCILE_STARTED_LOAD => player.observe(&app),
-                    Err(error) if is_rejected_control(&command) => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
-                    result => result,
+                    Err(error) => match command_error(replacement, rejected_control, error) {
+                        CommandError::Reconcile => player.observe(&app),
+                        CommandError::Ignore(error) => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
+                        CommandError::Report(error) => Err(error),
+                    },
+                    Ok(()) => Ok(()),
                 }
             }
             Ok(Request::Layout) => {
@@ -130,6 +150,7 @@ mod layout_queue_tests {
     #[test]
     fn stop_errors_reach_the_forced_state_report() {
         assert!(!is_rejected_control(&PlaybackCommand::Stop));
+        assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
     }
 }
 
