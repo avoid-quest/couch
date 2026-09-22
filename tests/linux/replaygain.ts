@@ -38,10 +38,10 @@ export async function verifyReplayGain(context: Context) {
     await clients[0]!.command({ type: "enqueue", entry: { id, title: `ReplayGain ${fixture.name}${radio ? " radio" : ""}`, source: `http://127.0.0.1:4200/replaygain/${fixture.file}`, ...(radio ? { kind: "radio" as const } : {}) } });
     return id;
   };
-  const play = async (id: string) => {
+  const play = async (id: string, requiresPosition = true) => {
     const previous = first().player.playbackId;
     await clients[0]!.command({ type: "play", entryId: id, fromStart: true });
-    await until("ReplayGain fixture starts in the actual native player", () => all(state => state.currentEntryId === id && state.player.playbackId !== previous && state.player.status === "playing" && state.player.position > 0), 15_000);
+    await until("ReplayGain fixture starts in the actual native player", () => all(state => state.currentEntryId === id && state.player.playbackId !== previous && state.player.status === "playing" && (!requiresPosition || state.player.position > 0)), 15_000);
   };
   const close = async (driver: UiDriver) => {
     if (await driver.execute("return !!document.querySelector('[role=dialog]')")) await driver.key(keys.escape);
@@ -80,7 +80,7 @@ export async function verifyReplayGain(context: Context) {
         await clients[0]!.command({ type: "replayGain", playbackId: before.playbackId!, mode });
         await until("current mode changes on both controllers without reloading or saving", () => all(state => state.player.playbackId === before.playbackId && state.player.replayGain === mode && JSON.stringify(state.preferences) === JSON.stringify(before.preferences)));
         await clients[0]!.command({ type: "pause", playbackId: before.playbackId!, paused: false });
-      } else await play(id);
+      } else await play(id, !radio);
       const dedicatedSink = Number(sinks.split("\n").find(line => line.split("\t")[1] === "couch-replaygain")!.split("\t")[0]);
       let routedInputs = await sinkInputs();
       await until("Actual native output is routed into the dedicated captured sink", async () => {
