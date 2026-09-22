@@ -239,12 +239,22 @@ try {
       return samples.length >= 2 && samples.at(-1)!.presented > samples[0]!.presented && samples.some(sample => sample.fps > 0);
     }, 10_000);
   }
-  const playbackId = clients[0]!.state!.player.playbackId!;
-  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  const initialPlaybackId = clients[0]!.state!.player.playbackId!;
+  const initialEntryId = clients[0]!.state!.currentEntryId!;
+  await clients[0]!.command({ type: "pause", playbackId: initialPlaybackId, paused: true });
   await until("first remote pauses native playback for all clients", () => all(state => state.player.status === "paused"));
   await until("native UI shows remote pause", async () => await execute("return document.querySelector('.playback-status')?.textContent") === "Paused");
-  await clients[1]!.command({ type: "seek", playbackId, position: 6 });
+  await clients[1]!.command({ type: "seek", playbackId: initialPlaybackId, position: 6 });
   await until("second remote seek is confirmed by native playback", () => all(state => Math.abs(state.player.position - 6) < 0.3));
+  await clients[0]!.command({ type: "stop" });
+  await until("early native Stop clears playback before replacement", () => all(state => state.player.status === "idle"));
+  const replacementId = crypto.randomUUID();
+  await clients[0]!.command({ type: "enqueue", entry: { id: replacementId, title: "GTK threading replacement fixture", source: "http://127.0.0.1:4200/multitrack.mkv" } });
+  await clients[1]!.command({ type: "play", entryId: replacementId });
+  await until("native replacement plays through the retained GtkGLArea", () => all(state => state.currentEntryId === replacementId && state.player.status === "playing" && state.player.playbackId !== initialPlaybackId));
+  const playbackId = clients[0]!.state!.player.playbackId!;
+  await clients[0]!.command({ type: "pause", playbackId, paused: true });
+  await until("replacement pauses before the remaining control checks", () => all(state => state.player.status === "paused"));
   await clients[0]!.command({ type: "volume", volume: 37 });
   await until("native volume update reaches both remotes", () => all(state => state.player.volume === 37));
 
