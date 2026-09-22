@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import type { DisplayState } from "../../../../shared/display";
@@ -10,14 +10,22 @@ export function DisplaySettings({ credentials, connected }: { credentials: ApiCr
   const display = useQuery({
     queryKey,
     enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/display").then(response => response.json() as Promise<DisplayState>),
+    queryFn: ({ signal }) => apiFetch(credentials, "/api/display", { signal }).then(response => response.json() as Promise<DisplayState>),
     refetchInterval: 1_000,
     refetchIntervalInBackground: false,
     retry: false,
   });
-  const [state, setState] = useState<DisplayState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const changeMutation = useMutation({
+    mutationFn: ({ op, body }: { op: string; body: unknown }) => apiFetch(credentials, `/api/display/${op}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }).then(response => response.json() as Promise<DisplayState>),
+    onSuccess: result => {
+      queryClient.setQueryData(queryKey, result);
+    },
+  });
+  const state = display.data;
+  const pending = changeMutation.isPending;
+  const error = changeMutation.error instanceof Error ? changeMutation.error.message : changeMutation.error ? "Display change failed." : null;
   const [now, setNow] = useState(Date.now());
   const readError = display.error instanceof Error ? display.error.message : display.error ? "Cannot read displays." : null;
 
@@ -25,21 +33,9 @@ export function DisplaySettings({ credentials, connected }: { credentials: ApiCr
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => {
-    setState(null); setError(null); setPending(false);
-    if (connected && display.data) setState(display.data);
-  }, [connected, credentials.origin, credentials.token, display.data, display.dataUpdatedAt]);
-  async function change(op: string, body: unknown) {
+  function change(op: string, body: unknown) {
     if (!connected || pending) return;
-    setPending(true); setError(null);
-    try {
-      const result = await apiFetch(credentials, `/api/display/${op}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      }).then(response => response.json() as Promise<DisplayState>);
-      setState(result);
-      await queryClient.invalidateQueries({ queryKey });
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Display change failed."); }
-    finally { setPending(false); }
+    changeMutation.mutate({ op, body });
   }
   return <section className="space-y-4">
     <h3>TV screen</h3>
