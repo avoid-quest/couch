@@ -22,21 +22,30 @@ type ActiveProgress = { playbackId: string; profileId: string; item: HistoryItem
 // Only native observations may change position. Commands merely request a checkpoint.
 export function createProgress(store: Store, committed: () => void, now = Date.now) {
   let active: ActiveProgress | null = null;
-  const flush = () => {
-    if (!active?.observed) return;
-    const snapshot = JSON.stringify([active.item.position, active.item.duration, active.item.watched]);
-    if (snapshot === active.lastSaved) return;
-    store.saveProgress(active.profileId, active.item, active.entry);
-    active.lastWrite = now();
-    active.lastSaved = snapshot;
-    committed();
+  let pending: ActiveProgress[] = [];
+  const snapshot = (progress: ActiveProgress) => JSON.stringify([progress.item.position, progress.item.duration, progress.item.watched]);
+  const flush = (notify = true) => {
+    let saved = false;
+    for (const progress of [...pending, active].filter((value): value is ActiveProgress => value !== null && value.observed)) {
+      const value = snapshot(progress);
+      if (value === progress.lastSaved) continue;
+      store.saveProgress(progress.profileId, progress.item, progress.entry);
+      progress.lastWrite = now();
+      progress.lastSaved = value;
+      saved = true;
+    }
+    pending = pending.filter(progress => snapshot(progress) !== progress.lastSaved);
+    if (saved && notify) committed();
+    return saved;
   };
   return {
     get mediaId() { return active?.item.mediaId ?? null; },
-    forgetProfile(id: string) { if (active?.profileId === id) active = null; },
+    forgetProfile(id: string) { if (active?.profileId === id) active = null; pending = pending.filter(progress => progress.profileId !== id); },
+    discard(mediaId: string) { pending = pending.filter(progress => progress.item.mediaId !== mediaId); },
     // Queue replacement may still fail after this checkpoint; keep observing.
     checkpoint: flush,
     begin(entry: QueueEntry, playbackId: string, profileId: string, playedBy?: PlaybackActor) {
+      if (active?.observed && snapshot(active) !== active.lastSaved) pending.push(active);
       const mediaId = playbackMediaId(entry);
       active = mediaId ? {
         playbackId, profileId, entry: { ...entry }, observed: false, lastSaved: "", lastWrite: -Infinity, paused: false, seek: null,
@@ -70,17 +79,18 @@ export function createProgress(store: Store, committed: () => void, now = Date.n
       else if (checkpoint) flush();
     },
     finish(nearEnd = false, commit?: (save: () => void) => void) {
-      const save = () => {
+      const save = (notify = true) => {
         if (active?.observed && nearEnd && active.item.duration !== null && active.item.duration >= 60 && active.item.position / active.item.duration >= 0.9) {
           active.item.watched = true;
           active.item.position = 0;
         }
-        flush();
+        return flush(notify);
       };
       if (commit) {
-        const previous = active && structuredClone(active);
-        try { commit(save); }
-        catch (error) { active = previous; throw error; }
+        const previous = structuredClone({ active, pending });
+        let saved = false;
+        try { commit(() => { saved = save(false); }); if (saved) committed(); }
+        catch (error) { ({ active, pending } = previous); throw error; }
       } else save();
       // Keep observing until all writes, including an enclosing transaction, commit.
       active = null;

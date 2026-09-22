@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
-import { playbackMediaId } from "./progress";
+import { createProgress, playbackMediaId } from "./progress";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
 
@@ -218,6 +218,26 @@ test("failed checkpoints never invalidate durable progress and retry before repl
   f.play("two");
   expect(f.saved()?.position).toBe(10);
   expect(f.session.state.progressError).toBeNull();
+});
+
+test("a failed enclosing commit keeps pending progress dirty", () => {
+  const store = openStore(":memory:");
+  let writes = 0, commits = 0, failing = false;
+  const save = store.saveProgress.bind(store);
+  store.saveProgress = (...args) => { if (failing) throw new Error("Disk full"); writes++; save(...args); };
+  const progress = createProgress(store, () => commits++, () => 100);
+  try {
+    progress.begin({ id: "one", title: "One", source: "library:one" }, "one", "household");
+    progress.observe({ ...idle, playbackId: "one", status: "playing", position: 95, duration: 100, seekable: true });
+    failing = true;
+    expect(() => progress.finish(true)).toThrow("Disk full");
+    progress.begin({ id: "two", title: "Two", source: "library:two" }, "two", "household");
+    failing = false;
+    expect(() => progress.finish(true, save => { save(); throw new Error("Queue transaction failed"); })).toThrow("Queue transaction failed");
+    expect(commits).toBe(1);
+    progress.checkpoint();
+    expect([writes, commits]).toEqual([3, 2]);
+  } finally { store.close(); }
 });
 
 test("history retains non-live sources privately and excludes radio and live entries", () => {

@@ -564,12 +564,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       assertAdmitted();
       if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
       store.editSharedProgress(state.activeProfile.id, mediaId, changes, item);
+      progress.discard(mediaId);
       invalidate("library");
     },
     removeHistory(mediaId: string) {
       assertAdmitted();
       if (progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before removing it from history.", 409);
       if (!store.removeSharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
+      progress.discard(mediaId);
       invalidate("library");
     },
     command(action: Action, authorize = () => {}, playedBy?: PlaybackActor) {

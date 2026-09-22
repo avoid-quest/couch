@@ -163,6 +163,76 @@ test("a queue-position write failure still adopts the track already started by t
   } finally { save.mockRestore(); f.close(); }
 });
 
+test("failed predecessor completions survive consecutive prepared transitions and recover", async () => {
+  const f = fixture();
+  const originalSave = f.store.saveProgress.bind(f.store);
+  let unavailable = true;
+  const save = spyOn(f.store, "saveProgress").mockImplementation((...args) => {
+    if (unavailable) throw new Error("Disk full");
+    originalSave(...args);
+  });
+  try {
+    await tick();
+    const second = f.commands.find(command => command.type === "prepare" && command.next);
+    if (second?.type !== "prepare" || !second.next) throw new Error("Missing second track");
+    const secondId = second.next.playbackId;
+    expect(() => f.session.observe({ ...idle, playbackId: secondId, status: "playing", position: 0.1, duration: 3 })).not.toThrow();
+    await tick();
+    const third = f.commands.findLast(command => command.type === "prepare" && command.next);
+    if (third?.type !== "prepare" || !third.next) throw new Error("Missing third track");
+    const thirdId = third.next.playbackId;
+    expect(() => f.session.observe({ ...idle, playbackId: thirdId, status: "playing", position: 0.1, duration: 3 })).not.toThrow();
+    expect(f.store.progress("household", "library:first")).toMatchObject({ watched: false, position: 2 });
+    expect(f.store.progress("household", "library:second")).toBeNull();
+    expect(f.session.state).toMatchObject({ currentEntryId: "third", progressError: "Could not save viewing progress. Check the TV's storage." });
+    unavailable = false;
+    f.session.checkpoint();
+    expect(f.store.progress("household", "library:first")).toMatchObject({ watched: true, position: 0 });
+    expect(f.store.progress("household", "library:second")).toMatchObject({ watched: true, position: 0 });
+    expect(f.session.state.progressError).toBeNull();
+  } finally { save.mockRestore(); f.close(); }
+});
+
+test("manual history changes discard a failed predecessor checkpoint", async () => {
+  const f = fixture();
+  const originalSave = f.store.saveProgress.bind(f.store);
+  let unavailable = true;
+  const save = spyOn(f.store, "saveProgress").mockImplementation((...args) => {
+    if (unavailable) throw new Error("Disk full");
+    originalSave(...args);
+  });
+  try {
+    await tick();
+    const next = f.commands.find(command => command.type === "prepare" && command.next);
+    if (next?.type !== "prepare" || !next.next) throw new Error("Missing successor");
+    f.session.observe({ ...idle, playbackId: next.next.playbackId, status: "playing", position: 0.1, duration: 3 });
+    unavailable = false;
+    f.session.editProgress("library:first", { watched: false }, { title: "first", libraryItemId: "first" });
+    f.session.checkpoint();
+    expect(f.store.progress("household", "library:first")).toMatchObject({ watched: false, position: 2 });
+  } finally { save.mockRestore(); f.close(); }
+});
+
+test("removing history discards a failed predecessor checkpoint", async () => {
+  const f = fixture();
+  const originalSave = f.store.saveProgress.bind(f.store);
+  let unavailable = true;
+  const save = spyOn(f.store, "saveProgress").mockImplementation((...args) => {
+    if (unavailable) throw new Error("Disk full");
+    originalSave(...args);
+  });
+  try {
+    await tick();
+    const next = f.commands.find(command => command.type === "prepare" && command.next);
+    if (next?.type !== "prepare" || !next.next) throw new Error("Missing successor");
+    f.session.observe({ ...idle, playbackId: next.next.playbackId, status: "playing", position: 0.1, duration: 3 });
+    unavailable = false;
+    f.session.removeHistory("library:first");
+    f.session.checkpoint();
+    expect(f.store.progress("household", "library:first")).toBeNull();
+  } finally { save.mockRestore(); f.close(); }
+});
+
 test("a prepared successor keeps its shared history owner and existing watched mark", async () => {
   const f = fixture();
   try {
