@@ -13,14 +13,16 @@ const autoJellyfin = process.argv.includes("--jellyfin");
 const providersArgument = process.argv.indexOf("--providers");
 const providersConfig = providersArgument === -1 ? null : process.argv[providersArgument + 1];
 const providerCatalogs = process.argv.includes("--provider-catalogs");
+const iptvPublicSample = process.argv.includes("--iptv-public-sample");
 const builtRemote = process.argv.includes("--built-remote");
 const connection = process.argv.includes("--connection");
 const diagnostics = process.argv.includes("--diagnostics");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
 if (providersConfig && providerCatalogs) throw new Error("Use either --providers or --provider-catalogs");
+if (iptvPublicSample && (providersConfig || providerCatalogs)) throw new Error("Use --iptv-public-sample without provider qualification options.");
 if (autoJellyfin && jellyfinConfig) throw new Error("Use either --jellyfin or --jellyfin-config");
-if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
-if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || process.argv.includes("--live-radio"))) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
+if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || iptvPublicSample || process.argv.includes("--live-radio"))) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
+if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || autoJellyfin || jellyfinConfig || iptvPublicSample || process.argv.includes("--live-radio"))) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
 
 async function run(command: string[]) {
   const child = Bun.spawn(command, { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
@@ -62,6 +64,7 @@ try {
     ...(fixture ? ["--network", fixture.dockerNetwork] : []),
     ...(providersConfig ? ["--mount", `type=bind,source=${resolve(providersConfig)},target=/providers.json,readonly`, "--env", "COUCH_TEST_PROVIDERS=/providers.json"] : []),
     ...(providerCatalogs ? ["--env", "COUCH_TEST_PROVIDER_CATALOGS=1"] : []),
+    ...(iptvPublicSample ? ["--env", "COUCH_TEST_IPTV_PUBLIC_SAMPLE=1"] : []),
     ...(process.argv.includes("--live-radio") ? ["--env", "COUCH_TEST_LIVE_RADIO=1"] : []),
     image, "bash", "-ec", 'git clone --no-checkout /source.bundle /work; git -C /work checkout --detach "$COUCH_SOURCE_REVISION"; exec bash /work/tests/linux/run.sh',
   ]);

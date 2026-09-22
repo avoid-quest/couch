@@ -53,7 +53,10 @@ real appliance restart behavior. Public-provider checks stay opt-in:
 ```sh
 bun run test:linux --providers tests/linux/providers.example.json
 bun run test:linux --provider-catalogs
+bun run test:linux --iptv-public-sample
 ```
 
 Those checks depend on external services and are recorded separately from the
-deterministic local journeys.
+deterministic local journeys. The IPTV option keeps generated HLS frame,
+freshness, recovery and restart checks in the ordinary journey, then records
+the Apple sample result in `iptv.json` as external qualification.

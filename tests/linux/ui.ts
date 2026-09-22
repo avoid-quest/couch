@@ -134,7 +134,9 @@ export class UiDriver {
     if (await this.execute("return !!document.querySelector('.primary-nav')")) {
       const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
       const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
-      await this.click(`.primary-nav a[data-source="${destination}"]`);
+      const target = `.primary-nav a[data-source="${destination}"]`;
+      await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
+      await this.click(target);
       if (source) {
         await this.type("#media-search", "");
         await this.key(keys.enter);

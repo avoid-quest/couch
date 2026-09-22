@@ -28,7 +28,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
   };
   const stop = async () => { await clients[0]!.command({ type: "stop" }); await until("IPTV Stop clears the current native load on both controllers", () => all(state => state.player.status === "idle" && state.currentEntryId === null)); };
   // Live clock-only ticks do not broadcast; the captured frames below prove advancement.
-  const playing = (id: string) => all(state => state.player.status === "playing" && state.player.speed === 1 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
+  const playing = (id: string, normalSpeed = true) => all(state => state.player.status === "playing" && (!normalSpeed || state.player.speed === 1) && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `iptv:${id}` && state.player.tracks?.some(track => track.kind === "video") === true && state.player.tracks?.some(track => track.kind === "audio") === true);
   const observations: unknown[] = [];
   let previous = "";
   const observe = setInterval(() => {
@@ -37,7 +37,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
     const encoded = JSON.stringify({ ...value, at: 0 });
     if (encoded !== previous) { observations.push(value); previous = encoded; }
   }, 100);
-  const evidence: Record<string, unknown> = { clockSpeed: 1, originalSpeed: speed, generated: fixture.hashes, encoding: fixture.encoding, epoch: fixture.epoch, publicSample: { url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
+  const evidence: Record<string, unknown> = { clockSpeed: 1, originalSpeed: speed, generated: fixture.hashes, encoding: fixture.encoding, epoch: fixture.epoch, publicSample: { selected: process.env.COUCH_TEST_IPTV_PUBLIC_SAMPLE === "1", url: appleGuideSample, permission: appleGuidePermission, schedule: "Generated XMLTV, not an Apple program schedule", catchup: "None supplied or tested" } };
   const write = () => Bun.write(`${artifactDir}/iptv.json`, JSON.stringify({ ...evidence, date: new Date().toISOString(), requests: fixture.requests(), observations, limits: "Software rendering and a silent audio sink. No physical audio, decoder, HDMI or network hardware qualification." }, null, 2));
   try {
     await stop();
@@ -185,11 +185,6 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
 
     const reimport = await api("sources", "POST", fixture.definition); assert.equal(reimport.status, 201);
     saved = (await reimport.json() as { source: GuideSource }).source;
-    const publicChannel = (await page()).channels.find(channel => channel.tvgId === "apple")!;
-    assert.equal((await api(`channels/${publicChannel.id}/play`, "POST", undefined, clients[1]!.token)).status, 200);
-    await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id), 45_000);
-    evidence.publicObserved = { playback: first().player, channel: publicChannel, testedAt: new Date().toISOString() };
-    await httpRemote.minimize(); await screenshot("native-iptv-apple-sample"); await stop();
     fixture.update(); assert.equal((await api(`sources/${saved.id}/refresh`, "POST")).status, 200);
     const cached = (await page()).channels;
     assert.ok(cached.every(channel => channel.now?.title.includes("updated")));
@@ -207,6 +202,24 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
       await until("IPTV restart stays stopped for both existing controllers", () => nextClients.every(client => client.state?.player.status === "idle" && client.state.currentEntryId === null));
       assert.deepEqual((await page()).channels, cached, "Restart restores the cached guide while its upstream is offline");
       evidence.restart = true; await write();
+      if (process.env.COUCH_TEST_IPTV_PUBLIC_SAMPLE !== "1") return;
+      const publicChannel = (await page()).channels.find(channel => channel.tvgId === "apple")!;
+      const queueBeforePublic = first().queue.map(entry => entry.id);
+      try {
+        assert.equal((await api(`channels/${publicChannel.id}/play`, "POST", undefined, clients[1]!.token)).status, 200);
+        await until("official authorized Apple Bip Bop sample plays native audio and video through the guide", () => playing(publicChannel.id, false), 45_000);
+        evidence.publicObserved = { playback: first().player, channel: publicChannel, testedAt: new Date().toISOString() };
+        await httpRemote.minimize(); await screenshot("native-iptv-apple-sample");
+      } catch (error) {
+        evidence.externalQualification = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+        throw new Error(`External IPTV qualification failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        await stop();
+        for (const entry of first().queue.filter(entry => !queueBeforePublic.includes(entry.id))) await clients[0]!.command({ type: "remove", entryId: entry.id });
+        assert.deepEqual(first().queue.map(entry => entry.id), queueBeforePublic, "Public IPTV qualification restores the existing queue");
+        if (!evidence.externalQualification) evidence.externalQualification = { status: "passed", observed: evidence.publicObserved };
+        await write();
+      }
     } };
   } catch (error) { evidence.failure = error instanceof Error ? error.message : String(error); throw error; } finally {
     clearInterval(observe);
