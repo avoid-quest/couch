@@ -65,8 +65,7 @@ export class UiDriver {
   }
 
   async revealElement(id: string, selector?: string) {
-    let location: { browser: boolean; controls: boolean; pad: boolean } | undefined;
-    await this.waitFor(`Click target ${selector ?? id} is rendered`, async () => !!(location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; if (!element) return null; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector])));
+    const location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
     if (location.browser) await this.home();
     if (location.controls || location.pad) await this.controls();
   }
@@ -135,7 +134,9 @@ export class UiDriver {
     if (await this.execute("return !!document.querySelector('.primary-nav')")) {
       const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
       const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
-      await this.click(`.primary-nav a[data-source="${destination}"]`);
+      const target = `.primary-nav a[data-source="${destination}"]`;
+      await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
+      await this.click(target);
       if (source) {
         await this.type("#media-search", "");
         await this.key(keys.enter);
