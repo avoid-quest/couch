@@ -91,6 +91,18 @@ describe("hosted versions and promotion", () => {
     expect(calls.slice(-2)).toEqual(["https://assets.example/Couch_0.1.0_amd64.deb", "https://assets.example/Couch_0.1.0_amd64.deb"]);
     expect(limitedBodyCancelled).toBe(true);
   });
+  test("a just-published asset survives three CDN propagation misses", async () => {
+    const manifest = fixture(), waits: number[] = [];
+    let attempts = 0;
+    const fetcher = (async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/update/")) return Response.json({ version: manifest.version, signature, url: "https://assets.example/Couch_0.1.0_amd64.deb" });
+      if (url === "https://assets.example/Couch_0.1.0_amd64.deb" && ++attempts <= 3) return new Response(null, { status: 404 });
+      return new Response(url.includes(".sig") ? signature : archive);
+    }) as typeof fetch;
+    expect((await verifyPublic(manifest, "preview", fetcher, async wait => { waits.push(wait); })).checks).toHaveLength(4);
+    expect(waits).toEqual([20_000, 20_000, 20_000]);
+  });
   test("rate-limit waits support HTTP dates and fallbacks, stop after two retries, and reject excessive waits", async () => {
     const clock = spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-15T00:00:00Z"));
     try {

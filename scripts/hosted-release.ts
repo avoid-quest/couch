@@ -194,13 +194,13 @@ export async function assertIncreasing(version: string, channel: Channel, update
 export async function downloadPublic(url: string, expected?: FileIdentity, fetcher: typeof fetch = fetch, sleep: (milliseconds: number) => Promise<void> = Bun.sleep) {
   assert.equal(new URL(url).protocol, "https:", "Public downloads require HTTPS.");
   let response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
-  for (let retries = 0; (response.status === 429 || response.status === 404) && retries < 2; retries++) {
+  for (let retries = 0; (response.status === 429 || response.status === 404) && retries < (response.status === 404 ? 3 : 2); retries++) {
     const retry = response.headers.get("retry-after");
     const milliseconds = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : NaN;
     const wait = response.status === 404 ? 20_000 : Number.isNaN(milliseconds) ? 60_000 : Math.max(0, milliseconds);
     await response.body?.cancel();
     assert.ok(Number.isFinite(wait) && wait <= 120_000, `CDN Retry-After exceeds the readiness wait limit: ${url}. Retry verification later.`);
-    console.warn(`CDN ${response.status === 404 ? "has not propagated" : "rate limited"} ${url}; retrying in ${wait / 1000}s (${retries + 1}/2).`);
+    console.warn(`CDN ${response.status === 404 ? "has not propagated" : "rate limited"} ${url}; retrying in ${wait / 1000}s (${retries + 1}/${response.status === 404 ? 3 : 2}).`);
     await sleep(wait);
     response = await fetcher(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
   }
