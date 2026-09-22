@@ -1,5 +1,11 @@
 # couch
 
+## 0.1.5-preview.11
+
+### Patch Changes
+
+- [#412](https://github.com/avoid-quest/couch/pull/412) [`e4c11be`](https://github.com/avoid-quest/couch/commit/e4c11be70e0dfad836f269ca264c104d11312833) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Wait up to one minute for a newly published package to reach the download CDN before marking release verification as failed.
+
 ## 0.1.5-preview.10
 
 ### Patch Changes
