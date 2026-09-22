@@ -34,9 +34,6 @@ function validAction(value: unknown, trusted: boolean): value is Action {
     case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
     case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
-    case "enqueueProviderPlaylist": return value.provider === "youtube" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean")
-      && videoQuality(value.quality);
-    case "enqueueProviderAlbum": return value.provider === "bandcamp" && httpUrl(value.url) && (value.playNow === undefined || typeof value.playNow === "boolean");
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
       && (value.playNow === undefined || typeof value.playNow === "boolean") && videoQuality(value.quality)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
@@ -80,10 +77,6 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
   }
   if (value.action.type === "goLive") return { type: "command", requestId: value.requestId, action: { type: "goLive", playbackId: value.action.playbackId } };
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
-  if (value.action.type === "enqueueProviderAlbum") {
-    const { provider, url, playNow } = value.action;
-    return { type: "command", requestId: value.requestId, action: { type: "enqueueProviderAlbum", provider, url, ...(playNow === undefined ? {} : { playNow }) } };
-  }
   if (value.action.type === "enqueueProvider") {
     const { provider, url, shape, title, thumbnail, playNow, quality } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
