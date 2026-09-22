@@ -64,7 +64,7 @@ try {
   await until("compiled Tauri app starts its compiled sidecar", sidecar, 30_000);
   await tv.button("Settings");
   await tv.settingsSection("connection");
-  await tv.button("Pair a remote");
+  await tv.button("Pair a remote", 'section[aria-label="Settings"]');
   await until("native app presents a pairing code", async () => /^\d{6}$/.test(await tv.pairingCode().catch(() => "")));
   const code = await tv.pairingCode();
   await tv.key(keys.escape);

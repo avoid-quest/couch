@@ -51,7 +51,7 @@ try {
     await start();
     await tv.button("Settings");
     await tv.settingsSection("connection");
-    await tv.button("Pair a remote");
+    await tv.button("Pair a remote", 'section[aria-label="Settings"]');
     await until("public IPTV pairing code is visible", async () => /^\d{6}$/.test(await tv.pairingCode().catch(() => "")));
     const code = await tv.pairingCode();
     await tv.key(keys.escape);
