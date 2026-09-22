@@ -15,12 +15,47 @@ use crate::Host;
 
 pub enum Request {
     Command(PlaybackCommand),
-    Layout(VideoRect),
+    Layout,
     Observe,
     Diagnostics(String),
     Readiness { nonce: String, deadline: std::time::Instant },
     Stop(tokio::sync::oneshot::Sender<Result<(), String>>),
     Shutdown,
+}
+
+#[derive(Default)]
+pub struct LayoutQueue { rect: Option<VideoRect>, queued: bool }
+
+impl LayoutQueue {
+    pub fn push(&mut self, rect: VideoRect) -> bool {
+        self.rect = Some(rect);
+        if self.queued { false } else { self.queued = true; true }
+    }
+
+    pub fn take(&mut self) -> Option<VideoRect> { self.queued = false; self.rect.take() }
+    pub fn cancel(&mut self) { self.queued = false; }
+}
+
+const RECONCILE_STARTED_LOAD: &str = "Native load started after its reply wait. Observing playback before retrying.";
+
+fn is_rejected_control(command: &PlaybackCommand) -> bool {
+    !matches!(command, PlaybackCommand::Load { .. } | PlaybackCommand::Stop)
+}
+
+enum CommandError {
+    Reconcile,
+    Ignore(String),
+    Report(String),
+}
+
+fn command_error(replacement: bool, rejected_control: bool, error: String) -> CommandError {
+    if replacement && error == RECONCILE_STARTED_LOAD {
+        CommandError::Reconcile
+    } else if rejected_control {
+        CommandError::Ignore(error)
+    } else {
+        CommandError::Report(error)
+    }
 }
 
 // One worker preserves command order. The plugin dispatches GPU work onto GTK.
@@ -64,10 +99,25 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 let _ = reply.send(result);
                 continue;
             }
-            Ok(Request::Command(command)) => player.command(&app, command),
-            Ok(Request::Layout(rect)) => {
-                player.rect = rect;
-                player.layout(&app)
+            Ok(Request::Command(command)) => {
+                let replacement = matches!(&command, PlaybackCommand::Load { .. });
+                let rejected_control = is_rejected_control(&command);
+                match player.command(&app, command) {
+                    Err(error) => match command_error(replacement, rejected_control, error) {
+                        CommandError::Reconcile => player.observe(&app),
+                        CommandError::Ignore(error) => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
+                        CommandError::Report(error) => Err(error),
+                    },
+                    Ok(()) => Ok(()),
+                }
+            }
+            Ok(Request::Layout) => {
+                let rect = app.state::<Host>().layouts.lock().expect("layout queue poisoned").take();
+                if let Some(rect) = rect {
+                    player.rect = rect;
+                    if let Err(error) = player.layout(&app) { log::warn!("Native layout was rejected without changing playback state: {error}"); }
+                }
+                continue;
             }
             Ok(Request::Observe) | Err(RecvTimeoutError::Timeout) => player.observe(&app),
             Ok(Request::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
@@ -81,6 +131,26 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
             app.state::<Host>().report(&player.state);
             reported = Some(player.state.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod layout_queue_tests {
+    use super::*;
+
+    #[test]
+    fn keeps_only_the_latest_layout_until_the_worker_runs() {
+        let mut queue = LayoutQueue::default();
+        assert!(queue.push(VideoRect { width: 100.0, ..VideoRect::default() }));
+        assert!(!queue.push(VideoRect { width: 200.0, ..VideoRect::default() }));
+        assert_eq!(queue.take().unwrap().width, 200.0);
+        assert!(queue.push(VideoRect { width: 300.0, ..VideoRect::default() }));
+    }
+
+    #[test]
+    fn stop_errors_reach_the_forced_state_report() {
+        assert!(!is_rejected_control(&PlaybackCommand::Stop));
+        assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
     }
 }
 
@@ -338,7 +408,10 @@ impl Player {
             .video()
             .desktop()
             .open_native(request)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| match error {
+                tauri_plugin_video::Error::DispatcherInFlight => RECONCILE_STARTED_LOAD.into(),
+                error => error.to_string(),
+            })?;
         self.apply(snapshot)
     }
 

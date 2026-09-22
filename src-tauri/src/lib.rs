@@ -37,6 +37,7 @@ struct Host {
     connection: watch::Sender<Option<Result<ConnectionInfo, String>>>,
     child: Mutex<Option<CommandChild>>,
     player: mpsc::Sender<player::Request>,
+    layouts: Mutex<player::LayoutQueue>,
     display: mpsc::Sender<display::Request>,
     updates: tokio::sync::mpsc::Sender<appimage_update::Request>,
     update_busy: AtomicBool,
@@ -120,9 +121,11 @@ fn set_video_rect(rect: VideoRect, host: tauri::State<'_, Host>) -> Result<(), S
     {
         return Err("Invalid video rectangle".into());
     }
-    host.player
-        .send(player::Request::Layout(rect))
-        .map_err(|_| "Native player stopped".into())
+    if !host.layouts.lock().expect("layout queue poisoned").push(rect) { return Ok(()); }
+    host.player.send(player::Request::Layout).map_err(|_| {
+        host.layouts.lock().expect("layout queue poisoned").cancel();
+        "Native player stopped".into()
+    })
 }
 
 #[derive(Serialize)]
@@ -519,6 +522,7 @@ pub fn run() {
                 connection,
                 child: Mutex::new(None),
                 player: player_sender,
+                layouts: Mutex::new(player::LayoutQueue::default()),
                 display: display_sender,
                 updates: update_sender,
                 update_busy: AtomicBool::new(false),
