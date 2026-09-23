@@ -76,9 +76,19 @@ async function role(session: string, xpath: string) {
 }
 
 async function click(session: string, xpath: string) {
-  const elements = await request(`/session/${session}/elements`, { using: "xpath", value: xpath }) as Array<Record<string, string>>;
-  assert.equal(elements.length, 1, `Expected one control for ${xpath}`);
-  await request(`/session/${session}/element/${elements[0]!["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+  const deadline = Date.now() + 15_000;
+  while (true) {
+    try {
+      const elements = await request(`/session/${session}/elements`, { using: "xpath", value: xpath }) as Array<Record<string, string>>;
+      assert.ok(elements.length <= 1, `Expected one control for ${xpath}`);
+      if (elements.length === 1) {
+        await request(`/session/${session}/element/${elements[0]!["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+        return;
+      }
+    } catch (error) { if (!/stale element reference|no such element/.test(String(error))) throw error; }
+    assert.ok(Date.now() < deadline, `Control did not settle: ${xpath}`);
+    await Bun.sleep(50);
+  }
 }
 
 async function open(presentation: "0" | "1", directory: string) {
@@ -183,11 +193,12 @@ try {
 const selectedHost = "http://127.0.0.1:4201";
 const hostData = await mkdtemp("/tmp/couch-lifecycle-selected-host-");
 seedConfiguredFixture(hostData);
-const remoteHost = Bun.spawn([sidecar], {
+const startSelectedHost = () => Bun.spawn([sidecar], {
   cwd: "/work",
   env: { ...process.env, COUCH_NATIVE: "0", COUCH_HOST: "127.0.0.1", COUCH_PORT: "4201", COUCH_ADVERTISE_URLS: selectedHost, COUCH_DATA_DIR: hostData },
   stdout: Bun.file("/artifacts/lifecycle-selected-host.log"), stderr: Bun.file("/artifacts/lifecycle-selected-host-error.log"),
 });
+let remoteHost = startSelectedHost();
 const hostHealth = async () => { try { return (await fetch(`${selectedHost}/api/health`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } };
 try {
   await until("selected remote host starts", hostHealth, 30_000);
@@ -200,6 +211,13 @@ try {
     assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "WebDriver exposes one app window");
     assert.equal((await request(`/session/${native.session}/elements`, { using: "xpath", value: '//header[contains(@class,"app-header")]' }) as unknown[]).length, 1, "Couch shows one app header");
     assert.equal(await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => ""), "", "No second remote OS window exists");
+    const selectedWindow = await windowId();
+    await command("xdotool", "windowmove", selectedWindow, "280", "180");
+    await command("xdotool", "windowsize", selectedWindow, "1200", "780");
+    await until("selected remote moves and resizes the same OS window", async () => {
+      const geometry = await command("xwininfo", "-id", selectedWindow);
+      return /Width:\s*1200/.test(geometry) && /Height:\s*780/.test(geometry);
+    });
     await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
     const pairingCode = (await Bun.file("/artifacts/lifecycle-selected-host-error.log").text()).match(/Pairing code: (\d{6})/)?.[1];
     assert.ok(pairingCode, "selected host prints a pairing code");
@@ -208,6 +226,13 @@ try {
     const { token, installationId } = await paired.json() as { token: string; installationId: string };
     await request(`/session/${native.session}/execute/sync`, { script: "localStorage.setItem('couch.pairing:' + arguments[0], JSON.stringify({ token: arguments[1], installationId: arguments[2] })); location.reload();", args: [selectedHost, token, installationId] });
     await until("paired desktop client connects to the selected host", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
+    remoteHost.kill();
+    await remoteHost.exited;
+    await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//div[contains(@class,"notice") and contains(normalize-space(.),"offline")]'), 30_000);
+    assert.equal(await role(native.session, '//button[normalize-space(.)="Update this app"]'), true, "local update access survives selected host outage");
+    remoteHost = startSelectedHost();
+    await until("selected host restarts", hostHealth, 30_000);
+    await until("selected host recovery clears the offline notice", async () => !await role(native.session, '//div[contains(@class,"notice") and contains(normalize-space(.),"offline")]'), 30_000);
     assert.equal(await health(), false, "selected remote creates no local playback host");
     await click(native.session, '//button[contains(normalize-space(.),"Play on: http://127.0.0.1:4201")]');
     await click(native.session, '//button[normalize-space(.)="This computer"]');
