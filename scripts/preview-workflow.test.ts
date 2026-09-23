@@ -22,7 +22,7 @@ test("native packages are signed and uploaded only in the release environment", 
 
 test("publication checks all source runs and assembled assets before publish", () => {
   const job = publisher.jobs.publish, selected = steps(publisher);
-  expect(job.environment).toBe("couch-release");
+  expect(job.environment).toBe("couch-publication");
   expect(job.if).toContain("github.ref == 'refs/heads/main'");
   expect(job.if).toContain("COUCH_RELEASES_ENABLED == 'true'");
   expect(publisher.on.push).toBeUndefined();

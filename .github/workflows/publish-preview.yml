@@ -46,7 +46,7 @@ jobs:
   publish:
     if: "${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}"
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: couch-release
+    environment: couch-publication
     timeout-minutes: 60
     permissions:
       contents: write

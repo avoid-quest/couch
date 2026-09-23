@@ -21,10 +21,12 @@ different source revision or signing key blocks assembly. Do not reuse a Cloud
 draft after an upload failure with different bytes; retain the same candidate
 or create a newer version.
 
-The enrolled Tauri private key, its password and the Cloud API key stay only in
-GitHub's `couch-release` environment. The Linux Package, native desktop and
-assembly jobs use those existing secrets. No production signing or Cloud key is
-needed on an owner's Mac; local Mac work is limited to unsigned/headless checks.
+The enrolled Tauri private key and its password stay in GitHub's
+`couch-release` environment for the Linux Package and native desktop jobs.
+The Cloud API key is also available to the `couch-publication` environment,
+which publishes the assembled release without access to the updater private key.
+No production signing or Cloud key is needed on an owner's Mac; local Mac work
+is limited to unsigned/headless checks.
 Enable `COUCH_RELEASES_ENABLED` only after the implementation and source/package
 gates pass. Keep signed receipts beyond GitHub's 90-day artifact/log retention
 window. No package payload goes through GitHub artifacts.
