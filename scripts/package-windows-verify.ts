@@ -10,11 +10,29 @@ import tauri from "../src-tauri/tauri.conf.json";
 const target = "x86_64-pc-windows-msvc";
 const directory = `src-tauri/target/${target}/release/bundle/nsis`;
 const hash = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
+// Reviewed Windows 11 system imports. Fail when a new toolchain/runtime DLL
+// appears until it is bundled or added here with a reason.
+const systemDlls = new Set([
+  "advapi32.dll", "api-ms-win-core-synch-l1-2-0.dll", "api-ms-win-crt-convert-l1-1-0.dll",
+  "api-ms-win-crt-heap-l1-1-0.dll", "api-ms-win-crt-locale-l1-1-0.dll", "api-ms-win-crt-math-l1-1-0.dll",
+  "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-crt-stdio-l1-1-0.dll", "api-ms-win-crt-string-l1-1-0.dll",
+  "bcrypt.dll", "bcryptprimitives.dll", "comctl32.dll", "crypt32.dll", "dbghelp.dll", "dwmapi.dll",
+  "gdi32.dll", "iphlpapi.dll", "kernel32.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll",
+  "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "wsock32.dll",
+]);
 
 function run(command: string[], env = process.env) {
   const result = Bun.spawnSync(command, { stderr: "inherit", maxBuffer: 256 * 1024 * 1024, env });
   assert.equal(result.exitCode, 0, command.join(" "));
   return result.stdout;
+}
+
+function peImports(path: string) {
+  const output = run(["llvm-readobj", "--coff-imports", path]).toString();
+  const names = [...output.matchAll(/^  Name: (.+)$/gm)].map(match => match[1]!.toLowerCase());
+  assert.ok(names.length, `No PE imports found: ${path}`);
+  for (const name of names) assert.match(name, /^[a-z0-9_.-]+\.dll$/, `Invalid PE import: ${name}`);
+  return [...new Set(names)].sort();
 }
 
 const config = await Bun.file(".artifacts/tauri-windows.conf.json").json();
@@ -87,6 +105,12 @@ try {
   assert.ok(files.includes("couch.exe"), "Missing native application");
   assert.deepEqual(await binaryArchitectures(join(installed, "couch.exe")), ["x86_64"]);
   assert.ok(files.includes("couch-server.exe"), "Missing Bun coordinator");
+  // NSIS extracts its own plugins only while installing; they are not app DLLs.
+  const bundledDlls = files.filter(file => file.toLowerCase().endsWith(".dll") && !file.startsWith("$PLUGINSDIR/"));
+  for (const file of bundledDlls) assert.ok(!systemDlls.has(basename(file).toLowerCase()), `Bundled DLL shadows Windows: ${file}`);
+  const availableDlls = new Set([...systemDlls, ...bundledDlls.filter(file => !file.includes("/")).map(file => file.toLowerCase())]);
+  const imports = Object.fromEntries<string[]>(["couch.exe", "couch-server.exe", ...bundledDlls].map(file => [file, peImports(join(installed, file))]));
+  for (const [file, names] of Object.entries(imports)) assert.deepEqual(names.filter(name => !availableDlls.has(name)), [], `Unresolved PE imports in ${file}`);
   const appBytes = Buffer.from(await Bun.file(join(installed, "couch.exe")).arrayBuffer());
   assert.ok(appBytes.includes(Buffer.from(tauri.identifier)), "Bundled app identifier changed");
   for (const file of ["couch.exe", "couch-server.exe"]) assert.ok(Buffer.from(await Bun.file(join(installed, file)).arrayBuffer()).includes(Buffer.from(release.revision)), `Bundled ${file} build revision changed`);
@@ -98,7 +122,7 @@ try {
   const payload = JSON.parse(inventory);
   await verifyPayload(installed, payload, target, "nsis", []);
   verifyBundledNativeLibraries(payload, files.filter(file => !file.startsWith("$PLUGINSDIR/")));
-  await Bun.write(".artifacts/windows-inventory.json", JSON.stringify({ revision: release.revision, version: release.version, identifier: tauri.identifier, target, installMode: config.bundle.windows.nsis.installMode, webviewInstallMode: config.bundle.windows.webviewInstallMode.type, feed: config.plugins.updater.endpoints[0], installer: { name: basename(installer), bytes: (await stat(installer)).size, sha256: await hash(installer) }, update: { name: basename(archive), bytes: (await stat(archive)).size, sha256: await hash(archive) }, files: files.sort() }, null, 2) + "\n");
+  await Bun.write(".artifacts/windows-inventory.json", JSON.stringify({ revision: release.revision, version: release.version, identifier: tauri.identifier, target, installMode: config.bundle.windows.nsis.installMode, webviewInstallMode: config.bundle.windows.webviewInstallMode.type, feed: config.plugins.updater.endpoints[0], installer: { name: basename(installer), bytes: (await stat(installer)).size, sha256: await hash(installer) }, update: { name: basename(archive), bytes: (await stat(archive)).size, sha256: await hash(archive) }, imports, files: files.sort() }, null, 2) + "\n");
   console.log(`Verified ${installer}: ${files.length} files, x64 identity, payload and signed update`);
 } finally {
   await rm(scratch, { recursive: true, force: true });

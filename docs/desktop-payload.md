@@ -60,12 +60,20 @@ On a macOS cross-build host, install Rust's `x86_64-pc-windows-msvc` target,
 `bun run package:windows` on a clean commit. It uses Tauri's current-user NSIS
 mode and downloaded WebView2 bootstrapper. The app identifier stays
 `quest.avoid.couch`; the package contains no existing user database or selected
-host state.
+host state. This macOS command cross-builds a Windows artifact for static
+qualification; it is not the Linux release delivery path. The existing Package
+workflow keeps its pinned Debian builder, and the T480 never builds packages.
 
 The command cross-compiles the Bun coordinator and Tauri app, then inspects the
 real installer. It checks its extracted app and coordinator as x64 PE files,
-payload hashes and paths, notices, native DLL list, release identity, and both
-Tauri signatures. NSIS itself uses a 32-bit installer stub. The updater ZIP
+payload hashes and paths, notices, native DLL list, direct PE imports, release
+identity, and both Tauri signatures. Every direct import must resolve to a
+bundled root DLL or the reviewed Windows system/API-set allowlist. Windows
+[API sets](https://learn.microsoft.com/en-us/windows/win32/apiindex/windows-apisets)
+are loader contracts, and the
+[Universal CRT](https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment)
+ships with Windows 10 and later. This static check cannot find DLLs loaded by
+name at runtime. NSIS itself uses a 32-bit installer stub. The updater ZIP
 contains that installer and a root `release.json`; the final ZIP bytes are signed
 again after the manifest is added. The feed target is `windows-x86_64-nsis`.
 The receipt is `.artifacts/windows-inventory.json`. Windows 11 installation,
