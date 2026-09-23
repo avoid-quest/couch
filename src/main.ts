@@ -77,7 +77,7 @@ hub = createHub({
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   frontend, assets,
-  // Vite provides HMR; Bun's HMR bundle breaks Router on Client-only remotes.
+  // Tauri and browser development use Vite HMR; Bun serves the Client-only page.
   development: false,
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
   sendPlayer(command) {
