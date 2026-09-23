@@ -239,7 +239,7 @@ try {
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"selected Couch is offline")]'), 30_000);
     assert.equal(await role(native.session, '//button[normalize-space(.)="Update this app"]'), true, "local update access survives selected host outage");
     await click(native.session, '//button[normalize-space(.)="Update this app"]');
-    await until("local updater loads while selected host is offline", () => role(native.session, '//div[@role="dialog"]//button[normalize-space(.)="Check for updates"]'), 30_000);
+    await until("local updater loads while selected host is offline", () => role(native.session, '//div[@role="dialog"]//button[normalize-space(.)="Check this app for updates"]'), 30_000);
     await command("xdotool", "key", "Escape");
     await until("local updater closes without changing playback device", async () => !await role(native.session, '//div[@role="dialog"]'));
     remoteHost = startSelectedHost();

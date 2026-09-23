@@ -129,7 +129,7 @@ export function InstallationUpdates() {
   return <QueryClientProvider client={queryClient}><Dialog open={open} onOpenChange={change}>
     <DialogTrigger asChild><Button variant="outline">Update this app</Button></DialogTrigger>
     <DialogContent>
-      <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>This computer updates itself. The selected playback computer has separate updates, and your saved playback device stays selected.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {credentials ? <UpdatesSettings credentials={credentials} connected target="this app" /> : <p role="status">Connecting to this installation…</p>}
     </DialogContent>

@@ -223,6 +223,7 @@ test("an offline remote keeps this installation's update controls and shared-win
   await act(async () => fireEvent.click(button("Update this app")));
   await flush();
   expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
+  expect(screen.getByText(/This computer updates itself. The selected playback computer has separate updates/)).toBeDefined();
   expect(screen.getByText(/Updates and recovery for this app/)).toBeDefined();
   expect(screen.getByText("Hosted update")).toBeDefined();
   expect(button("Install update on this app").disabled).toBe(false);

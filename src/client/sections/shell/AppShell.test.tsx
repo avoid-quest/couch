@@ -4,7 +4,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
-import { screen } from "@/testing";
+import { fireEvent, screen } from "@/testing";
 import type { ShellValue } from "./AppShell";
 import { ShellContext } from "./shell-context";
 
@@ -39,9 +39,10 @@ async function renderUpdates(authority: "host" | "administrator" | "controller",
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const origin = localHost ? "http://127.0.0.1:4100" : "http://192.168.1.20:4100";
   const shell = { nativeHost: true, localHost, tvPresentation: false, credentials: { origin, token: localHost ? "local-owner" : "remote-pairing" }, connected: true, identity: { authority }, details: { tvPresentation: false } } as unknown as ShellValue;
-  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async input => {
-    expect(String(input)).toBe(`${origin}/api/updates`);
-    return Response.json({ channel: "stable", policy: "manual", status: "idle", currentCheck: true, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, installation: { enabled: true, repairAvailable: false, transaction: null } });
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+    expect(String(input)).toBe(`${origin}/api/updates${init?.method === "POST" ? "/check" : ""}`);
+    expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${localHost ? "local-owner" : "remote-pairing"}`);
+    return Response.json({ channel: "stable", policy: "manual", status: "idle", currentCheck: true, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, installation: { enabled: true, repairAvailable: false, transaction: null } }, { status: init?.method === "POST" ? 202 : 200 });
   }) as typeof fetch);
   const base = createRootRoute({ component: () => <QueryClientProvider client={client}><ShellContext.Provider value={shell}><Outlet /></ShellContext.Provider></QueryClientProvider> });
   const updates = createRoute({ getParentRoute: () => base, path: "/settings/updates", component: UpdatesPage });
@@ -55,7 +56,8 @@ test("a remote administrator manages only the selected host's update policy", as
   expect(screen.getByLabelText("Release channel for selected host")).toBeDefined();
   expect(screen.getByLabelText("Install updates on selected host")).toBeDefined();
   expect(screen.queryByLabelText("Release channel for this app")).toBeNull();
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check selected host for updates" })));
+  expect(fetchSpy?.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input) === "http://192.168.1.20:4100/api/updates/check" && init?.method === "POST")).toBe(true);
 });
 
 test("a remote controller cannot manage the selected host's updates", async () => {
