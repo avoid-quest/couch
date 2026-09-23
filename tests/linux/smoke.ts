@@ -62,6 +62,10 @@ try {
   await until("Tauri WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("compiled Tauri app starts its compiled sidecar", sidecar, 30_000);
+  if (process.env.COUCH_TEST_DESKTOP_SMOKE === "1") {
+    const placed = Bun.spawn(["xdotool", "search", "--onlyvisible", "--name", "^Couch$", "windowmove", "100", "100"]);
+    assert.equal(await placed.exited, 0, "desktop smoke places the native window inside Xvfb before pixel sampling");
+  }
   await tv.button("Settings");
   await tv.settingsSection("connection");
   await tv.button("Pair a remote", 'section[aria-label="Settings"]');

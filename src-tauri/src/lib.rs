@@ -624,6 +624,8 @@ pub fn run() {
                 )?;
                 #[cfg(target_os = "macos")]
                 desktop_lifecycle::install_mac_menu(app.handle())?;
+                #[cfg(target_os = "linux")]
+                desktop_lifecycle::install_linux_menu(app.handle())?;
             }
             let handle = app.handle().clone();
             let main = tauri::WebviewWindowBuilder::from_config(app, &config)?

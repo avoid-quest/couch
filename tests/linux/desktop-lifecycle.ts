@@ -1,0 +1,213 @@
+import { strict as assert } from "node:assert";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { seedConfiguredFixture } from "./configured-fixture";
+
+const origin = "http://127.0.0.1:4100";
+const driverOrigin = "http://127.0.0.1:4444";
+const binary = process.env.COUCH_NATIVE_BINARY ?? "/work/bin/couch";
+const checks: string[] = [];
+
+async function until(description: string, check: () => boolean | Promise<boolean>, timeout = 15_000) {
+  const deadline = Date.now() + timeout;
+  while (!await check()) {
+    assert.ok(Date.now() < deadline, description);
+    await Bun.sleep(50);
+  }
+  checks.push(description);
+  console.log(`PASS ${description}`);
+}
+
+async function command(...args: string[]) {
+  const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+  const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  assert.equal(code, 0, `${args.join(" ")}: ${error}`);
+  return output.trim();
+}
+
+async function request(path: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
+  const response = await fetch(driverOrigin + path, {
+    method, headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15_000),
+  });
+  const result = await response.json() as { value: any };
+  assert.ok(response.ok && !result.value?.error, `WebDriver ${path}: ${JSON.stringify(result.value)}`);
+  return result.value;
+}
+
+async function health() {
+  try { return (await fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(500) })).ok; }
+  catch { return false; }
+}
+
+async function processIds(name: string) {
+  const process = Bun.spawn(["pgrep", "-x", name], { stdout: "pipe", stderr: "ignore" });
+  const output = await new Response(process.stdout).text();
+  await process.exited;
+  return output.trim().split("\n").filter(Boolean);
+}
+
+async function windowId() {
+  const output = await command("xdotool", "search", "--onlyvisible", "--name", "^Couch$");
+  for (const id of output.split("\n")) {
+    if ((await command("xprop", "-id", id, "WM_PROTOCOLS")).includes("WM_DELETE_WINDOW")) return id;
+  }
+  throw new Error("No Couch window accepts the desktop Close action");
+}
+
+async function closeWindow(id: string) {
+  await command("xdotool", "windowactivate", "--sync", id);
+  await command("xdotool", "key", "alt+F4");
+}
+
+async function quitShortcut(id: string) {
+  await command("xdotool", "windowactivate", "--sync", id);
+  await command("xdotool", "key", "ctrl+q");
+}
+
+async function role(session: string, xpath: string) {
+  const elements = await request(`/session/${session}/elements`, { using: "xpath", value: xpath }).catch(() => []) as Array<Record<string, string>>;
+  for (const element of elements) {
+    try {
+      if (await request(`/session/${session}/element/${element["element-6066-11e4-a52e-4f735466cecf"]}/displayed`)) return true;
+    } catch { /* The app can replace a matched control between lookup and display check. */ }
+  }
+  return false;
+}
+
+async function open(presentation: "0" | "1", directory: string) {
+  const driver = Bun.spawn(["tauri-driver"], {
+    env: { ...process.env, COUCH_DATA_DIR: directory, COUCH_TV_PRESENTATION: presentation, COUCH_DEV_BUN: Bun.which("bun") ?? "/usr/local/bin/bun" },
+    stdout: Bun.file(`/artifacts/lifecycle-${presentation}-driver.log`),
+    stderr: Bun.file(`/artifacts/lifecycle-${presentation}-native.log`),
+  });
+  await until("native WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
+  const session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: binary } } } })).sessionId as string;
+  return { driver, session, directory };
+}
+
+async function closeDriver(native: Awaited<ReturnType<typeof open>>) {
+  await request(`/session/${native.session}`, undefined, "DELETE").catch(() => {});
+  native.driver.kill();
+  await native.driver.exited;
+}
+
+const local = await mkdtemp("/tmp/couch-lifecycle-local-");
+seedConfiguredFixture(local);
+let native = await open("0", local);
+try {
+  try { await until("desktop local host starts", health, 30_000); }
+  catch (error) {
+    const messages = await request(`/session/${native.session}/elements`, { using: "xpath", value: '//*[@role="status" or @role="alert"]' }) as Array<Record<string, string>>;
+    for (const message of messages) console.error(await request(`/session/${native.session}/element/${message["element-6066-11e4-a52e-4f735466cecf"]}/text`).catch(() => ""));
+    throw error;
+  }
+  await until("desktop navigation has a readable label", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
+  const firstApp = await processIds("couch"), firstHost = await processIds("couch-server");
+  assert.equal(firstApp.length, 1);
+  assert.equal(firstHost.length, 1);
+  const window = await windowId();
+  await closeWindow(window);
+  await until("Close minimizes without a tray watcher", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Iconic"));
+  assert.equal(await health(), true, "Close retains the owned host");
+  const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: local, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
+  assert.equal(await second.exited, 0, "a second launch returns to the first instance");
+  await until("launcher restores the minimized window", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Normal"));
+  assert.deepEqual(await processIds("couch"), firstApp, "launcher creates no second app");
+  assert.deepEqual(await processIds("couch-server"), firstHost, "launcher creates no second host");
+  await command("xdotool", "windowmove", window, "3000", "3000");
+  await closeWindow(window);
+  await until("offscreen Close still minimizes", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Iconic"));
+  const reopen = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: local, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
+  assert.equal(await reopen.exited, 0);
+  await until("launcher recovers an offscreen window", async () => {
+    const geometry = await command("xwininfo", "-id", window);
+    const x = Number(geometry.match(/Absolute upper-left X:\s*(-?\d+)/)?.[1]);
+    const y = Number(geometry.match(/Absolute upper-left Y:\s*(-?\d+)/)?.[1]);
+    return (await command("xprop", "-id", window, "WM_STATE")).includes("Normal") && x >= 0 && x < 1600 && y >= 0 && y < 1000;
+  });
+  await quitShortcut(window);
+  await until("Quit with sharing asks for confirmation", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "Quit Couch\\?").catch(() => "")).length > 0);
+  await command("xdotool", "key", "Escape");
+  await until("Cancel keeps the host running", health);
+  assert.deepEqual(await processIds("couch"), firstApp);
+  await quitShortcut(window);
+  await until("Quit confirmation returns", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "Quit Couch\\?").catch(() => "")).length > 0);
+  await command("xdotool", "key", "Return");
+  await until("confirmed Quit stops the app and owned host", async () => !(await health()) && (await processIds("couch")).length === 0 && (await processIds("couch-server")).length === 0);
+} finally { await closeDriver(native); }
+
+const unavailable = await mkdtemp("/tmp/couch-lifecycle-remote-");
+seedConfiguredFixture(unavailable);
+await writeFile(`${unavailable}/operating-mode.json`, JSON.stringify({ mode: "remote", address: "http://127.0.0.1:49999", targets: ["http://127.0.0.1:49999"], localSetupComplete: true }));
+native = await open("0", unavailable);
+try {
+  await until("unavailable selected host exposes Retry", () => role(native.session, '//button[normalize-space(.)="Retry"]'), 30_000);
+  await until("unavailable selected host exposes Use this computer", () => role(native.session, '//button[normalize-space(.)="Use this computer"]'));
+  assert.equal(await health(), false, "remote selection does not start a local playback host");
+  const window = await windowId();
+  await closeWindow(window);
+  await until("remote recovery Close minimizes", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Iconic"));
+  const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: unavailable, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
+  assert.equal(await second.exited, 0);
+  await until("launcher restores remote recovery", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Normal") && await role(native.session, '//button[normalize-space(.)="Use this computer"]'));
+  assert.equal(await health(), false, "remote recovery never creates a local playback host");
+} finally { await closeDriver(native); }
+
+const television = await mkdtemp("/tmp/couch-lifecycle-tv-");
+seedConfiguredFixture(television);
+native = await open("1", television);
+try {
+  await until("TV presentation starts its host", health, 30_000);
+  await until("TV keeps its labelled navigation", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
+  const window = await windowId();
+  assert.match(await command("xprop", "-id", window, "_NET_WM_STATE"), /_NET_WM_STATE_FULLSCREEN/, "TV stays fullscreen");
+  await closeWindow(window);
+  await until("TV Close retains its exit behavior", async () => !(await health()) && (await processIds("couch")).length === 0);
+} finally { await closeDriver(native); }
+
+const tray = Bun.spawn(["gtk-sni-tray-standalone", "--watcher", "--top", "--end", "--size", "40"], {
+  stdout: Bun.file("/artifacts/lifecycle-tray.log"), stderr: Bun.file("/artifacts/lifecycle-tray-error.log"),
+});
+try {
+  await until("Linux tray watcher starts", async () => (await command("gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus", "--method", "org.freedesktop.DBus.NameHasOwner", "org.kde.StatusNotifierWatcher").catch(() => "")).includes("true"));
+  const trayData = await mkdtemp("/tmp/couch-lifecycle-tray-");
+  seedConfiguredFixture(trayData);
+  native = await open("0", trayData);
+  try {
+    await until("tray desktop starts its local host", health, 30_000);
+    await until("tray desktop retains labelled navigation", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
+    const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
+    const registration = await command("gdbus", "call", "--session", "--dest", "org.kde.StatusNotifierWatcher", "--object-path", "/StatusNotifierWatcher", "--method", "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierWatcher", "RegisteredStatusNotifierItems");
+    const item = registration.match(/:[0-9.]+/)?.[0];
+    assert.ok(item, "Couch registers a StatusNotifier item");
+    const itemInfo = await command("gdbus", "introspect", "--session", "--recurse", "--dest", item, "--object-path", "/");
+    assert.match(itemInfo, /tray-icon tray app couch-desktop/, "registered item belongs to Couch");
+    const menuPath = itemInfo.match(/readonly o Menu = '([^']+)'/)?.[1];
+    assert.ok(menuPath, "Couch exposes a native tray menu");
+    const menu = await command("gdbus", "call", "--session", "--dest", item, "--object-path", menuPath, "--method", "com.canonical.dbusmenu.GetLayout", "0", "1", "[]");
+    const showId = menu.match(/\((\d+), \{'label': <'Show Couch'>/)?.[1];
+    const quitId = menu.match(/\((\d+), \{'label': <'Quit Couch'>/)?.[1];
+    assert.ok(showId && quitId, "tray menu labels offer Show Couch and Quit Couch");
+    const menuAction = (id: string) => command("gdbus", "call", "--session", "--dest", item, "--object-path", menuPath, "--method", "com.canonical.dbusmenu.Event", id, "clicked", "<int32 0>", "0");
+    const window = await windowId();
+    await closeWindow(window);
+    await until("Close hides Couch with a usable tray", async () => (await command("xwininfo", "-id", window)).includes("IsUnMapped"));
+    assert.equal(await health(), true, "the hidden tray app retains its host");
+    await menuAction(showId);
+    await until("Show Couch restores the hidden window", async () => (await command("xwininfo", "-id", window)).includes("IsViewable"));
+    assert.deepEqual(await processIds("couch"), appPid);
+    assert.deepEqual(await processIds("couch-server"), hostPid);
+    await closeWindow(window);
+    await until("tray Close hides again", async () => (await command("xwininfo", "-id", window)).includes("IsUnMapped"));
+    await menuAction(quitId);
+    await until("tray Quit confirms sharing", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "Quit Couch\\?").catch(() => "")).length > 0);
+    await command("xdotool", "key", "Escape");
+    await until("tray Quit cancel retains the host", health);
+    await menuAction(quitId);
+    await until("tray Quit confirmation returns", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "Quit Couch\\?").catch(() => "")).length > 0);
+    await command("xdotool", "key", "Return");
+    await until("confirmed tray Quit stops app and host", async () => !(await health()) && (await processIds("couch")).length === 0 && (await processIds("couch-server")).length === 0);
+  } finally { await closeDriver(native); }
+} finally { tray.kill(); await tray.exited; }
+
+await writeFile("/artifacts/desktop-lifecycle.json", JSON.stringify({ revision: process.env.COUCH_SOURCE_REVISION, checks, limitations: "Xvfb/Openbox and a standalone StatusNotifier tray exercise native desktop behavior without physical display, audio hardware, or an installed package." }, null, 2));

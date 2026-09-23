@@ -82,6 +82,11 @@ software rendering qualifies physical TV, speaker or hardware behavior. The
 launcher still accepts its existing Jellyfin/provider options. Use `preview:linux`
 for an uncommitted visual preview, not qualification.
 
+The desktop smoke also checks native Close, launcher reopen, Quit, unavailable
+host recovery, and TV Close behavior. It starts a StatusNotifier watcher after
+the no-tray cases to check both Linux Close paths and the tray's Show Couch and
+Quit Couch actions.
+
 ## Hosted execution and budget
 
 [Check](../.github/workflows/check.yml) remains manually dispatched on the existing

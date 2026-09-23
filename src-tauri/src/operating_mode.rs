@@ -448,6 +448,12 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
         Some("CmdOrCtrl+Shift+P"),
     )
     .map_err(error)?;
+    #[cfg(target_os = "linux")]
+    let quit = tauri::menu::MenuItem::with_id(app, "quit-remote-couch", "Quit Couch", true, Some("Ctrl+Q"))
+        .map_err(error)?;
+    #[cfg(target_os = "linux")]
+    let menu = tauri::menu::Menu::with_items(app, &[&device, &quit]).map_err(error)?;
+    #[cfg(not(target_os = "linux"))]
     let menu = tauri::menu::Menu::with_items(app, &[&device]).map_err(error)?;
     // The bundled window's 88 px recovery bar stays exposed even if target JavaScript hangs.
     let remote = WebviewWindowBuilder::new(app, "remote", WebviewUrl::External(url))
@@ -465,6 +471,10 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
                         let _ = main.set_focus();
                     }
                 });
+            }
+            #[cfg(target_os = "linux")]
+            if event.id().as_ref() == "quit-remote-couch" {
+                crate::desktop_lifecycle::request_quit(window.app_handle());
             }
         })
         .decorations(false)

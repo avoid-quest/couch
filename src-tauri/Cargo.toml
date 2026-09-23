@@ -39,6 +39,9 @@ libc = "0.2"
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+tauri = { version = "=2.11.5", features = ["tray-icon"] }
+dbus = "0.9"
+libloading = "=0.7.4"
 bluer = { version = "=0.17.4", features = ["bluetoothd"] }
 futures-util = "0.3"
 tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
