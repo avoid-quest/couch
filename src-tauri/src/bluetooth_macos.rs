@@ -15,6 +15,7 @@ use std::{
 };
 
 const LIMIT: Duration = Duration::from_secs(60);
+const DISCONNECT_RETRY_AFTER: Duration = Duration::from_secs(1);
 const SETTINGS: &str = "Check in System Settings on the playback host.";
 
 fn canonical_address(address: &NSString) -> String {
@@ -314,6 +315,56 @@ impl Bluetooth {
         Ok(())
     }
 
+    fn set_connection(
+        &self,
+        id: &str,
+        desired: bool,
+        end: Instant,
+        connected: impl Fn() -> bool,
+        open: impl Fn() -> i32,
+        close: impl Fn() -> i32,
+    ) -> Result<(), String> {
+        if !self.active(id) {
+            return Err("Bluetooth operation cancelled.".into());
+        }
+        let was_connected = connected();
+        if was_connected == desired {
+            return Ok(());
+        }
+        if !desired {
+            let mut retried = false;
+            loop {
+                if !self.active(id) {
+                    return Err("Bluetooth operation cancelled.".into());
+                }
+                let status = close();
+                if status != 0 && connected() {
+                    return Err(format!("Bluetooth disconnection failed ({status})."));
+                }
+                let check_end = if retried {
+                    end
+                } else {
+                    (Instant::now() + DISCONNECT_RETRY_AFTER).min(end)
+                };
+                match self.verify_connection(id, false, check_end, &connected) {
+                    Ok(()) => return Ok(()),
+                    Err(_) if !retried && self.active(id) && Instant::now() < end => retried = true,
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        let status = open();
+        let result = if status != 0 && !connected() {
+            Err(format!("Bluetooth connection failed ({status})."))
+        } else {
+            self.verify_connection(id, true, end, &connected)
+        };
+        if !was_connected && !self.active(id) && connected() {
+            let _ = close();
+        }
+        result
+    }
+
     fn connect(
         &self,
         id: &str,
@@ -321,27 +372,14 @@ impl Bluetooth {
         desired: bool,
         end: Instant,
     ) -> Result<(), String> {
-        if unsafe { device.isConnected() } == desired {
-            return Ok(());
-        }
-        let status = unsafe {
-            if desired {
-                device.openConnection()
-            } else {
-                device.closeConnection()
-            }
-        };
-        if status != 0 {
-            return Err(format!(
-                "Bluetooth {} failed ({status}).",
-                if desired {
-                    "connection"
-                } else {
-                    "disconnection"
-                }
-            ));
-        }
-        self.verify_connection(id, desired, end, || unsafe { device.isConnected() })
+        self.set_connection(
+            id,
+            desired,
+            end,
+            || unsafe { device.isConnected() },
+            || unsafe { device.openConnection() },
+            || unsafe { device.closeConnection() },
+        )
     }
 
     fn perform(&self, action: &Action, id: &str) -> Result<(), String> {
@@ -446,13 +484,7 @@ impl Bluetooth {
                     return Err("Pair this device first.".into());
                 }
                 let desired = action.op != "disconnect";
-                let was_connected = unsafe { device.isConnected() };
-                let result = self.connect(id, &device, desired, end);
-                if desired && !was_connected && !self.active(id) && unsafe { device.isConnected() }
-                {
-                    let _ = unsafe { device.closeConnection() };
-                }
-                result
+                self.connect(id, &device, desired, end)
             }
             _ => Err("Unknown Bluetooth action.".into()),
         }
@@ -712,5 +744,87 @@ mod tests {
                 || false
             )
             .is_err());
+    }
+
+    #[test]
+    fn cancelled_pair_connection_closes_the_new_link() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(false);
+        let closes = std::cell::Cell::new(0);
+        let result = bluetooth.set_connection(
+            "one",
+            true,
+            Instant::now() + Duration::from_millis(100),
+            || connected.get(),
+            || {
+                connected.set(true);
+                retire(
+                    &mut bluetooth.pending.lock().unwrap(),
+                    "cancelled",
+                    "Cancelled.",
+                );
+                0
+            },
+            || {
+                closes.set(closes.get() + 1);
+                connected.set(false);
+                0
+            },
+        );
+        assert_eq!(result.unwrap_err(), "Bluetooth operation cancelled.");
+        assert!(!connected.get());
+        assert_eq!(closes.get(), 1);
+    }
+
+    #[test]
+    fn connection_exists_error_succeeds_when_link_is_observed() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(false);
+        bluetooth
+            .set_connection(
+                "one",
+                true,
+                Instant::now() + Duration::from_millis(100),
+                || connected.get(),
+                || {
+                    connected.set(true);
+                    -1
+                },
+                || panic!("successful connection must stay open"),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn disconnect_retries_once_when_success_does_not_change_readback() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(true);
+        let closes = std::cell::Cell::new(0);
+        bluetooth
+            .set_connection(
+                "one",
+                false,
+                Instant::now() + Duration::from_secs(2),
+                || connected.get(),
+                || panic!("disconnect must not open a link"),
+                || {
+                    closes.set(closes.get() + 1);
+                    if closes.get() == 2 {
+                        connected.set(false);
+                    }
+                    0
+                },
+            )
+            .unwrap();
+        assert_eq!(closes.get(), 2);
     }
 }
