@@ -4,6 +4,7 @@ import { delimiter, join } from "node:path";
 import inputs from "../packaging/inputs.json";
 import { packageManager, version } from "../package.json";
 import { publicKey, releaseVersion } from "./hosted-policy";
+import { stageMacNative } from "./package-mac-native";
 
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
@@ -37,6 +38,8 @@ await mkdir(notices, { recursive: true });
 await mkdir(staging, { recursive: true });
 await cp("packaging/NOTICE.mac", join(notices, "NOTICE"));
 await download(inputs.notices.find(notice => notice.name === "bun-LICENSE.md")!, join(notices, "bun-LICENSE.md"));
+for (const name of ["yt-dlp-LICENSE", "yt-dlp-NOTICES.txt", "deno-LICENSE.md"]) await download(inputs.notices.find(notice => notice.name === name)!, join(notices, name));
+const native = await stageMacNative();
 
 type Package = { name: string; versions: string[]; paths: string[]; license: string };
 const groups = JSON.parse(run([process.execPath, "pm", "licenses", "--prod", "--json"])) as Record<string, Package[]>;
@@ -52,20 +55,20 @@ await download(inputs.cargoAboutMac, join(staging, "cargo-about-mac.tar.gz"));
 run(["tar", "-xzf", join(staging, "cargo-about-mac.tar.gz"), "-C", staging]);
 const about = (await Bun.file("packaging/about.toml").text()).replace('x86_64-unknown-linux-gnu', target);
 await Bun.write(join(staging, "about-mac.toml"), about);
-run([join(staging, "cargo-about-0.9.2-aarch64-apple-darwin/cargo-about"), "generate", "--locked", "--no-default-features", "--fail", "--manifest-path", "src-tauri/Cargo.toml", "--config", join(staging, "about-mac.toml"), "--output-file", join(notices, "native.txt"), "packaging/about.hbs"]);
+run([join(staging, "cargo-about-0.9.2-aarch64-apple-darwin/cargo-about"), "generate", "--locked", "--fail", "--manifest-path", "src-tauri/Cargo.toml", "--config", join(staging, "about-mac.toml"), "--output-file", join(notices, "native.txt"), "packaging/about.hbs"]);
 
 const locks = Object.fromEntries(await Promise.all(["bun.lock", "src-tauri/Cargo.lock", "rust-toolchain.toml"].map(async path => [path, sha256(new Uint8Array(await Bun.file(path).arrayBuffer()))])));
-await Bun.write(join(resources, "build-inputs.json"), JSON.stringify({ cargoAboutMac: inputs.cargoAboutMac, bun: run([process.execPath, "--revision"]), rust: run(["rustc", "--version"]), locks }, null, 2));
+await Bun.write(join(resources, "build-inputs.json"), JSON.stringify({ cargoAboutMac: inputs.cargoAboutMac, macTools: inputs.macTools, macNativeSha256: sha256(new Uint8Array(await Bun.file(join(resources, "mac-native.json")).arrayBuffer())), bun: run([process.execPath, "--revision"]), rust: run(["rustc", "--version"]), locks }, null, 2));
 await Bun.write(join(resources, "host.json"), JSON.stringify({ target, os: "macos", architecture: "arm64", minimumVersion: "26" }));
 await mkdir(".artifacts", { recursive: true });
 await Bun.write(".artifacts/tauri-mac.conf.json", JSON.stringify({
   version: releaseVersion(version),
   bundle: {
     targets: ["app", "dmg"],
-    resources: { "resources/build-inputs.json": "build-inputs.json", "resources/host.json": "host.json", "resources/payload.json": "payload.json", "resources/release.json": "release.json", "resources/notices/": "notices/" },
+    resources: { "resources/build-inputs.json": "build-inputs.json", "resources/host.json": "host.json", "resources/payload.json": "payload.json", "resources/release.json": "release.json", "resources/tools/": "tools/", "resources/tools.json": "tools.json", "resources/mac-native.json": "mac-native.json", "resources/notices/": "notices/" },
     createUpdaterArtifacts: true,
-    macOS: { minimumSystemVersion: "26.0", signingIdentity: "-", entitlements: "Entitlements.mac.plist" },
+    macOS: { minimumSystemVersion: "26.0", signingIdentity: "-", entitlements: "Entitlements.mac.plist", frameworks: native.frameworks },
   },
   plugins: { updater: { pubkey: key, endpoints: [endpoint] } },
 }));
-console.log("Prepared Apple Silicon Client-only resources and ad-hoc DMG configuration");
+console.log("Prepared Apple Silicon Full resources and ad-hoc DMG configuration");

@@ -48,11 +48,19 @@ for (const [target, format] of [
       helpers[name] = { sha256: new Bun.CryptoHasher("sha256").update(binary).digest("hex") };
     }
     await write(join(resources, "tools.json"), JSON.stringify(helpers));
+    if (format === "dmg") {
+      const library = executable(target);
+      await write(join(resources, "mac-libraries", "libmpv.2.dylib"), library);
+      await chmod(join(resources, "mac-libraries", "libmpv.2.dylib"), 0o755);
+      await write(join(resources, "tools", "mpv"), library);
+      await chmod(join(resources, "tools", "mpv"), 0o755);
+      await write(join(resources, "mac-native.json"), JSON.stringify({ mpv: { bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }, libraries: [{ name: "libmpv.2.dylib", bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }] }));
+    }
     for (const name of ["build-inputs.json", "build-packages.tsv"]) await write(join(resources, name), "{}\n");
     await write(join(resources, "notices", "NOTICE"), "Couch notices\n");
     const hostPackages = format === "deb" ? ["libmpv2"] : [];
     const payload = await createPayload(target, format, sidecar, resources, ["yt-dlp", "deno", "ffprobe"], hostPackages);
-    expect(payload.native).toEqual({ bundledLibraries: [], declaredHostPackages: hostPackages });
+    expect(payload.native).toEqual({ bundledLibraries: format === "dmg" ? ["Contents/Frameworks/libmpv.2.dylib"] : [], declaredHostPackages: hostPackages });
     if (format === "deb") expect(() => verifyBundledNativeLibraries(payload, payload.files.map(file => file.path).concat("usr/lib/Couch/libmpv.so.2"))).toThrow("Bundled native libraries differ");
     if (format === "nsis") expect(payload.files.map(file => file.path)).toEqual(expect.arrayContaining([
       "couch-server.exe", "tools/deno.exe", "tools.json", "build-inputs.json", "notices/NOTICE",
@@ -61,12 +69,18 @@ for (const [target, format] of [
     const installed = join(directory, "installed");
     const verify = (candidate = payload) => verifyPayload(installed, candidate, target, format, ["yt-dlp", "deno", "ffprobe"], hostPackages);
     for (const file of payload.files) {
-      const source = file.path === paths.sidecar ? sidecar : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
+      const source = file.path === paths.sidecar ? sidecar : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.startsWith("Contents/Frameworks/") ? join(resources, "mac-libraries", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
       const path = join(installed, file.path);
       await write(path, new Uint8Array(await Bun.file(source).arrayBuffer()));
       if (file.architecture) await chmod(path, 0o755);
     }
     await verify();
+    if (format === "dmg") {
+      await rm(join(installed, "Contents/Frameworks/libmpv.2.dylib"));
+      await expect(verify()).rejects.toThrow();
+      await write(join(installed, "Contents/Frameworks/libmpv.2.dylib"), executable(target));
+      await chmod(join(installed, "Contents/Frameworks/libmpv.2.dylib"), 0o755);
+    }
     if (format === "appimage") {
       const patched = executable(target);
       patched[90] = 1;
