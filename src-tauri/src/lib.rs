@@ -598,7 +598,7 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         );
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
     let builder = builder.plugin(tauri_plugin_video::init());
 
     builder

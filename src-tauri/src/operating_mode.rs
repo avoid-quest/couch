@@ -12,7 +12,8 @@ const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
 const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 pub(crate) fn local_playback_unavailable() -> bool {
-    cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true)
+    !cfg!(feature = "desktop-playback")
+        || (cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true))
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -780,6 +781,17 @@ mod tests {
             remembered.address.as_deref(),
             Some("http://192.168.1.10:4100")
         );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(not(feature = "desktop-playback"))]
+    #[test]
+    fn client_only_ignores_remembered_local_mode_without_erasing_it() {
+        let path = std::env::temp_dir().join(format!("couch-mode-{}.json", uuid::Uuid::new_v4()));
+        let saved = r#"{"mode":"local","localSetupComplete":true}"#;
+        std::fs::write(&path, saved).unwrap();
+        assert!(Modes::load(path.clone()).unwrap().current().mode.is_none());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
         std::fs::remove_file(path).unwrap();
     }
 }

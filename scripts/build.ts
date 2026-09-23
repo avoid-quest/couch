@@ -1,5 +1,6 @@
-import { mkdir } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
 import { version } from "../package.json";
 import tauri from "../src-tauri/tauri.conf.json";
 import { releaseVersion } from "./hosted-policy";
@@ -55,6 +56,19 @@ const server = await Bun.build({
   define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo), "import.meta.env.DEV": "false" },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
+if (packaged && format === "dmg") {
+  // Tauri signs the copied sidecar in the app. Sign these same bytes under its
+  // installed basename first so payload.json hashes the final ad-hoc signature.
+  const directory = await mkdtemp(join(tmpdir(), "couch-mac-sidecar-"));
+  try {
+    const source = `src-tauri/binaries/couch-server-${target}`;
+    const installed = join(directory, "couch-server");
+    await cp(source, installed);
+    const sign = Bun.spawnSync(["codesign", "--force", "--sign", "-", "--options", "runtime", "--entitlements", "src-tauri/Entitlements.mac.plist", installed], { stderr: "inherit" });
+    if (sign.exitCode !== 0) throw new Error("Cannot ad-hoc sign the Mac coordinator");
+    await cp(installed, source);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
 if (packaged) {
   const hostFile = Bun.file("src-tauri/resources/host.json");
   const host = await hostFile.exists() ? await hostFile.json() : { target, os: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux", architecture: process.arch };

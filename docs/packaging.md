@@ -2,6 +2,8 @@
 
 The shared coordinator, helper and resource inventory for desktop targets is
 described in [desktop payload inventory](desktop-payload.md).
+The [Mac Client-only package](packaging-macos.md) has its own target build and
+artifact verifier.
 
 One signed native Debian 13 amd64 package ships Couch and its application
 dependencies. Hosted Actions builds it in the pinned Debian 13 container
