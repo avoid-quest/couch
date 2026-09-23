@@ -1418,10 +1418,14 @@ test.skipIf(process.platform !== "darwin")("Mac sound uses the selected host, pa
   expect(await owner.command({ type: "volume", volume: 38 })).toMatchObject({ ok: true });
   expect(await owner.command({ type: "mute", muted: true })).toMatchObject({ ok: true });
   expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 38, muted: true, platform: "mac" });
+  first.hub.session.observe({ ...idle, volume: 7 });
+  expect(first.commands).toContainEqual({ type: "volume", volume: 100 });
+  expect(first.hub.session.state.player.volume).toBe(38);
   expect((await controllerApi(first.hub, ownerToken, "/api/sound/output", "POST", { output: "absent" })).status).toBe(409);
   volume = 52; defaultOutput = "speakers";
   await Bun.sleep(1_100);
   expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 52, muted: true });
+  expect(first.hub.session.state.player.volume).toBe(52);
   expect(defaultOutput).toBe("headphones");
   headphonesAvailable = false;
   await Bun.sleep(1_100);
