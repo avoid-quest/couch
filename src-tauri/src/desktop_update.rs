@@ -5,7 +5,7 @@ use crate::appimage_update::{
     verify, Action, Candidate, Channel, Enrollment, Request, MAX_ARCHIVE,
 };
 use serde::Deserialize;
-#[cfg(any(target_os = "macos", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 use std::io::Read;
 use std::{
     fs,
@@ -89,6 +89,14 @@ pub fn running(app: &tauri::AppHandle) -> bool {
     }
 }
 
+pub fn directory(data: &Path) -> PathBuf {
+    // An existing Linux desktop AppImage may relaunch into a legacy trial.
+    #[cfg(target_os = "linux")]
+    return data.join("updates/appimage");
+    #[cfg(not(target_os = "linux"))]
+    data.join("updates/desktop")
+}
+
 fn endpoint(current: &str, channel: Channel) -> Result<reqwest::Url, String> {
     semver::Version::parse(current).map_err(error)?;
     let (platform, _) = target().ok_or("This desktop target has no updater.")?;
@@ -144,6 +152,21 @@ fn validate(manifest: &Manifest, version: &str, current_data_format: u64) -> Res
         return Err("The signed update is for another platform, version or data format. Check for a compatible release.".into());
     }
     Ok(())
+}
+
+fn trial_failure(
+    transaction: &serde_json::Value,
+    current: &serde_json::Value,
+    error: Option<&str>,
+) -> Option<String> {
+    let wrong_identity = transaction["version"] != current["version"]
+        || transaction["revision"] != current["revision"]
+        || transaction["dataFormat"]
+            .as_u64()
+            .is_some_and(|format| current["dataFormat"] != format);
+    error.map(str::to_owned).or_else(|| {
+        wrong_identity.then(|| "The running app does not match the installed update. Retry or reinstall a verified compatible release without removing Couch data.".into())
+    })
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -230,46 +253,58 @@ fn windows_manifest(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(target_os = "linux")]
-async fn linux_manifest(path: &Path, directory: &Path) -> Result<Vec<u8>, String> {
-    use std::os::unix::fs::PermissionsExt;
-    let inspection = directory.join(format!("inspect-{}", uuid::Uuid::new_v4()));
-    crate::prepare_data_dir(&inspection).map_err(error)?;
-    let result = async {
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(error)?;
-        let status = tokio::time::timeout(
-            Duration::from_secs(30),
-            tokio::process::Command::new(path)
-                .current_dir(&inspection)
-                .args(["--appimage-extract", "usr/lib/Couch/release.json"])
-                .kill_on_drop(true)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status(),
-        )
-        .await
-        .map_err(|_| "The signed AppImage inspection timed out.")?
-        .map_err(error)?;
-        if !status.success() {
-            return Err("Cannot extract the signed AppImage release manifest.".into());
-        }
-        let manifest =
-            fs::read(inspection.join("squashfs-root/usr/lib/Couch/release.json")).map_err(error)?;
-        if manifest.len() > 64 * 1024 {
-            return Err("The signed release manifest is too large.".into());
-        }
-        Ok(manifest)
+fn appimage_offset(bytes: &[u8]) -> Result<usize, String> {
+    let invalid = || "The signed update is not an x64 type 2 AppImage.".to_string();
+    let header = bytes.get(..64).ok_or_else(invalid)?;
+    if &header[..4] != b"\x7fELF"
+        || header[4] != 2
+        || header[5] != 1
+        || &header[8..11] != b"AI\x02"
+        || &header[18..20] != b"\x3e\0"
+    {
+        return Err(invalid());
     }
-    .await;
-    let _ = fs::remove_dir_all(inspection);
-    result
+    let offset = u64::from_le_bytes(header[40..48].try_into().unwrap());
+    let width = u16::from_le_bytes(header[58..60].try_into().unwrap()) as u64;
+    let count = u16::from_le_bytes(header[60..62].try_into().unwrap()) as u64;
+    if width < 64 || count == 0 {
+        return Err(invalid());
+    }
+    let table_size = width.checked_mul(count).ok_or_else(invalid)?;
+    let table_end = offset.checked_add(table_size).ok_or_else(invalid)?;
+    let last = table_end.checked_sub(width).ok_or_else(invalid)?;
+    let section_end = last.checked_add(64).ok_or_else(invalid)?;
+    let section = bytes
+        .get(usize::try_from(last).map_err(error)?..usize::try_from(section_end).map_err(error)?)
+        .ok_or_else(invalid)?;
+    let section_start = u64::from_le_bytes(section[24..32].try_into().unwrap());
+    let section_size = u64::from_le_bytes(section[32..40].try_into().unwrap());
+    let image_offset = table_end.max(section_start.checked_add(section_size).ok_or_else(invalid)?);
+    let image_offset = usize::try_from(image_offset).map_err(error)?;
+    if bytes.get(image_offset..image_offset.saturating_add(4)) != Some(b"hsqs") {
+        return Err(invalid());
+    }
+    Ok(image_offset)
 }
 
-async fn inspect(
-    bytes: &[u8],
-    _path: &Path,
-    _directory: &Path,
-    version: &str,
-) -> Result<Manifest, String> {
+#[cfg(target_os = "linux")]
+fn linux_manifest(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let offset = appimage_offset(bytes)?;
+    let archive = squashfs_reader::FileSystem::from_read(std::io::Cursor::new(&bytes[offset..]))
+        .map_err(error)?;
+    let mut file = archive.open("usr/lib/Couch/release.json").map_err(error)?;
+    let mut manifest = Vec::new();
+    file.by_ref()
+        .take(64 * 1024 + 1)
+        .read_to_end(&mut manifest)
+        .map_err(error)?;
+    if manifest.len() > 64 * 1024 {
+        return Err("The signed release manifest is too large.".into());
+    }
+    Ok(manifest)
+}
+
+fn inspect(bytes: &[u8], version: &str) -> Result<Manifest, String> {
     if bytes.is_empty() || bytes.len() as u64 > MAX_ARCHIVE {
         return Err("The staged update has an invalid size.".into());
     }
@@ -278,7 +313,7 @@ async fn inspect(
     #[cfg(target_os = "windows")]
     let manifest = windows_manifest(bytes)?;
     #[cfg(target_os = "linux")]
-    let manifest = linux_manifest(_path, _directory).await?;
+    let manifest = linux_manifest(bytes)?;
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     let manifest: Vec<u8> = return Err("This desktop target has no updater.".into());
     let manifest: Manifest = serde_json::from_slice(&manifest).map_err(error)?;
@@ -303,19 +338,14 @@ fn read_staged(path: &Path) -> Result<Option<Vec<u8>>, String> {
     }
 }
 
-async fn staged(
-    path: &Path,
-    directory: &Path,
-    update: &Update,
-    trust: &Enrollment,
-) -> Result<Option<(Manifest, u64)>, String> {
+fn staged(path: &Path, update: &Update, trust: &Enrollment) -> Result<Option<(Manifest, u64)>, String> {
     let Some(bytes) = read_staged(path)? else {
         return Ok(None);
     };
     if verify(&bytes, &update.signature, &trust.pubkey).is_err() {
         return Ok(None);
     }
-    let manifest = inspect(&bytes, path, directory, &update.version).await?;
+    let manifest = inspect(&bytes, &update.version)?;
     Ok(Some((manifest, bytes.len() as u64)))
 }
 
@@ -332,7 +362,7 @@ pub fn status(
             let data = std::env::var_os("COUCH_DATA_DIR")
                 .map(PathBuf::from)
                 .unwrap_or(fallback);
-            read_transaction(&data.join("updates/desktop"), saved_id)
+            read_transaction(&directory(&data), saved_id)
         });
     match result {
         Ok(transaction) => {
@@ -365,15 +395,21 @@ pub async fn run(
     directory: PathBuf,
     mut requests: tokio::sync::mpsc::Receiver<Request>,
 ) {
-    if let Ok(mut transaction) = read_transaction(&directory, None) {
+    let recovery = read_transaction(&directory, None).and_then(|mut transaction| {
         if !transaction.is_null()
             && !matches!(
                 transaction["phase"].as_str(),
                 Some("succeeded" | "failed" | "operator-required" | "trial")
             )
         {
-            let _ = journal(&directory, &mut transaction, "operator-required", Some("The update stopped during replacement. Retry or reinstall a verified compatible release without removing Couch data.".into()));
+            journal(&directory, &mut transaction, "operator-required", Some("The update stopped during replacement. Retry or reinstall a verified compatible release without removing Couch data.".into()))?;
         }
+        Ok(())
+    });
+    if let Err(message) = recovery {
+        log::error!("Cannot recover the desktop update transaction: {message}");
+        app.exit(1);
+        return;
     }
     let mut selected: Option<(Channel, Update, Candidate)> = None;
     while let Some(request) = requests.recv().await {
@@ -399,8 +435,8 @@ pub async fn run(
                 let mut transaction = read_transaction(&directory, None)?;
                 if transaction["phase"] == "trial" {
                     let current = build();
-                    let failure = error.clone().or_else(|| (transaction["version"] != current["version"] || transaction["revision"] != current["revision"] || transaction["dataFormat"] != current["dataFormat"]).then(|| "The running app does not match the installed update. Retry or reinstall a verified compatible release without removing Couch data.".into()));
-                    journal(
+                    let failure = trial_failure(&transaction, &current, error.as_deref());
+                    if let Err(storage) = journal(
                         &directory,
                         &mut transaction,
                         if failure.is_none() {
@@ -409,7 +445,10 @@ pub async fn run(
                             "operator-required"
                         },
                         failure,
-                    )?;
+                    ) {
+                        app.exit(1);
+                        return Err(storage);
+                    }
                 }
                 return Ok(serde_json::json!({"ok":true}));
             }
@@ -445,7 +484,7 @@ pub async fn run(
                     selected = None;
                     match check(&app, &trust, channel).await? {
                         Some((update, mut summary)) => {
-                            let staged = staged(&path, &directory, &update, &trust).await?;
+                            let staged = staged(&path, &update, &trust)?;
                             if let Some((manifest, bytes)) = staged.as_ref() {
                                 summary.revision = manifest.revision.clone();
                                 summary.bytes = *bytes;
@@ -470,29 +509,33 @@ pub async fn run(
                         .await?
                         .filter(|(_, c)| c.id == summary.id)
                         .ok_or("The candidate changed. Use Check now before downloading.")?;
-                    if staged(&path, &directory, &update, &trust).await?.is_none() {
+                    if staged(&path, &update, &trust)?.is_none() {
                         update.timeout = Some(Duration::from_secs(30 * 60));
                         let (limit, mut exceeded) = tokio::sync::watch::channel(false);
                         let mut received = 0u64;
+                        let mut reported = std::time::Instant::now();
                         let download = update.download(|size, total| {
                             received += size as u64;
                             if received > MAX_ARCHIVE || total.is_some_and(|size| size > MAX_ARCHIVE) { let _ = limit.send(true); }
-                            report(serde_json::json!({"progress":{"received":received,"total":total.unwrap_or(0)}}));
+                            if reported.elapsed() >= Duration::from_millis(250) {
+                                report(serde_json::json!({"progress":{"received":received,"total":total.unwrap_or(0)}}));
+                                reported = std::time::Instant::now();
+                            }
                         }, || {});
                         let bytes = tokio::select! {
                             result = download => result.map_err(error)?,
                             _ = exceeded.changed() => return Err("The download exceeds the supported desktop update size.".into()),
                         };
+                        if bytes.is_empty() || bytes.len() as u64 > MAX_ARCHIVE {
+                            return Err("The desktop download has an invalid size.".into());
+                        }
                         save(&path, &bytes)?;
-                        if let Err(message) =
-                            inspect(&bytes, &path, &directory, &current.version).await
-                        {
+                        if let Err(message) = inspect(&bytes, &current.version) {
                             let _ = fs::remove_file(&path);
                             return Err(message);
                         }
                     }
-                    let (manifest, size) = staged(&path, &directory, &update, &trust)
-                        .await?
+                    let (manifest, size) = staged(&path, &update, &trust)?
                         .ok_or("The staged download failed verification. Download it again.")?;
                     current.revision = manifest.revision;
                     current.bytes = size;
@@ -526,7 +569,7 @@ pub async fn run(
                     verify(&bytes, &update.signature, &trust.pubkey).map_err(|_| {
                         "The staged update failed verification. Download it again.".to_string()
                     })?;
-                    let manifest = inspect(&bytes, &path, &directory, &summary.version).await?;
+                    let manifest = inspect(&bytes, &summary.version)?;
                     if summary.revision != manifest.revision || summary.bytes != bytes.len() as u64
                     {
                         return Err("The staged update changed after selection. Check and download it again.".into());
@@ -566,7 +609,10 @@ pub async fn run(
                         } else {
                             "failed"
                         };
-                        let _ = journal(&directory, &mut transaction, phase, Some(format!("{message} Retry or reinstall a verified compatible release without removing Couch data.")));
+                        if let Err(storage) = journal(&directory, &mut transaction, phase, Some(format!("{message} Retry or reinstall a verified compatible release without removing Couch data."))) {
+                            app.exit(1);
+                            return Err(format!("Cannot save the update failure: {storage}"));
+                        }
                     }
                     if disrupted {
                         #[cfg(not(target_os = "windows"))]
@@ -585,8 +631,11 @@ pub async fn run(
                 let message =
                     "The desktop update timed out. Check its saved transaction before retrying.";
                 if matches!(request.action, Action::Install { .. }) {
-                    if let Ok(mut transaction) = read_transaction(&directory, None) {
-                        let _ = journal(
+                    let saved = read_transaction(&directory, None).and_then(|mut transaction| {
+                        if transaction.is_null() {
+                            return Ok(());
+                        }
+                        journal(
                             &directory,
                             &mut transaction,
                             if disrupted {
@@ -595,7 +644,12 @@ pub async fn run(
                                 "failed"
                             },
                             Some(message.into()),
-                        );
+                        )
+                    });
+                    if let Err(storage) = saved {
+                        log::error!("Cannot save the timed-out desktop update: {storage}");
+                        app.exit(1);
+                        continue;
                     }
                 }
                 if disrupted {
@@ -613,6 +667,43 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_linux_trial_keeps_its_directory_and_completes_without_a_data_format_field() {
+        #[cfg(target_os = "linux")]
+        assert_eq!(directory(Path::new("/tmp/couch")), Path::new("/tmp/couch/updates/appimage"));
+        let current = serde_json::json!({"version":"0.2.0","revision":"a","dataFormat":2});
+        let mut trial = serde_json::json!({"phase":"trial","version":"0.2.0","revision":"a"});
+        assert!(trial_failure(&trial, &current, None).is_none());
+        trial["dataFormat"] = 3.into();
+        assert!(trial_failure(&trial, &current, None).is_some());
+        assert!(trial_failure(&trial, &current, Some("The database check failed.")).is_some());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn appimage_manifest_is_read_from_the_squashfs_without_running_the_candidate() {
+        let squashfs = include_bytes!("../tests/fixtures/update/release.squashfs");
+        let mut appimage = vec![0; 128];
+        appimage[..4].copy_from_slice(b"\x7fELF");
+        appimage[4] = 2;
+        appimage[5] = 1;
+        appimage[8..11].copy_from_slice(b"AI\x02");
+        appimage[18..20].copy_from_slice(b"\x3e\0");
+        appimage[40..48].copy_from_slice(&64u64.to_le_bytes());
+        appimage[58..60].copy_from_slice(&64u16.to_le_bytes());
+        appimage[60..62].copy_from_slice(&1u16.to_le_bytes());
+        appimage[64 + 24..64 + 32].copy_from_slice(&64u64.to_le_bytes());
+        appimage[64 + 32..64 + 40].copy_from_slice(&64u64.to_le_bytes());
+        appimage.extend_from_slice(squashfs);
+        let manifest: Manifest = serde_json::from_slice(&linux_manifest(&appimage).unwrap()).unwrap();
+        assert!(validate(&manifest, "0.2.0", 1).is_ok());
+        appimage[18] = 0xb7;
+        assert!(linux_manifest(&appimage).is_err());
+        appimage[18] = 0x3e;
+        appimage[40..48].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(linux_manifest(&appimage).is_err());
+    }
+
     #[test]
     fn manifest_rejects_wrong_target_stale_version_and_data() {
         let Some((_, expected)) = target() else {

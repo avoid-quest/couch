@@ -318,9 +318,11 @@ pub(crate) fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
         file.write_all(bytes).map_err(error)?;
         file.sync_all().map_err(error)?;
         fs::rename(&temporary, path).map_err(error)?;
+        #[cfg(unix)]
         fs::File::open(directory)
             .and_then(|file| file.sync_all())
-            .map_err(error)
+            .map_err(error)?;
+        Ok(())
     })();
     if result.is_err() {
         let _ = fs::remove_file(temporary);

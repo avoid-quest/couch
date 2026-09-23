@@ -23,6 +23,9 @@ The signed manifest must match the feed version and the current data format must
 be readable by the new release.
 
 Couch rechecks staged bytes and that manifest before it stops data writers.
+For AppImages, it reads the embedded SquashFS without executing the candidate.
+Linux desktop updates continue using `updates/appimage` so a trial written by the
+previous updater is verified and completed on the first relaunch into this code.
 Tauri verifies the signature during download and performs replacement. On
 Windows, Tauri exits when it starts NSIS, so Couch writes the trial transaction
 first. After relaunch, the bundled UI and Bun coordinator must acknowledge the

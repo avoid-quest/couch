@@ -613,7 +613,7 @@ pub fn run() {
             if desktop_update::running(app.handle()) {
                 tauri::async_runtime::spawn(desktop_update::run(
                     app.handle().clone(),
-                    data_dir.join("updates/desktop"),
+                    desktop_update::directory(&data_dir),
                     update_receiver,
                 ));
             } else {
