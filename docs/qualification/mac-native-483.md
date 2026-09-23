@@ -43,6 +43,15 @@ The private native diagnostics now expose mpv's `current-ao`, `current-vo` and
 do not establish physical audibility; output routing still
 require the installed Full check.
 
+After the EOF/replay review fix, the rebuilt development app showed distinct
+native frames from a 120-second, 1280×720 H.264/AAC test clip at 0:33 and 1:31.
+The frame timestamp and playback position advanced. A burst of 24 pause, seek and
+resume commands through the paired controller returned 24 successful replies;
+the player remained `playing` without an error at the final seek position and
+continued showing new frames. The check ran at 0% volume; Stop returned the
+app to idle and the previous 99% volume was restored. A focused mpv fixture
+test covers EOF followed by seek and play in the same native session.
+
 ### Fresh development-app replay at code commit `2c9e3372`
 
 On 23 September, the rebuilt isolated `Couch Native 483` development app played
@@ -72,7 +81,7 @@ audibility and bundled Mac dependency checks remain unverified.
 
 - `bun run check`: passed, 1,247 tests passed and four optional network tests
   skipped (1,244 core plus three real-clock tests).
-- `cargo test -p tauri-plugin-video --lib --locked`: three tests passed.
+- `cargo test -p tauri-plugin-video --lib --locked`: six tests passed.
 - A local Cargo build with the sidecar excluded and an isolated bundle ID passed.
 
 Source-specific media behavior, Mac dependency bundling and installed sound

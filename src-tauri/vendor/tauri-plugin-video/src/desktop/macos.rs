@@ -129,7 +129,6 @@ struct Player<R: Runtime> {
     view: usize,
     key: String,
     loaded: bool,
-    ended: bool,
     error: Option<String>,
     replay_gain: crate::mpv_replaygain::ReplayGain,
     pending_subtitles: Vec<NativeSubtitle>,
@@ -169,6 +168,19 @@ fn on_main<R: Runtime, T: Send + 'static>(
 
 fn mpv_error(error: libmpv2::Error) -> Error {
     Error::Pipeline(error.to_string())
+}
+
+fn playback_status(mpv: &Mpv, loaded: bool, has_error: bool) -> (bool, bool, bool) {
+    let eof = loaded && mpv.get_property::<bool>("eof-reached").unwrap_or(false);
+    let buffering = mpv
+        .get_property::<bool>("paused-for-cache")
+        .unwrap_or(false);
+    let playing = loaded
+        && !mpv.get_property::<bool>("pause").unwrap_or(true)
+        && !buffering
+        && !eof
+        && !has_error;
+    (eof, buffering, playing)
 }
 
 fn validate_open(request: &NativeOpenRequest) -> Result<()> {
@@ -241,7 +253,6 @@ impl<R: Runtime> Worker<R> {
             view,
             key: request.session_key.clone(),
             loaded: false,
-            ended: false,
             error: None,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
             pending_subtitles: request.subtitles.clone(),
@@ -462,7 +473,6 @@ impl<R: Runtime> Player<R> {
                     unsafe { self.mpv.hook_continue(id) }.map_err(mpv_error)?;
                     selection?;
                 }
-                Event::EndFile(mpv_end_file_reason::Eof) => self.ended = true,
                 Event::EndFile(mpv_end_file_reason::Error) => {
                     self.error = Some("mpv could not play this source".into())
                 }
@@ -502,10 +512,7 @@ impl<R: Runtime> Player<R> {
             });
         }
         let position = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
-        let paused = mpv.get_property::<bool>("pause").unwrap_or(true);
-        let buffering = mpv
-            .get_property::<bool>("paused-for-cache")
-            .unwrap_or(false);
+        let (ended, buffering, playing) = playback_status(mpv, self.loaded, self.error.is_some());
         let chapters = (0..mpv.get_property::<i64>("chapter-list/count").unwrap_or(0))
             .filter_map(|index| {
                 let position = mpv
@@ -538,7 +545,7 @@ impl<R: Runtime> Player<R> {
                 error: self.error.clone(),
                 volume: mpv.get_property::<f64>("volume").unwrap_or(80.0) / 100.0,
                 seekable: mpv.get_property::<bool>("seekable").unwrap_or(false),
-                ended: self.ended || mpv.get_property::<bool>("eof-reached").unwrap_or(false),
+                ended,
                 loading: (!self.loaded || buffering) && self.error.is_none(),
                 speed: mpv.get_property::<f64>("speed").unwrap_or(1.0),
                 audio_delay: mpv.get_property::<f64>("audio-delay").unwrap_or(0.0),
@@ -551,7 +558,7 @@ impl<R: Runtime> Player<R> {
             duration_seconds: mpv.get_property::<f64>("duration").unwrap_or(0.0),
             current_time_seconds: position,
             buffered_seconds: 0.0,
-            playing: self.loaded && !paused && !buffering && !self.ended && self.error.is_none(),
+            playing,
             video_width: mpv
                 .get_property::<i64>("video-params/w")
                 .unwrap_or(0)
@@ -576,5 +583,62 @@ impl<R: Runtime> Player<R> {
             encoded_bytes_buffered: 0,
             average_frame_processing_us: 0.0,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{path::Path, time::Instant};
+
+    #[test]
+    fn replay_after_eof_reports_playing_again() {
+        let mut mpv = Mpv::with_initializer(|init| {
+            init.set_option("vo", "null")?;
+            init.set_option("ao", "null")?;
+            init.set_option("keep-open", "yes")?;
+            init.set_option("speed", 0.25_f64)?;
+            Ok(())
+        })
+        .unwrap();
+        let media =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/fixtures/cue/short.wav");
+        mpv.command("loadfile", &[media.to_str().unwrap(), "replace"])
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut loaded = false;
+        while !mpv.get_property::<bool>("eof-reached").unwrap_or(false) {
+            assert!(Instant::now() < deadline, "fixture did not reach EOF");
+            match mpv.wait_event(0.05).transpose().unwrap() {
+                Some(Event::FileLoaded) => loaded = true,
+                Some(Event::EndFile(mpv_end_file_reason::Error)) => {
+                    panic!("fixture could not load")
+                }
+                _ => {}
+            }
+        }
+        assert!(loaded);
+        assert!(playback_status(&mpv, loaded, false).0);
+
+        mpv.command("seek", &["0", "absolute+exact"]).unwrap();
+        mpv.set_property("pause", false).unwrap();
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "fixture did not restart after seek"
+            );
+            let _ = mpv.wait_event(0.01);
+            if !mpv.get_property::<bool>("eof-reached").unwrap_or(true)
+                && mpv.get_property::<f64>("time-pos").unwrap_or(0.0) > 0.0
+            {
+                let (reported_ended, _, playing) = playback_status(&mpv, loaded, false);
+                assert!(
+                    !reported_ended,
+                    "replayed media must no longer report ended"
+                );
+                assert!(playing, "replayed media must report playing");
+                break;
+            }
+        }
     }
 }
