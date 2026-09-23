@@ -9,6 +9,11 @@ pub(crate) fn show(app: &tauri::AppHandle) {
         return;
     };
     let _ = main.unminimize();
+    if !crate::tv_presentation() {
+        if let Err(error) = recover_window(&main) {
+            log::warn!("Cannot recover Couch window: {error}");
+        }
+    }
     let _ = main.show();
     let _ = main.set_focus();
     if let Some(remote) = app.get_webview_window("remote") {
@@ -33,12 +38,69 @@ pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
     if let Some(main) = app.get_webview_window("main") {
         #[cfg(target_os = "macos")]
         let result = main.hide();
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        let result = if linux_tray_usable(app) { main.hide() } else { main.minimize() };
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let result = main.minimize();
         if let Err(error) = result {
             log::warn!("Cannot close Couch window: {error}");
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_tray_available() -> bool {
+    use dbus::blocking::Connection;
+    use std::time::Duration;
+
+    let Ok(connection) = Connection::new_session() else { return false };
+    // A watcher can register icons without any tray host to display them.
+    let host = connection
+        .with_proxy("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher", Duration::from_millis(200))
+        .method_call::<(dbus::arg::Variant<bool>,), _, _, _>(
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            ("org.kde.StatusNotifierWatcher", "IsStatusNotifierHostRegistered"),
+        )
+        .is_ok_and(|(dbus::arg::Variant(registered),)| registered);
+    // Tauri's Linux tray loads AppIndicator at runtime and panics if neither library exists.
+    host && ["libayatana-appindicator3.so.1", "libappindicator3.so.1", "libayatana-appindicator3.so", "libappindicator3.so"]
+        .iter()
+        .any(|name| unsafe { libloading::Library::new(name) }.is_ok())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_tray_usable(app: &tauri::AppHandle) -> bool {
+    app.tray_by_id("couch-desktop").is_some() && linux_tray_available()
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn install_linux_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, Submenu};
+    use tauri::tray::TrayIconBuilder;
+
+    let show_item = MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit-couch", "Quit Couch", true, Some("Ctrl+Q"))?;
+    let application = Submenu::with_items(app, "Couch", true, &[&show_item, &quit])?;
+    app.set_menu(Menu::with_items(app, &[&application])?)?;
+    app.on_menu_event(|app, event| match event.id().as_ref() {
+        "show-couch" => show(app),
+        "quit-couch" => request_quit(app),
+        _ => {}
+    });
+    if linux_tray_available() {
+        let tray_show = MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?;
+        let tray_quit = MenuItem::with_id(app, "quit-couch", "Quit Couch", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&tray_show, &tray_quit])?;
+        let mut tray = TrayIconBuilder::with_id("couch-desktop").menu(&menu);
+        if let Some(icon) = app.default_window_icon() {
+            tray = tray.icon(icon.clone());
+        }
+        if let Err(error) = tray.build(app) {
+            log::warn!("Linux tray unavailable; Close will minimize Couch: {error}");
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn request_quit(app: &tauri::AppHandle) {

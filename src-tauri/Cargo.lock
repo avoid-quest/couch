@@ -616,6 +616,7 @@ dependencies = [
  "dbus-tokio",
  "futures-util",
  "libc",
+ "libloading",
  "libmpv2",
  "libmpv2-sys",
  "log",

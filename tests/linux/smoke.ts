@@ -63,6 +63,10 @@ try {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   if (process.env.COUCH_TEST_DESKTOP_SMOKE === "1") await request(`/session/${session}/window/rect`, { x: 0, y: 0, width: 1280, height: 800 });
   await until("compiled Tauri app starts its compiled sidecar", sidecar, 30_000);
+  if (process.env.COUCH_TEST_DESKTOP_SMOKE === "1") {
+    const placed = Bun.spawn(["xdotool", "search", "--onlyvisible", "--name", "^Couch$", "windowmove", "100", "100"]);
+    assert.equal(await placed.exited, 0, "desktop smoke places the native window inside Xvfb before pixel sampling");
+  }
   await tv.button("Settings");
   await tv.settingsSection("connection");
   await tv.button("Pair a remote", 'section[aria-label="Settings"]');

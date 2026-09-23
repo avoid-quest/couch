@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl git pkg-config unzip acl jq minisign \
     libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
     libmpv-dev libgl1-mesa-dri libgl-dev \
-    ffmpeg xvfb xauth dbus-x11 openbox xdotool webkit2gtk-driver fonts-dejavu-core \
+    ffmpeg xvfb xauth dbus-x11 openbox xdotool webkit2gtk-driver fonts-dejavu-core haskell-gtk-sni-tray-utils python3-dbus python3-gi \
     && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -fsSL https://bun.sh/install -o /tmp/install-bun.sh \
     && bash /tmp/install-bun.sh bun-v1.4.2 \
