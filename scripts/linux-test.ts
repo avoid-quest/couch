@@ -13,6 +13,7 @@ const builtRemote = process.argv.includes("--built-remote");
 const desktopSmoke = process.argv.includes("--desktop-smoke");
 const connection = process.argv.includes("--connection");
 const diagnostics = process.argv.includes("--diagnostics");
+const mpvThreading = process.argv.includes("--mpv-threading");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
 if (providersConfig && providerCatalogs) throw new Error("Use either --providers or --provider-catalogs");
 if (iptvPublicSample && (providersConfig || providerCatalogs)) throw new Error("Use --iptv-public-sample without provider qualification options.");
@@ -21,6 +22,7 @@ if (retiredExternalOptions.length) throw new Error(`${retiredExternalOptions.joi
 if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
 if (desktopSmoke && (builtRemote || connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --desktop-smoke alone for the Linux desktop playback journey.");
 if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
+if (mpvThreading && (builtRemote || desktopSmoke || connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --mpv-threading alone for the focused native journey.");
 
 async function run(command: string[]) {
   const child = Bun.spawn(command, { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
@@ -58,6 +60,7 @@ try {
     ...(desktopSmoke ? ["--env", "COUCH_TEST_DESKTOP_SMOKE=1"] : []),
     ...(connection ? ["--env", "COUCH_TEST_CONNECTION=1"] : []),
     ...(diagnostics ? ["--env", "COUCH_TEST_DIAGNOSTICS=1"] : []),
+    ...(mpvThreading ? ["--env", "COUCH_TEST_MPV_THREADING=1"] : []),
     ...(providersConfig ? ["--mount", `type=bind,source=${resolve(providersConfig)},target=/providers.json,readonly`, "--env", "COUCH_TEST_PROVIDERS=/providers.json"] : []),
     ...(providerCatalogs ? ["--env", "COUCH_TEST_PROVIDER_CATALOGS=1"] : []),
     ...(iptvPublicSample ? ["--env", "COUCH_TEST_IPTV_PUBLIC_SAMPLE=1"] : []),

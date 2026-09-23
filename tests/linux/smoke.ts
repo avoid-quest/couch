@@ -2,6 +2,7 @@ import { seedConfiguredFixture } from "./configured-fixture";
 seedConfiguredFixture();
 import { strict as assert } from "node:assert";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
+import type { Diagnostics } from "../../src/shared/diagnostics";
 import { remoteSocketUrl } from "./build";
 import { assertNativeVideoPixels } from "./pixels";
 import { UiDriver, keys, type Wait } from "./ui";
@@ -10,6 +11,7 @@ import { UiDriver, keys, type Wait } from "./ui";
 // behaviour belongs to the focused suites listed in native-coverage.md.
 const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444", artifacts = "/artifacts";
 const revision = process.env.COUCH_SOURCE_REVISION!;
+const mpvThreading = process.env.COUCH_TEST_MPV_THREADING === "1";
 const checks: string[] = [];
 const until: Wait = async (description, predicate, timeout = 15_000) => {
   const deadline = Date.now() + timeout;
@@ -33,6 +35,7 @@ let session = "", state: SessionState | undefined;
 const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 const tv = new UiDriver(request, () => session);
 const media = Bun.serve({ hostname: "127.0.0.1", port: 4200, fetch: () => new Response(Bun.file("/mnt/fixtures/multitrack.mkv")) });
+await Promise.all([Bun.write(`${artifacts}/smoke-driver.log`, ""), Bun.write(`${artifacts}/smoke-native.log`, "")]);
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file(`${artifacts}/smoke-driver.log`), stderr: Bun.file(`${artifacts}/smoke-native.log`) });
 let controller: WebSocket | undefined;
 const connect = async (token: string) => {
@@ -85,12 +88,61 @@ try {
   await tv.addDirectMedia("http://127.0.0.1:4200/generated-local-media.mkv", "Generated local smoke media");
   await until("native app queues generated local media", () => state?.queue.length === 1 && state.queue[0]?.title === "Generated local smoke media");
   const entryId = state!.queue[0]!.id;
+  if (mpvThreading) {
+    assert.equal(process.env.TAURI_VIDEO_TELEMETRY, "1", "threading qualification records native frame telemetry");
+    await command({ type: "enqueue", entry: { ...state!.queue[0]!, id: crypto.randomUUID(), title: "Replacement local media" } });
+    await until("replacement source is queued", () => state?.queue.length === 2);
+  }
   await command({ type: "play", entryId, fromStart: true });
   await until("one paired-controller Play command reaches libmpv", () => state?.currentEntryId === entryId && state.player.status === "playing" && state.player.position > 0);
   await tv.watching();
   await assertNativeVideoPixels(tv.execute, artifacts, "native-smoke-video");
   checks.push("native pixels show generated local media");
 
+  if (mpvThreading) {
+    const latency: Record<string, number> = {};
+    const measured = async (name: string, action: Action) => {
+      const started = performance.now();
+      await command(action);
+      latency[name] = Number((performance.now() - started).toFixed(2));
+      return started;
+    };
+    const firstPlayback = state!.player.playbackId!;
+    for (const position of [4, 8, 2]) {
+      const started = await measured(`seek-${position}`, { type: "seek", playbackId: firstPlayback, position });
+      await until(`seek ${position} keeps the native position truthful`, () => state?.player.playbackId === firstPlayback && Math.abs(state.player.position - position) < 1.5);
+      latency[`seek-${position}-observed`] = Number((performance.now() - started).toFixed(2));
+    }
+    const beforeDiagnostics = state!.player.position;
+    const collected = performance.now();
+    const exported = await fetch(`${origin}/api/diagnostics/export`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
+    latency.diagnostics = Number((performance.now() - collected).toFixed(2));
+    assert.equal(exported.status, 200);
+    const report = await exported.json() as Diagnostics;
+    assert.ok(report.native?.facts.some(fact => fact.name === "mpv version" && fact.value));
+    await until("diagnostics leave native playback advancing", () => state?.player.playbackId === firstPlayback && state.player.position > beforeDiagnostics);
+
+    const replacement = state!.queue[1]!.id;
+    const replacementStarted = await measured("replacement", { type: "play", entryId: replacement, fromStart: true });
+    await until("replacement owns the observed queue and picture", () => state?.currentEntryId === replacement && state.player.status === "playing" && state.player.playbackId !== firstPlayback && state.player.position > 0);
+    latency["replacement-observed"] = Number((performance.now() - replacementStarted).toFixed(2));
+    await assertNativeVideoPixels(tv.execute, artifacts, "native-replacement-video");
+    const stopStarted = await measured("stop", { type: "stop" });
+    await until("Stop leaves no active native playback", () => state?.currentEntryId === null && state.player.status === "idle" && state.player.playbackId === null);
+    latency["stop-observed"] = Number((performance.now() - stopStarted).toFixed(2));
+    await command({ type: "seek", playbackId: firstPlayback, position: 17 }).catch(() => {});
+    await Bun.sleep(500);
+    assert.equal(state?.player.status, "idle", "a stale seek cannot revive the stopped source");
+
+    const log = await Bun.file(`${artifacts}/smoke-native.log`).text();
+    const frames = [...log.matchAll(/mpv telemetry: presented=(\d+) dropped=(\d+) fps=([\d.]+)/g)]
+      .map(([, presented, dropped, fps]) => ({ presented: Number(presented), dropped: Number(dropped), fps: Number(fps) }));
+    assert.ok(frames.length > 0 && frames.some(frame => frame.presented > 0 && frame.fps > 0), "GTK presented native frames during control calls");
+    assert.ok(!log.includes("mpv_render_context_render() not being called or stuck"), "libmpv reported no stuck render");
+    await Bun.write(`${artifacts}/gtk-mpv-threading.json`, JSON.stringify({ revision, latency, frames, nativePixels: ["native-smoke-video.png", "native-replacement-video.png"], stuckRenderLog: false, diagnosticsMs: latency.diagnostics, checks }, null, 2));
+  }
+
+  const queuedIds = state!.queue.map(item => item.id).join();
   controller.close();
   await request(`/session/${session}`, undefined, "DELETE");
   session = "";
@@ -98,7 +150,7 @@ try {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
   await until("restarted compiled desktop app starts its sidecar", sidecar, 30_000);
   await connect(token);
-  await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === entryId && state.currentEntryId === null && state.player.status === "idle");
+  await until("paired queue persists across restart without autoplay", () => state?.queue.map(item => item.id).join() === queuedIds && state.currentEntryId === null && state.player.status === "idle");
 
   const binaries = await Bun.file(`${artifacts}/binaries.sha256`).text();
   assert.match(binaries, /\/work\/bin\/couch$/m, "receipt includes the launched Tauri binary hash");
