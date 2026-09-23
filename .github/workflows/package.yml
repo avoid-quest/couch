@@ -91,7 +91,7 @@ jobs:
           GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p .artifacts/hosted-release
-          if [ "$FORMAT" = appimage ]; then test "$CHANNEL" = preview && test "$PUBLISH" = false; fi
+          if [ "$FORMAT" = appimage ]; then test "$CHANNEL" = preview && test "$PUBLISH" = false || exit 1; fi
           if [ "$BUILD_RUN" = 0 ]; then
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
             case "$FORMAT" in deb|appimage) ;; *) exit 1 ;; esac
