@@ -201,8 +201,9 @@ try {
     assert.equal((await request(`/session/${native.session}/elements`, { using: "xpath", value: '//header[contains(@class,"app-header")]' }) as unknown[]).length, 1, "Couch shows one app header");
     assert.equal(await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => ""), "", "No second remote OS window exists");
     await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
-    const ready = JSON.parse((await Bun.file("/artifacts/lifecycle-selected-host.log").text()).split("\n").find(line => line.includes('"type":"ready"'))!) as { pairingCode: string };
-    const paired = await fetch(`${selectedHost}/api/pair`, { method: "POST", headers: { Origin: selectedHost, "Content-Type": "application/json" }, body: JSON.stringify({ code: ready.pairingCode, name: "Desktop client" }) });
+    const pairingCode = (await Bun.file("/artifacts/lifecycle-selected-host-error.log").text()).match(/Pairing code: (\d{6})/)?.[1];
+    assert.ok(pairingCode, "selected host prints a pairing code");
+    const paired = await fetch(`${selectedHost}/api/pair`, { method: "POST", headers: { Origin: selectedHost, "Content-Type": "application/json" }, body: JSON.stringify({ code: pairingCode, name: "Desktop client" }) });
     assert.equal(paired.status, 200);
     const { token, installationId } = await paired.json() as { token: string; installationId: string };
     await request(`/session/${native.session}/execute/sync`, { script: "localStorage.setItem('couch.pairing:' + arguments[0], JSON.stringify({ token: arguments[1], installationId: arguments[2] })); location.reload();", args: [selectedHost, token, installationId] });
