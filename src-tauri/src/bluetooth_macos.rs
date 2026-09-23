@@ -359,7 +359,7 @@ impl Bluetooth {
         } else {
             self.verify_connection(id, true, end, &connected)
         };
-        if !was_connected && !self.active(id) && connected() {
+        if status == 0 && !was_connected && !self.active(id) && connected() {
             let _ = close();
         }
         result
@@ -799,6 +799,33 @@ mod tests {
                 || panic!("successful connection must stay open"),
             )
             .unwrap();
+    }
+
+    #[test]
+    fn cancelled_connection_exists_does_not_close_another_actors_link() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(false);
+        let result = bluetooth.set_connection(
+            "one",
+            true,
+            Instant::now() + Duration::from_millis(100),
+            || connected.get(),
+            || {
+                connected.set(true);
+                retire(
+                    &mut bluetooth.pending.lock().unwrap(),
+                    "cancelled",
+                    "Cancelled.",
+                );
+                -1
+            },
+            || panic!("another actor owns this connection"),
+        );
+        assert_eq!(result.unwrap_err(), "Bluetooth operation cancelled.");
+        assert!(connected.get());
     }
 
     #[test]
