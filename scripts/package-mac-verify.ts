@@ -76,6 +76,7 @@ try {
       }
     }
     await walk(root);
+    files.sort();
     verifyBundledNativeLibraries(payload, files);
     for (const name of ["couch", "couch-server"]) {
       const executable = join(root, "Contents/MacOS", name);
@@ -84,17 +85,24 @@ try {
       assert.ok(dependencies.every(path => path.startsWith("/usr/lib/") || path.startsWith("/System/Library/")), `${name} links an unbundled native library: ${dependencies.join(", ")}`);
     }
     assert.ok(!files.some(path => /(^|\/)(?:libmpv|ffprobe|yt-dlp|deno)(?:\.|$)/i.test(path)), "Client-only bundle contains Full media components");
-    return { files: files.length, release };
+    const hashes: { path: string; sha256: string }[] = [];
+    for (const path of files) hashes.push({ path, sha256: await hash(join(root, path)) });
+    return { files: hashes, release };
   }
   const mounted = await inspect(app);
   const extracted = join(staging, "updater");
   await mkdir(extracted);
   run(["tar", "-xzf", archive, "-C", extracted]);
   assert.deepEqual(await readdir(extracted), ["Couch.app"], "Updater archive contains unexpected top-level files");
-  const update = await inspect(join(extracted, "Couch.app"));
+  const updateApp = join(extracted, "Couch.app");
+  run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", updateApp]);
+  assert.match(codeSignature(updateApp), /Signature=adhoc/);
+  assert.match(codeSignature(join(updateApp, "Contents/MacOS/couch-server")), /Signature=adhoc/);
+  const update = await inspect(updateApp);
   assert.deepEqual(update.release, mounted.release, "DMG and updater archive carry different builds");
-  await Bun.write(".artifacts/mac-inventory.json", JSON.stringify({ build, os: run(["sw_vers", "-productVersion"]), osBuild: run(["sw_vers", "-buildVersion"]), dmg: { path: dmg, sha256: await hash(dmg), bytes: Bun.file(dmg).size }, updater: { path: archive, sha256: await hash(archive), bytes: Bun.file(archive).size, signature: (await Bun.file(signature).text()).trim() }, files: mounted.files }, null, 2) + "\n");
-  console.log(`Verified ${dmg}: ${mounted.files} app files, Apple Silicon closure, ad-hoc signature and signed updater archive`);
+  assert.deepEqual(update.files, mounted.files, "DMG and updater archive contain different app bytes");
+  await Bun.write(".artifacts/mac-inventory.json", JSON.stringify({ build, os: run(["sw_vers", "-productVersion"]), osBuild: run(["sw_vers", "-buildVersion"]), dmg: { path: dmg, sha256: await hash(dmg), bytes: Bun.file(dmg).size }, updater: { path: archive, sha256: await hash(archive), bytes: Bun.file(archive).size, signature: (await Bun.file(signature).text()).trim() }, files: mounted.files.length }, null, 2) + "\n");
+  console.log(`Verified ${dmg}: ${mounted.files.length} matching app files, Apple Silicon closure, ad-hoc signatures and signed updater archive`);
 } finally {
   if (attached) run(["hdiutil", "detach", "-quiet", mount]);
   await rm(staging, { recursive: true, force: true });
