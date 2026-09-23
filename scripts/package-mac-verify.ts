@@ -9,6 +9,11 @@ function run(command: string[]) {
   assert.equal(result.exitCode, 0, command.join(" "));
   return result.stdout.toString().trim();
 }
+function codeSignature(path: string) {
+  const result = Bun.spawnSync(["codesign", "-dv", "--verbose=2", path]);
+  assert.equal(result.exitCode, 0, `Cannot read code signature: ${path}`);
+  return result.stderr.toString();
+}
 const hash = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
 const build = await Bun.file("src-tauri/build-info.json").json();
 assert.equal(build.target, "aarch64-apple-darwin");
@@ -34,6 +39,9 @@ try {
   const app = join(mount, "Couch.app");
   run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
   assert.equal(run(["plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", join(app, "Contents/Info.plist")]), "quest.avoid.couch");
+  assert.equal(run(["plutil", "-extract", "LSMinimumSystemVersion", "raw", "-o", "-", join(app, "Contents/Info.plist")]), "26.0");
+  assert.match(codeSignature(app), /Signature=adhoc/);
+  assert.match(codeSignature(join(app, "Contents/MacOS/couch-server")), /Signature=adhoc/);
 
   async function inspect(root: string) {
     const release = await Bun.file(join(root, "Contents/Resources/release.json")).json();
