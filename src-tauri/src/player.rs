@@ -58,7 +58,7 @@ fn command_error(replacement: bool, rejected_control: bool, error: String) -> Co
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
 fn observation_error(reconciling: &mut bool, error: tauri_plugin_video::Error) -> Result<(), String> {
     if *reconciling && matches!(error, tauri_plugin_video::Error::DispatcherInFlight) {
         return Ok(());
@@ -168,7 +168,7 @@ mod layout_queue_tests {
         assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
     #[test]
     fn started_open_keeps_observing_after_repeated_stats_timeouts() {
         let mut reconciling = true;
