@@ -33,6 +33,7 @@ pub enum TrackKind {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Default))]
 #[serde(rename_all = "camelCase")]
 pub struct NativeOpenRequest {
     #[serde(default)]
