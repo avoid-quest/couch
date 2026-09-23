@@ -25,8 +25,10 @@ Select `appimage` to stage the desktop payload without Debian TV setup or update
 broker files. Tauri builds and signs the AppImage; `package-appimage-verify.ts`
 extracts it and records every packaged file, symlink, native library and SHA-256
 in `.artifacts/appimage-inventory.json`. The bundle includes the coordinator,
-helpers, libmpv and redistribution notices. Its Linux ABI floor is set by this
-Debian 13 builder. Compatibility with older distributions has not been proven.
+helpers, libmpv and redistribution notices. The build checks the pinned Tauri
+AppImage tools and runtime before and after bundling. Its Linux ABI floor is set
+by this Debian 13 builder. Compatibility with older distributions has not been
+proven.
 
 ## Qualify
 
