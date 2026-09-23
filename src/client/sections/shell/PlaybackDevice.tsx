@@ -14,7 +14,6 @@ import type { Credentials } from "@/session/session";
 import { loadedBuild } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useUpdateActivity } from "@/update-activity";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };

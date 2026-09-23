@@ -48,10 +48,14 @@ afterEach(async () => {
   originals.clear();
 });
 async function render(sharing = false) {
-  const { NativeModeGate, PlaybackDevice, LocalSharingPrompt } = await import("./PlaybackDevice");
+  const { NativeModeGate, PlaybackDevice, InstallationUpdates, LocalSharingPrompt, usePlaybackDevice } = await import("./PlaybackDevice");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  function Controls() {
+    const device = usePlaybackDevice();
+    return <><p>Local installation</p><PlaybackDevice />{device?.mode === "remote" && <InstallationUpdates />}{sharing && <LocalSharingPrompt credentials={{ origin: "http://127.0.0.1:4100", token: "local-secret" }} />}</>;
+  }
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<NativeModeGate><QueryClientProvider client={client!}><p>Local installation</p><PlaybackDevice />{sharing && <LocalSharingPrompt credentials={{ origin: "http://127.0.0.1:4100", token: "local-secret" }} />}</QueryClientProvider></NativeModeGate>));
+  await act(async () => root.render(<NativeModeGate><QueryClientProvider client={client!}><Controls /></QueryClientProvider></NativeModeGate>));
   await flush();
 }
 
@@ -203,20 +207,24 @@ test("an offline remote keeps this installation's update controls and shared-win
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   connectionError = "Cannot reach that Couch.";
   onlineManager.setOnline(false);
+  let channel = "preview";
+  let policy = "manual";
   request.mockImplementation((async (input, init) => {
     expect(String(input)).toStartWith("http://127.0.0.1:54321/");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer own-installation");
     if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
-    return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, current: { candidateId: "d".repeat(64), version: "0.1.0-preview.1", revision: "a".repeat(40) }, repairAvailable: false, transaction: null } });
+    if (String(input).endsWith("/api/updates/channel")) channel = JSON.parse(String(init?.body)).channel;
+    if (String(input).endsWith("/api/updates/policy")) policy = JSON.parse(String(init?.body)).policy;
+    return Response.json({ channel, policy, status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, current: { candidateId: "d".repeat(64), version: "0.1.0-preview.1", revision: "a".repeat(40) }, repairAvailable: false, transaction: null } });
   }) as typeof fetch);
   await render();
+  await act(async () => fireEvent.pointerDown(screen.getByText("Local installation"))); await flush();
+  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(true);
   await act(async () => fireEvent.click(button("Update this app")));
   await flush();
   expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
   expect(screen.getByText(/Updates and recovery for this app/)).toBeDefined();
   expect(screen.getByText("Hosted update")).toBeDefined();
-  await act(async () => fireEvent.pointerDown(button("Update this app"))); await flush();
-  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(true);
   expect(button("Install update on this app").disabled).toBe(false);
   expect(screen.getByLabelText("Release channel for this app")).toBeDefined();
   expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
@@ -230,6 +238,14 @@ test("an offline remote keeps this installation's update controls and shared-win
   expect(screen.queryByRole("button", { name: "Repair current release on this app" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
+  expect(choice.mode).toBe("remote");
+  await act(async () => root.unmount());
+  const { createRoot } = await import("react-dom/client");
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await render();
+  await act(async () => fireEvent.click(button("Update this app"))); await flush();
+  expect(screen.getByLabelText("Release channel for this app").textContent).toContain("Stable");
+  expect(screen.getByLabelText("Install updates on this app").textContent).toContain("Auto when idle");
   expect(choice.mode).toBe("remote");
 });
 
