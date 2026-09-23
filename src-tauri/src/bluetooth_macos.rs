@@ -3,7 +3,7 @@ use objc2::{define_class, msg_send, rc::Retained, runtime::AnyObject, AnyThread,
 use objc2_core_bluetooth::{CBManager, CBManagerAuthorization};
 use objc2_foundation::{NSDate, NSObject, NSObjectProtocol, NSRunLoop, NSString};
 use objc2_io_bluetooth::{
-    BluetoothHCIPowerState, BluetoothPINCode, IOBluetoothDevice, IOBluetoothDeviceInquiry,
+    BluetoothPINCode, IOBluetoothDevice, IOBluetoothDeviceInquiry,
     IOBluetoothDeviceInquiryDelegate, IOBluetoothDevicePair, IOBluetoothDevicePairDelegate,
     IOBluetoothHostController,
 };
@@ -217,7 +217,8 @@ impl Bluetooth {
             else {
                 return Ok(json!({"adapter":"absent","devices":[],"operation":operation}));
             };
-            let power = unsafe { controller.powerState() };
+            // The generated binding encodes this C enum as unsigned, but macOS returns signed int.
+            let power: i32 = unsafe { msg_send![&*controller, powerState] };
             let scanning = operation
                 .as_ref()
                 .is_some_and(|op| op["kind"] == "scan" && op["status"] == "running");
@@ -252,7 +253,7 @@ impl Bluetooth {
                 })
                 .collect();
             Ok(
-                json!({"adapter":if power == BluetoothHCIPowerState::ON { "available" } else { "off" },"devices":devices,"operation":operation}),
+                json!({"adapter":if power == 1 { "available" } else { "off" },"devices":devices,"operation":operation}),
             )
         })
     }
