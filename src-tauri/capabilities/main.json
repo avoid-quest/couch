@@ -15,6 +15,7 @@
     "allow-select-playback-device",
     "allow-retry-playback-device",
     "allow-complete-local-setup",
+    "allow-local-update-activity",
     "allow-desktop-interface-size",
     "core:window:allow-is-fullscreen",
     "core:window:allow-set-fullscreen",

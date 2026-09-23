@@ -561,6 +561,9 @@ pub async fn run(
                     if !previous.is_null() {
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
                     }
+                    if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                        return Err("Waiting for this app to be idle before automatic installation.".into());
+                    }
                     let (_, update, summary) = selected
                         .as_ref()
                         .filter(|(_, _, c)| &c.id == candidate_id)
@@ -581,6 +584,10 @@ pub async fn run(
                         serde_json::json!({"ok":true,"accepted":true,"transaction":transaction}),
                     );
                     let installation = async {
+                        if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                            transaction["idleDeferred"] = true.into();
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "quiescing", None)?;
                         let nonce = uuid::Uuid::new_v4().to_string();
                         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -592,6 +599,11 @@ pub async fn run(
                         if when_idle && !closed { transaction["idleDeferred"] = true.into(); }
                         result?;
                         if !closed { return Err("The data writers did not stop.".into()); }
+                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "installing", None)?;
                         #[cfg(target_os = "windows")]
                         {

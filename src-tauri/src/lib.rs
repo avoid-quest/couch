@@ -442,6 +442,14 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                 }
                             }
                         }
+                        Ok(SidecarMessage::AppimageResumed { nonce, error }) => {
+                            let mut pending = host.update_checkpoint.lock().expect("checkpoint lock poisoned");
+                            if pending.as_ref().is_some_and(|(id, _)| id == &nonce) {
+                                if let Some((_, sender)) = pending.take() {
+                                    let _ = sender.send((false, error.map_or(Ok(()), Err)));
+                                }
+                            }
+                        }
                         Ok(SidecarMessage::AppimageUpdate { request_id, action }) => {
                             if uuid::Uuid::parse_str(&request_id).is_ok() {
                                 if let crate::appimage_update::Action::Status {
@@ -606,6 +614,7 @@ pub fn run() {
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
+            operating_mode::local_update_activity,
             operating_mode::desktop_interface_size
         ])
         .setup(|app| {
@@ -704,6 +713,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
                 if label == "main" && !tv_presentation() {
+                    desktop_lifecycle::on_main_window_event(app, event);
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         desktop_lifecycle::close(app, api);
                     }

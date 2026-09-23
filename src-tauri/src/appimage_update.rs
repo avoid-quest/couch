@@ -637,7 +637,7 @@ async fn backup(
     trust: &Enrollment,
     directory: &Path,
     request_id: &str,
-) -> Result<(), String> {
+) -> Result<PathBuf, String> {
     let destination = application.join("backups").join(request_id);
     fs::create_dir_all(destination.parent().unwrap()).map_err(error)?;
     fs::create_dir(&destination).map_err(error)?;
@@ -674,7 +674,11 @@ async fn backup(
     let mut sync = std::process::Command::new("/usr/bin/sync");
     sync.arg("-f").arg(&destination);
     command(sync, 120, "Could not flush the recovery backup.").await?;
-    Ok(())
+    Ok(destination)
+}
+
+fn discard_abandoned_backup(path: &Path) -> Result<(), String> {
+    fs::remove_dir_all(path).map_err(error)
 }
 
 fn verify_supervisor(properties: &str, cgroup: &str, pid: u32) -> Result<(), String> {
@@ -714,10 +718,6 @@ async fn supervised_restart() -> Result<(), String> {
         &fs::read_to_string("/proc/self/cgroup").map_err(error)?,
         std::process::id(),
     )
-}
-
-fn remote_blocks_install(when_idle: bool, remote_selected: bool) -> bool {
-    when_idle && remote_selected
 }
 
 pub async fn run(
@@ -849,14 +849,8 @@ pub async fn run(
                     if repair {
                         return Err("Recover the retained verified app with couch-recover. Hosted downloads may expire.".into());
                     }
-                    if remote_blocks_install(
-                        when_idle,
-                        crate::operating_mode::remote_selected(&app),
-                    ) {
-                        return Err(
-                            "Switch to This computer before automatic installation."
-                                .into(),
-                        );
+                    if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                        return Err("Waiting for this app to be idle before automatic installation.".into());
                     }
                     let application = application(&app)?;
                     let _lock = installation_lock(&application)?;
@@ -884,6 +878,10 @@ pub async fn run(
                         verify(&bytes, &update.signature, &trust.pubkey)?;
                         known_good(&application, &trust)?;
                         preflight(&application, &directory, bytes.len() as u64).await?;
+                        if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                            transaction["idleDeferred"] = true.into();
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "quiescing", None)?;
                         let nonce = uuid::Uuid::new_v4().to_string();
                         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -897,7 +895,22 @@ pub async fn run(
                         if when_idle && !closed { transaction["idleDeferred"] = true.into(); }
                         result?;
                         if !closed { return Err("The data writers did not stop.".into()); }
-                        backup(&application, &trust, &directory, request_id).await?;
+                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
+                        let backup_path = backup(&application, &trust, &directory, request_id).await?;
+                        if when_idle && crate::operating_mode::recent_input(&app) {
+                            // No replacement will use this completed recovery backup.
+                            discard_abandoned_backup(&backup_path)?;
+                            crate::operating_mode::resume_idle_quiesce(&app, &nonce).await?;
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "installing", None)?;
                         update.install(&bytes).map_err(error)?;
                         save(&application.join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":requirements.revision,"dataFormat":requirements.data_format,"readableDataFormats":requirements.readable_data_formats,"archiveSha256":format!("{:x}", Sha256::digest(&bytes))})).map_err(error)?)?;
@@ -1024,12 +1037,6 @@ mod tests {
         );
     }
     #[test]
-    fn automatic_tv_install_waits_while_remote_playback_device_is_selected() {
-        assert!(remote_blocks_install(true, true));
-        assert!(!remote_blocks_install(true, false));
-        assert!(!remote_blocks_install(false, true));
-    }
-    #[test]
     fn signed_requirements_reject_incompatible_data_and_host_before_interruption() {
         let requirements = Requirements {
             schema_version: 1,
@@ -1082,6 +1089,31 @@ mod tests {
     const KEY: &str = include_str!("../tests/fixtures/update/public.key");
     const SIGNATURE: &str = include_str!("../tests/fixtures/update/archive.sig");
     const ARCHIVE: &[u8] = include_bytes!("../tests/fixtures/update/archive");
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn deferred_backup_removes_only_its_own_recovery_directory() {
+        let root = std::env::temp_dir().join(format!("couch-backup-{}", uuid::Uuid::new_v4()));
+        let application = root.join("application");
+        let data = root.join("data");
+        let updates = data.join("updates/appimage");
+        fs::create_dir_all(&application).unwrap();
+        fs::create_dir_all(&updates).unwrap();
+        fs::write(application.join("Couch.AppImage"), ARCHIVE).unwrap();
+        fs::write(application.join("Couch.AppImage.sig"), SIGNATURE).unwrap();
+        fs::write(application.join("build.json"), serde_json::to_vec(&serde_json::json!({
+            "version": build()["version"], "revision": build()["revision"],
+            "archiveSha256": archive_hash(&application.join("Couch.AppImage")).unwrap()
+        })).unwrap()).unwrap();
+        fs::write(data.join("couch.sqlite"), b"retained user data").unwrap();
+        let trust = Enrollment { pubkey: KEY.into() };
+        let previous = backup(&application, &trust, &updates, &"a".repeat(32)).await.unwrap();
+        let abandoned = backup(&application, &trust, &updates, &"b".repeat(32)).await.unwrap();
+        discard_abandoned_backup(&abandoned).unwrap();
+        assert!(!abandoned.exists());
+        assert_eq!(fs::read(previous.join("data/couch.sqlite")).unwrap(), b"retained user data");
+        assert_eq!(fs::read(previous.join("Couch.AppImage")).unwrap(), ARCHIVE);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn official_signer_bytes_verify_and_tampering_is_rejected() {
         verify(ARCHIVE, SIGNATURE, KEY).unwrap();

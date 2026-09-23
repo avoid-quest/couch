@@ -1,5 +1,22 @@
 import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { Credentials } from "./session/session";
+
+export function useLocalUpdateActivity(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const stop = new AbortController();
+    let last = -Infinity;
+    const activity = (event: Event) => {
+      if (!event.isTrusted || performance.now() - last < 1_000) return;
+      last = performance.now();
+      void invoke("local_update_activity").catch(() => {});
+    };
+    for (const type of ["pointerdown", "pointermove", "wheel", "keydown"])
+      document.addEventListener(type, activity, { capture: true, signal: stop.signal });
+    return () => stop.abort();
+  }, [enabled]);
+}
 
 export function useUpdateActivity(credentials: Credentials | null, connected: boolean) {
   useEffect(() => {

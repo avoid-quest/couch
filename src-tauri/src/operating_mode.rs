@@ -4,11 +4,12 @@ use std::{
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::PathBuf,
     sync::{atomic::Ordering, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{Manager, Url};
 
 const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
+const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 pub(crate) fn local_playback_unavailable() -> bool {
     cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true)
@@ -36,6 +37,7 @@ pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
     operation: tokio::sync::Mutex<()>,
+    last_input: Mutex<Instant>,
 }
 
 impl Modes {
@@ -49,6 +51,7 @@ impl Modes {
             path,
             choice: Mutex::new(choice),
             operation: tokio::sync::Mutex::new(()),
+            last_input: Mutex::new(Instant::now()),
         })
     }
     fn saved(&self) -> Choice {
@@ -110,6 +113,73 @@ pub(crate) fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
 
 pub(crate) fn remote_selected(app: &tauri::AppHandle) -> bool {
     app.state::<Modes>().current().mode == Some(Mode::Remote)
+}
+
+pub(crate) fn window_opened(app: &tauri::AppHandle) {
+    if remote_selected(app) {
+        *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
+    }
+}
+
+fn remote_busy(visible: bool, focused: bool, since: Duration) -> bool {
+    visible && focused && since < IDLE_WINDOW
+}
+
+fn recent_remote_input(selected: bool, since: Duration) -> bool {
+    selected && since < IDLE_WINDOW
+}
+
+pub(crate) fn recent_input(app: &tauri::AppHandle) -> bool {
+    let modes = app.state::<Modes>();
+    let selected = modes.current().mode == Some(Mode::Remote);
+    let since = modes.last_input.lock().expect("input lock poisoned").elapsed();
+    recent_remote_input(selected, since)
+}
+
+pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
+    if !remote_selected(app) { return Ok(false); }
+    let Some(main) = app.get_webview_window("main") else { return Ok(false); };
+    let visible = main.is_visible().map_err(error)? && !main.is_minimized().map_err(error)?;
+    if !visible { return Ok(false); }
+    let focused = main.is_focused().map_err(error)?;
+    let since = app.state::<Modes>().last_input.lock().expect("input lock poisoned").elapsed();
+    Ok(remote_busy(visible, focused, since))
+}
+
+pub(crate) const IDLE_WAIT: &str = "Waiting for this app to be idle before automatic installation.";
+
+pub(crate) async fn resume_idle_quiesce(app: &tauri::AppHandle, nonce: &str) -> Result<(), String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let host = app.state::<crate::Host>();
+    *host.update_checkpoint.lock().expect("checkpoint lock poisoned") = Some((nonce.to_owned(), sender));
+    host.report_message(serde_json::json!({"type":"appimageResume","nonce":nonce}));
+    let (closed, result) = tokio::time::timeout(Duration::from_secs(10), receiver).await
+        .map_err(|_| "Resuming local maintenance timed out.")?.map_err(error)?;
+    if closed { return Err("Local maintenance remained closed after deferring the update.".into()); }
+    result
+}
+
+pub(crate) async fn defer_after_checkpoint(app: &tauri::AppHandle, when_idle: bool, nonce: &str) -> Result<bool, String> {
+    // The input timestamp precedes its HTTP relay, even if focus has since moved away.
+    if !when_idle || !recent_input(app) { return Ok(false); }
+    resume_idle_quiesce(app, nonce).await?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn local_update_activity(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    trusted(&window)?;
+    if !remote_selected(&app) { return Ok(()); }
+    *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
+    let connection = app.state::<crate::Host>().connection.borrow().clone();
+    if let Some(Ok(info)) = connection {
+        connection_client().timeout(Duration::from_secs(2)).build().map_err(error)?
+            .post(format!("{}/api/activity", info.origin))
+            .bearer_auth(info.token)
+            .json(&serde_json::json!({"activity": true}))
+            .send().await.map_err(error)?.error_for_status().map_err(error)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn local_authority(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -412,6 +482,7 @@ pub async fn select_playback_device(
         choice.address = Some(address);
         // Remember the deliberate choice even when the target is unavailable. Never fall back to local.
         modes.save(choice.clone())?;
+        *modes.last_input.lock().expect("input lock poisoned") = Instant::now();
     } else {
         stop_local(&app, true).await?;
         crate::start_local(&app)?;
@@ -459,6 +530,31 @@ pub async fn complete_local_setup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_install_waits_for_recent_input_in_a_visible_focused_window() {
+        let recent = Duration::from_secs(599);
+        assert!(remote_busy(true, true, recent));
+        assert!(!remote_busy(false, true, recent));
+        assert!(!remote_busy(true, false, recent));
+        assert!(!remote_busy(true, true, Duration::from_secs(600)));
+        // Input between the early updater check and the stopped-writer reply changes the final decision.
+        assert!(!remote_busy(true, true, Duration::from_secs(601)));
+        assert!(remote_busy(true, true, Duration::ZERO));
+    }
+
+    #[test]
+    fn final_checkpoint_keeps_input_after_focus_moves_away() {
+        let quiet = Duration::from_secs(601);
+        assert!(!remote_busy(true, true, quiet));
+        assert!(!recent_remote_input(true, quiet));
+        // The native command records input before its HTTP relay completes, then the window loses focus.
+        let fresh = Duration::ZERO;
+        assert!(!remote_busy(true, false, fresh));
+        assert!(recent_remote_input(true, fresh));
+        assert!(!recent_remote_input(true, Duration::from_secs(600)));
+        assert!(!recent_remote_input(false, fresh));
+    }
 
     #[test]
     fn mode_change_waits_for_trial_or_unreadable_update_status() {

@@ -22,6 +22,7 @@ pub enum SidecarMessage {
         action: crate::bluetooth::Action,
     },
     AppimageQuiesced { nonce: String, closed: bool, error: Option<String> },
+    AppimageResumed { nonce: String, error: Option<String> },
     AppimageUpdate {
         #[serde(rename = "requestId")]
         request_id: String,

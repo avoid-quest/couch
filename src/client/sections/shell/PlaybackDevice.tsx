@@ -13,7 +13,7 @@ import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { buildInfo, loadedBuild } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
-import { useUpdateActivity } from "@/update-activity";
+import { useLocalUpdateActivity } from "@/update-activity";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
@@ -33,6 +33,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   const sequence = useRef(0);
   const busy = useRef(false);
   const failedPreflight = useRef(false);
+  useLocalUpdateActivity(native && choice?.mode === "remote");
   useEffect(() => {
     if (!native) return;
     let disposed = false;
@@ -107,7 +108,6 @@ export function InstallationUpdates() {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useUpdateActivity(credentials, !!credentials);
   useEffect(() => () => queryClient.clear(), [queryClient]);
   useEffect(() => {
     const stop = new AbortController();

@@ -22,6 +22,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
   const idle = createUpdateIdle();
   idle.playback("idle", false);
   let admitted = !installed;
+  let quiesced: string | null = null;
   let frontendReady = false;
   const manual = createManualUpdate(native, () => admitted, id => updates.candidateReady(id), () => updates.canRepair());
   const updates = createUpdates(join(directory, "updates"), loadedBuild, installed ? native.feed : undefined, undefined, () => admitted, installed ? {
@@ -100,12 +101,18 @@ export async function runMaintenanceMode(directory: string, token: string, forma
       if (message.type === "shutdown") await close();
       else if (message.type === "appimageUpdate" || message.type === "debUpdate") native.receive(message);
       else if (message.type === "readiness") readiness.receive(message.nonce, message.ok, message.build);
+      else if (message.type === "appimageResume") {
+        const error = quiesced === message.nonce ? null : "No matching local update checkpoint to resume.";
+        if (!error) { quiesced = null; admitted = true; idle.activity(); }
+        send({ type: "appimageResumed", nonce: message.nonce, error });
+      }
       else if (message.type === "appimageQuiesce") void (async () => {
         const result = await checkpointAppImage({ ...message, idle: () => idle.reason(), player: () => "idle", closeAdmission: () => { admitted = false; }, quiesce: async () => {
           // Settings writes are awaited by createUpdates before the native request begins.
           // Do not close its in-flight automatic request while acknowledging this checkpoint.
           return { progressSaved: true, admissionClosed: true };
         } });
+        quiesced = result.closed && !result.error ? message.nonce : null;
         send({ type: "appimageQuiesced", nonce: message.nonce, ...result });
       })();
     }
