@@ -696,7 +696,11 @@ mod tests {
         appimage[64 + 32..64 + 40].copy_from_slice(&64u64.to_le_bytes());
         appimage.extend_from_slice(squashfs);
         let manifest: Manifest = serde_json::from_slice(&linux_manifest(&appimage).unwrap()).unwrap();
-        assert!(validate(&manifest, "0.2.0", 1).is_ok());
+        assert_eq!(manifest.version, "0.2.0");
+        assert_eq!(manifest.target, "x86_64-unknown-linux-gnu");
+        if target().is_some() {
+            assert!(validate(&manifest, "0.2.0", 1).is_ok());
+        }
         appimage[18] = 0xb7;
         assert!(linux_manifest(&appimage).is_err());
         appimage[18] = 0x3e;
