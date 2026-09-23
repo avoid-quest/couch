@@ -48,3 +48,13 @@ test("a TV Now page keeps transport when its Now playing section is hidden", asy
   expect(screen.queryByRole("button", { name: "Play Evening movie" })).toBeNull();
   expect(screen.getByRole("button", { name: "Stop playback" })).toBeDefined();
 });
+
+test("only the local desktop Now page offers the native file picker", async () => {
+  const { NowPage } = await import("./NowPage");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const render = (localHost: boolean) => <QueryClientProvider client={client}><ShellContext.Provider value={{ ...shell, localHost, tvPresentation: false } as NonNullable<typeof shell>}><NowPage /></ShellContext.Provider></QueryClientProvider>;
+  await act(async () => root.render(render(true)));
+  expect(screen.getByRole("button", { name: "Open file" })).toBeDefined();
+  await act(async () => root.render(render(false)));
+  expect(screen.queryByRole("button", { name: "Open file" })).toBeNull();
+});
