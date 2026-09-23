@@ -30,7 +30,7 @@ export async function bluetoothSettings(request: Request, identity: () => Contro
       }
       if (["pair", "connect", "disconnect", "forget"].includes(action.op) && !/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(action.device ?? "")) throw new ControllerError("Choose a current Bluetooth device.", 400);
     } else return json({ error: "Not found." }, 404);
-    if (!invoke) return json({ error: "Bluetooth requires the native Ubuntu TV session." }, 503);
+    if (!invoke) return json({ error: "Bluetooth requires a native playback host." }, 503);
     const result = await invoke(action);
     // A revoked administrator cannot retain a pending agent or discovery lease.
     try { authorize(); } catch (error) { void invoke({ op: "cancel", owner }).catch(() => {}); throw error; }

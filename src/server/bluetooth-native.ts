@@ -5,7 +5,7 @@ export function createNativeBluetooth(send?: (requestId: string, action: Bluetoo
   const fail = (id: string, message: string) => { const item = pending.get(id); if (item) { clearTimeout(item.timer); pending.delete(id); item.reject(new Error(message)); } };
   return {
     request(action: BluetoothAction): Promise<BluetoothState> {
-      if (!send) return Promise.reject(new Error("Bluetooth requires the native Ubuntu TV session."));
+      if (!send) return Promise.reject(new Error("Bluetooth requires a native playback host."));
       if (pending.size >= 16 && action.op !== "cancel") return Promise.reject(new Error("Bluetooth is busy. Try again."));
       return new Promise((resolve, reject) => {
         const id = crypto.randomUUID();

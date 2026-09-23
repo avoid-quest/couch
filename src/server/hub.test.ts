@@ -1358,6 +1358,32 @@ test("Bluetooth pairing ownership ends on administrator demotion, revocation and
   expect(calls).toContainEqual({ op: "cancel", owner: controller.id });
 });
 
+test("a separate paired Administrator reads back Bluetooth connection changes while Controller and revoked remotes cannot manage them", async () => {
+  const address = "AA:BB:CC:DD:EE:FF";
+  let connected = false;
+  const actions: import("../shared/bluetooth").BluetoothAction[] = [];
+  const { hub } = fixture(undefined, undefined, undefined, { nativeBluetooth: async action => {
+    actions.push(action);
+    if (action.op === "connect") connected = true;
+    if (action.op === "disconnect") connected = false;
+    return { adapter: "available", devices: [{ address, name: "Paired headphones", paired: true, connected }], operation: null };
+  } });
+  const owner = await pair(hub), administrator = await pair(hub), controller = await pair(hub);
+  await claimAdministrator(hub, owner);
+  const { controller: remote } = await (await controllerApi(hub, administrator, "/api/controllers/me")).json() as { controller: { id: string } };
+  expect((await controllerApi(hub, owner, `/api/controllers/${remote.id}/role`, "POST", { role: "administrator" })).status).toBe(200);
+  expect((await controllerApi(hub, controller, "/api/bluetooth", "POST", { action: { op: "connect", device: address } })).status).toBe(403);
+  for (const [op, expected] of [["connect", true], ["disconnect", false]] as const) {
+    const response = await controllerApi(hub, administrator, "/api/bluetooth", "POST", { action: { op, device: address } });
+    expect(response.status).toBe(200);
+    expect((await response.json()).devices[0].connected).toBe(expected);
+    expect((await (await controllerApi(hub, administrator, "/api/bluetooth")).json()).devices[0].connected).toBe(expected);
+  }
+  expect(actions.filter(action => action.op === "connect" || action.op === "disconnect").map(action => action.owner)).toEqual([remote.id, remote.id]);
+  expect((await controllerApi(hub, owner, `/api/controllers/${remote.id}`, "DELETE")).status).toBe(200);
+  expect((await controllerApi(hub, administrator, "/api/bluetooth")).status).toBe(401);
+});
+
 test("paired controllers share For later across profile changes and restart without changing the active queue", async () => {
   const first = fixture();
   const token = await pair(first.hub), another = await pair(first.hub);
