@@ -58,7 +58,10 @@ try {
       for (const name of await readdir(directory)) {
         const path = join(directory, name), info = await lstat(path);
         if (info.isDirectory()) await walk(path);
-        else if (info.isFile()) files.push(relative(root, path).replaceAll("\\", "/"));
+        else {
+          assert.ok(info.isFile(), `Unexpected app entry: ${path}`);
+          files.push(relative(root, path).replaceAll("\\", "/"));
+        }
       }
     }
     await walk(root);
