@@ -84,7 +84,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
   return <section className="space-y-4">
     <h3>Bluetooth</h3>
     <p>Put your device in pairing mode, then search and choose it below.</p>
-    {error && <p role="alert">{error}</p>}
+    {(error || bluetooth.error?.message) && <p role="alert">{error || bluetooth.error?.message}</p>}
     {!connected && <p>Reconnect to manage Bluetooth on the playback computer.</p>}
     {state?.adapter === "absent" && <p>No Bluetooth adapter is attached to the playback computer.</p>}
     {state?.adapter === "blocked" && <p>Bluetooth is blocked. Turn off airplane mode or release the playback computer's Bluetooth switch.</p>}

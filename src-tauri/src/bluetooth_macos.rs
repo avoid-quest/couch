@@ -17,6 +17,10 @@ use std::{
 const LIMIT: Duration = Duration::from_secs(60);
 const SETTINGS: &str = "Check in System Settings on the playback host.";
 
+fn canonical_address(address: &NSString) -> String {
+    address.to_string().replace('-', ":").to_ascii_uppercase()
+}
+
 #[derive(Default)]
 struct Pending {
     owner: String,
@@ -109,7 +113,7 @@ define_class!(
             if let Some(address) = device.and_then(|device| unsafe { device.addressString() }) {
                 let mut pending = self.ivars().pending.lock().unwrap();
                 if running(&pending, &self.ivars().id) {
-                    pending.found.insert(address.to_string().to_uppercase());
+                    pending.found.insert(canonical_address(&address));
                 }
             }
         }
@@ -223,7 +227,7 @@ impl Bluetooth {
                 for item in paired.iter() {
                     if let Some(device) = item.downcast_ref::<IOBluetoothDevice>() {
                         if let Some(address) = unsafe { device.addressString() } {
-                            addresses.insert(address.to_string().to_uppercase());
+                            addresses.insert(canonical_address(&address));
                         }
                     }
                 }
@@ -519,18 +523,19 @@ impl Bluetooth {
                 json!({"id":id,"device":action.device,"kind":action.op,"status":"running","endsAt":ends_at,"message":null,"prompt":null}),
             );
             let this = self.clone();
-            let task_id = id.clone();
-            std::thread::spawn(move || {
-                let result = objc2::rc::autoreleasepool(|_| this.perform(&action, &task_id));
-                this.finish(&task_id, result);
+            let timeout_id = id.clone();
+            let watchdog = tokio::spawn(async move {
+                tokio::time::sleep(LIMIT).await;
+                let mut pending = this.pending.lock().unwrap();
+                if running(&pending, &timeout_id) {
+                    retire(&mut pending, "error", "Bluetooth timed out. Try again.");
+                }
             });
             let this = self.clone();
             std::thread::spawn(move || {
-                std::thread::sleep(LIMIT);
-                let mut pending = this.pending.lock().unwrap();
-                if running(&pending, &id) {
-                    retire(&mut pending, "error", "Bluetooth timed out. Try again.");
-                }
+                let result = objc2::rc::autoreleasepool(|_| this.perform(&action, &id));
+                this.finish(&id, result);
+                watchdog.abort();
             });
         }
         self.state().await
@@ -547,6 +552,14 @@ mod tests {
             operation: Some(json!({"id":"one","status":"running","prompt":null})),
             ..Default::default()
         }))
+    }
+
+    #[test]
+    fn mac_addresses_match_the_shared_bluetooth_route() {
+        assert_eq!(
+            canonical_address(&NSString::from_str("aa-bb-cc-dd-ee-ff")),
+            "AA:BB:CC:DD:EE:FF"
+        );
     }
 
     fn response(owner: &str, prompt: &str, value: &str) -> Action {
