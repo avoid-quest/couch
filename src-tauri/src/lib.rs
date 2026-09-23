@@ -11,6 +11,7 @@ mod metadata_export;
 mod operating_mode;
 mod player;
 mod protocol;
+mod sound;
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -349,6 +350,8 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         ("COUCH_YT_DLP", "yt-dlp"),
         ("COUCH_DENO", "deno"),
         ("COUCH_FFPROBE", "ffprobe"),
+        #[cfg(target_os = "macos")]
+        ("COUCH_MPV", "mpv"),
     ] {
         let filename = format!("{name}{}", if cfg!(windows) { ".exe" } else { "" });
         let bundled = app
@@ -511,6 +514,20 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                 Ok(state) => serde_json::json!({"type":"bluetooth","requestId":request_id,"state":state}),
                 Err(error) => serde_json::json!({"type":"bluetooth","requestId":request_id,"error":error}),
                     });
+                                });
+                            }
+                        }
+                        Ok(SidecarMessage::Sound { request_id, action }) => {
+                            if uuid::Uuid::parse_str(&request_id).is_ok() {
+                                let handle = handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    let result = tauri::async_runtime::spawn_blocking(move || sound::request(action)).await;
+                                    let host = handle.state::<Host>();
+                                    host.report_message(match result {
+                                        Ok(Ok(state)) => serde_json::json!({"type":"sound","requestId":request_id,"state":state}),
+                                        Ok(Err(error)) => serde_json::json!({"type":"sound","requestId":request_id,"error":error}),
+                                        Err(error) => serde_json::json!({"type":"sound","requestId":request_id,"error":error.to_string()}),
+                                    });
                                 });
                             }
                         }

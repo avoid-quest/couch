@@ -12,6 +12,7 @@ type Options = {
   changed: (state: SoundRouteState) => void;
   backend?: ReturnType<typeof pulseRouting>;
   subscribe?: (onEvent: () => void) => { stop: () => void };
+  platform?: "linux" | "mac";
 };
 
 // One long-lived `pactl subscribe` replaces the 500ms poll that spawned 3-5
@@ -45,7 +46,7 @@ function pactlSubscribe(onEvent: () => void, onExit: () => void): { stop: () => 
 export function createSoundRouting(options: Options) {
   const backend = options.backend ?? pulseRouting();
   let selected = options.saved();
-  let snapshot: SoundRouteState = { selectedOutput: selected, observedOutput: null, volume: null, muted: false, error: "Checking the TV audio session." };
+  let snapshot: SoundRouteState = { selectedOutput: selected, observedOutput: null, volume: null, muted: false, error: `Checking the ${options.platform === "mac" ? "Mac" : "TV"} audio session.` };
   let closed = false, busy = false, changing = false;
   const publish = (value: SoundRouteState) => {
     if (closed) return;
@@ -89,14 +90,15 @@ export function createSoundRouting(options: Options) {
     const observed = await backend.route();
     if (closed) return;
     if (observed && observed !== selected) { lost("Couch left the selected audio output. Playback stopped. Choose an output and resume explicitly."); return; }
-    publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null });
+    publish({ selectedOutput: selected, observedOutput: observed, volume: sink.volume, muted: sink.muted, error: null,
+      ...(options.platform === "mac" ? { platform: "mac" as const, volumeWritable: sink.volumeWritable, muteWritable: sink.muteWritable } : {}) });
   };
   const check = async () => {
     pollWhileActive();
     if (busy || closed) return;
     busy = true;
     try { await refresh(); }
-    catch { lost("Cannot verify the TV audio output. Playback stopped. Check the Ubuntu audio service, then resume."); }
+    catch { lost(options.platform === "mac" ? "Cannot verify the Mac audio output. Playback stopped. Check sound on the selected playback host, then resume." : "Cannot verify the TV audio output. Playback stopped. Check the Ubuntu audio service, then resume."); }
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {
@@ -153,7 +155,8 @@ export function createSoundRouting(options: Options) {
       if (!closed) { respawn = setTimeout(listen, 1_000); respawn.unref?.(); }
     });
   };
-  void check();
+  if (options.platform === "mac") setTimeout(() => void check(), 0);
+  else void check();
   listen();
   return {
     get state() { const address = options.savedProfile?.()?.bluetoothAddress; return { ...snapshot, ...(address ? { selectedBluetoothAddress: address } : {}) }; },

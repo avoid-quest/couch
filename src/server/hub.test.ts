@@ -1384,6 +1384,66 @@ test("a separate paired Administrator reads back Bluetooth connection changes wh
   expect((await controllerApi(hub, administrator, "/api/bluetooth")).status).toBe(401);
 });
 
+test.skipIf(process.platform !== "darwin")("Mac sound uses the selected host, paired Administrator authority and saved output intent", async () => {
+  let selected = "speakers", defaultOutput = "speakers", volume = 64, muted = false, source = "1", headphonesAvailable = true;
+  const calls: string[] = [];
+  const nativeSound: NonNullable<Parameters<typeof createHub>[0]["nativeSound"]> = async action => {
+    calls.push(action.op);
+    if (action.op === "inventory") return { defaultOutput, profiles: ["1", "2"].map(id => ({ card: "headphones", id, name: `Headphones · ${id}`, active: id === source, available: headphonesAvailable, selectable: true })), outputs: ["speakers", "headphones"].map(id => ({ id, card: id, name: id, state: id === "headphones" && !headphonesAvailable ? "Unavailable" : "Available", availability: id === "headphones" && !headphonesAvailable ? "unavailable" : "available", volume: id === selected ? volume : 64, muted: id === selected && muted, volumeWritable: true, muteWritable: true })) };
+    if (action.op === "route") return { output: null };
+    if (action.op === "default") { defaultOutput = action.output; return { ok: true }; }
+    if (action.op === "volume") { volume = Math.round(action.value! * 100); return { ok: true }; }
+    if (action.op === "mute") { muted = !!action.value; return { ok: true }; }
+    if (action.op === "profile") { source = action.profile!; return { ok: true }; }
+    throw new Error("Unsupported fake sound request");
+  };
+  const options = { nativeSound, nativeDiagnostics: async () => ({ build: { version: null, revision: null, target: null, packaged: false }, facts: [] }) };
+  const first = fixture(undefined, undefined, undefined, options);
+  const ownerToken = await pair(first.hub), guestToken = await pair(first.hub);
+  await claimAdministrator(first.hub, ownerToken);
+  const owner = new Peer(first.hub, ownerToken), guest = new Peer(first.hub, guestToken);
+  await Promise.all([owner.ready(), guest.ready()]);
+  expect((await controllerApi(first.hub, guestToken, "/api/sound")).status).toBe(403);
+  expect((await controllerApi(first.hub, guestToken, "/api/sound/output", "POST", { output: "headphones" })).status).toBe(403);
+  expect((await controllerApi(first.hub, ownerToken, "/api/sound/output", "POST", { output: "headphones" })).status).toBe(200);
+  selected = "headphones";
+  expect((await controllerApi(first.hub, hostToken, "/api/sound")).status).toBe(200);
+  expect(first.commands).toContainEqual({ type: "audioOutput", output: "headphones" });
+  expect((await controllerApi(first.hub, hostToken, "/api/sound/output", "POST", { output: "speakers" })).status).toBe(200);
+  selected = "speakers";
+  expect((await controllerApi(first.hub, ownerToken, "/api/sound/output", "POST", { output: "headphones" })).status).toBe(200);
+  selected = "headphones";
+  expect((await controllerApi(first.hub, ownerToken, "/api/sound/profile", "POST", { profile: { card: "headphones", profile: "2" } })).status).toBe(200);
+  expect(source).toBe("2");
+  expect(await owner.command({ type: "volume", volume: 38 })).toMatchObject({ ok: true });
+  expect(await owner.command({ type: "mute", muted: true })).toMatchObject({ ok: true });
+  expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 38, muted: true, platform: "mac" });
+  first.hub.session.observe({ ...idle, volume: 7 });
+  expect(first.commands).toContainEqual({ type: "volume", volume: 100 });
+  expect(first.hub.session.state.player.volume).toBe(38);
+  expect((await controllerApi(first.hub, ownerToken, "/api/sound/output", "POST", { output: "absent" })).status).toBe(409);
+  volume = 52; defaultOutput = "speakers";
+  await Bun.sleep(1_100);
+  expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 52, muted: true });
+  expect(first.hub.session.state.player.volume).toBe(52);
+  expect(defaultOutput).toBe("headphones");
+  headphonesAvailable = false;
+  await Bun.sleep(1_100);
+  expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", observedOutput: null, volume: null, error: expect.stringContaining("unavailable") });
+  headphonesAvailable = true;
+  await Bun.sleep(1_100);
+  expect(first.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 52, muted: true, error: null });
+  await Promise.all([owner.close(), guest.close()]);
+  await first.hub.close(); hubs.splice(hubs.indexOf(first.hub), 1);
+  defaultOutput = "speakers"; calls.length = 0;
+  const restarted = fixture(first.databasePath, undefined, undefined, options);
+  await Bun.sleep(10);
+  expect(restarted.hub.session.state.systemAudio).toMatchObject({ selectedOutput: "headphones", volume: 52, muted: true });
+  expect(defaultOutput).toBe("headphones");
+  expect(restarted.commands).toEqual([]);
+  expect(calls).toContain("inventory");
+});
+
 test("paired controllers share For later across profile changes and restart without changing the active queue", async () => {
   const first = fixture();
   const token = await pair(first.hub), another = await pair(first.hub);

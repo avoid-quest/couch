@@ -47,6 +47,8 @@ import { createSoundRouting } from "./sound-routing";
 import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
+import { macSound } from "./sound-mac";
+import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
 
@@ -65,6 +67,7 @@ type HubOptions = {
   nativeBluetooth?: (action: BluetoothAction) => Promise<BluetoothState>;
   nativeDisplay?: (action: DisplayAction) => Promise<DisplayState>;
   nativeDiagnostics?: () => Promise<NativeDiagnostics | null>;
+  nativeSound?: (action: NativeSoundAction) => Promise<unknown>;
   frontend?: HTMLBundle | Response;
   assets?: Record<string, Response>;
   development?: boolean;
@@ -119,7 +122,8 @@ export function createHub(options: HubOptions) {
     return value === "true" ? true : value === "false" ? false : null;
   });
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
-  const systemAudio = !!options.nativeDiagnostics && process.platform === "linux";
+  const macAudio = process.platform === "darwin" && options.nativeSound ? macSound(options.nativeSound) : null;
+  const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
@@ -226,10 +230,11 @@ export function createHub(options: HubOptions) {
     active: () => ["loading", "playing", "paused"].includes(session.state.player.status),
     pin: output => options.sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
+    ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
   if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
-  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && process.platform === "linux", idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop.") });
+  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio), idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop."), ...(macAudio ? { backend: macAudio.test, testAvailable: macAudio.canTest, platform: "mac" as const } : {}) });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const updateWork = () => {

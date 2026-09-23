@@ -45,6 +45,12 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
       expect(result.urls.every(url => url.startsWith("http://"))).toBe(true);
       return message();
     }
+    if (result.type === "sound") {
+      const state = (result.action as { op?: string }).op === "inventory" ? { defaultOutput: "test-output", profiles: [], outputs: [{ id: "test-output", name: "Test output", state: "Available", availability: "available", volume: 50, muted: false, volumeWritable: true, muteWritable: true }] } : { output: null };
+      child.stdin.write(`${JSON.stringify({ type: "sound", requestId: result.requestId, state } satisfies HostMessage)}\n`);
+      await child.stdin.flush();
+      return message();
+    }
     return result;
   }
 
@@ -87,8 +93,8 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
   await child.stdin.flush();
   child.stdin.write(line.slice(12));
   await child.stdin.flush();
-  // Linux uses system audio and leaves the native player at unity gain.
-  expect(await message()).toEqual({ type: "playback", command: { type: "volume", volume: process.platform === "linux" ? 100 : 80 } });
+  // Native Linux and Mac sound controls leave the player at unity gain.
+  expect(await message()).toEqual({ type: "playback", command: { type: "volume", volume: process.platform === "linux" || process.platform === "darwin" ? 100 : 80 } });
   expect((await health()).player).toBe("idle");
 
   if (reason === "stdin close") child.stdin.end();

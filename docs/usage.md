@@ -1,8 +1,8 @@
 # Couch usage and development
 
 A Linux TV player controlled by everyone on the local network. Tauri embeds
-libmpv on Linux; Bun owns the shared queue, catalogs and paired remotes. The
-native Mac app can run from source in local or remote mode, without Mac playback.
+libmpv on Linux and Mac; Bun owns the shared queue, catalogs and paired remotes.
+The native Mac app runs from source with local playback or as a remote.
 
 The [public download page](https://couch.avoid.quest/download) currently offers
 Debian 13 amd64 packages. Source behavior described here may be newer than the
@@ -106,10 +106,12 @@ bun run desktop
 
 On first launch, choose **This computer** and keep remote control off unless
 you need LAN clients. The app starts its own Bun coordinator from source with
-the existing private native pipe and owner token. Now, Find, Saved, Settings
-and the queue are real; **native playback currently requires Linux**. Mac playback
-is separate work. There is no sidecar compilation, production frontend build,
-container, signing setup or media-helper installation needed to start this UI.
+the existing private native pipe and owner token. Now, Find, Saved, Settings,
+the queue and local playback run from source. Choose a Mac output in **Settings >
+Sound**; volume and mute control that output. A paired Administrator can manage
+it too. The development player needs Homebrew `mpv` for libmpv. There is no
+sidecar compilation, production frontend build, container or signing setup
+needed to start this UI.
 Providers that need external helpers still need `bun run setup:media`.
 
 Use the header's **Play on** control to switch to **Another Couch**. It shows
@@ -265,8 +267,9 @@ Run either this command or the desktop app on port 4100. `COUCH_PORT` can select
 another API port, but keep it stable so remotes retain their address. Client-only
 remotes continue to load the Bun-hosted UI on the server's advertised URLs.
 
-macOS can build and run the desktop UI/server, but this first native playback
-implementation is Linux-only. To produce a local macOS debug app:
+macOS can build and run the desktop UI, server and local player from source.
+The debug app still uses development dependencies and is not a qualified
+installed Mac package. To produce one:
 
 ```sh
 bun run desktop:build --debug --bundles app

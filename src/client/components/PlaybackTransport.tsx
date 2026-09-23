@@ -17,7 +17,7 @@ export function playbackCapabilities(state: SessionState | null, connected: bool
   return {
     available,
     active: !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status),
-    audioReady: !state?.systemAudio || state.systemAudio.volume !== null,
+    audioReady: !state?.systemAudio || state.systemAudio.volume !== null || state.systemAudio.volumeWritable === false && !state.systemAudio.error,
     transportReady: available && !!player?.playbackId && ["playing", "paused"].includes(player.status),
     seekable: !!player?.seekable,
     pausable: !live || !!player?.seekable,
@@ -66,9 +66,10 @@ export function PlaybackTransport({ state, credentials, connected, run, compact 
 
 export function PlaybackVolume({ state, connected, run }: Props) {
   const { available, audioReady } = playbackCapabilities(state, connected);
-  return <div className="volume-control" role="group" aria-label="TV volume">
-    {state.systemAudio ? <Button variant="ghost" size="icon" className="icon-button" aria-label={state.systemAudio.muted ? "Unmute TV" : "Mute TV"} title={state.systemAudio.muted ? "Unmute TV" : "Mute TV"} disabled={!available || !audioReady} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" />}
-    <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady} onCommit={volume => run({ type: "volume", volume })} />
-    <span>{audioReady ? `${Math.round(state.player.volume)}%` : "Unknown"}</span>
+  const target = state.systemAudio?.platform === "mac" ? state.installationName || "Mac" : "TV";
+  return <div className="volume-control" role="group" aria-label={`${target} volume`}>
+    {state.systemAudio ? <Button variant="ghost" size="icon" className="icon-button" aria-label={`${state.systemAudio.muted ? "Unmute" : "Mute"} ${target}`} title={`${state.systemAudio.muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" />}
+    <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />
+    <span>{state.systemAudio?.volume === null ? "Unknown" : `${Math.round(state.player.volume)}%`}</span>
   </div>;
 }

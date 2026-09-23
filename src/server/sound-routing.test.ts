@@ -99,6 +99,7 @@ test("session pauses seekable media on audio loss, suppresses stale EOF and requ
   try {
     session.observe({ playbackId: null, status: "idle", position: 0, duration: null, volume: 100, seekable: false, error: null });
     session.command({ type: "enqueue", entry: { id: "first", title: "First", source: "file:///first.mp4" }, playNow: true });
+    expect(commands.find(command => command.type === "load")).toMatchObject({ audioOutput: "hdmi" });
     session.command({ type: "enqueue", entry: { id: "next", title: "Next", source: "file:///next.mp4" } });
     const playbackId = session.state.player.playbackId!;
     session.observe({ playbackId, status: "playing", position: 25, duration: 100, volume: 100, seekable: true, error: null });

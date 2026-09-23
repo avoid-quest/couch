@@ -29,6 +29,14 @@ unsafe extern "C" {
     fn couch_video_destroy(view: *mut c_void);
 }
 
+#[cfg(test)]
+#[test]
+fn explicit_core_audio_device_is_a_writable_mpv_property() {
+    let mpv = Mpv::with_initializer(|init| init.set_option("audio-fallback-to-null", "yes")).unwrap();
+    mpv.set_property("audio-device", "coreaudio/couch-nonexistent-output").unwrap();
+    assert_eq!(mpv.get_property::<String>("audio-device").unwrap(), "coreaudio/couch-nonexistent-output");
+}
+
 type Job<R> = Box<dyn FnOnce(&mut Worker<R>) + Send>;
 
 pub struct MacVideo<R: Runtime> {
@@ -326,6 +334,7 @@ impl<R: Runtime> Worker<R> {
             init.set_option("osc", "no")?;
             init.set_option("ytdl", "no")?;
             init.set_option("audio-display", "no")?;
+            init.set_option("audio-fallback-to-null", "yes")?;
             init.set_option("osd-level", "0")?;
             init.set_option("input-default-bindings", "no")?;
             Ok(())
@@ -415,6 +424,9 @@ impl<R: Runtime> Worker<R> {
             .mpv
             .set_property("mute", request.muted)
             .map_err(mpv_error)?;
+        if let Some(output) = request.audio_output.as_deref() {
+            player.mpv.set_property("audio-device", format!("coreaudio/{output}")).map_err(mpv_error)?;
+        }
         player
             .mpv
             .set_property("pause", !request.autoplay)
@@ -520,6 +532,7 @@ impl<R: Runtime> Worker<R> {
                         ],
                     ),
                     "volume" => mpv.set_property("volume", request.value * 100.0),
+                    "audioOutput" => mpv.set_property("audio-device", format!("coreaudio/{}", request.audio_output.as_deref().ok_or_else(|| Error::InvalidRequest("Audio output is missing".into()))?)),
                     "speed" => mpv.set_property("speed", request.value),
                     "audioDelay" => mpv.set_property("audio-delay", request.value),
                     "subtitleDelay" => mpv.set_property("sub-delay", request.value),
