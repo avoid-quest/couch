@@ -1,17 +1,25 @@
 use std::{
+    collections::BTreeMap,
     ffi::c_void,
     mem::ManuallyDrop,
-    sync::mpsc::{self, SyncSender, TrySendError},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, SyncSender, TrySendError},
+        Arc, Weak,
+    },
     time::Duration,
 };
 
-use libmpv2::{events::Event, mpv_end_file_reason, Mpv};
+use libmpv2::{
+    events::{mpv_event_id, Event},
+    mpv_end_file_reason, Mpv,
+};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::{
     Error, MpvChapter, MpvPlaybackState, NativeControlRequest, NativeLayoutRequest,
-    NativeOpenRequest, NativePlaybackSnapshot, NativeSessionRequest, NativeSubtitle,
-    NativeTrackInfo, Result, TrackKind,
+    NativeNextSource, NativeOpenRequest, NativePlaybackSnapshot, NativePrepareRequest,
+    NativeSessionRequest, NativeSubtitle, NativeTrackInfo, Result, TrackKind,
 };
 
 unsafe extern "C" {
@@ -24,16 +32,22 @@ unsafe extern "C" {
 type Job<R> = Box<dyn FnOnce(&mut Worker<R>) + Send>;
 
 pub struct MacVideo<R: Runtime> {
-    sender: SyncSender<Job<R>>,
+    sender: Arc<SyncSender<Job<R>>>,
 }
 
 impl<R: Runtime> MacVideo<R> {
     pub fn new(app: AppHandle<R>) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<Job<R>>(32);
+        let sender = Arc::new(sender);
+        let wakeup = Arc::downgrade(&sender);
         std::thread::Builder::new()
             .name("couch-mac-mpv".into())
             .spawn(move || {
-                let mut worker = Worker { app, player: None };
+                let mut worker = Worker {
+                    app,
+                    player: None,
+                    wakeup,
+                };
                 while let Ok(job) = receiver.recv() {
                     job(&mut worker);
                 }
@@ -79,6 +93,9 @@ impl<R: Runtime> MacVideo<R> {
     pub fn control(&self, request: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
         self.call(move |worker| worker.control(request))
     }
+    pub fn prepare(&self, request: NativePrepareRequest) -> Result<NativePlaybackSnapshot> {
+        self.call(move |worker| worker.prepare(request))
+    }
     pub fn layout(&self, request: NativeLayoutRequest) -> Result<()> {
         self.call(move |worker| worker.layout(request))
     }
@@ -121,6 +138,7 @@ impl<R: Runtime> MacVideo<R> {
 struct Worker<R: Runtime> {
     app: AppHandle<R>,
     player: Option<Player<R>>,
+    wakeup: Weak<SyncSender<Job<R>>>,
 }
 
 struct Player<R: Runtime> {
@@ -128,6 +146,11 @@ struct Player<R: Runtime> {
     mpv: ManuallyDrop<Mpv>,
     view: usize,
     key: String,
+    playback_id: String,
+    source_headers: BTreeMap<String, String>,
+    next: Option<NativeNextSource>,
+    cue: bool,
+    can_prepare_next: bool,
     loaded: bool,
     error: Option<String>,
     radio: bool,
@@ -186,11 +209,6 @@ fn playback_status(mpv: &Mpv, loaded: bool, has_error: bool) -> (bool, bool, boo
 }
 
 fn validate_open(request: &NativeOpenRequest) -> Result<()> {
-    if request.end_position.is_some() {
-        return Err(Error::InvalidRequest(
-            "Bounded segment playback is not available on Mac yet".into(),
-        ));
-    }
     if request
         .backend
         .as_deref()
@@ -249,16 +267,48 @@ fn configure_media(mpv: &Mpv, request: &NativeOpenRequest) -> Result<()> {
         .map_err(mpv_error)
 }
 
-fn configure_start(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+fn configure_start(mpv: &Mpv, position: Option<f64>, cue: bool) -> Result<()> {
     if position.is_some_and(|value| !value.is_finite() || value < 0.0) {
         return Err(Error::InvalidRequest(
             "startPosition must be finite and nonnegative".into(),
         ));
     }
-    let start = position
-        .filter(|value| *value > 0.0)
-        .map_or_else(|| "none".to_owned(), |value| value.to_string());
+    let start = position.filter(|value| *value > 0.0).map_or_else(
+        || "none".to_owned(),
+        |value| crate::mpv_cue::timestamp(value, cue).to_string(),
+    );
     mpv.set_property("start", start).map_err(mpv_error)
+}
+
+fn configure_end(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+    if position.is_some_and(|value| !value.is_finite() || value <= 0.0) {
+        return Err(Error::InvalidRequest(
+            "endPosition must be finite and positive".into(),
+        ));
+    }
+    let end = position.map_or_else(
+        || "none".to_owned(),
+        |value| crate::mpv_cue::timestamp(value, true).to_string(),
+    );
+    mpv.set_property("end", end).map_err(mpv_error)
+}
+
+fn cancel_playlist(mpv: &Mpv) -> Result<()> {
+    mpv.set_property("prefetch-playlist", false)
+        .map_err(mpv_error)?;
+    mpv.command("playlist-clear", &[]).map_err(mpv_error)
+}
+
+fn queue_audio(mpv: &Mpv, uri: &str) -> Result<()> {
+    configure_start(mpv, None, false)?;
+    configure_end(mpv, None)?;
+    mpv.set_property("prefetch-playlist", true)
+        .map_err(mpv_error)?;
+    if let Err(error) = mpv.command("loadfile", &[uri, "append"]) {
+        let _ = mpv.set_property("prefetch-playlist", false);
+        return Err(mpv_error(error));
+    }
+    Ok(())
 }
 
 impl<R: Runtime> Worker<R> {
@@ -268,7 +318,7 @@ impl<R: Runtime> Worker<R> {
         if unsafe { libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr()) }.is_null() {
             return Err(Error::Pipeline("mpv requires the C numeric locale".into()));
         }
-        let mpv = Mpv::with_initializer(|init| {
+        let mut mpv = Mpv::with_initializer(|init| {
             init.set_option("vo", "libmpv")?;
             init.set_option("hwdec", "auto-safe")?;
             init.set_option("video-timing-offset", 0.0_f64)?;
@@ -282,7 +332,33 @@ impl<R: Runtime> Worker<R> {
         })
         .map_err(mpv_error)?;
         mpv.disable_deprecated_events().map_err(mpv_error)?;
+        mpv.disable_event(mpv_event_id::Tick).map_err(mpv_error)?;
         mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
+        // The preload hook must run before the host's next snapshot poll.
+        let wakeup = self.wakeup.clone();
+        let pending = Arc::new(AtomicBool::new(false));
+        mpv.set_wakeup_callback(move || {
+            if pending.swap(true, Ordering::AcqRel) {
+                return;
+            }
+            if let Some(sender) = wakeup.upgrade() {
+                let finished = pending.clone();
+                if sender
+                    .try_send(Box::new(move |worker: &mut Worker<R>| {
+                        finished.store(false, Ordering::Release);
+                        if let Some(player) = worker.player.as_mut() {
+                            if let Err(error) = player.drain_events() {
+                                player.error = Some(error.to_string());
+                            }
+                        }
+                    }))
+                    .is_ok()
+                {
+                    return;
+                }
+            }
+            pending.store(false, Ordering::Release);
+        });
         let window = self
             .app
             .get_webview_window("main")
@@ -308,6 +384,15 @@ impl<R: Runtime> Worker<R> {
             mpv: ManuallyDrop::new(mpv),
             view,
             key: request.session_key.clone(),
+            playback_id: request.session_key.clone(),
+            source_headers: request.headers.clone(),
+            next: None,
+            cue: request.end_position.is_some(),
+            can_prepare_next: request.audio_uri.is_none()
+                && request.max_video_height.is_none()
+                && !request.radio
+                && !request.go_live
+                && !request.event_start,
             loaded: false,
             error: None,
             radio: request.radio,
@@ -334,7 +419,9 @@ impl<R: Runtime> Worker<R> {
             .mpv
             .set_property("pause", !request.autoplay)
             .map_err(mpv_error)?;
-        configure_start(&player.mpv, request.start_position)?;
+        cancel_playlist(&player.mpv)?;
+        configure_start(&player.mpv, request.start_position, player.cue)?;
+        configure_end(&player.mpv, request.end_position)?;
         player
             .mpv
             .command("loadfile", &[&request.uri, "replace"])
@@ -355,14 +442,47 @@ impl<R: Runtime> Worker<R> {
         Ok(player)
     }
 
+    fn prepare(&mut self, request: NativePrepareRequest) -> Result<NativePlaybackSnapshot> {
+        let player = self.player(&request.session_key)?;
+        player.drain_events()?;
+        player.next = None;
+        cancel_playlist(&player.mpv)?;
+        if player.playback_id != request.playback_id {
+            // Bun canceled a successor that started before its next observation.
+            player.mpv.command("stop", &[]).map_err(mpv_error)?;
+            player.playback_id = request.playback_id;
+            player.error = Some(
+                "The queue changed during the track transition. Play a queue item to continue."
+                    .into(),
+            );
+            return player.snapshot();
+        }
+        if let Some(next) = request.next {
+            if !player.loaded
+                || player.cue
+                || !player.can_prepare_next
+                || player.error.is_some()
+                || next.headers != player.source_headers
+            {
+                return Err(Error::InvalidRequest(
+                    "This source requires an ordinary queue transition.".into(),
+                ));
+            }
+            queue_audio(&player.mpv, &next.uri)?;
+            player.next = Some(next);
+        }
+        player.snapshot()
+    }
+
     fn control(&mut self, request: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
         let player = self.player(&request.session_key)?;
+        player.drain_events()?;
         if request
             .playback_id
             .as_deref()
-            .is_some_and(|id| id != player.key)
+            .is_some_and(|id| id != player.playback_id)
         {
-            return Err(Error::InvalidRequest("Stale Mac playback ID".into()));
+            return player.snapshot();
         }
         match request.action.as_str() {
             "track" | "deselectTrack" => {
@@ -391,7 +511,14 @@ impl<R: Runtime> Worker<R> {
                 match request.action.as_str() {
                     "play" => mpv.set_property("pause", false),
                     "pause" | "audioPause" => mpv.set_property("pause", true),
-                    "seek" => mpv.command("seek", &[&request.value.to_string(), "absolute+exact"]),
+                    "seek" => mpv.command(
+                        "seek",
+                        &[
+                            &crate::mpv_cue::timestamp(request.value.max(0.0), player.cue)
+                                .to_string(),
+                            "absolute+exact",
+                        ],
+                    ),
                     "volume" => mpv.set_property("volume", request.value * 100.0),
                     "speed" => mpv.set_property("speed", request.value),
                     "audioDelay" => mpv.set_property("audio-delay", request.value),
@@ -480,9 +607,23 @@ impl<R: Runtime> Player<R> {
         })
     }
 
-    fn snapshot(&mut self) -> Result<NativePlaybackSnapshot> {
+    fn drain_events(&mut self) -> Result<()> {
         while let Some(event) = self.mpv.wait_event(0.0) {
             match event.map_err(mpv_error)? {
+                Event::StartFile => {
+                    if let Some(next) = self.next.take() {
+                        self.playback_id = next.playback_id;
+                        self.source_headers = next.headers;
+                        self.loaded = false;
+                        self.error = None;
+                        self.cue = false;
+                        self.pending_subtitles.clear();
+                        self.subtitle_error = None;
+                        crate::mpv_subtitles::reset(&self.mpv, &next.preferences)?;
+                        self.replay_gain
+                            .reset(&self.mpv, next.preferences.replay_gain)?;
+                    }
+                }
                 Event::FileLoaded => self.loaded = true,
                 Event::Hook { id } => {
                     let selection = crate::mpv_tracks::select(&self.mpv, self.max_video_height)
@@ -503,6 +644,11 @@ impl<R: Runtime> Player<R> {
                 _ => {}
             }
         }
+        Ok(())
+    }
+
+    fn snapshot(&mut self) -> Result<NativePlaybackSnapshot> {
+        self.drain_events()?;
         let mpv = &self.mpv;
         let mut tracks = Vec::new();
         for index in 0..mpv.get_property::<i64>("track-list/count").unwrap_or(0) {
@@ -569,7 +715,7 @@ impl<R: Runtime> Player<R> {
         }
         Ok(NativePlaybackSnapshot {
             mpv_state: Some(MpvPlaybackState {
-                playback_id: Some(self.key.clone()),
+                playback_id: Some(self.playback_id.clone()),
                 error: self.error.clone(),
                 volume: mpv.get_property::<f64>("volume").unwrap_or(80.0) / 100.0,
                 seekable: self.loaded && mpv.get_property::<bool>("seekable").unwrap_or(false),
@@ -623,257 +769,5 @@ impl<R: Runtime> Player<R> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{
-        fs,
-        io::{Read, Write},
-        net::TcpListener,
-        path::{Path, PathBuf},
-        process::Command,
-        sync::{
-            atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
-        },
-        time::{Instant, SystemTime, UNIX_EPOCH},
-    };
-
-    #[test]
-    fn live_load_has_no_implicit_seek_overriding_the_probed_start() {
-        for (event_start, go_live, expected) in [
-            (true, false, "live_start_index=0"),
-            (false, true, "live_start_index=-1"),
-        ] {
-            let mpv = Mpv::with_initializer(|init| {
-                init.set_option("vo", "null")?;
-                init.set_option("ao", "null")?;
-                Ok(())
-            })
-            .unwrap();
-            let request = NativeOpenRequest {
-                uri: "https://example.test/live.m3u8".into(),
-                event_start,
-                go_live,
-                ..Default::default()
-            };
-            configure_media(&mpv, &request).unwrap();
-            configure_start(&mpv, request.start_position).unwrap();
-            assert_eq!(mpv.get_property::<String>("start").unwrap(), "none");
-            assert!(mpv
-                .get_property::<String>("demuxer-lavf-o")
-                .unwrap()
-                .contains(expected));
-        }
-    }
-
-    #[test]
-    fn split_network_video_loads_both_tracks_with_required_headers() {
-        struct Fixture(PathBuf);
-        impl Drop for Fixture {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-        let fixture = Fixture(std::env::temp_dir().join(format!(
-            "couch-mac-split-{}-{}", std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
-        )));
-        fs::create_dir(&fixture.0).unwrap();
-        let video = fixture.0.join("video.mp4");
-        let audio = fixture.0.join("audio.m4a");
-        for (source, codec, output) in [
-            ("color=c=blue:s=640x360:r=25", "libx264", &video),
-            ("sine=frequency=440:sample_rate=48000", "aac", &audio),
-        ] {
-            let kind = if codec == "aac" { "a" } else { "v" };
-            let result = Command::new("ffmpeg")
-                .args([
-                    "-v",
-                    "error",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    source,
-                    "-t",
-                    "4",
-                    &format!("-c:{kind}"),
-                    codec,
-                    "-threads",
-                    "1",
-                    "-y",
-                ])
-                .arg(output)
-                .output()
-                .unwrap();
-            assert!(
-                result.status.success(),
-                "{}",
-                String::from_utf8_lossy(&result.stderr)
-            );
-        }
-        let video = fs::read(video).unwrap();
-        let audio = fs::read(audio).unwrap();
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let origin = format!("http://{}", listener.local_addr().unwrap());
-        let stop = Arc::new(AtomicBool::new(false));
-        let served = Arc::new(AtomicUsize::new(0));
-        let server_stop = Arc::clone(&stop);
-        let server_served = Arc::clone(&served);
-        let server = std::thread::spawn(move || {
-            while !server_stop.load(Ordering::Relaxed) {
-                let Ok((mut socket, _)) = listener.accept() else {
-                    std::thread::sleep(Duration::from_millis(5));
-                    continue;
-                };
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut request = Vec::new();
-                while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") && request.len() < 8192
-                {
-                    let mut chunk = [0; 1024];
-                    let Ok(count) = socket.read(&mut chunk) else {
-                        break;
-                    };
-                    if count == 0 {
-                        break;
-                    }
-                    request.extend_from_slice(&chunk[..count]);
-                }
-                let text = String::from_utf8_lossy(&request);
-                let authorized = text
-                    .to_ascii_lowercase()
-                    .contains("authorization: token,part2");
-                let (body, content_type) = if text.starts_with("GET /video.mp4 ") {
-                    (&video, "video/mp4")
-                } else if text.starts_with("GET /audio.m4a ") {
-                    (&audio, "audio/mp4")
-                } else {
-                    continue;
-                };
-                if authorized {
-                    server_served.fetch_add(1, Ordering::Relaxed);
-                }
-                let status = if authorized {
-                    "200 OK"
-                } else {
-                    "403 Forbidden"
-                };
-                let size = if authorized { body.len() } else { 0 };
-                let _ = write!(socket, "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n");
-                if authorized {
-                    let _ = socket.write_all(body);
-                }
-            }
-        });
-        let mut mpv = Mpv::with_initializer(|init| {
-            init.set_option("vo", "null")?;
-            init.set_option("ao", "null")?;
-            init.set_option("ytdl", "no")?;
-            Ok(())
-        })
-        .unwrap();
-        mpv.hook_add("on_preloaded", 0).unwrap();
-        let request = NativeOpenRequest {
-            session_key: "split".into(),
-            uri: format!("{origin}/video.mp4"),
-            audio_uri: Some(format!("{origin}/audio.m4a")),
-            headers: [("Authorization".into(), "token,part2".into())].into(),
-            max_video_height: Some(720),
-            width: 640.0,
-            height: 360.0,
-            ..Default::default()
-        };
-        validate_open(&request).unwrap();
-        configure_media(&mpv, &request).unwrap();
-        configure_start(&mpv, request.start_position).unwrap();
-        mpv.command("loadfile", &[&request.uri, "replace"]).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(12);
-        let mut loaded = false;
-        while Instant::now() < deadline {
-            match mpv.wait_event(0.05).transpose().unwrap() {
-                Some(Event::Hook { id }) => {
-                    let result = crate::mpv_tracks::select(&mpv, request.max_video_height);
-                    unsafe { mpv.hook_continue(id) }.unwrap();
-                    result.unwrap();
-                }
-                Some(Event::FileLoaded) => {
-                    loaded = true;
-                    break;
-                }
-                Some(Event::EndFile(mpv_end_file_reason::Error)) => {
-                    panic!("split media failed to load")
-                }
-                _ => {}
-            }
-        }
-        let kinds: Vec<_> = (0..mpv.get_property::<i64>("track-list/count").unwrap_or(0))
-            .filter_map(|index| {
-                mpv.get_property::<String>(&format!("track-list/{index}/type"))
-                    .ok()
-            })
-            .collect();
-        mpv.command("stop", &[]).unwrap();
-        stop.store(true, Ordering::Relaxed);
-        server.join().unwrap();
-        assert!(loaded, "split media did not load before the deadline");
-        assert!(kinds.iter().any(|kind| kind == "video"), "{kinds:?}");
-        assert!(kinds.iter().any(|kind| kind == "audio"), "{kinds:?}");
-        assert!(
-            served.load(Ordering::Relaxed) >= 2,
-            "both URLs must require the header"
-        );
-    }
-
-    #[test]
-    fn replay_after_eof_reports_playing_again() {
-        let mut mpv = Mpv::with_initializer(|init| {
-            init.set_option("vo", "null")?;
-            init.set_option("ao", "null")?;
-            init.set_option("keep-open", "yes")?;
-            init.set_option("speed", 0.25_f64)?;
-            Ok(())
-        })
-        .unwrap();
-        let media =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/fixtures/cue/short.wav");
-        mpv.command("loadfile", &[media.to_str().unwrap(), "replace"])
-            .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let mut loaded = false;
-        while !mpv.get_property::<bool>("eof-reached").unwrap_or(false) {
-            assert!(Instant::now() < deadline, "fixture did not reach EOF");
-            match mpv.wait_event(0.05).transpose().unwrap() {
-                Some(Event::FileLoaded) => loaded = true,
-                Some(Event::EndFile(mpv_end_file_reason::Error)) => {
-                    panic!("fixture could not load")
-                }
-                _ => {}
-            }
-        }
-        assert!(loaded);
-        assert!(playback_status(&mpv, loaded, false).0);
-
-        mpv.command("seek", &["0", "absolute+exact"]).unwrap();
-        mpv.set_property("pause", false).unwrap();
-        loop {
-            assert!(
-                Instant::now() < deadline,
-                "fixture did not restart after seek"
-            );
-            let _ = mpv.wait_event(0.01);
-            if !mpv.get_property::<bool>("eof-reached").unwrap_or(true)
-                && mpv.get_property::<f64>("time-pos").unwrap_or(0.0) > 0.0
-            {
-                let (reported_ended, _, playing) = playback_status(&mpv, loaded, false);
-                assert!(
-                    !reported_ended,
-                    "replayed media must no longer report ended"
-                );
-                assert!(playing, "replayed media must report playing");
-                break;
-            }
-        }
-    }
-}
+#[path = "macos_tests.rs"]
+mod tests;
