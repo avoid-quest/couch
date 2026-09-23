@@ -6,7 +6,9 @@ use std::{
     sync::{atomic::Ordering, Mutex},
     time::Duration,
 };
-use tauri::{Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, Url};
+
+const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +32,6 @@ pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
     operation: tokio::sync::Mutex<()>,
-    remote_closed: tokio::sync::watch::Sender<bool>,
 }
 
 impl Modes {
@@ -44,11 +45,7 @@ impl Modes {
             path,
             choice: Mutex::new(choice),
             operation: tokio::sync::Mutex::new(()),
-            remote_closed: tokio::sync::watch::channel(true).0,
         })
-    }
-    pub fn remote_destroyed(&self) {
-        self.remote_closed.send_replace(true);
     }
     fn current(&self) -> Choice {
         self.choice.lock().expect("mode lock poisoned").clone()
@@ -92,11 +89,24 @@ pub fn app_origin(config: &tauri::Config, url: &Url) -> bool {
     }
     bundled_origin(url)
 }
-fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
+pub(crate) fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
     if window.label() == "main" && app_origin(window.config(), &window.url().map_err(error)?) {
         Ok(())
     } else {
         Err("Playback device controls belong to the bundled app.".into())
+    }
+}
+
+pub(crate) fn remote_selected(app: &tauri::AppHandle) -> bool {
+    app.state::<Modes>().current().mode == Some(Mode::Remote)
+}
+
+pub(crate) fn local_authority(window: &tauri::WebviewWindow) -> Result<(), String> {
+    trusted(window)?;
+    if window.app_handle().state::<Modes>().current().mode == Some(Mode::Local) {
+        Ok(())
+    } else {
+        Err("Local playback commands require This computer.".into())
     }
 }
 
@@ -107,20 +117,7 @@ pub fn desktop_interface_size(
     size: Option<f64>,
 ) -> Result<f64, String> {
     let modes = app.state::<Modes>();
-    let choice = modes.current();
-    let remote = window.label() == "remote"
-        && choice.mode == Some(Mode::Remote)
-        && choice.address.as_deref().is_some_and(|address| {
-            target(address).ok().is_some_and(|url| {
-                window
-                    .url()
-                    .ok()
-                    .is_some_and(|current| current.origin() == url.origin())
-            })
-        });
-    if trusted(&window).is_err() && !remote {
-        return Err("Desktop appearance belongs to this Couch client.".into());
-    }
+    trusted(&window)?;
     let path = modes.path.with_file_name("desktop-interface-size");
     if let Some(size) = size {
         if ![1.0, 1.15, 1.3].contains(&size) {
@@ -233,8 +230,8 @@ async fn preflight(url: &Url) -> Result<(), String> {
     }
     let value: serde_json::Value = serde_json::from_slice(&body)
         .map_err(|_| "That address did not return a Couch connection.")?;
-    if value["desktopRemoteUi"].as_u64() != Some(1) {
-        return Err("This Couch does not support app remote mode. Update the playback computer, or open its address in a browser.".into());
+    if value["desktopClientProtocol"].as_u64() != Some(DESKTOP_CLIENT_PROTOCOL) {
+        return Err("This Couch uses an incompatible desktop client protocol. Update this app or the playback computer, then retry or choose another address.".into());
     }
     if value["remoteControlEnabled"] == false {
         return Err("Remote control is off. Enable Allow remote control on the playback computer, then retry.".into());
@@ -357,171 +354,6 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
     Ok(())
 }
 
-async fn close_remote(app: &tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("remote") {
-        let modes = app.state::<Modes>();
-        modes.remote_closed.send_replace(false);
-        let mut closed = modes.remote_closed.subscribe();
-        window.close().map_err(error)?;
-        // App-level Destroyed is delivered after Tauri removes the old window label.
-        tokio::time::timeout(Duration::from_secs(3), closed.wait_for(|done| *done))
-            .await
-            .map_err(|_| "The remote window has not closed yet. Retry changing playback device.")?
-            .map_err(error)?;
-    }
-    Ok(())
-}
-
-fn remote_geometry(
-    position: PhysicalPosition<i32>,
-    size: PhysicalSize<u32>,
-    scale: f64,
-) -> Option<(PhysicalPosition<i32>, PhysicalSize<u32>)> {
-    // Round up so fractional display scales cannot cover the recovery bar.
-    let header = (88.0 * scale).ceil() as u32;
-    if size.width == 0 || size.height <= header {
-        return None;
-    }
-    Some((
-        PhysicalPosition::new(position.x, position.y.saturating_add(header as i32)),
-        PhysicalSize::new(size.width, size.height - header),
-    ))
-}
-
-pub fn sync_remote_geometry(app: &tauri::AppHandle) -> Result<(), String> {
-    let (Some(main), Some(remote)) = (
-        app.get_webview_window("main"),
-        app.get_webview_window("remote"),
-    ) else {
-        return Ok(());
-    };
-    // Keep the last usable geometry through transient minimize/zero-size events.
-    if main.is_minimized().map_err(error)? {
-        return Ok(());
-    }
-    if let Some((position, size)) = remote_geometry(
-        main.inner_position().map_err(error)?,
-        main.inner_size().map_err(error)?,
-        main.scale_factor().map_err(error)?,
-    ) {
-        // Physical bounds stay correct even before the remote adopts a new monitor's scale.
-        remote.set_position(position).map_err(error)?;
-        remote.set_size(size).map_err(error)?;
-    }
-    Ok(())
-}
-
-async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String> {
-    let url = target(address)?;
-    if crate::appimage_update::status(app, None, "mode-check")["transaction"]["phase"] == "trial" {
-        return Err("This computer still needs its local update checks. Choose Use this computer to finish them before returning to remote mode.".into());
-    }
-    preflight(&url).await?;
-    if let Some(remote) = app.get_webview_window("remote") {
-        if remote.url().map_err(error)?.origin() == url.origin() {
-            remote.navigate(url).map_err(error)?;
-            return if app.state::<Host>().window_closed.load(Ordering::SeqCst) {
-                remote.hide().map_err(error)
-            } else {
-                remote.set_focus().map_err(error)
-            };
-        }
-    }
-    close_remote(app).await?;
-    let main = app
-        .get_webview_window("main")
-        .ok_or("Playback device controls are unavailable.")?;
-    let scale = main.scale_factor().map_err(error)?;
-    let (position, size) = remote_geometry(
-        main.inner_position().map_err(error)?,
-        main.inner_size().map_err(error)?,
-        scale,
-    )
-    .ok_or("Restore the playback device window before opening the remote.")?;
-    let origin = url.origin();
-    let handle = app.clone();
-    let device = tauri::menu::MenuItem::with_id(
-        app,
-        "playback-device",
-        "Playback device",
-        true,
-        Some("CmdOrCtrl+Shift+P"),
-    )
-    .map_err(error)?;
-    #[cfg(target_os = "linux")]
-    let quit = tauri::menu::MenuItem::with_id(app, "quit-remote-couch", "Quit Couch", true, Some("Ctrl+Q"))
-        .map_err(error)?;
-    #[cfg(target_os = "linux")]
-    let menu = tauri::menu::Menu::with_items(app, &[&device, &quit]).map_err(error)?;
-    #[cfg(not(target_os = "linux"))]
-    let menu = tauri::menu::Menu::with_items(app, &[&device]).map_err(error)?;
-    // The bundled window's 88 px recovery bar stays exposed even if target JavaScript hangs.
-    let remote = WebviewWindowBuilder::new(app, "remote", WebviewUrl::External(url))
-        .title("Couch remote")
-        .visible(!app.state::<Host>().window_closed.load(Ordering::SeqCst))
-        .menu(menu)
-        .on_menu_event(|window, event| {
-            if event.id().as_ref() == "playback-device" {
-                let app = window.app_handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let modes = app.state::<Modes>();
-                    let _guard = modes.operation.lock().await;
-                    let _ = close_remote(&app).await;
-                    if let Some(main) = app.get_webview_window("main") {
-                        let _ = main.set_focus();
-                    }
-                });
-            }
-            #[cfg(target_os = "linux")]
-            if event.id().as_ref() == "quit-remote-couch" {
-                crate::desktop_lifecycle::request_quit(window.app_handle());
-            }
-        })
-        .decorations(false)
-        .resizable(false)
-        .maximizable(false)
-        .fullscreen(false)
-        .position(position.x as f64 / scale, position.y as f64 / scale)
-        .inner_size(size.width as f64 / scale, size.height as f64 / scale)
-        .always_on_top(true)
-        .on_navigation(move |url| url.origin() == origin)
-        .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-        .build()
-        .map_err(error)?;
-    if app.state::<Host>().window_closed.load(Ordering::SeqCst) {
-        remote.hide().map_err(error)?;
-    } else {
-        remote.show().map_err(error)?;
-    }
-    sync_remote_geometry(app)?;
-    remote.on_window_event(move |event| {
-        if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-            if let Some(main) = handle.get_webview_window("main") {
-                let _ = main.set_focus();
-            }
-        }
-    });
-    Ok(())
-}
-
-pub(crate) async fn reopen_selected(app: &tauri::AppHandle) -> Result<(), String> {
-    let modes = app.state::<Modes>();
-    let _guard = modes.operation.lock().await;
-    let choice = modes.current();
-    if choice.mode == Some(Mode::Remote) && app.get_webview_window("remote").is_none() {
-        crate::start_coordinator(app, false)?;
-        open_remote(
-            app,
-            choice
-                .address
-                .as_deref()
-                .ok_or("Choose another Couch's address.")?,
-        )
-        .await?;
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn playback_device(
     window: tauri::WebviewWindow,
@@ -555,10 +387,8 @@ pub async fn select_playback_device(
         choice.mode = Some(mode);
         choice.address = Some(address);
         // Remember the deliberate choice even when the target is unavailable. Never fall back to local.
-        close_remote(&app).await?;
         modes.save(choice.clone())?;
     } else {
-        close_remote(&app).await?;
         stop_local(&app, true).await?;
         crate::start_local(&app)?;
         choice.mode = Some(mode);
@@ -580,14 +410,7 @@ pub async fn retry_playback_device(
         Some(Mode::Local) => crate::start_local(&app),
         Some(Mode::Remote) => {
             crate::start_coordinator(&app, false)?;
-            open_remote(
-                &app,
-                choice
-                    .address
-                    .as_deref()
-                    .ok_or("Choose another Couch's address.")?,
-            )
-            .await
+            preflight(&target(choice.address.as_deref().ok_or("Choose another Couch's address.")?)?).await
         }
         None => Ok(()),
     }
@@ -607,18 +430,6 @@ pub async fn complete_local_setup(
     }
     choice.local_setup_complete = true;
     modes.save(choice)
-}
-
-#[tauri::command]
-pub async fn show_playback_device(
-    window: tauri::WebviewWindow,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    trusted(&window)?;
-    let modes = app.state::<Modes>();
-    let _guard = modes.operation.lock().await;
-    close_remote(&app).await?;
-    window.set_focus().map_err(error)
 }
 
 #[cfg(test)]
@@ -648,37 +459,6 @@ mod tests {
         ] {
             assert!(!app_origin(&config, &Url::parse(url).unwrap()), "{url}");
         }
-    }
-
-    #[test]
-    fn remote_geometry_keeps_the_recovery_header_on_moved_and_scaled_displays() {
-        for (position, size, scale, expected_position, expected_size) in [
-            ((-1920, 100), (1920, 1080), 1.0, (-1920, 188), (1920, 992)),
-            ((240, -240), (2560, 1440), 2.0, (240, -64), (2560, 1264)),
-            ((80, 100), (1600, 1000), 1.3, (80, 215), (1600, 885)),
-            ((240, 60), (1000, 150), 1.25, (240, 170), (1000, 40)),
-        ] {
-            assert_eq!(
-                remote_geometry(position.into(), size.into(), scale),
-                Some((expected_position.into(), expected_size.into())),
-            );
-        }
-    }
-
-    #[test]
-    fn remote_geometry_ignores_empty_space_and_restores_the_available_size() {
-        for size in [(0, 600), (800, 0), (800, 88), (800, 40)] {
-            assert!(remote_geometry((0, 0).into(), size.into(), 1.0).is_none());
-        }
-        assert!(remote_geometry((0, 0).into(), (800, 176).into(), 2.0).is_none());
-        assert_eq!(
-            remote_geometry((20, 40).into(), (800, 89).into(), 1.0),
-            Some(((20, 128).into(), (800, 1).into())),
-        );
-        assert_eq!(
-            remote_geometry((20, 40).into(), (800, 600).into(), 1.0),
-            Some(((20, 128).into(), (800, 512).into())),
-        );
     }
 
     #[test]
@@ -806,21 +586,21 @@ mod tests {
         }
         assert!(response(
             "200 OK",
-            r#"{"desktopRemoteUi":1,"remoteControlEnabled":true}"#
+            r#"{"desktopClientProtocol":1,"remoteControlEnabled":true}"#
         )
         .await
         .is_ok());
-        assert!(response("200 OK", r#"{"desktopRemoteUi":2}"#)
+        assert!(response("200 OK", r#"{"desktopClientProtocol":2}"#)
             .await
             .unwrap_err()
-            .contains("does not support"));
+            .contains("incompatible desktop client protocol"));
         assert!(response("200 OK", r#"{}"#)
             .await
             .unwrap_err()
-            .contains("does not support"));
+            .contains("incompatible desktop client protocol"));
         assert!(response(
             "200 OK",
-            r#"{"desktopRemoteUi":1,"remoteControlEnabled":false}"#
+            r#"{"desktopClientProtocol":1,"remoteControlEnabled":false}"#
         )
         .await
         .unwrap_err()

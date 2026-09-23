@@ -75,6 +75,12 @@ async function role(session: string, xpath: string) {
   return false;
 }
 
+async function click(session: string, xpath: string) {
+  const elements = await request(`/session/${session}/elements`, { using: "xpath", value: xpath }) as Array<Record<string, string>>;
+  assert.equal(elements.length, 1, `Expected one control for ${xpath}`);
+  await request(`/session/${session}/element/${elements[0]!["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
+}
+
 async function open(presentation: "0" | "1", directory: string) {
   const driver = Bun.spawn(["tauri-driver"], {
     env: { ...process.env, COUCH_DATA_DIR: directory, COUCH_TV_PRESENTATION: presentation, COUCH_DEV_BUN: Bun.which("bun") ?? "/usr/local/bin/bun" },
@@ -190,34 +196,42 @@ try {
   await writeFile(`${selected}/operating-mode.json`, JSON.stringify({ mode: "remote", address: selectedHost, targets: [selectedHost], localSetupComplete: true }));
   native = await open("0", selected);
   try {
-    await until("selected remote window opens", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => "")).length > 0, 30_000);
-    let remoteHandle: string | undefined;
-    for (const handle of await request(`/session/${native.session}/window/handles`) as string[]) {
-      await request(`/session/${native.session}/window`, { handle });
-      if (String(await request(`/session/${native.session}/url`)).startsWith(selectedHost)) remoteHandle = handle;
-    }
-    assert.ok(remoteHandle, "WebDriver exposes the selected host page");
-    await request(`/session/${native.session}/window`, { handle: remoteHandle });
-    await until("selected remote page shows connection heading", () => role(native.session, '//*[self::h1 or self::h2][normalize-space(.)="Connect to Couch"]'));
-    await until("selected remote page offers Connect", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    await until("selected remote uses the bundled Couch window", () => role(native.session, '//button[contains(normalize-space(.),"Play on: http://127.0.0.1:4201")]'), 30_000);
+    assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "WebDriver exposes one app window");
+    assert.equal((await request(`/session/${native.session}/elements`, { using: "xpath", value: '//header[contains(@class,"app-header")]' }) as unknown[]).length, 1, "Couch shows one app header");
+    assert.equal(await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => ""), "", "No second remote OS window exists");
+    await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    const ready = JSON.parse((await Bun.file("/artifacts/lifecycle-selected-host.log").text()).split("\n").find(line => line.includes('"type":"ready"'))!) as { pairingCode: string };
+    const paired = await fetch(`${selectedHost}/api/pair`, { method: "POST", headers: { Origin: selectedHost, "Content-Type": "application/json" }, body: JSON.stringify({ code: ready.pairingCode, name: "Desktop client" }) });
+    assert.equal(paired.status, 200);
+    const { token, installationId } = await paired.json() as { token: string; installationId: string };
+    await request(`/session/${native.session}/execute/sync`, { script: "localStorage.setItem('couch.pairing:' + arguments[0], JSON.stringify({ token: arguments[1], installationId: arguments[2] })); location.reload();", args: [selectedHost, token, installationId] });
+    await until("paired desktop client connects to the selected host", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     assert.equal(await health(), false, "selected remote creates no local playback host");
+    await click(native.session, '//button[contains(normalize-space(.),"Play on: http://127.0.0.1:4201")]');
+    await click(native.session, '//button[normalize-space(.)="This computer"]');
+    await until("remote to local starts this computer", health, 30_000);
+    await click(native.session, '//button[contains(normalize-space(.),"Play on: This computer")]');
+    await click(native.session, '//button[normalize-space(.)="http://127.0.0.1:4201"]');
+    await click(native.session, '//button[normalize-space(.)="Stop and switch"]');
+    await until("local to remote stops this computer", async () => !await health(), 30_000);
+    await until("local to remote restores the paired shell", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
+    assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "Switching keeps one OS window");
     const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
     assert.equal(appPid.length, 1);
     assert.equal(hostPid.length, 2, "selected host and client-only coordinator each have one process");
     assert.ok(hostPid.includes(String(remoteHost.pid)));
-    const remoteWindow = await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$");
     const mainWindow = await windowId();
     await closeWindow(mainWindow);
-    await until("selected remote Close minimizes trusted window", async () => (await command("xprop", "-id", mainWindow, "WM_STATE").catch(() => "")).includes("Iconic"));
-    await until("selected remote Close hides remote window", async () => (await command("xwininfo", "-id", remoteWindow)).includes("IsUnMapped"));
+    await until("selected remote Close minimizes the sole window", async () => (await command("xprop", "-id", mainWindow, "WM_STATE").catch(() => "")).includes("Iconic"));
     assert.equal(await hostHealth(), true, "client-only Close keeps selected host running");
     const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: selected, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
     assert.equal(await second.exited, 0);
-    await until("launcher restores selected remote", async () => (await command("xwininfo", "-id", remoteWindow)).includes("IsViewable"));
-    await until("reopened selected remote retains Connect", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    await until("launcher restores the same selected remote window", async () => (await command("xwininfo", "-id", mainWindow)).includes("IsViewable"));
+    await until("reopened selected remote retains the shared shell", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     assert.deepEqual(await processIds("couch"), appPid);
     assert.deepEqual(await processIds("couch-server"), hostPid);
-    await quitShortcut(remoteWindow);
+    await quitShortcut(mainWindow);
     await until("client-only Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
   } finally { await closeDriver(native); }
 } finally { remoteHost.kill(); await remoteHost.exited; }

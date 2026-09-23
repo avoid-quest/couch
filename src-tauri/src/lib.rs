@@ -100,9 +100,11 @@ fn prepare_data_dir(path: &std::path::Path) -> std::io::Result<()> {
 
 #[tauri::command]
 async fn connection_info(
+    window: tauri::WebviewWindow,
     _app: tauri::AppHandle,
     host: tauri::State<'_, Host>,
 ) -> Result<ConnectionInfo, String> {
+    operating_mode::trusted(&window)?;
     let mut connection = host.connection.subscribe();
     tokio::time::timeout(Duration::from_secs(15), async move {
         loop {
@@ -148,7 +150,8 @@ mod connection_tests {
 }
 
 #[tauri::command]
-fn set_video_rect(rect: VideoRect, host: tauri::State<'_, Host>) -> Result<(), String> {
+fn set_video_rect(window: tauri::WebviewWindow, rect: VideoRect, host: tauri::State<'_, Host>) -> Result<(), String> {
+    operating_mode::local_authority(&window)?;
     if ![rect.x, rect.y, rect.width, rect.height]
         .iter()
         .all(|value| value.is_finite())
@@ -178,7 +181,8 @@ struct PickedMedia {
 }
 
 #[tauri::command]
-async fn choose_media(app: tauri::AppHandle) -> Result<Option<PickedMedia>, String> {
+async fn choose_media(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<Option<PickedMedia>, String> {
+    operating_mode::local_authority(&window)?;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -206,7 +210,8 @@ async fn choose_media(app: tauri::AppHandle) -> Result<Option<PickedMedia>, Stri
 }
 
 #[tauri::command]
-async fn choose_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn choose_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<Option<String>, String> {
+    operating_mode::local_authority(&window)?;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -563,7 +568,6 @@ pub fn run() {
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
-            operating_mode::show_playback_device,
             operating_mode::desktop_interface_size
         ])
         .setup(|app| {
@@ -627,7 +631,6 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_window_state::Builder::default()
                         .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
-                        .with_denylist(&["remote"])
                         .with_filename(data_dir.join("window-state.json").to_string_lossy())
                         .build(),
                 )?;
@@ -657,23 +660,6 @@ pub fn run() {
                 if label == "main" && !tv_presentation() {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         desktop_lifecycle::close(app, api);
-                    }
-                }
-                if label == "remote" && matches!(event, tauri::WindowEvent::Destroyed) {
-                    app.state::<operating_mode::Modes>().remote_destroyed();
-                }
-                if label == "main"
-                    && matches!(
-                        event,
-                        tauri::WindowEvent::Moved(_)
-                            | tauri::WindowEvent::Resized(_)
-                            | tauri::WindowEvent::ScaleFactorChanged { .. }
-                    )
-                {
-                    if let Err(error) = operating_mode::sync_remote_geometry(app) {
-                        log::warn!(
-                            "Cannot align the remote window with playback device controls: {error}"
-                        );
                     }
                 }
             }

@@ -14,6 +14,8 @@ import { useInterfaceSize } from "../interface-size";
 import { useTvPresentation } from "../useTvPresentation";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
+import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
+import { desktopClientProtocol } from "../../shared/desktop-protocol";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -22,9 +24,14 @@ const nativeHost = isNativeHost();
 const tvPresentation = isTvPresentation();
 let cacheSequence = 0;
 
-function storedCredentials(): Credentials | null {
-  if (nativeHost) return null;
+const pairingKey = (origin: string) => `couch.pairing:${origin}`;
+function storedCredentials(selectedOrigin?: string): Credentials | null {
   try {
+    if (nativeHost) {
+      if (!selectedOrigin) return null;
+      const value = JSON.parse(localStorage.getItem(pairingKey(selectedOrigin)) ?? "null") as { token?: string; installationId?: string } | null;
+      return value?.token && value.installationId ? { origin: selectedOrigin, token: value.token, installationId: value.installationId } : null;
+    }
     const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
     if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
     const installationId = localStorage.getItem(installationKey);
@@ -47,6 +54,7 @@ type SessionBag = ReturnType<typeof useSession>;
 type SessionGateValue = SessionBag & {
   queryClient: QueryClient;
   nativeHost: boolean;
+  localHost: boolean;
   tvPresentation: boolean;
   credentials: Credentials | null;
   setCredentials: (credentials: Credentials | null) => void;
@@ -79,10 +87,13 @@ export function useSessionGate(): SessionGateValue {
 }
 
 export function SessionGate({ children }: PropsWithChildren) {
-  const [credentials, saveCredentials] = useState<Credentials | null>(storedCredentials);
+  const device = usePlaybackDevice();
+  const localHost = nativeHost && device?.mode === "local";
+  const selectedOrigin = nativeHost && device?.mode === "remote" ? device.address ?? undefined : undefined;
+  const [credentials, saveCredentials] = useState<Credentials | null>(() => storedCredentials(selectedOrigin));
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
-  const [booting, setBooting] = useState(nativeHost);
+  const [booting, setBooting] = useState(localHost);
   const [error, setError] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const [remoteName, setRemoteName] = useState(storedRemoteName);
@@ -123,7 +134,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     requestAnimationFrame(() => applyTvNavigation(key));
   }
 
-  const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation);
+  const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
   // A cache belongs to one authenticated connection/authority, never to storage.
   // The new provider is selected during render, before old responses can become
   // visible under new credentials. Cleanup cancels the retired queries; its
@@ -172,7 +183,7 @@ export function SessionGate({ children }: PropsWithChildren) {
   });
 
   useEffect(() => {
-    if (!nativeHost || !credentials) return;
+    if (!localHost || !credentials) return;
     const stop = new AbortController();
     void (async () => {
       for (let attempt = 0; attempt < 5 && !stop.signal.aborted; attempt++) {
@@ -184,18 +195,18 @@ export function SessionGate({ children }: PropsWithChildren) {
       }
     })();
     return () => stop.abort();
-  }, [credentials]);
+  }, [localHost, credentials]);
 
   useEffect(() => {
-    if (!nativeHost) return;
+    if (!localHost) return;
     const listener = listen<string[]>("connection-addresses", event => setHost(current => current ? { ...current, urls: event.payload } : current));
     return () => { void listener.then(stop => stop()); };
-  }, []);
+  }, [localHost]);
 
   useEffect(() => {
     document.body.classList.toggle("native-host", nativeHost);
     document.body.classList.toggle("tv-presentation", tvPresentation);
-    if (!nativeHost) return;
+    if (!localHost) return;
     let disposed = false;
     setBooting(true);
     void invoke<ConnectionInfo>("connection_info").then((info) => {
@@ -209,7 +220,7 @@ export function SessionGate({ children }: PropsWithChildren) {
       if (!disposed) setBooting(false);
     });
     return () => { disposed = true; };
-  }, [hostAttempt, setCredentials]);
+  }, [localHost, hostAttempt, setCredentials]);
 
   useEffect(() => {
     if (!tvPresentation) return;
@@ -261,7 +272,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     setPairing(true);
     setError(null);
     try {
-      const origin = credentials?.origin ?? location.origin;
+      const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
       const response = await fetch(`${origin}/api/pair`, {
         method: "POST",
         signal: AbortSignal.any([operation.signal, AbortSignal.timeout(8_000)]),
@@ -271,7 +282,10 @@ export function SessionGate({ children }: PropsWithChildren) {
       const result = await response.json() as { token?: string; installationId?: string; error?: string };
       if (!current()) return;
       if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the playback computer." : result.error || "Could not pair with the player.");
-      try { localStorage.setItem(tokenKey, result.token); localStorage.setItem(installationKey, result.installationId); } catch { /* Pairing still works for this tab. */ }
+      try {
+        if (selectedOrigin) localStorage.setItem(pairingKey(origin), JSON.stringify({ token: result.token, installationId: result.installationId }));
+        else { localStorage.setItem(tokenKey, result.token); localStorage.setItem(installationKey, result.installationId); }
+      } catch { /* Pairing still works for this tab. */ }
       setCredentials({ origin, token: result.token, installationId: result.installationId });
       setPairingCode("");
     } catch (reason) {
@@ -282,13 +296,16 @@ export function SessionGate({ children }: PropsWithChildren) {
   };
 
   const unpair = () => {
-    try { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); } catch { /* Storage may be disabled. */ }
+    try {
+      if (selectedOrigin) localStorage.removeItem(pairingKey(selectedOrigin));
+      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); }
+    } catch { /* Storage may be disabled. */ }
     setCredentials(null);
     setError(null);
   };
 
   const value: SessionGateValue = {
-    queryClient, nativeHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
+    queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, reconnect, pair, unpair,
     pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
     tv, registerBackHandler: handler => { backHandler.current = handler; },

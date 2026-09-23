@@ -14,7 +14,6 @@ fn main() {
             "select_playback_device",
             "retry_playback_device",
             "complete_local_setup",
-            "show_playback_device",
             "desktop_interface_size",
         ]),
     ))

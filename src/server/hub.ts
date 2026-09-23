@@ -40,6 +40,7 @@ import { createDiagnostics } from "./diagnostics";
 import type { NativeDiagnostics } from "../shared/diagnostics";
 import { buildInfo } from "./build-info";
 import { buildKey } from "../shared/build";
+import { desktopClientProtocol } from "../shared/desktop-protocol";
 import { createGuide } from "./iptv";
 
 import { createSoundRouting } from "./sound-routing";
@@ -373,7 +374,7 @@ export function createHub(options: HubOptions) {
       ...options.assets,
       ...Object.fromEntries(frontendPaths.map(path => [path, options.frontend ?? new Response("Couch media server")])),
       "/api/health": request => allowed(request, false) ? json({ ok: true, player: session.state.player.status }) : json({ error: "Unrecognized host or origin." }, 403),
-      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopRemoteUi: 1, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
+      "/api/connection": request => allowed(request, false) ? cors(request, json({ name: store.installationName(), installationId: store.installationId(), urls: connectionUrls, player: session.state.player.status, remoteControlEnabled: store.remoteControlEnabled(), ...(options.managedLan ? { lanError } : {}), desktopClientProtocol, tvPresentation: process.env.COUCH_TV_PRESENTATION === "1" })) : json({ error: "Unrecognized host or origin." }, 403),
       "/api/pair": {
         POST: async request => {
           if (!allowed(request, true)) return json({ error: "Unrecognized host or origin." }, 403);
@@ -479,7 +480,9 @@ export function createHub(options: HubOptions) {
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
           if (!identity()) throw new ControllerError("This remote's access was revoked. Pair again.", 401);
         };
-        if (websocket && buildInfo.packaged && buildKey(buildInfo) !== url.searchParams.get("build")) return cors(request, json({ error: "Refresh this page to load the current TV build." }, 409));
+        if (websocket && buildInfo.packaged && (url.searchParams.has("clientProtocol") && tauriOrigins.has(request.headers.get("origin") ?? "")
+          ? url.searchParams.get("clientProtocol") !== String(desktopClientProtocol)
+          : buildKey(buildInfo) !== url.searchParams.get("build"))) return cors(request, json({ error: "Update this desktop client or playback computer to a compatible protocol, or refresh the browser page." }, 409));
         if (caller.controller) store.touchController(caller.controller.id);
         if (!websocket && url.pathname === "/api/settings/streamingcommunity") return cors(request, await streamingCommunitySettings.handle(request, currentIdentity));
         if (!websocket && url.pathname === "/api/settings/startup") return cors(request, await startup.handle(request, currentIdentity));

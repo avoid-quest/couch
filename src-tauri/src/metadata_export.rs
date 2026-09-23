@@ -30,8 +30,10 @@ fn write_archive(path: &Path, archive: &[u8]) -> Result<(), String> {
 #[tauri::command]
 pub async fn save_metadata_export(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     request: tauri::ipc::Request<'_>,
 ) -> Result<bool, String> {
+    crate::operating_mode::local_authority(&window)?;
     let id = request
         .headers()
         .get("X-Couch-Item-Id")

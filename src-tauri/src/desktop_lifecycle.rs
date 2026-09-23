@@ -16,25 +16,11 @@ pub(crate) fn show(app: &tauri::AppHandle) {
     }
     let _ = main.show();
     let _ = main.set_focus();
-    if let Some(remote) = app.get_webview_window("remote") {
-        let _ = remote.show();
-        let _ = remote.set_focus();
-    } else {
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            if let Err(error) = crate::operating_mode::reopen_selected(&app).await {
-                log::warn!("Cannot reopen selected playback device: {error}");
-            }
-        });
-    }
 }
 
 pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
     api.prevent_close();
     app.state::<Host>().window_closed.store(true, Ordering::SeqCst);
-    if let Some(remote) = app.get_webview_window("remote") {
-        let _ = remote.hide();
-    }
     if let Some(main) = app.get_webview_window("main") {
         #[cfg(target_os = "macos")]
         let result = main.hide();

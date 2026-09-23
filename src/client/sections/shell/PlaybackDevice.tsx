@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { useNavigation } from "@/navigation";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -15,7 +14,7 @@ import { loadedBuild } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useUpdateActivity } from "@/update-activity";
 
-type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
+export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
 const Context = createContext<Device | null>(null);
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -75,27 +74,24 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       finally { busy.current = false; setPending(false); }
     },
     retry: () => setAttempt(value => value + 1),
-    show: () => { setSelecting(true); setPending(false); void invoke("show_playback_device").catch(reason => setError(message(reason))); },
+    show: () => { setSelecting(true); setPending(false); },
     dismiss: () => setSelecting(false),
     completeLocalSetup: async () => setChoice(await invoke<Choice>("complete_local_setup")),
   };
   return <Context.Provider value={device}>
-    {choice.mode !== "local" && <ModeNavigation />}
-    {choice.mode === "local" ? <Fragment key={localEpoch}>{children}</Fragment> : choice.mode === "remote" ? <main className="min-h-dvh bg-background">
-      <header className="flex h-[88px] items-center justify-between gap-3 border-b px-4" aria-label="App playback device controls">
-        <div className="min-w-0"><p className="truncate text-sm font-medium">Playing on {choice.address}</p><p className="text-xs text-muted-foreground" role="status">{pending ? "Connecting…" : error ? "Connection needs attention" : "Media plays on the other computer"}</p></div>
-        <div className="flex shrink-0 gap-2"><InstallationUpdates /><PlaybackDevice /><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
-      </header>
-      <div className="mx-auto max-w-xl space-y-4 p-6"><h1 className="text-xl font-semibold">Another Couch</h1>
-        <p>Pair using the code shown on the playback computer. This app has the same permissions as a browser remote.</p>
-        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-        <p className="text-sm text-muted-foreground">If the page stays blank, update this app and its system webview. You can always retry, choose another address, or use this computer. Check the current QR or address on the playback computer if its address changed.</p>
-      </div>
-    </main> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">Where do you want to play?</h1><p className="text-muted-foreground">Play on this computer, or control another Couch on your network.</p><DeviceForm firstUse /></Card></main>}
+    {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment> : choice.mode === "remote" ? <>
+      <Fragment key={`remote:${choice.address}`}>{children}</Fragment>
+      {error && <aside className="fixed bottom-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))] rounded-lg border bg-card p-4 shadow-lg" aria-label="Playback device recovery">
+        <p className="font-medium">Another Couch needs attention</p>
+        <p className="mt-1 text-sm text-muted-foreground" role="alert">{error}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Choose another address from Play on, or return to this computer.</p>
+        <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
+      </aside>}
+    </> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">Where do you want to play?</h1><p className="text-muted-foreground">Play on this computer, or control another Couch on your network.</p><DeviceForm firstUse /></Card></main>}
   </Context.Provider>;
 }
 
-function InstallationUpdates() {
+export function InstallationUpdates() {
   const device = usePlaybackDevice()!;
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [open, setOpen] = useState(false);
@@ -135,12 +131,6 @@ function InstallationUpdates() {
       {credentials ? <UpdatesSettings credentials={credentials} connected /> : <p role="status">Connecting to this installation…</p>}
     </DialogContent>
   </Dialog>;
-}
-
-function ModeNavigation() {
-  useNavigation(() => {});
-  useEffect(() => { document.documentElement.style.setProperty("--interface-scale", "1"); }, []);
-  return null;
 }
 
 function DeviceForm({ firstUse = false, onDone }: { firstUse?: boolean; onDone?: () => void }) {

@@ -42,7 +42,7 @@ async function render(status: "playing" | "unavailable") {
     player: { playbackId: status === "playing" ? "movie" : null, status, position: 0, duration: null, volume: 50, seekable: false, error: status === "unavailable" ? "Video backend missing" : null },
   };
   const shell = {
-    nativeHost: true, tvPresentation: false, credentials: { origin: "http://localhost", token: "host" },
+    nativeHost: true, localHost: true, tvPresentation: false, credentials: { origin: "http://localhost", token: "host" },
     state, status: "connected", statusLabel: "Connected", details: { tvPresentation: false },
     connected: true, active: status === "playing", current: state.queue[0] ?? null,
     available: status === "playing", section: "Find", tv: { browsing: true, controlsVisible: false },
