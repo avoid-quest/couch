@@ -1,5 +1,5 @@
 declare global {
-  interface Window { __COUCH_NATIVE_HOST__?: boolean }
+  interface Window { __COUCH_NATIVE_HOST__?: boolean; __COUCH_TV_PRESENTATION__?: boolean }
 }
 declare const COUCH_DEV_ORIGIN: string | null;
 
@@ -11,3 +11,5 @@ export function isNativeHost() {
       || ["http:", "https:"].includes(location.protocol) && location.hostname === "tauri.localhost" && !location.port
       || typeof COUCH_DEV_ORIGIN !== "undefined" && COUCH_DEV_ORIGIN !== null && location.origin === COUCH_DEV_ORIGIN);
 }
+
+export const isTvPresentation = () => isNativeHost() && window.__COUCH_TV_PRESENTATION__ === true;

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { defaultTvAppearance, isInterfaceSize, type InterfaceSize, type TvAppearance } from "../shared/appearance";
 
 const key = "couch.remote-interface-size";
@@ -10,7 +11,24 @@ const read = (): InterfaceSize => {
   } catch { return 1; }
 };
 let current = read();
+let subscribers = 0;
+let nativeRequest = 0;
+const refreshNative = () => {
+  if (!isTauri()) return;
+  const request = ++nativeRequest;
+  void invoke<InterfaceSize>("desktop_interface_size").then(value => {
+    if (request === nativeRequest && isInterfaceSize(value) && current !== value) {
+      current = value;
+      window.dispatchEvent(new Event(changed));
+    }
+  }).catch(() => {});
+};
 const subscribe = (listener: () => void) => {
+  const native = isTauri();
+  if (native && subscribers++ === 0) {
+    refreshNative();
+    window.addEventListener("focus", refreshNative);
+  }
   const storage = (event: StorageEvent) => {
     if (event.key !== key && event.key !== null) return;
     current = read();
@@ -18,13 +36,21 @@ const subscribe = (listener: () => void) => {
   };
   window.addEventListener("storage", storage);
   window.addEventListener(changed, listener);
-  return () => { window.removeEventListener("storage", storage); window.removeEventListener(changed, listener); };
+  return () => {
+    window.removeEventListener("storage", storage);
+    window.removeEventListener(changed, listener);
+    if (native && --subscribers === 0) window.removeEventListener("focus", refreshNative);
+  };
 };
 
-export function saveRemoteInterfaceSize(value: InterfaceSize) {
+export async function saveRemoteInterfaceSize(value: InterfaceSize) {
+  nativeRequest++;
   current = value;
   let saved = true;
-  try { localStorage.setItem(key, String(value)); } catch { saved = false; }
+  try {
+    if (isTauri()) await invoke("desktop_interface_size", { size: value });
+    else localStorage.setItem(key, String(value));
+  } catch { saved = false; }
   window.dispatchEvent(new Event(changed));
   return saved;
 }
@@ -43,10 +69,10 @@ export function usePreviewSeconds(appearance: TvAppearance) {
   return expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : 0;
 }
 
-export function useInterfaceSize(native: boolean, appearance = defaultTvAppearance) {
+export function useInterfaceSize(tvPresentation: boolean, appearance = defaultTvAppearance) {
   const remote = useRemoteInterfaceSize();
   const seconds = usePreviewSeconds(appearance);
-  const size = native ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
+  const size = tvPresentation ? appearance.preview && !seconds ? appearance.confirmedSize : appearance.size : remote;
   // Keep persisted choices and remote scaling. The old wider TV steps
   // (1.35/1.75) predate the deduplicated scaling and read as bloat now.
   const scale = size;

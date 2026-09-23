@@ -16,7 +16,7 @@ import { SessionBar } from "@/components/SessionBar";
 
 export function NowPage() {
   const shell = useShell();
-  const { nativeHost, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
+  const { tvPresentation, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
   const [nowDraft, setNowDraft] = useState("");
   const [layout, setLayout] = useState<ReturnType<typeof readNowSections>>(readNowSections);
   const { order, hidden } = layout;
@@ -32,7 +32,7 @@ export function NowPage() {
     const next = { order, hidden: hiddenNext };
     setLayout(next); saveNowSections(next);
   };
-  const onStage = !nativeHost || tv.browsing;
+  const onStage = !tvPresentation || tv.browsing;
   const sections: Record<NowSectionId, ReactNode> = {
     playing: <NowPlaying embedded part="current" state={state} credentials={credentials} connected={connected} run={run} onBrowse={browseSection} active={onStage} />,
     queue: <NowPlaying embedded part="next" state={state} credentials={credentials} connected={connected} run={run} active={onStage} />,
@@ -75,7 +75,7 @@ export function NowPage() {
           })}
           {/* A customized Now page can hide its Now playing section. This bar is
               the TV's remaining transport route while browsing that page. */}
-          {nativeHost && tv.browsing && hidden.includes("playing") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tv.dismissLayer()} />}
+          {tvPresentation && tv.browsing && hidden.includes("playing") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tv.dismissLayer()} />}
         </section>
       </SortableContext>
     </DndContext>

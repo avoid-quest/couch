@@ -69,6 +69,7 @@ Native source changes additionally require the retained native commands:
 ```sh
 bun run verify --native
 bun run test:linux
+bun run test:linux --desktop-smoke  # Windowed Linux desktop playback and native video pixels
 ```
 
 `--native` adds the locked Cargo tests and the retained startup-buffer test after

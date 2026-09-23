@@ -9,7 +9,7 @@ let saveRemoteInterfaceSize: typeof import("./interface-size")["saveRemoteInterf
 const originals = new Map<string, PropertyDescriptor | undefined>();
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "Node", "Event", "localStorage", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "Node", "Event", "localStorage", "isTauri", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key) });
   }
@@ -31,7 +31,7 @@ test("saved Largest applies the same scale on the TV and on remotes", async () =
   await act(async () => root.render(<Size native appearance={appearance} />));
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.3");
   expect(measurements).toBe(1);
-  await act(async () => { saveRemoteInterfaceSize(1.3); root.render(<Size native={false} appearance={appearance} />); });
+  await act(async () => { await saveRemoteInterfaceSize(1.3); root.render(<Size native={false} appearance={appearance} />); });
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.3");
   // The same choice on TV and remote applies one scale: no redundant event.
   expect(measurements).toBe(1);
@@ -42,4 +42,22 @@ test("expired TV previews restore the confirmed viewing scale and Default remain
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.15");
   await act(async () => root.render(<Size native appearance={{ size: 1, confirmedSize: 1, preview: null }} />));
   expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1");
+});
+
+test("native client reloads a size changed in the remote window when the main window regains focus", async () => {
+  let saved = 1;
+  Object.defineProperty(globalThis, "isTauri", { configurable: true, value: true });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async () => saved } });
+  const appearance: TvAppearance = { size: 1, confirmedSize: 1, preview: null };
+  await act(async () => root.render(<Size native={false} appearance={appearance} />));
+  expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1");
+  saved = 1.3;
+  await act(async () => window.dispatchEvent(new window.Event("focus")));
+  expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.3");
+  await act(async () => root.unmount());
+  const { createRoot } = await import("react-dom/client");
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  saved = 1.15;
+  await act(async () => root.render(<Size native={false} appearance={appearance} />));
+  expect(document.documentElement.style.getPropertyValue("--interface-scale")).toBe("1.15");
 });

@@ -14,6 +14,7 @@ fn main() {
             "retry_playback_device",
             "complete_local_setup",
             "show_playback_device",
+            "desktop_interface_size",
         ]),
     ))
     .expect("Cannot generate native command permissions");

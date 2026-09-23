@@ -8,7 +8,7 @@ export function SoundPage() {
     <SettingsLayout section="sound">
       {(identity?.authority === "administrator" || identity?.authority === "host") && credentials
         ? <SoundSettings credentials={credentials} connected={connected} />
-        : <p className="text-muted-foreground">An administrator can manage TV sound.</p>}
+        : <p className="text-muted-foreground">An administrator can manage sound on the selected playback host.</p>}
     </SettingsLayout>
   );
 }

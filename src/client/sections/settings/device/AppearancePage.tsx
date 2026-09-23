@@ -4,12 +4,12 @@ import { AppearanceSettings } from "./AppearanceSettings";
 
 export function AppearancePage() {
   const shell = useShell();
-  const { credentials, connected, host, identity, state } = shell;
+  const { credentials, connected, identity, state, tvPresentation } = shell;
   return (
     <SettingsLayout section="appearance">
-      <AppearanceSettings scope="device" native={!!host} credentials={credentials} connected={connected}
-        administrator={identity?.authority === "administrator" || !!host && identity?.authority === "host"}
-        appearance={state?.appearance} />
+      <AppearanceSettings scope="device" tvPresentation={tvPresentation} credentials={credentials} connected={connected}
+        administrator={identity?.authority === "administrator" || identity?.authority === "host"}
+        appearance={state?.appearance} hostName={state?.installationName} />
     </SettingsLayout>
   );
 }

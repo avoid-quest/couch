@@ -8,6 +8,7 @@ StartLimitBurst=5
 [Service]
 Type=exec
 Environment=GDK_BACKEND=x11
+Environment=COUCH_TV_PRESENTATION=1
 EnvironmentFile=/etc/couch/appliance.env
 EnvironmentFile=-/run/couch-appliance/recovery.env
 ExecStartPre=/usr/bin/pactl info

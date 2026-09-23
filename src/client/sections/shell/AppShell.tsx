@@ -11,7 +11,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { ProviderPanel } from "@/components/ProviderPanel";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { LocalSharingPrompt } from "@/sections/shell/PlaybackDevice";
+import { LocalSharingPrompt, PlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
@@ -49,7 +49,7 @@ import { useShell } from "./shell-context";
 
 function useShellValue() {
   const gate = useSessionGate();
-  const { nativeHost, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, connected, run, unpair, host, booting, error, setError, tv, registerBackHandler, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = gate;
+  const { nativeHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, connected, run, unpair, host, booting, error, setError, tv, registerBackHandler, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = gate;
   const router = useRouter();
   const location = useLocation();
   const section = sectionForPath(location.pathname) ?? "Now";
@@ -83,7 +83,7 @@ function useShellValue() {
   const changePage = (name: string) => {
     // Big-picture behavior: while playing, any navigation opens the browsing
     // layer over the player instead of floating the controls above the page.
-    if (nativeHost && active && !tv.browsing) tv.openHome();
+    if (tvPresentation && active && !tv.browsing) tv.openHome();
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
     if (to !== at) router.history.push(to);
   };
@@ -170,7 +170,7 @@ function useShellValue() {
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   const statusLabel = booting ? "Starting player" : {
-    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected", "build-mismatch": "Refresh this page to load the TV’s current version",
+    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected", "build-mismatch": "Refresh this page to load the selected host's current version",
   }[status];
 
   return {
@@ -205,38 +205,40 @@ export function AppShell() {
   return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 
-function ShellChrome({ children }: PropsWithChildren) {
+export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
-  const { nativeHost, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
+  const { nativeHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
   const { section, statusLabel, available, active, programme, current } = shell;
   const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const player = state?.player;
   const pairingRef = useRef<HTMLButtonElement>(null);
+  const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const videoStage = nativeHost && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
+    subtitle={programme ? `Programme: ${programme.title}` : undefined}
+    artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />;
 
   return (
-    <div className={cn("app-shell couch-shell", nativeHost
+    <div className={cn("app-shell couch-shell", tvPresentation
       ? cn("tv-shell", tv.browsing && "tv-browsing", tv.controlsVisible && "tv-controls-visible",
         // Slim strokes and real icon-button targets: the TV zoom magnifies stroke weight.
         "[&_svg]:stroke-[1.5] [&_.icon-button]:min-h-11 [&_.icon-button]:min-w-11 [&_.icon-button_svg]:size-6")
       : "remote-shell")}>
 
       <main id="main">
-        {nativeHost && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
+        {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
-        {nativeHost && <VideoStage active={active} title={current?.title || "Your media"}
-          audioOnly={current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected)}
-          subtitle={programme ? `Programme: ${programme.title}` : undefined}
-          artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />}
-        <div className={nativeHost ? "tv-browser" : "remote-browser"} hidden={nativeHost && !tv.browsing} data-tv-navigation-scope={nativeHost && tv.browsing ? "" : undefined}>
+        {tvPresentation && videoStage}
+        <div className={tvPresentation ? "tv-browser" : "remote-browser"} hidden={tvPresentation && !tv.browsing} data-tv-navigation-scope={tvPresentation && tv.browsing ? "" : undefined}>
       <header className="app-header">
-        <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (nativeHost) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
+        <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (tvPresentation) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
         <div className="header-status">
-          {!nativeHost && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
+          {!tvPresentation && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
+          {nativeHost && !tvPresentation && <PlaybackDevice />}
           {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
-          {credentials && !pairingRequired && !nativeHost && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
-          {credentials && !pairingRequired && !nativeHost && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label="Remote" onClick={() => shell.setRemoteOpen(true)}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
+          {credentials && !pairingRequired && !tvPresentation && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
+          {credentials && !pairingRequired && !tvPresentation && details?.tvPresentation && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label="Remote" onClick={() => shell.setRemoteOpen(true)}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
           <DigitalClock />
         </div>
       </header>
@@ -269,19 +271,20 @@ function ShellChrome({ children }: PropsWithChildren) {
         ) : (
           <>
             {!connected && <p className="notice" role="status">Connecting to the player.</p>}
-            {player?.status === "unavailable" && <p className="notice">{player.error || "TV player unavailable. You can still add to the queue."}</p>}
+            {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
                 {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined} aria-label={label}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
               </nav>
               <div className="media-browser">
+                {nativeHost && !tvPresentation && active && !audioOnly && videoStage}
                 {children}
               </div>
             </div>
             <SourceSetupDialog localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} />
             {/* On the TV the bar is always available while playing and returns to the
                 playback view; remotes open the inline Now playing page instead. */}
-            {current && (active || player?.status === "error") && (nativeHost ? tv.browsing && section !== "Now" : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => nativeHost ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={nativeHost ? undefined : () => shell.setRemoteOpen(true)} />}
+            {current && (active || player?.status === "error") && (tvPresentation ? tv.browsing && section !== "Now" : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tvPresentation ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={!tvPresentation && details?.tvPresentation ? () => shell.setRemoteOpen(true) : undefined} />}
             {/* Saved provider collections open here: Find stays search-first, and
                 Open gives the collection its own browsable trail. */}
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
@@ -294,7 +297,7 @@ function ShellChrome({ children }: PropsWithChildren) {
           </>
         )}
         </div>
-        {nativeHost && credentials && <section className="tv-playback-controls" hidden={tv.browsing || !tv.controlsVisible} data-tv-navigation-scope={!tv.browsing && tv.controlsVisible ? "" : undefined} aria-label="Player">
+        {tvPresentation && credentials && <section className="tv-playback-controls" hidden={tv.browsing || !tv.controlsVisible} data-tv-navigation-scope={!tv.browsing && tv.controlsVisible ? "" : undefined} aria-label="Player">
           <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={() => tv.openHome()}><House aria-hidden="true" />Home</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}

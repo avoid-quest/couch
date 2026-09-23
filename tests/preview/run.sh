@@ -12,6 +12,7 @@ bun tests/linux/fixtures.ts
 if [[ "${COUCH_PREVIEW_MEDIA:-}" == 1 ]]; then bun scripts/preview-media.ts; fi
 
 mkdir -p /root/.config
+export COUCH_TV_PRESENTATION=1
 pulseaudio --start --exit-idle-time=-1
 pactl load-module module-null-sink sink_name=couch >/dev/null
 pactl set-default-sink couch

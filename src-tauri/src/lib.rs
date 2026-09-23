@@ -515,7 +515,8 @@ pub fn run() {
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
-            operating_mode::show_playback_device
+            operating_mode::show_playback_device,
+            operating_mode::desktop_interface_size
         ])
         .setup(|app| {
             let data_dir = match std::env::var_os("COUCH_DATA_DIR") {
@@ -560,12 +561,17 @@ pub fn run() {
             app.manage(operating_mode::Modes::load(
                 data_dir.join("operating-mode.json"),
             )?);
-            let config = app.config().app.windows[0].clone();
+            let mut config = app.config().app.windows[0].clone();
+            let tv_presentation = cfg!(target_os = "linux")
+                && std::env::var("COUCH_TV_PRESENTATION").as_deref() == Ok("1");
+            config.fullscreen = tv_presentation;
+            config.decorations = !tv_presentation;
             let handle = app.handle().clone();
             tauri::WebviewWindowBuilder::from_config(app, &config)?
-                .initialization_script(
-                    "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', { value: true });",
-                )
+                .initialization_script(format!(
+                    "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', {{ value: true }}); Object.defineProperty(window, '__COUCH_TV_PRESENTATION__', {{ value: {} }});",
+                    tv_presentation
+                ))
                 .on_navigation(move |url| operating_mode::app_origin(handle.config(), url))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;

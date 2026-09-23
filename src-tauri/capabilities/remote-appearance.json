@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-appearance",
+  "description": "The selected remote Couch page can save this desktop client's interface size.",
+  "windows": ["remote"],
+  "remote": { "urls": ["http://*:*", "https://*:*" ] },
+  "permissions": ["allow-desktop-interface-size"]
+}

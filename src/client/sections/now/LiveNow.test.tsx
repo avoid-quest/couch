@@ -58,9 +58,9 @@ test("a failed catalogue load offers a retry that reloads it", async () => {
 });
 
 test("expired programmes return to the station before polling", async () => {
-  programmes = { station: { title: "Closing set", expiresAt: Date.now() + 30 } };
+  programmes = { station: { title: "Closing set", expiresAt: Date.now() + 1_000 } };
   await render();
   expect(screen.getByText("Closing set")).toBeDefined();
-  await act(async () => { await Bun.sleep(40); });
+  await act(async () => { await Bun.sleep(1_100); });
   expect(screen.queryByText("Closing set")).toBeNull();
 });

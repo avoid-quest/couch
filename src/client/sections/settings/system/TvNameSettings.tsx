@@ -34,7 +34,7 @@ export function TvNameSettings({ credentials, connected, canWrite, host }: Props
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: draft.trim() }),
       });
       await queryClient.invalidateQueries({ queryKey });
-      setNotice("TV name saved.");
+      setNotice("Playback device name saved.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save settings.");
     } finally { setPending(false); }
@@ -45,17 +45,17 @@ export function TvNameSettings({ credentials, connected, canWrite, host }: Props
       {canWrite ? (
         <form className="space-y-3" onSubmit={event => void save(event)}>
           <div className="space-y-2">
-            <Label htmlFor="tv-name">TV name</Label>
+            <Label htmlFor="tv-name">Playback device name</Label>
             <Input id="tv-name" className="min-h-11" value={draft} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={!connected || pending} aria-describedby="tv-name-help" />
           </div>
-          <p id="tv-name-help" className="text-muted-foreground">Name shown for this TV.</p>
-          <Button type="submit" className="min-h-11" disabled={!connected || pending || !draft.trim() || draft.trim() === savedName}>{pending ? "Saving…" : "Save TV name"}</Button>
+          <p id="tv-name-help" className="text-muted-foreground">Name shown for the selected playback computer.</p>
+          <Button type="submit" className="min-h-11" disabled={!connected || pending || !draft.trim() || draft.trim() === savedName}>{pending ? "Saving…" : "Save playback device name"}</Button>
         </form>
       ) : (
         <div className="space-y-1">
-          <h3>TV name</h3>
+          <h3>Playback device name</h3>
           <p className="break-words" data-settings-tv-name>{savedName || "Couch"}</p>
-          <p className="text-muted-foreground">{credentials ? "An administrator can change this TV's name." : host ? "Pair this browser to control the TV." : "An administrator can change this TV's name."}</p>
+          <p className="text-muted-foreground">{credentials ? "An administrator can change this playback computer's name." : host ? "Pair this browser to control the playback computer." : "An administrator can change this playback computer's name."}</p>
         </div>
       )}
       {(name.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not load settings."}</AlertDescription></Alert>}

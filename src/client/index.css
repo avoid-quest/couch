@@ -178,7 +178,7 @@ h3 { font-weight: 600; }
   .workspace { grid-template-columns: 1fr; }
   .app-header { min-height: 88px; }
   .video-stage { aspect-ratio: 2 / 1; }
-  .native-host .video-stage { aspect-ratio: 16 / 9; }
+  .tv-presentation .video-stage { aspect-ratio: 16 / 9; }
 }
 @media (max-width: 480px) {
   .app-shell { padding: 0 12px; }
@@ -210,10 +210,10 @@ h3 { font-weight: 600; }
   [data-slot="slider"] { min-height: 44px; }
   [data-slot="tabs-list"] { height: auto; min-height: 50px; }
 }
-body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { min-height: 48px; }
-:where(body.native-host) [data-slot="button"][data-size^="icon"] { min-width: 48px; }
-body.native-host [data-slot="slider"] { min-height: 44px; }
-body.native-host [data-slot="tabs-list"] { height: auto; min-height: 54px; }
+body.tv-presentation button, body.tv-presentation input, body.tv-presentation [role="combobox"], body.tv-presentation [role="option"] { min-height: 48px; }
+:where(body.tv-presentation) [data-slot="button"][data-size^="icon"] { min-width: 48px; }
+body.tv-presentation [data-slot="slider"] { min-height: 44px; }
+body.tv-presentation [data-slot="tabs-list"] { height: auto; min-height: 54px; }
 [data-slot="dialog-header"] { padding-right: 36px; }
 
 .radio-programme { display: flex; align-items: center; gap: 1rem; margin: 0; }
@@ -358,23 +358,23 @@ body.native-host [data-slot="tabs-list"] { height: auto; min-height: 54px; }
 }
 
 /* Native-only dimensions apply to portal dialogs and controls as well as home. */
-body.native-host {
+body.tv-presentation {
   font-size: 24px;
   --text-xs: 18px;
   --text-sm: 20px;
   --text-base: 24px;
   --text-lg: 28px;
 }
-body.native-host button, body.native-host input, body.native-host [role="combobox"], body.native-host [role="option"] { font-size: 24px; }
-body.native-host [data-slot="dialog-content"], body.native-host [data-slot="popover-content"] { font-size: 24px; }
-body.native-host .play-button svg { width: 32px; height: 32px; }
-body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset: 4px; }
+body.tv-presentation button, body.tv-presentation input, body.tv-presentation [role="combobox"], body.tv-presentation [role="option"] { font-size: 24px; }
+body.tv-presentation [data-slot="dialog-content"], body.tv-presentation [data-slot="popover-content"] { font-size: 24px; }
+body.tv-presentation .play-button svg { width: 32px; height: 32px; }
+body.tv-presentation :focus-visible { outline: 4px solid var(--ring); outline-offset: 4px; }
 .tv-shell .tv-playback-controls .volume-control > span { font-size: 20px; }
 
 /* couch-shell.css */
 /* The accepted TV rail and phone bottom navigation share the same destinations. */
 .couch-shell { --shell-header: 72px; --shell-rail: 195px; --shell-footer: 74px; --shell-gutter: 42px; container: couch-shell / inline-size; }
-.couch-shell.remote-shell { max-width: 1440px; padding: 0; margin: auto; }
+.couch-shell.remote-shell { width: 100%; padding: 0; margin: 0; }
 .couch-shell .app-header { position: sticky; top: 0; z-index: 20; background: var(--background); min-height: var(--shell-header); padding: 12px var(--shell-gutter); gap: 18px; border-bottom: 1px solid var(--border); }
 .couch-shell .brand { flex-shrink: 0; font-size: 26px; font-weight: 750; letter-spacing: -1.8px; gap: 4px; }
 .couch-shell .brand-dot { width: 7px; height: 7px; margin-top: 17px; border-radius: 50%; background: #c4b998; }
@@ -389,6 +389,7 @@ body.native-host :focus-visible { outline: 4px solid var(--ring); outline-offset
 .couch-shell .primary-nav [data-source][aria-current="page"] { background: var(--muted); }
 .couch-shell .primary-nav svg { width: 20px; height: 20px; }
 .couch-shell .media-browser { min-width: 0; padding: 32px var(--shell-gutter) calc(var(--shell-footer) + 32px); gap: 0; border: 0; border-radius: 0; background: transparent; }
+.native-host .remote-shell .video-stage { width: min(100%, 960px); margin: 0 auto 24px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--radius-xl); }
 .couch-shell .media-browser > section { min-width: 0; }
 .couch-shell .media-browser [hidden] { display: none; }
 .couch-shell .browse-back { margin-bottom: 18px; }
@@ -463,7 +464,7 @@ body { min-width: 0; }
 /* Radix positions portal wrappers in viewport pixels. Scale their contents. */
 #root, [data-slot="dialog-content"], [data-slot="select-content"], [data-slot="popover-content"] { zoom: var(--interface-scale); }
 .app-shell { min-height: calc(100dvh / var(--interface-scale)); }
-[data-slot="dialog-content"], body.native-host [data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
+[data-slot="dialog-content"], body.tv-presentation [data-slot="dialog-content"] { max-height: calc(100dvh / var(--interface-scale) - 2rem); }
 [data-slot="popover-content"] { max-width: calc((100vw - 2rem) / var(--interface-scale)); }
 @media (max-width: 480px) {
   .remote-shell .brand { min-width: 0; gap: 6px; }

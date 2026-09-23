@@ -214,6 +214,7 @@ export class UiDriver {
       } else {
         const target = `[aria-label="Settings pages"] [data-settings-page="${destination}"]`;
         if (await this.execute("return !!document.querySelector('[role=dialog] .settings-back')")) await this.button("All settings", '[role="dialog"]');
+        await this.waitFor(`Settings offers ${destination}`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
         await this.click(target);
       }
       await this.waitFor(`Settings selects ${section}`, () => this.execute('return document.querySelector(arguments[0])?.getAttribute("aria-current") === "page"', [`[aria-label="Settings pages"] [data-settings-page="${destination}"]`]));

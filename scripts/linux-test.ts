@@ -10,6 +10,7 @@ const providersConfig = providersArgument === -1 ? null : process.argv[providers
 const providerCatalogs = process.argv.includes("--provider-catalogs");
 const iptvPublicSample = process.argv.includes("--iptv-public-sample");
 const builtRemote = process.argv.includes("--built-remote");
+const desktopSmoke = process.argv.includes("--desktop-smoke");
 const connection = process.argv.includes("--connection");
 const diagnostics = process.argv.includes("--diagnostics");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
@@ -18,6 +19,7 @@ if (iptvPublicSample && (providersConfig || providerCatalogs)) throw new Error("
 const retiredExternalOptions = ["--jellyfin", "--jellyfin-config", "--live-radio"].filter(option => process.argv.includes(option));
 if (retiredExternalOptions.length) throw new Error(`${retiredExternalOptions.join(", ")} no longer runs the retired broad journey; use the focused Jellyfin and radio suites instead.`);
 if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
+if (desktopSmoke && (builtRemote || connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --desktop-smoke alone for the Linux desktop playback journey.");
 if ((connection || diagnostics) && (connection && diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --connection or --diagnostics alone for the focused native journey.");
 
 async function run(command: string[]) {
@@ -53,6 +55,7 @@ try {
     "--mount", "type=volume,source=couch-linux-registry,target=/root/.cargo/registry",
     "--mount", "type=volume,source=couch-linux-bun,target=/root/.bun/install/cache",
     ...(builtRemote ? ["--env", "COUCH_TEST_BUILT_REMOTE=1"] : []),
+    ...(desktopSmoke ? ["--env", "COUCH_TEST_DESKTOP_SMOKE=1"] : []),
     ...(connection ? ["--env", "COUCH_TEST_CONNECTION=1"] : []),
     ...(diagnostics ? ["--env", "COUCH_TEST_DIAGNOSTICS=1"] : []),
     ...(providersConfig ? ["--mount", `type=bind,source=${resolve(providersConfig)},target=/providers.json,readonly`, "--env", "COUCH_TEST_PROVIDERS=/providers.json"] : []),
