@@ -2,18 +2,7 @@ name: AppImage qualification
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
-    paths:
-      - .github/workflows/appimage-qualification.yml
-      - .github/workflows/package.yml
-      - packaging/**
-      - scripts/desktop-payload.ts
-      - scripts/hosted-*.sh
-      - scripts/hosted-*.ts
-      - scripts/package-*.ts
-      - scripts/package-build.sh
-      - src-tauri/**
-      - tests/package/**
+    types: [opened, labeled, synchronize, reopened]
 
 permissions:
   contents: read

@@ -128,5 +128,8 @@ fresh runtime fixture. Publication requires separate authorization. The T480
 installs/runs Couch; it is never a build worker.
 Apply `qualify-package` to an AppImage PR for the native x86_64 clean-launch
 check. It uses a disposable signing key without release credentials or
-publication. The label keeps this expensive build off ordinary PR runs. The act package/updater fixture and Debian regression remain
-separate local gates.
+publication. Without the label, the job is skipped. With it, one runner job has
+a 90-minute cap and includes checkout, Debian image setup, package compilation,
+driver installation, a fresh runtime and cleanup. Record the full hosted job
+duration and queue delay before making any billing or cold-cache claim. The act
+package/updater fixture and Debian regression remain separate local gates.

@@ -27,6 +27,8 @@ const names = {
 const cases = [
   { name: "native-draft", inputs: {}, want: ["build", "qualify", "sign", "upload"] },
   { name: "appimage-draft", inputs: { format: "appimage" }, want: ["build", "qualify", "sign", "upload"] },
+  { name: "reject-appimage-publish", inputs: { format: "appimage", publish: true }, want: [], fail: true },
+  { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable" }, want: [], fail: true },
   { name: "native-publish", inputs: { publish: true }, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
   { name: "completed-draft-retry", inputs: { "build-run": 123, publish: true }, want: ["publish", "readiness"] },
   { name: "receipt-log-fallback", inputs: { "build-run": 123, publish: true }, fault: "Download retained receipts", want: ["logs", "publish", "readiness"] },

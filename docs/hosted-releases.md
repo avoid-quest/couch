@@ -34,6 +34,8 @@ provider metadata, as with the Debian package. `package:build` and
 `hosted-build.sh` still default to Debian; select `appimage` explicitly. The
 AppImage draft is package qualification only. Installed upgrades, X11/Wayland
 behavior and download migration remain separate acceptance before publication.
+The Package workflow rejects AppImage publication and Stable dispatch until
+those acceptance checks have passed.
 
 Both public feeds use normal HTTPS redirects:
 
