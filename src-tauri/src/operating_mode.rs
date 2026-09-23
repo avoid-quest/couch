@@ -9,6 +9,7 @@ use std::{
 use tauri::{Manager, Url};
 
 const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
+const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 pub(crate) fn local_playback_unavailable() -> bool {
     cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true)
@@ -121,7 +122,18 @@ pub(crate) fn window_opened(app: &tauri::AppHandle) {
 }
 
 fn remote_busy(visible: bool, focused: bool, since: Duration) -> bool {
-    visible && focused && since < Duration::from_secs(600)
+    visible && focused && since < IDLE_WINDOW
+}
+
+fn recent_remote_input(selected: bool, since: Duration) -> bool {
+    selected && since < IDLE_WINDOW
+}
+
+pub(crate) fn recent_input(app: &tauri::AppHandle) -> bool {
+    let modes = app.state::<Modes>();
+    let selected = modes.current().mode == Some(Mode::Remote);
+    let since = modes.last_input.lock().expect("input lock poisoned").elapsed();
+    recent_remote_input(selected, since)
 }
 
 pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
@@ -148,7 +160,8 @@ pub(crate) async fn resume_idle_quiesce(app: &tauri::AppHandle, nonce: &str) -> 
 }
 
 pub(crate) async fn defer_after_checkpoint(app: &tauri::AppHandle, when_idle: bool, nonce: &str) -> Result<bool, String> {
-    if !when_idle || !idle_blocked(app)? { return Ok(false); }
+    // The input timestamp precedes its HTTP relay, even if focus has since moved away.
+    if !when_idle || !recent_input(app) { return Ok(false); }
     resume_idle_quiesce(app, nonce).await?;
     Ok(true)
 }
@@ -528,6 +541,19 @@ mod tests {
         // Input between the early updater check and the stopped-writer reply changes the final decision.
         assert!(!remote_busy(true, true, Duration::from_secs(601)));
         assert!(remote_busy(true, true, Duration::ZERO));
+    }
+
+    #[test]
+    fn final_checkpoint_keeps_input_after_focus_moves_away() {
+        let quiet = Duration::from_secs(601);
+        assert!(!remote_busy(true, true, quiet));
+        assert!(!recent_remote_input(true, quiet));
+        // The native command records input before its HTTP relay completes, then the window loses focus.
+        let fresh = Duration::ZERO;
+        assert!(!remote_busy(true, false, fresh));
+        assert!(recent_remote_input(true, fresh));
+        assert!(!recent_remote_input(true, Duration::from_secs(600)));
+        assert!(!recent_remote_input(false, fresh));
     }
 
     #[test]

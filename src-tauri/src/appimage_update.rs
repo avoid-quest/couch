@@ -637,7 +637,7 @@ async fn backup(
     trust: &Enrollment,
     directory: &Path,
     request_id: &str,
-) -> Result<(), String> {
+) -> Result<PathBuf, String> {
     let destination = application.join("backups").join(request_id);
     fs::create_dir_all(destination.parent().unwrap()).map_err(error)?;
     fs::create_dir(&destination).map_err(error)?;
@@ -674,7 +674,7 @@ async fn backup(
     let mut sync = std::process::Command::new("/usr/bin/sync");
     sync.arg("-f").arg(&destination);
     command(sync, 120, "Could not flush the recovery backup.").await?;
-    Ok(())
+    Ok(destination)
 }
 
 fn verify_supervisor(properties: &str, cgroup: &str, pid: u32) -> Result<(), String> {
@@ -897,8 +897,11 @@ pub async fn run(
                             disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
                             return Err(crate::operating_mode::IDLE_WAIT.into());
                         }
-                        backup(&application, &trust, &directory, request_id).await?;
-                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                        let backup_path = backup(&application, &trust, &directory, request_id).await?;
+                        if when_idle && crate::operating_mode::recent_input(&app) {
+                            // No replacement will use this completed recovery backup.
+                            fs::remove_dir_all(&backup_path).map_err(error)?;
+                            crate::operating_mode::resume_idle_quiesce(&app, &nonce).await?;
                             transaction["idleDeferred"] = true.into();
                             disrupted = false;
                             disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
