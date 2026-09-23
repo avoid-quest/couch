@@ -1,5 +1,5 @@
 // Exercise the signed AppImage in a disposable runtime container, including its
-// independent Client-only maintenance coordinator and a host-served remote view.
+// independent Client-only maintenance coordinator and one bundled Couch window.
 import { strict as assert } from "node:assert";
 import { resolve } from "node:path";
 
@@ -48,6 +48,8 @@ async function click(xpath: string) {
 }
 try {
   await until("Clean AppImage opens playback-device choice", () => element('//*[self::h1 or self::h2][normalize-space(.)="Where do you want to play?"]'));
+  const bundledUrl = await request("/url") as string;
+  assert.match(bundledUrl, /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)(?:\/|$)/, "The app loads its bundled frontend");
   await Bun.write(`${evidence}/first-launch.png`, Buffer.from(await request("/screenshot"), "base64"));
   await click('//button[normalize-space(.)="Another Couch"]');
   const address = await element('//label[normalize-space(.)="Couch address"]/following::input[1]');
@@ -66,34 +68,32 @@ try {
     return result === true;
   });
   assert.equal(inside("sh", "-c", "pgrep -x couch-server | wc -l"), "2", "One selected host and one private maintenance coordinator must run");
-  let remote: string | undefined;
-  await until("AppImage opens the selected host's remote view", async () => {
-    for (const handle of await request("/window/handles") as string[]) {
-      await request("/window", { handle });
-      if (String(await request("/url")).startsWith(selectedHost)) remote = handle;
-    }
-    return !!remote;
-  });
-  await request("/window", { handle: remote });
-  await until("Host-served view requests a pairing code", () => element('//*[self::h1 or self::h2][normalize-space(.)="Connect to Couch"]'));
+  await until("Selected host appears in the bundled window", () => element('//button[contains(normalize-space(.),"Play on: http://127.0.0.1:44101")]'));
+  assert.equal((await request("/window/handles") as string[]).length, 1, "The desktop has one WebDriver window");
+  assert.equal(await request("/url"), bundledUrl, "Selecting a host keeps the bundled frontend");
+  assert.equal(inside("sh", "-c", "xdotool search --onlyvisible --name '^Couch remote$' || true"), "", "No second remote OS window opens");
+  await until("Shared window requests a pairing code", () => element('//label[normalize-space(.)="Pairing code"]/following::input[1]'));
   const code = inside("cat", "/evidence/host.log").match(/Pairing code:\s*(\d{6})/)?.[1];
   assert.ok(code, "The selected host supplies a pairing code");
-  const pairing = await element('//input[@aria-label="Pairing code"]');
+  const name = await element('//label[normalize-space(.)="Device name"]/following::input[1]');
+  assert.ok(name, "The shared shell labels the device name");
+  await request(`/element/${name}/value`, { text: "AppImage client" });
+  const pairing = await element('//label[normalize-space(.)="Pairing code"]/following::input[1]');
   assert.ok(pairing, "Pairing code field is labelled");
   await request(`/element/${pairing}/value`, { text: code });
   await click('//button[normalize-space(.)="Connect"]');
-  await until("Paired Client-only view loads the host navigation", () => element('//nav[@aria-label="Main navigation"]'));
+  await until("Paired Client-only window loads host navigation", () => element('//nav[@aria-label="Main navigation"]'));
   const authority = await asyncExecute(`
-    const token = localStorage.getItem('couch.remote-token');
-    const response = await fetch('/api/controllers/me', {headers:{Authorization:'Bearer ' + token}});
+    const pairing = JSON.parse(localStorage.getItem('couch.pairing:${selectedHost}') || '{}');
+    const response = await fetch('${selectedHost}/api/controllers/me', {headers:{Authorization:'Bearer ' + pairing.token}});
     return response.ok ? (await response.json()).authority : response.status;
   `);
   assert.equal(authority, "administrator", "The host, not the AppImage, grants this remote's role");
-  const nativeGrant = await asyncExecute(`
-    if (!window.__TAURI_INTERNALS__) return false;
-    try { await window.__TAURI_INTERNALS__.invoke('playback_device'); return true; } catch { return false; }
-  `);
-  assert.equal(nativeGrant, false, "The host-served view cannot call trusted playback-device commands");
+  assert.equal(await execute("return window.__COUCH_NATIVE_HOST__ === true"), true, "The shared bundled shell retains native identity");
+  const localGrant = await asyncExecute("try { await window.__TAURI_INTERNALS__.invoke('choose_media'); return true; } catch { return false; }");
+  assert.equal(localGrant, false, "Another Couch cannot use local media commands");
+  assert.equal(await request("/url"), bundledUrl, "Pairing keeps the sole bundled window");
+  assert.equal((await request("/window/handles") as string[]).length, 1, "Pairing opens no second window");
   assert.deepEqual(JSON.parse(inside("cat", "/evidence/native-build.json")), JSON.parse(inside("cat", "/evidence/server-build.json")));
   await Bun.write(`${evidence}/result.json`, JSON.stringify({ build: JSON.parse(inside("cat", "/evidence/native-build.json")), checks, limits: ["Disposable Debian 13 X11 desktop with software rendering and null audio", "AppImage extraction avoids Docker's absent FUSE mount", "Installed upgrade and Wayland behavior require separate acceptance"] }, null, 2) + "\n");
 } finally {

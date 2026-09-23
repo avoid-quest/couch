@@ -75,10 +75,11 @@ container instrumentation limit this proof; it is not hardware or installed
 native-update acceptance. The integrated TV/update package must pass this
 fixture again after those changes merge. AppImage builds inspect the extracted
 AppDir and start the exact signed file in a fresh disposable desktop runtime.
-The AppImage fixture pairs with a separate packaged coordinator and verifies
-that the host-served view cannot call trusted native controls. It uses extraction
-because the container has no FUSE device; this does not qualify a normal FUSE
-mount or Wayland.
+The AppImage fixture pairs with a separate packaged coordinator in the sole
+bundled Couch window. It verifies that remote mode cannot call local media
+commands and that this installation's maintenance coordinator stays separate.
+It uses extraction because the container has no FUSE device; this does not
+qualify a normal FUSE mount or Wayland.
 
 The Debian builder layers, Cargo dependencies and Bun downloads remain caches.
 Cache misses build normally. No cache hit or hosted duration is claimed by local
