@@ -1,5 +1,27 @@
 # couch
 
+## 0.2.0-preview.12
+
+### Minor Changes
+
+- [#519](https://github.com/avoid-quest/couch/pull/519) [`5f637c6`](https://github.com/avoid-quest/couch/commit/5f637c6d0c3282ac73e639015103bf799f413f87) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Build and verify a signed Linux AppImage for the shared desktop app.
+
+### Patch Changes
+
+- [#523](https://github.com/avoid-quest/couch/pull/523) [`2b63220`](https://github.com/avoid-quest/couch/commit/2b632201718d35efc673f9207e5960f5763e299e) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Verify bundled Linux AppImage playback libraries and media helpers with a fresh local playback fixture.
+
+- [#520](https://github.com/avoid-quest/couch/pull/520) [`65251b1`](https://github.com/avoid-quest/couch/commit/65251b1513c892402cd3645f44c1d2fd88a9c446) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Prepare one signed Preview release containing Debian, AppImage, Apple Silicon Mac and Windows NSIS packages.
+
+- [#522](https://github.com/avoid-quest/couch/pull/522) [`4d7eb98`](https://github.com/avoid-quest/couch/commit/4d7eb982f4439c4b57a53b9dbc20419cb6f48996) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Bundle the production Mac player, its native libraries and enabled media helpers in the desktop app.
+
+- [#511](https://github.com/avoid-quest/couch/pull/511) [`c642ff4`](https://github.com/avoid-quest/couch/commit/c642ff41aa22868e50650c41a192017e14447e78) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Add Mac native playback handling for split video/audio sources, radio metadata and IPTV live starts.
+
+- [#512](https://github.com/avoid-quest/couch/pull/512) [`585ffbc`](https://github.com/avoid-quest/couch/commit/585ffbc7e6634caeadee61e8e391b02eab25e749) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Mac music playback now respects CUE track boundaries and ReplayGain settings, and prepares eligible local and Jellyfin tracks for the next queue transition.
+
+- [#514](https://github.com/avoid-quest/couch/pull/514) [`aa89944`](https://github.com/avoid-quest/couch/commit/aa89944f94336fa4f6f62ba3a245c7bf8f580530) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Verify Mac audio tracks, subtitles, chapters and saved playback preferences, and stop oversized subtitle uploads at the size limit.
+
+- [#513](https://github.com/avoid-quest/couch/pull/513) [`4647279`](https://github.com/avoid-quest/couch/commit/46472793fd6237812e1fa81ef1c10ea1554cb181) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Choose a Mac sound output and control its effective volume and mute from Couch or a paired Administrator remote.
+
 ## 0.1.5-preview.11
 
 ### Patch Changes
