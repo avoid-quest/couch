@@ -1,7 +1,7 @@
-# Mac Client-only package
+# Mac desktop package
 
-On an Apple Silicon Mac, use Bun 1.4.2 and the locked Rust toolchain. Supply the
-same enrolled Tauri updater key pair used by Couch's existing release process as
+On an Apple Silicon Mac, use Bun 1.4.2 and the locked Rust toolchain. Supply a
+Tauri updater key pair as
 `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` and
 `COUCH_UPDATER_PUBLIC_KEY`, then run:
 
@@ -10,24 +10,32 @@ bun install --frozen-lockfile
 bun run package:mac
 ```
 
-The command requires a clean commit. It stages the Apple Silicon build inputs,
-Bun and production dependency notices, then uses Tauri to build and ad-hoc sign
-the `.app` and DMG. Tauri also signs `Couch.app.tar.gz` independently for its
-updater. The verifier mounts the DMG, checks the installed payload hashes,
-architecture, system-library closure, notices and app signature, then verifies
-the updater archive and its Tauri signature. Its receipt is
-`.artifacts/mac-inventory.json`. Keep the DMG and updater archive private until
-the installed acceptance and publication work is authorized.
+The command requires a clean commit and Homebrew `mpv` and `ffmpeg`. It discovers
+the installed libmpv, mpv executable and ffprobe library closure, then stages
+those libraries, standalone yt-dlp and Deno, mpv, ffprobe, the Bun coordinator
+and their notices. The
+packaged `mac-native.json` records the installed formula versions, source and
+bottle checksums, original binary hashes and signed bundle hashes. Downloaded
+yt-dlp and Deno are pinned in `packaging/inputs.json`. Tauri copies the native
+libraries into `Contents/Frameworks`, builds and ad-hoc signs the `.app`
+and DMG, then signs `Couch.app.tar.gz` separately for the updater. The verifier
+mounts the DMG, checks payload hashes, loader paths, architecture, helper
+execution without Homebrew in `PATH`, notices and signatures, then compares
+every app byte with the updater archive. Its receipt is
+`.artifacts/mac-inventory.json`.
 
-The command disables the default `desktop-playback` Cargo feature for this
-Client-only artifact. The bundled UI offers remote playback only.
+The default `desktop-playback` Cargo feature stays enabled. The same app can
+host local playback or switch to Client-only mode. The bundled coordinator
+retains Couch's `quest.avoid.couch` identity and app data location.
 
-The client connects to another Couch through that host's served UI. Its bundled
-coordinator provides private maintenance and recovery; this package carries no
-libmpv, `ffprobe`, `yt-dlp` or Deno and has no local playback claim. The updater
-feed target is `darwin-aarch64`, matching the desktop update adapter in
-[#473](https://github.com/avoid-quest/couch/issues/473). Installed upgrade and
-recovery qualification belongs to the [Mac acceptance ticket](https://github.com/avoid-quest/couch/issues/490).
+For local headless qualification, use a disposable Tauri updater key pair. The
+enrolled private updater key remains in GitHub's `couch-release` environment;
+the hosted Apple Silicon `macos-26` job builds the production package. The
+updater feed target is `darwin-aarch64`, matching the desktop update adapter in
+[#473](https://github.com/avoid-quest/couch/issues/473). Installed playback,
+upgrade and recovery are manual checks after Preview under
+[#489](https://github.com/avoid-quest/couch/issues/489) and
+[#490](https://github.com/avoid-quest/couch/issues/490).
 
 Ad-hoc signing does not notarize the app. A downloaded copy may need individual
 approval in macOS Privacy & Security, and network access can prompt separately.

@@ -28,7 +28,7 @@ export type Payload = { target: string; format: string; enabledHelpers: string[]
 const helperNames = ["yt-dlp", "deno", "ffprobe"] as const;
 export const isNativeLibrary = (path: string) => /\.(?:so(?:\.\d+)*|dylib|dll)$/i.test(path);
 export function verifyBundledNativeLibraries(payload: Payload, packagePaths: string[]) {
-  assert.deepEqual(packagePaths.filter(isNativeLibrary).sort(), payload.native.bundledLibraries, "Bundled native libraries differ from payload inventory");
+  assert.deepEqual(packagePaths.filter(isNativeLibrary).sort(), [...payload.native.bundledLibraries].sort(), "Bundled native libraries differ from payload inventory");
 }
 const hash = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
 
@@ -69,6 +69,11 @@ export async function createPayload(target: string, format: string, sidecar: str
   await add(sidecar, paths.sidecar, true);
   for (const name of enabledHelpers) await add(join(resources, "tools", name + (target.includes("windows") ? ".exe" : "")), posix.join(paths.resources, "tools", name + (target.includes("windows") ? ".exe" : "")), true);
   if (enabledHelpers.length) await add(join(resources, "tools.json"), posix.join(paths.resources, "tools.json"));
+  if (target.endsWith("-apple-darwin") && enabledHelpers.length) {
+    await add(join(resources, "mac-native.json"), posix.join(paths.resources, "mac-native.json"));
+    await add(join(resources, "tools", "mpv"), posix.join(paths.resources, "tools", "mpv"), true);
+    for (const name of await readdir(join(resources, "mac-libraries"))) await add(join(resources, "mac-libraries", name), `Contents/Frameworks/${name}`, true);
+  }
   await add(join(resources, "build-inputs.json"), posix.join(paths.resources, "build-inputs.json"));
   if (await Bun.file(join(resources, "build-packages.tsv")).exists()) await add(join(resources, "build-packages.tsv"), posix.join(paths.resources, "build-packages.tsv"));
   const notices = join(resources, "notices");
@@ -95,8 +100,8 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
   assert.deepEqual(payload.native.declaredHostPackages, expectedHostPackages);
   assert.deepEqual(payload.native.bundledLibraries, payload.files.filter(file => isNativeLibrary(file.path)).map(file => file.path));
   const paths = payloadPaths(expectedTarget, expectedFormat);
-  const binaries = [paths.sidecar, ...expectedHelpers.map(name => posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : "")))];
-  const required = [...binaries, ...(expectedHelpers.length ? [posix.join(paths.resources, "tools.json")] : []), posix.join(paths.resources, "build-inputs.json"), ...(expectedFormat === "deb" ? [posix.join(paths.resources, "build-packages.tsv")] : [])];
+  const binaries = [paths.sidecar, ...expectedHelpers.map(name => posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : ""))), ...(expectedFormat === "dmg" && expectedHelpers.length ? [posix.join(paths.resources, "tools", "mpv")] : [])];
+  const required = [...binaries, ...(expectedHelpers.length ? [posix.join(paths.resources, "tools.json")] : []), ...(expectedFormat === "dmg" && expectedHelpers.length ? [posix.join(paths.resources, "mac-native.json")] : []), posix.join(paths.resources, "build-inputs.json"), ...(expectedFormat === "deb" ? [posix.join(paths.resources, "build-packages.tsv")] : [])];
   for (const path of required) assert.ok(payload.files.some(file => file.path === path), `Missing payload entry: ${path}`);
   assert.ok(payload.files.some(file => file.path.endsWith("notices/NOTICE") || file.path === "usr/share/doc/couch/NOTICE"), "Missing redistribution notice");
   const seen = new Set<string>();
@@ -117,6 +122,12 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
     for (const name of expectedHelpers) {
       const path = posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : ""));
       assert.equal(payload.files.find(file => file.path === path)?.sha256, helpers[name]?.sha256, `Helper provenance mismatch: ${name}`);
+    }
+    if (expectedFormat === "dmg") {
+      const native = await Bun.file(join(root, paths.resources, "mac-native.json")).json();
+      assert.equal(payload.files.find(file => file.path === posix.join(paths.resources, "tools", "mpv"))?.sha256, native.mpv.bundledSha256, "Mac mpv provenance mismatch");
+      assert.deepEqual([...payload.native.bundledLibraries].sort(), native.libraries.map((library: { name: string }) => `Contents/Frameworks/${library.name}`).sort());
+      for (const library of native.libraries) assert.equal(payload.files.find(file => file.path === `Contents/Frameworks/${library.name}`)?.sha256, library.bundledSha256, `Native provenance mismatch: ${library.name}`);
     }
   }
 }

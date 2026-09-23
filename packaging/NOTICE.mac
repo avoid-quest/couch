@@ -6,5 +6,7 @@ and build instructions are at https://github.com/oven-sh/bun/tree/bun-v1.4.2 .
 
 native.txt records the Rust dependencies included in this Apple Silicon build.
 javascript.json and javascript/ record the production JavaScript dependencies.
-This Client-only package does not include libmpv, ffprobe, yt-dlp or Deno and
-does not offer local playback.
+This Full package includes libmpv, ffprobe, yt-dlp and Deno. macos-native/
+contains source and bottle provenance and license notices for the linked
+Homebrew libraries. mac-native.json records their original and bundled binary
+hashes. The same app can switch to Client-only mode.
