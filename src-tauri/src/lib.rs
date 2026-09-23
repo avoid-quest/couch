@@ -1,6 +1,7 @@
 mod appimage_update;
 mod bluetooth;
 mod deb_update;
+mod desktop_update;
 mod desktop_lifecycle;
 mod diagnostics;
 mod diagnostics_export;
@@ -242,6 +243,18 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
     start_coordinator(app, true)
 }
 
+pub(crate) fn local_update_status(
+    app: &tauri::AppHandle,
+    saved_id: Option<&str>,
+    request_id: &str,
+) -> serde_json::Value {
+    if desktop_update::running(app) {
+        desktop_update::status(app, saved_id, request_id)
+    } else {
+        appimage_update::status(app, saved_id, request_id)
+    }
+}
+
 fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), String> {
     let host = app.state::<Host>();
     if host.child.lock().expect("sidecar lock poisoned").is_some() {
@@ -299,7 +312,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         )
         .env(
             "COUCH_APPIMAGE",
-            if appimage_update::running(app) {
+            if appimage_update::tv_running(app) {
                 "1"
             } else {
                 "0"
@@ -308,6 +321,10 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         .env(
             "COUCH_PACKAGE_UPDATE",
             if deb_update::running(app) { "1" } else { "0" },
+        )
+        .env(
+            "COUCH_DESKTOP_UPDATE",
+            if desktop_update::running(app) { "1" } else { "0" },
         )
         .env("COUCH_HOST_TOKEN", token)
         .env("COUCH_DATA_DIR", &host.data_dir)
@@ -428,7 +445,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                     request_id: ref saved_id,
                                 } = action
                                 {
-                                    host.report_message(appimage_update::status(
+                                    host.report_message(local_update_status(
                                         &handle,
                                         saved_id.as_deref(),
                                         &request_id,
@@ -606,11 +623,19 @@ pub fn run() {
                 quit_confirmed: AtomicBool::new(false),
                 child_exited,
             });
-            tauri::async_runtime::spawn(appimage_update::run(
-                app.handle().clone(),
-                data_dir.join("updates/appimage"),
-                update_receiver,
-            ));
+            if desktop_update::running(app.handle()) {
+                tauri::async_runtime::spawn(desktop_update::run(
+                    app.handle().clone(),
+                    desktop_update::directory(&data_dir),
+                    update_receiver,
+                ));
+            } else {
+                tauri::async_runtime::spawn(appimage_update::run(
+                    app.handle().clone(),
+                    data_dir.join("updates/appimage"),
+                    update_receiver,
+                ));
+            }
             tauri::async_runtime::spawn(deb_update::run(
                 app.handle().clone(),
                 data_dir.join("updates/deb"),

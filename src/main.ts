@@ -27,13 +27,15 @@ const adminRecoveryCode = process.env.COUCH_ADMIN_RECOVERY_CODE;
 delete process.env.COUCH_ADMIN_RECOVERY_CODE;
 if (native && !process.env.COUCH_HOST_TOKEN) throw new Error("The native host must supply its private token");
 const dataDir = process.env.COUCH_DATA_DIR ?? ".data";
-if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null, process.env.COUCH_DEV_ORIGIN);
+if (native && process.env.COUCH_MAINTENANCE_ONLY === "1") await runMaintenanceMode(dataDir, process.env.COUCH_HOST_TOKEN!, process.env.COUCH_APPIMAGE === "1" ? "appimage" : process.env.COUCH_DESKTOP_UPDATE === "1" ? "desktop" : process.env.COUCH_PACKAGE_UPDATE === "1" ? "deb" : null, process.env.COUCH_DEV_ORIGIN);
 
 function send(message: SidecarMessage) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
 const appimage = native && process.env.COUCH_APPIMAGE === "1";
+const desktop = native && process.env.COUCH_DESKTOP_UPDATE === "1";
+const tauriUpdates = appimage || desktop;
 const appimageUpdates = createNativeAppImageUpdates((requestId, action) => send({ type: "appimageUpdate", requestId, action }));
 const deb = native && process.env.COUCH_PACKAGE_UPDATE === "1";
 // Docker's published host port is a development-only proxy boundary: its LAN
@@ -46,8 +48,8 @@ const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ t
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
 let hub: Hub;
-let admission = !(appimage || deb);
-const updater = appimage ? appimageUpdates : deb ? debUpdates : undefined;
+let admission = !(tauriUpdates || deb);
+const updater = tauriUpdates ? appimageUpdates : deb ? debUpdates : undefined;
 await mkdir(dataDir, { recursive: true, mode: 0o700 });
 // Preserve the administrator's permissions on data shared with us through an ACL.
 if (process.geteuid && (await stat(dataDir)).uid === process.geteuid()) await chmod(dataDir, 0o700);
@@ -57,11 +59,11 @@ hub = createHub({
   publishedLan: previewProxyLan,
   onAddresses: urls => { if (native) send({ type: "addresses", urls }); },
   remoteControlEnabled: !native,
-  ...(appimage || deb ? { restart: (appimage ? appimageUpdates : debUpdates).restart } : {}),
-  ...(appimage || deb ? { updateFeed: (appimage ? appimageUpdates : debUpdates).feed } : {}),
+  ...(tauriUpdates || deb ? { restart: (tauriUpdates ? appimageUpdates : debUpdates).restart } : {}),
+  ...(tauriUpdates || deb ? { updateFeed: (tauriUpdates ? appimageUpdates : debUpdates).feed } : {}),
   nativeDisplay: nativeDisplay.request,
   ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
-  ...(appimage || deb ? {
+  ...(tauriUpdates || deb ? {
     admitted: () => admission,
     frontendReady: (value: unknown) => {
       const build = value as MaintenanceBuild;
@@ -114,8 +116,8 @@ async function close() {
 process.on("SIGINT", close);
 process.on("SIGTERM", close);
 
-if (appimage || deb) void (async () => {
-  const updates = appimage ? appimageUpdates : debUpdates;
+if (tauriUpdates || deb) void (async () => {
+  const updates = tauriUpdates ? appimageUpdates : debUpdates;
   try {
     const status = await updates.request({ op: "status" });
     if (status.transaction?.phase === "trial") {

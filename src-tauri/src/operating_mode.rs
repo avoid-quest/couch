@@ -283,11 +283,6 @@ pub(crate) async fn quit_interruption(
 
 async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String> {
     let host = app.state::<Host>();
-    if host.workers.lock().expect("worker lock poisoned").is_some()
-        && host.child.lock().expect("sidecar lock poisoned").is_none()
-    {
-        return Ok(());
-    }
     if host
         .update_busy
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -305,9 +300,11 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
         }
     }
     let _release = Release(&host.update_busy);
-    let update = crate::appimage_update::status(app, None, "mode-check");
-    if update["transaction"]["phase"] == "trial" {
-        return Err("Finish this computer's update checks before changing playback device.".into());
+    update_allows_mode_change(&crate::local_update_status(app, None, "mode-check"))?;
+    if host.workers.lock().expect("worker lock poisoned").is_some()
+        && host.child.lock().expect("sidecar lock poisoned").is_none()
+    {
+        return Ok(());
     }
     if !confirm && host.local_running.load(Ordering::Relaxed) {
         let connection = host
@@ -351,6 +348,19 @@ async fn stop_local(app: &tauri::AppHandle, confirm: bool) -> Result<(), String>
             .map_err(error)??;
     }
     host.connection.send_replace(None);
+    Ok(())
+}
+
+fn update_allows_mode_change(status: &serde_json::Value) -> Result<(), String> {
+    if status["ok"] != true {
+        return Err(format!(
+            "Cannot check this computer's update before changing playback device: {}",
+            status["error"].as_str().unwrap_or("Unknown update status.")
+        ));
+    }
+    if status["transaction"]["phase"] == "trial" {
+        return Err("Finish this computer's update checks before changing playback device.".into());
+    }
     Ok(())
 }
 
@@ -435,6 +445,13 @@ pub async fn complete_local_setup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mode_change_waits_for_trial_or_unreadable_update_status() {
+        assert!(update_allows_mode_change(&serde_json::json!({"ok":true,"transaction":{"phase":"trial"}})).is_err());
+        assert!(update_allows_mode_change(&serde_json::json!({"error":"journal unreadable"})).is_err());
+        assert!(update_allows_mode_change(&serde_json::json!({"ok":true,"transaction":{"phase":"succeeded"}})).is_ok());
+    }
 
     #[test]
     fn main_navigation_accepts_only_packaged_or_exact_development_origin() {

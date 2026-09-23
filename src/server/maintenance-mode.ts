@@ -12,7 +12,7 @@ import { createUpdates } from "./updates";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
 // It opens no media catalog, player, LAN listener or pairing endpoint.
-export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "deb" | null, devOrigin?: string): Promise<never> {
+export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "desktop" | "deb" | null, devOrigin?: string): Promise<never> {
   const send = (message: SidecarMessage) => { process.stdout.write(`${JSON.stringify(message)}\n`); };
   const native = format === "deb"
     ? createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }))
