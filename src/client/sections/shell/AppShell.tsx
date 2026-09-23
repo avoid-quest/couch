@@ -23,6 +23,7 @@ import { readSearchState, searchLocation, type SearchRouteState } from "@/search
 import { createId } from "@/session/session";
 import { pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
+import { buildInfo } from "../../../shared/build";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
@@ -272,7 +273,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           </Card>
         ) : (
           <>
-            {!connected && <div className="notice" role="status">{status === "server-unavailable" ? "The selected Couch is offline. Its address stays selected." : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="ml-3 inline-flex gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button><Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button></span>}</div>}
+            {!connected && <div className="notice" role="status">{status === "server-unavailable" ? "The selected Couch is offline. Its address stays selected." : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="ml-3 inline-flex gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>}</span>}</div>}
             {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
