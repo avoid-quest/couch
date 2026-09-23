@@ -26,7 +26,7 @@ name: Package
         description: Attempt that produced the retained artifact
       release-id:
         type: string
-        description: "Optional recorded draft ID, must match the completed upload on retry"
+        description: "Recorded draft ID; attach AppImage to a Debian draft or match a retry"
       readiness-only:
         type: boolean
         default: false

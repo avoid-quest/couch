@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { application, cdn, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, packageFormat, releasePlatforms, type PackageFormat, type Channel } from "./hosted-policy";
+import { application, assetPlatforms, cdn, channelArgs, downloadUrl, publicFiles, publicKey, releaseVersion, packageFormat, releasePlatforms, type PackageFormat, type Channel } from "./hosted-policy";
 
 type FileIdentity = { bytes: number; sha256: string; signature?: string };
 export type Manifest = {
@@ -68,24 +68,29 @@ export async function verifyFiles(directory: string, manifest: Manifest) {
   }
 }
 
-export function verifyCloud(release: CloudRelease, manifest: Manifest, channel: Channel) {
+export function verifyCloud(release: CloudRelease, manifest: Manifest, channel: Channel, allowOtherAssets = false) {
   validateManifest(manifest);
   assert.equal(release.version, manifest.version, "Cloud version differs from the built app.");
   assert.equal(release.channel, channel === "preview" ? "preview" : null, "Cloud channel differs.");
   assert.match(release.id, /^[A-Z0-9]{26}$/);
-  assert.deepEqual(release.assets.map(asset => asset.filename).sort(), publicFiles(manifest.version, packageFormat(manifest.format)).sort(), "Cloud has an incomplete or unapproved public asset set.");
-  for (const asset of release.assets) {
+  const format = packageFormat(manifest.format);
+  const expectedNames = publicFiles(manifest.version, format);
+  const allNames = ["deb", "appimage", "dmg", "nsis"].flatMap(value => publicFiles(manifest.version, value as PackageFormat));
+  assert.deepEqual(release.assets.filter(asset => expectedNames.includes(asset.filename)).map(asset => asset.filename).sort(), expectedNames.slice().sort(), "Cloud has an incomplete asset set for this format.");
+  assert.ok(release.assets.every(asset => allowOtherAssets ? allNames.includes(asset.filename) : expectedNames.includes(asset.filename)), "Cloud has an unapproved public asset.");
+  assert.equal(new Set(release.assets.map(asset => asset.filename)).size, release.assets.length, "Cloud has duplicate asset names.");
+  for (const asset of release.assets.filter(asset => expectedNames.includes(asset.filename))) {
     const expected = manifest.files[asset.filename]!;
     assert.equal(Number(asset.size), expected.bytes, `Cloud size differs: ${asset.filename}`);
     assert.equal(asset.signature ?? undefined, expected.signature, `Cloud signature differs: ${asset.filename}`);
-    const platforms = releasePlatforms(packageFormat(manifest.format));
-    const applicationAsset = asset.filename === publicFiles(manifest.version, packageFormat(manifest.format))[0];
-    assert.equal(asset.publicPlatform, applicationAsset ? platforms.public : null);
-    assert.equal(asset.updatePlatform, applicationAsset ? platforms.update : null);
+    const platforms = assetPlatforms(manifest.version, format, asset.filename);
+    assert.equal(asset.publicPlatform, platforms.public);
+    assert.equal(asset.updatePlatform, platforms.update);
   }
 }
 
 export function qualificationChecks(format: PackageFormat) {
+  if (format === "dmg" || format === "nsis") return ["signatures", `${format}-package`];
   return ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", format === "deb" ? "debian-desktop" : "appimage-client"];
 }
 
@@ -225,15 +230,17 @@ export async function verifyPublic(manifest: Manifest, channel: Channel, fetcher
     return result.bytes;
   };
   const format = packageFormat(manifest.format), platforms = releasePlatforms(format);
-  const app = manifest.files[publicFiles(manifest.version, format)[0]!]!;
+  const files = publicFiles(manifest.version, format);
+  const installer = manifest.files[files[0]!]!;
+  const updater = manifest.files[files.at(-1)!]!;
   for (const [name, identity] of Object.entries(manifest.files)) await get(downloadUrl(name, channel), identity);
-  await get(downloadUrl(`platform/${platforms.public}`, channel), app);
+  await get(downloadUrl(`platform/${platforms.public}`, channel), installer);
   // An earlier current version asks for metadata even when this is the first release.
   const endpoint = `https://cdn.crabnebula.app/update/${application}/${platforms.update}/0.0.0` + (channel === "preview" ? "?channel=preview" : "");
   const metadata = JSON.parse(new TextDecoder().decode(await get(endpoint)));
   assert.equal(metadata.version, manifest.version, "CDN still offers another version. Retry verification without republishing.");
-  assert.equal(metadata.signature.trim(), app.signature);
-  await get(metadata.url, app);
+  assert.equal(metadata.signature.trim(), updater.signature);
+  await get(metadata.url, updater);
   return { version: manifest.version, format: packageFormat(manifest.format), revision: manifest.revision, channel, checkedAt: new Date().toISOString(), files: manifest.files, checks };
 }
 
@@ -246,6 +253,7 @@ async function seal(directory: string) {
   assert.equal(build.version, config.version);
   assert.equal(config.plugins.updater.pubkey, publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY));
   const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
+  assert.ok(format === "deb" || format === "appimage", "The hosted builder only seals Linux packages.");
   const inventory = await read(format === "deb" ? ".artifacts/deb-inventory.json" : ".artifacts/appimage-inventory.json");
   const details = JSON.parse(new TextDecoder().decode(inventory));
   assert.deepEqual(details.build, build);
@@ -279,7 +287,9 @@ if (import.meta.main) {
     assert.equal(release.status, "Draft");
     assert.equal(release.version, version);
     assert.equal(release.channel, "preview");
-    assert.equal(release.assets.length, 0, "A fresh build cannot replace an uploaded candidate. Reuse its signed receipt or choose a new version.");
+    if (releaseId && packageFormat(process.env.COUCH_PACKAGE_FORMAT) === "appimage") {
+      assert.ok(release.assets.every(asset => publicFiles(version, "deb").includes(asset.filename)), "Attach AppImage only to a Debian-only draft.");
+    } else assert.equal(release.assets.length, 0, "A fresh build cannot replace an uploaded candidate. Reuse its signed receipt or choose a new version.");
     assert.match(release.id, /^[A-Z0-9]{26}$/);
     await Bun.write(join(directory, "draft-preview.json"), JSON.stringify(release, null, 2));
     if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${release.id}\n`);
@@ -299,9 +309,9 @@ if (import.meta.main) {
     } else if (operation === "restore") await restorePublic(directory, manifest);
     else if (operation === "resume") {
       const uploaded: CloudRelease = await Bun.file(join(directory, "receipts", `upload-${channel}.json`)).json();
-      verifyCloud(uploaded, manifest, channel);
+      verifyCloud(uploaded, manifest, channel, channel === "preview" && packageFormat(manifest.format) === "appimage");
       if (releaseId) assert.equal(releaseId, uploaded.id, "Retry the completed uploaded draft.");
-      verifyCloud(JSON.parse(cn(["show", application, uploaded.id, ...channels])), manifest, channel);
+      verifyCloud(JSON.parse(cn(["show", application, uploaded.id, ...channels])), manifest, channel, channel === "preview" && packageFormat(manifest.format) === "appimage");
       if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${uploaded.id}\n`);
     } else if (operation === "readiness") {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
@@ -340,15 +350,14 @@ if (import.meta.main) {
             assert.equal(existing.signature ?? undefined, manifest.files[name]!.signature);
             continue;
           }
-          const platforms = releasePlatforms(packageFormat(manifest.format));
-          const applicationAsset = name === publicFiles(manifest.version, packageFormat(manifest.format))[0];
+          const platforms = assetPlatforms(manifest.version, packageFormat(manifest.format), name);
           const signaturePath = join(directory, "signatures", `${name}.sig`);
           await Bun.write(signaturePath, manifest.files[name]!.signature!);
-          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(applicationAsset ? ["--public-platform", platforms.public, "--update-platform", platforms.update] : []), "--signature", signaturePath]);
+          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(platforms.public ? ["--public-platform", platforms.public] : []), ...(platforms.update ? ["--update-platform", platforms.update] : []), "--signature", signaturePath]);
         }
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       }
-      verifyCloud(release, manifest, channel);
+      verifyCloud(release, manifest, channel, operation === "upload" && channel === "preview" && packageFormat(manifest.format) === "appimage");
       if (operation === "publish") {
         await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
         cn(["publish", application, releaseId!, ...channels]);

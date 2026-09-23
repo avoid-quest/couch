@@ -13,6 +13,7 @@ const architecture = process.env.COUCH_ACT_ARCH ?? `linux/${process.arch === "ar
 const source = await Bun.file(".github/workflows/package.yml").text();
 const workflow = Bun.YAML.parse(source) as any;
 const release = Bun.YAML.parse(await Bun.file(".github/workflows/release.yml").text()) as any;
+assert.equal(release.on.push, undefined, "The coordinated Preview gate must not dispatch from a merge.");
 const names = {
   build: "Build and sign the selected package",
   qualify: "Qualify the exact signed bytes",
@@ -27,6 +28,7 @@ const names = {
 const cases = [
   { name: "native-draft", inputs: {}, want: ["build", "qualify", "sign", "upload"] },
   { name: "appimage-draft", inputs: { format: "appimage" }, want: ["build", "qualify", "sign", "upload"] },
+  { name: "appimage-attach", inputs: { format: "appimage", "release-id": "AAAAAAAAAAAAAAAAAAAAAAAAAA" }, want: ["build", "qualify", "sign", "upload"] },
   { name: "reject-appimage-publish", inputs: { format: "appimage", publish: true }, want: [], fail: true },
   { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable", "build-run": 123 }, want: [], fail: true },
   { name: "native-publish", inputs: { publish: true }, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
@@ -56,6 +58,8 @@ assert.match(candidate.run, /release-notes\.ts "\$revision"/);
 const appimageGuard = candidate.run.match(/^\s*if \[ "\$FORMAT" = appimage \]; then[^\n]*$/m)?.[0];
 assert.ok(appimageGuard, "Exercise the real AppImage input guard in act");
 assert.doesNotMatch(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /release-notes|notes=/);
+assert.match(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /-f publish=false/);
+assert.match(workflow.jobs.release.steps.find((step: any) => step.id === "draft").env.RELEASE_ID, /inputs\.release-id/);
 await mkdir(`${output}/home`, { recursive: true });
 await mkdir(`${output}/workspace`, { recursive: true });
 const results = [];

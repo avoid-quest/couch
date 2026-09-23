@@ -2,18 +2,17 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { application, cdn, channelArgs, downloadUrl, packageFormat, publicFiles, releasePlatforms, releaseVersion, updaterEndpoint } from "./hosted-policy";
+import { application, assetPlatforms, cdn, channelArgs, downloadUrl, packageFormat, publicFiles, releasePlatforms, releaseVersion, updaterEndpoint, type PackageFormat } from "./hosted-policy";
 import { assertIncreasing, githubRelease, githubTag, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
 
 const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()).trim();
 const signature = (await Bun.file("src-tauri/tests/fixtures/update/archive.sig").text()).trim();
 const archive = new Uint8Array(await Bun.file("src-tauri/tests/fixtures/update/archive").arrayBuffer());
-function fixture(version = "0.1.0", format: "deb" | "appimage" = "deb"): Manifest {
+function fixture(version = "0.1.0", format: PackageFormat = "deb"): Manifest {
   return { schemaVersion: 1, format, version, revision: "a".repeat(40), publicKey: key, inventorySha256: "b".repeat(64), files: Object.fromEntries(publicFiles(version, format).map(name => [name, { bytes: archive.length, sha256: hash(archive), signature }])) };
 }
 function cloud(manifest: Manifest): CloudRelease {
-  const platforms = releasePlatforms(packageFormat(manifest.format));
-  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: platforms.public, updatePlatform: platforms.update })) };
+  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: assetPlatforms(manifest.version, packageFormat(manifest.format), filename).public, updatePlatform: assetPlatforms(manifest.version, packageFormat(manifest.format), filename).update })) };
 }
 
 describe("hosted versions and promotion", () => {
@@ -68,6 +67,29 @@ describe("hosted versions and promotion", () => {
         await expect(verifyFiles(directory, manifest)).rejects.toThrow("Unexpected or missing public file");
       }
     } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+  test("one Preview draft maps six installers and updater files to four feeds", async () => {
+    const version = "0.1.5-preview.11";
+    const manifests = (["deb", "appimage", "dmg", "nsis"] as const).map(format => fixture(version, format));
+    const release = { ...cloud(manifests[0]!), channel: "preview", assets: manifests.flatMap(manifest => cloud(manifest).assets) };
+    expect(release.assets).toHaveLength(6);
+    for (const manifest of manifests) expect(() => verifyCloud(release, manifest, "preview", true)).not.toThrow();
+    expect(() => verifyCloud(release, manifests[0]!, "preview")).toThrow();
+    release.assets[3]!.updatePlatform = "darwin-aarch64-dmg";
+    expect(() => verifyCloud(release, manifests[2]!, "preview", true)).toThrow();
+    release.assets[3]!.updatePlatform = "darwin-aarch64";
+    for (const format of ["dmg", "nsis"] as const) {
+      const manifest = fixture(version, format);
+      const updaterName = publicFiles(version, format)[1]!;
+      const urls: string[] = [];
+      const receipt = await verifyPublic(manifest, "preview", (async input => {
+        const url = String(input); urls.push(url);
+        return url.includes("/update/") ? Response.json({ version, signature, url: `https://assets.example/${updaterName}` }) : new Response(archive);
+      }) as typeof fetch);
+      expect(receipt.checks).toHaveLength(5);
+      expect(urls.at(-1)).toBe(`https://assets.example/${updaterName}`);
+      expect(urls.some(url => url.includes(releasePlatforms(format).update))).toBe(true);
+    }
   });
   test.skipIf(!Bun.which("minisign"))("retained bytes and signatures are verified before reuse", async () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-hosted-test-"));
