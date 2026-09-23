@@ -28,9 +28,11 @@ Linux desktop updates continue using `updates/appimage` so a trial written by th
 previous updater is verified and completed on the first relaunch into this code.
 Tauri verifies the signature during download and performs replacement. On
 Windows, Tauri exits when it starts NSIS, so Couch writes the trial transaction
-first. After relaunch, the bundled UI and Bun coordinator must acknowledge the
-same running build as the native app. Client-only uses the private maintenance
-coordinator and does not probe a local player or the selected remote host.
+first. After relaunch, the one bundled window and Bun coordinator must acknowledge
+the same running build as the native app. In remote mode the window reaches this
+installation's private maintenance coordinator even if the selected host is offline;
+the health check does not probe a local player or send the local update token to
+the selected host.
 
 Each target package ticket still owns a real signed artifact, dependency closure,
 installed update and recovery qualification, and its release feed. Those checks

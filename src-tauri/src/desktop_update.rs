@@ -1,5 +1,5 @@
-//! Desktop replacement through Tauri. Update admission and work checks stay in
-//! the same Bun maintenance path used by the supervised Linux TV installation.
+//! Desktop replacement through Tauri. Bun owns admission and work checkpoints
+//! through the local host or the private maintenance coordinator in remote mode.
 use crate::appimage_update::{
     build, candidate, current_identity, enrollment, error, journal, now, read_transaction, save,
     verify, Action, Candidate, Channel, Enrollment, Request, MAX_ARCHIVE,
