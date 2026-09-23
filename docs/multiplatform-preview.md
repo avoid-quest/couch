@@ -21,14 +21,13 @@ different source revision or signing key blocks assembly. Do not reuse a Cloud
 draft after an upload failure with different bytes; retain the same candidate
 or create a newer version.
 
-The production Tauri private key, its password and the Cloud API key remain in
-their existing owner-held stores. The Linux Package workflow uses the
-`couch-release` environment. The Mac builder needs the same enrolled Tauri
-key and public key for its build and `seal` commands, and the Cloud API key only
-for `upload`. The assembly machine needs `COUCH_UPDATER_PUBLIC_KEY` and
-`CN_API_KEY`, not the private key. Keep `.artifacts/preview` private and retain
-the signed receipts outside the 90-day GitHub artifact/log retention window.
-No package payload goes through GitHub artifacts.
+The enrolled Tauri private key, its password and the Cloud API key stay only in
+GitHub's `couch-release` environment. The Linux Package, native desktop and
+assembly jobs use those existing secrets. No production signing or Cloud key is
+needed on an owner's Mac; local Mac work is limited to unsigned/headless checks.
+Enable `COUCH_RELEASES_ENABLED` only after the implementation and source/package
+gates pass. Keep signed receipts beyond GitHub's 90-day artifact/log retention
+window. No package payload goes through GitHub artifacts.
 
 ## Build and upload
 
@@ -39,14 +38,12 @@ gh workflow run release.yml --repo avoid-quest/couch --ref main
 # Or dispatch Package directly with format=deb, channel=preview, publish=false.
 ```
 
-Record the Package run and attempt. Download its small
-`release-receipts-RUN.ATTEMPT` artifact into
-`.artifacts/preview/deb`. If artifact storage fails, restore the bounded
-`COUCH_RELEASE_RECEIPTS=` run-log record with `scripts/hosted-receipts.ts`,
-then verify its signatures and original-run provenance as described in
-[hosted releases](hosted-releases.md#gates-and-signing). Read
-`draft-preview.json` there for the 26-character release ID. The signed
-`manifest.json` records the exact revision, version, hash and updater key.
+Record the successful Package run and attempt and its 26-character draft ID
+from the small `release-receipts-RUN.ATTEMPT` artifact. The signed manifest
+records the revision, version, package hashes and updater key. The later jobs
+download these small receipts and, if artifact storage failed, recover them
+from the bounded `COUCH_RELEASE_RECEIPTS=` run log. They check signatures and
+the original GitHub run before using either copy.
 
 Build AppImage from that same `main` revision and attach it to the Debian draft:
 
@@ -55,64 +52,51 @@ gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=appimage -f channel=preview -f publish=false -f release-id=DRAFT_ID
 ```
 
-Download its small signed receipts into `.artifacts/preview/appimage`. The
-Package job verifies and uploads the exact AppImage on its Debian builder.
+Record its successful run and attempt. The Package job verifies and uploads
+the exact AppImage on its Debian builder.
 It accepts the recorded Debian asset in the draft and still refuses AppImage
 publication. The pinned builder's clean package and disposable runtime checks
 remain the source/package proof; installed AppImage update behavior is a
 separate target check.
 
-On an Apple Silicon Mac checked out at the same commit, build and inspect the
-Mac package and Windows cross-built package. These commands require the
-existing target toolchains, Bun 1.4.2 and enrolled Tauri key:
+Dispatch each native package on the GitHub Apple Silicon `macos-26` runner:
 
 ```sh
-bun run package:mac
-bun scripts/preview-release.ts seal dmg .artifacts/preview/dmg
-bun run package:windows
-bun scripts/preview-release.ts seal nsis .artifacts/preview/nsis
+gh workflow run package-desktop.yml --repo avoid-quest/couch --ref main \
+  -f format=dmg -f deb-run=DEB_RUN -f deb-attempt=DEB_ATTEMPT -f release-id=DRAFT_ID
+gh workflow run package-desktop.yml --repo avoid-quest/couch --ref main \
+  -f format=nsis -f deb-run=DEB_RUN -f deb-attempt=DEB_ATTEMPT -f release-id=DRAFT_ID
 ```
 
-`seal` copies only the verified package files, checks the inventory hashes,
-verifies the updater signatures, signs the DMG and two small receipts, then
-checks those receipts against the enrolled public key. Keep the qualified
-bytes on this Mac. With `CN_API_KEY` and `CN_BIN` set for the supported Cloud
-CLI, upload each format to the same recorded draft ID:
-
-```sh
-bun scripts/preview-release.ts upload .artifacts/preview/dmg DRAFT_ID
-bun scripts/preview-release.ts upload .artifacts/preview/nsis DRAFT_ID
-```
-
-The signed manifests and qualification receipts for all four formats must
-exist under `.artifacts/preview/{deb,appimage,dmg,nsis}`. Keep each format's
-`receipts/upload-preview.json`. Before any publication, from the exact source
-commit, run:
-
-```sh
-bun scripts/preview-release.ts verify .artifacts/preview DRAFT_ID
-```
-
-The check requires six approved Cloud assets whose size, signature and
-platform metadata agree with all four signed manifests. It does not claim
-Cloud has served the bytes publicly. It leaves the draft unpublished.
+The jobs check the Debian signed receipt against their checkout, build and
+inspect their package, seal the exact bytes and upload directly to the same
+Cloud draft. The Mac DMG contains Full capabilities, including a switchable
+Client-only mode; the Windows NSIS stays Client-only. Record each successful
+native run and attempt. These jobs retain only signed manifests, qualification
+receipts and Cloud upload metadata. `act` can exercise their guards and control
+flow, but cannot execute a macOS runner or prove a native package build.
 
 ## Publication and target checks
 
 After the coordinating task confirms the implementation list and signed
-source/package checks, explicitly publish the verified draft, then check every public download
-and updater endpoint:
+source/package checks, dispatch the assembly job with all four successful run
+IDs and attempts:
 
 ```sh
-bun scripts/preview-release.ts publish .artifacts/preview DRAFT_ID
-bun scripts/preview-release.ts readiness .artifacts/preview DRAFT_ID
+gh workflow run publish-preview.yml --repo avoid-quest/couch --ref main \
+  -f deb-run=DEB_RUN -f deb-attempt=DEB_ATTEMPT \
+  -f appimage-run=APPIMAGE_RUN -f appimage-attempt=APPIMAGE_ATTEMPT \
+  -f dmg-run=DMG_RUN -f dmg-attempt=DMG_ATTEMPT \
+  -f nsis-run=NSIS_RUN -f nsis-attempt=NSIS_ATTEMPT -f release-id=DRAFT_ID
 ```
 
-`readiness` hashes all six public downloads, checks the four platform download
+The job rejects mismatched versions, revisions, keys, source runs, formats and
+Cloud asset metadata before publishing. `readiness` hashes all six public downloads, checks the four platform download
 routes and updater metadata-selected bytes, writes per-format readiness
 receipts, and mirrors the changelog to one GitHub prerelease. If CDN
-propagation delays readiness, rerun `readiness` against the same ID. Keep the
-receipts and Cloud release ID. The T480 only installs and runs Couch; it never
+propagation delays readiness after publication, dispatch the same workflow
+with the same inputs and `-f readiness-only=true`. Keep the receipts and Cloud
+release ID. The T480 only installs and runs Couch; it never
 builds. Mac and Windows static package verification does not replace installed
 Mac DMG and Windows 11 NSIS launch, updater, trust and state-preservation
 acceptance. AppImage FUSE/Wayland and real installed upgrades also remain

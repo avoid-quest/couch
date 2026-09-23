@@ -5,8 +5,9 @@ pinned Debian 13 container on Blacksmith, qualifies the package, and uploads
 directly to CrabNebula in one job. GitHub retains small signed receipts, never
 another application payload. The [artifact cleanup and initial workflow checks](evidence/native-debian/2026-09-15/actions-preparation/README.md)
 record removal of 107 obsolete unexpired artifacts. Repository Actions and the
-`COUCH_RELEASES_ENABLED` variable are enabled; a fresh hosted run still needs to
-establish current capacity.
+`COUCH_RELEASES_ENABLED` variable gates dispatch; it remains false until the
+coordinated Preview release. A fresh hosted run still needs to establish current
+capacity.
 
 ## Package and channel selection
 
@@ -32,10 +33,9 @@ argument. Each channel rejects a version equal to or below one already published
 update artifact. The detached signature stays in signed release receipts and
 provider metadata, as with the Debian package. `package:build` and
 `hosted-build.sh` still default to Debian; select `appimage` explicitly. The
-AppImage draft is package qualification only. Installed upgrades, X11/Wayland
-behavior and download migration remain separate acceptance before publication.
-The Package workflow rejects AppImage publication and Stable dispatch until
-those acceptance checks have passed.
+Package workflow rejects direct AppImage publication and Stable dispatch.
+Installed upgrades, X11/Wayland behavior and download migration remain separate
+owner acceptance after the coordinated Preview publication.
 
 Both public feeds use normal HTTPS redirects:
 
@@ -50,18 +50,16 @@ The T480 only installs and runs packages.
 
 ## Gates and signing
 
-The single release job requires committed `main`, `COUCH_RELEASES_ENABLED=true`,
-and the existing main-only `couch-release` environment. Its `publish` input
-defaults to false. One job avoids an artifact-storage handoff before publication;
-there is no separate `couch-publication` job. The existing owner approval uses
-the explicit dispatch input and main restriction, not a separate environment
-reviewer.
+The Package job requires committed `main`, `COUCH_RELEASES_ENABLED=true`, and
+the existing main-only `couch-release` environment. Its `publish` input
+defaults to false and cannot publish Preview. The four-platform assembly job
+has its own explicit dispatch and checks all signed receipts before publication.
 
 `CN_API_KEY`, `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` remain environment secrets. The repository
-variable `COUCH_UPDATER_PUBLIC_KEY` contains only the Tauri public-key wrapper.
-The key and password remain in owner-held private configuration; the owner has
-deferred the offline backup. No release secrets are passed to tests, fixture
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` remain GitHub environment secrets.
+`COUCH_UPDATER_PUBLIC_KEY` is a repository variable with the Tauri public-key
+wrapper.
+The key and password stay only in GitHub. No release secrets reach tests, fixture
 containers, PR checks or dependency caches. The native package, `manifest.json`
 and successful `qualified.json` are signed. The manifest identifies source,
 original run/attempt, inventory hash, package size/hash and signature.
@@ -162,8 +160,8 @@ invent a version-specific CDN route.
 Upload retries run at most three times while the signed bytes remain on the
 same runner. If that runner disappears before a complete upload, its missing
 private draft bytes cannot be recovered by the supported Cloud CLI. A retry
-without the completed upload receipt stops. Use a retained local candidate or
-build a new candidate under a new version. Never replace uploaded bytes under an
+without the completed upload receipt stops. Build a new candidate under a new
+version. Never replace uploaded bytes under an
 existing version; a fresh Debian build refuses a nonempty draft, while AppImage
 may attach to the recorded Debian-only draft. A completed publication
 with delayed CDN readiness needs only another readiness run.
@@ -171,8 +169,8 @@ with delayed CDN readiness needs only another readiness run.
 ## GitHub Releases mirror
 
 After public readiness, the Preview assembler or Stable Package workflow mirrors
-the version to GitHub Releases. Package needs `contents: write` for its release
-job; the local assembler uses the owner's `gh` authentication. The release carries only the changelog
+the version to GitHub Releases. Both jobs use the scoped GitHub Actions token
+with `contents: write`. The release carries only the changelog
 notes from the dispatch; downloads stay on CrabNebula. The tag is `v<version>`
 pinned to the built revision with `target_commitish`, so Preview publication of
 `0.1.5-preview.2` produces prerelease `v0.1.5-preview.2` and Stable promotion of
@@ -191,37 +189,14 @@ runs whenever the retained receipts show a completed publication, so a
 `readiness-only` recheck after delayed CDN readiness still creates the release
 the original publish earned.
 
-## Mac fallback
+## Four-platform Preview
 
-If Actions cannot build because capacity remains unavailable, use the existing
-[isolated Mac Debian builder](packaging.md#build) with the exact
-committed source and same build inputs. Do not build on the T480. With the
-owner's signing variables available only to signing commands, the core sequence
-is:
-
-```sh
-# Inside the committed-source Debian builder.
-bash scripts/hosted-build.sh deb
-# In a fresh exec without private signing/provider variables.
-COUCH_PACKAGE_FORMAT=deb bash scripts/hosted-qualify.sh
-
-# On the Docker host, with the fixture run from that same source checkout.
-mkdir -p .artifacts/native-qualification
-bash scripts/hosted-desktop.sh BUILDER_CONTAINER .artifacts/native-qualification
-
-# Inside the builder, only after both qualification steps pass.
-bun scripts/hosted-release.ts qualify .artifacts/hosted-release
-# Separate signing exec with the private signing variables available.
-bun x --no-install tauri signer sign .artifacts/hosted-release/qualified.json
-```
-
-Retain that directory privately, then use the existing `draft` and `upload`
-operations in `scripts/hosted-release.ts`, with the qualified directory,
-Preview channel and recorded release ID. These commands work without a GitHub
-build run and upload only the selected public allowlist. Preview publication
-requires the four signed receipts in the [assembly guide](multiplatform-preview.md).
-Keep the same version identity only when using the same retained bytes; a
-fresh fallback build after a partial upload needs a new candidate identity.
+The [assembly guide](multiplatform-preview.md) uses the Debian Package job,
+AppImage Package job and two Apple Silicon GitHub jobs to build and upload one
+draft. A separate GitHub job verifies all four successful source runs and signed
+receipts before publishing. The Tauri signing key stays only on GitHub. If
+hosted capacity is unavailable, defer production packaging; local checks can
+still use disposable keys and unsigned fixtures.
 
 ## Storage
 

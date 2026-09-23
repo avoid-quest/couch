@@ -1,0 +1,122 @@
+name: Publish assembled Preview
+"on":
+  workflow_dispatch:
+    inputs:
+      deb-run:
+        type: number
+        required: true
+      deb-attempt:
+        type: number
+        default: 1
+      appimage-run:
+        type: number
+        required: true
+      appimage-attempt:
+        type: number
+        default: 1
+      dmg-run:
+        type: number
+        required: true
+      dmg-attempt:
+        type: number
+        default: 1
+      nsis-run:
+        type: number
+        required: true
+      nsis-attempt:
+        type: number
+        default: 1
+      release-id:
+        type: string
+        required: true
+        description: Recorded 26-character Preview draft ID
+      readiness-only:
+        type: boolean
+        default: false
+        description: Recheck a published Preview after CDN propagation
+permissions:
+  contents: read
+concurrency:
+  group: couch-hosted-release
+  cancel-in-progress: false
+env:
+  COUCH_UPDATER_PUBLIC_KEY: "${{ vars.COUCH_UPDATER_PUBLIC_KEY }}"
+  COUCH_RELEASES_ENABLED: "${{ vars.COUCH_RELEASES_ENABLED }}"
+jobs:
+  publish:
+    if: "${{ vars.COUCH_RELEASES_ENABLED == 'true' && github.ref == 'refs/heads/main' }}"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: couch-release
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - name: Install receipt verifier
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends minisign
+      - name: Restore and check all four signed source runs
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          DEB_RUN: "${{ inputs.deb-run }}"
+          DEB_ATTEMPT: "${{ inputs.deb-attempt }}"
+          APPIMAGE_RUN: "${{ inputs.appimage-run }}"
+          APPIMAGE_ATTEMPT: "${{ inputs.appimage-attempt }}"
+          DMG_RUN: "${{ inputs.dmg-run }}"
+          DMG_ATTEMPT: "${{ inputs.dmg-attempt }}"
+          NSIS_RUN: "${{ inputs.nsis-run }}"
+          NSIS_ATTEMPT: "${{ inputs.nsis-attempt }}"
+          RELEASE_ID: "${{ inputs.release-id }}"
+        run: |
+          bun scripts/preview-receipt-source.ts deb .artifacts/preview/deb "$DEB_RUN" "$DEB_ATTEMPT"
+          bun scripts/preview-receipt-source.ts appimage .artifacts/preview/appimage "$APPIMAGE_RUN" "$APPIMAGE_ATTEMPT"
+          bun scripts/preview-receipt-source.ts dmg .artifacts/preview/dmg "$DMG_RUN" "$DMG_ATTEMPT"
+          bun scripts/preview-receipt-source.ts nsis .artifacts/preview/nsis "$NSIS_RUN" "$NSIS_ATTEMPT"
+          test "$(jq -er .id .artifacts/preview/deb/draft-preview.json)" = "$RELEASE_ID"
+      - name: Install supported Cloud CLI
+        uses: crabnebula-dev/cloud-release@1a8803698ba41de6b23e42abc5dcc3721308233c
+        with:
+          command: version
+          api-key: "${{ secrets.CN_API_KEY }}"
+          path: .artifacts
+      - name: Verify the assembled draft or published release
+        env:
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          RELEASE_ID: "${{ inputs.release-id }}"
+        run: bun scripts/preview-release.ts verify .artifacts/preview "$RELEASE_ID"
+      - name: Publish all six qualified Preview assets together
+        if: "${{ !inputs.readiness-only }}"
+        env:
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          RELEASE_ID: "${{ inputs.release-id }}"
+        run: bun scripts/preview-release.ts publish .artifacts/preview "$RELEASE_ID"
+      - name: Check public downloads, updater feeds and GitHub mirror
+        env:
+          CN_API_KEY: "${{ secrets.CN_API_KEY }}"
+          CN_BIN: "${{ github.workspace }}/.artifacts/cn"
+          GH_TOKEN: "${{ github.token }}"
+          RELEASE_ID: "${{ inputs.release-id }}"
+        run: bun scripts/preview-release.ts readiness .artifacts/preview "$RELEASE_ID"
+      - name: Retain publication and readiness receipts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        continue-on-error: true
+        with:
+          name: "preview-assembly-${{ github.run_id }}.${{ github.run_attempt }}"
+          path: |
+            .artifacts/preview/*/manifest.json
+            .artifacts/preview/*/manifest.json.sig
+            .artifacts/preview/*/qualified.json
+            .artifacts/preview/*/qualified.json.sig
+            .artifacts/preview/*/receipts/upload-preview.json
+            .artifacts/preview/*/readiness-preview.json
+            .artifacts/preview/publish-preview.json
+          if-no-files-found: warn
+          retention-days: 90

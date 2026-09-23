@@ -36,13 +36,14 @@ export async function sealNative(format: "dmg" | "nsis", directory: string) {
   assert.equal(inventory.build?.revision ?? inventory.revision, revision, "Package inventory belongs to another revision.");
   assert.equal(inventory.build?.version ?? inventory.version, version, "Package inventory belongs to another version.");
   assert.equal(inventory.build?.dirty ?? false, false, "Package inventory has dirty source.");
-  assert.equal(inventory.build?.clientOnly ?? inventory.clientOnly, true, "Mac and Windows releases are Client-only.");
+  assert.equal(inventory.build?.clientOnly ?? inventory.clientOnly, format === "nsis", "Mac must be Full capable; Windows remains Client-only.");
   assert.equal(inventory.build?.target ?? inventory.target, format === "dmg" ? "aarch64-apple-darwin" : "x86_64-pc-windows-msvc");
   const entries = format === "dmg"
     ? [inventory.dmg, inventory.updater]
     : [{ ...inventory.installer, path: join("src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis", inventory.installer.name) }, { ...inventory.update, path: join("src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis", inventory.update.name) }];
   assert.deepEqual(entries.map(entry => basename(entry.path)), publicFiles(version, format), "Tauri asset names differ from the release allowlist.");
   const manifest: Manifest = { schemaVersion: 1, format, version, revision, publicKey: key, inventorySha256: hash(inventoryBytes), files: {} };
+  if (process.env.GITHUB_RUN_ID) manifest.buildRun = { id: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT) };
   await mkdir(join(directory, "public"), { recursive: true });
   await mkdir(join(directory, "signatures"), { recursive: true });
   for (const entry of entries) {
@@ -66,7 +67,7 @@ export async function sealNative(format: "dmg" | "nsis", directory: string) {
   sign(join(directory, "manifest.json"));
   sign(join(directory, "qualified.json"));
   await verifyReceipt(directory);
-  console.log(`Sealed ${format} ${version} from ${revision}; retain ${directory} privately.`);
+  console.log(`Sealed ${format} ${version} from ${revision}.`);
 }
 
 function checkDraft(release: CloudRelease, manifest: Manifest, id: string) {
@@ -150,6 +151,11 @@ export async function assemble(directory: string, id: string, operation: "verify
 if (import.meta.main) {
   const [operation, input, arg] = process.argv.slice(2);
   assert.ok(input, "Use seal <dmg|nsis> <directory>, upload <directory> <draft-id>, or verify/publish/readiness <assembly-directory> <draft-id>.");
+  if (operation === "seal" || operation === "upload" || operation === "publish" || operation === "readiness") {
+    assert.equal(process.env.GITHUB_ACTIONS, "true", "Production Preview operations run only in GitHub Actions.");
+    assert.equal(process.env.GITHUB_REF, "refs/heads/main", "Production Preview operations require main.");
+    assert.equal(process.env.COUCH_RELEASES_ENABLED, "true", "Enable releases before production Preview operations.");
+  }
   if (operation === "seal") {
     assert.ok(input === "dmg" || input === "nsis");
     assert.ok(arg);

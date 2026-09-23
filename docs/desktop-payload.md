@@ -66,9 +66,10 @@ downloaded-artifact acceptance tests.
 
 ## Windows Client-only package
 
-On a macOS cross-build host, install Rust's `x86_64-pc-windows-msvc` target,
-`cargo-xwin`, LLVM, NSIS, `cargo-about`, Minisign and 7-Zip. With the enrolled
-`COUCH_UPDATER_PUBLIC_KEY` and `TAURI_SIGNING_PRIVATE_KEY` set, run
+The [GitHub desktop package job](../.github/workflows/package-desktop.yml) installs
+Rust's `x86_64-pc-windows-msvc` target, `cargo-xwin`, LLVM, NSIS,
+`cargo-about`, Minisign and 7-Zip on an Apple Silicon runner. It uses the
+enrolled signing key only inside the `couch-release` environment and runs
 `bun run package:windows` on a clean commit. It uses Tauri's current-user NSIS
 mode and downloaded WebView2 bootstrapper. The app identifier stays
 `quest.avoid.couch`; the package contains no existing user database or selected

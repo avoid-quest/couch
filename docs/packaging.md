@@ -64,5 +64,5 @@ sets the current glibc floor; older distributions require their own proof.
 
 ## Release
 
-See [hosted releases](hosted-releases.md). The Mac is only a build fallback
-using the same container; it never hosts the download or update feed.
+See [hosted releases](hosted-releases.md). Production signing and publication
+run in GitHub Actions; the T480 only installs and runs Couch.

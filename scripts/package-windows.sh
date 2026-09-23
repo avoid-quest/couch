@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 if [ "$(uname -s)" != Darwin ]; then echo 'Build this Windows package with the supported macOS cross-build tools' >&2; exit 1; fi
-export PATH="$HOME/.cargo/bin:$(brew --prefix llvm)/bin:$PATH"
+export PATH="$HOME/.cargo/bin:${COUCH_LLVM_PREFIX:-$(brew --prefix llvm)}/bin:$PATH"
 export COUCH_PACKAGE_FORMAT=nsis COUCH_DESKTOP_TARGET=x86_64-pc-windows-msvc COUCH_CLIENT_ONLY=1
 export SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
 bun scripts/package-windows-prepare.ts
