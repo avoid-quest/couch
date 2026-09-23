@@ -273,9 +273,7 @@ impl<R: Runtime> DesktopVideo<R> {
     #[cfg(target_os = "macos")]
     pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> { self.mac.close(payload) }
     #[cfg(target_os = "macos")]
-    pub fn prepare_native(&self, _: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> {
-        Err(crate::Error::InvalidRequest("Mac gapless preparation is not available yet".into()))
-    }
+    pub fn prepare_native(&self, payload: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.prepare(payload) }
 
     #[cfg(windows)]
     pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> {
