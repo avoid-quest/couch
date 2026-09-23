@@ -10,6 +10,7 @@ fn main() {
             "choose_media",
             "choose_folder",
             "save_metadata_export",
+            "save_diagnostics_export",
             "playback_device",
             "select_playback_device",
             "retry_playback_device",

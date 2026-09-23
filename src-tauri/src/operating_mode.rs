@@ -483,6 +483,7 @@ mod tests {
             assert!(target(input).is_err(), "{input}");
         }
     }
+
     #[test]
     fn only_private_loopback_and_link_local_addresses_are_accepted() {
         for ip in [

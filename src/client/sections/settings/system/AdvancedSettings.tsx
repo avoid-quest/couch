@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, RefreshCw } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiFetch, type ApiCredentials } from "@/api/client";
+import { isNativeHost } from "@/session/native-context";
 import type { Diagnostics } from "../../../../shared/diagnostics";
 import type { UpdateState } from "../../../../shared/updates";
 import { DiagnosticFacts } from "./DiagnosticFacts";
@@ -13,7 +15,7 @@ import { ToolsSettings } from "./ToolsSettings";
 
 const diagnosticTime = (at: string) => at.replace("T", " ").replace("Z", " UTC");
 
-function useExportDiagnostics({ credentials, connected, enabled }: { credentials: ApiCredentials; connected: boolean; enabled: boolean }) {
+function useExportDiagnostics({ credentials, connected, enabled, native }: { credentials: ApiCredentials; connected: boolean; enabled: boolean; native: boolean }) {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -23,9 +25,15 @@ function useExportDiagnostics({ credentials, connected, enabled }: { credentials
     if (!exporting || !connected || !enabled) return;
     const controller = new AbortController();
     setError(null); setNotice(null);
-    void fetch(`${origin}/api/diagnostics/export`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) })
+    void apiFetch({ origin, token }, "/api/diagnostics/export", { signal: controller.signal }, 10_000)
       .then(async response => {
-        if (!response.ok) throw new Error();
+        if (native) {
+          const bytes = await response.arrayBuffer().catch(() => { throw new Error("Diagnostic transfer stopped before the report was complete. No file was saved."); });
+          if (controller.signal.aborted) return;
+          const saved = await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes));
+          if (!controller.signal.aborted) setNotice(saved ? "Diagnostics report saved." : "Save canceled. No file was saved.");
+          return;
+        }
         const blob = await response.blob();
         if (controller.signal.aborted) return;
         const url = URL.createObjectURL(blob);
@@ -35,10 +43,10 @@ function useExportDiagnostics({ credentials, connected, enabled }: { credentials
         setTimeout(() => URL.revokeObjectURL(url), 1_000);
         setNotice("Diagnostic download started.");
       })
-      .catch(() => { if (!controller.signal.aborted) setError("Could not export diagnostics. Check the connection and administrator access, then try again."); })
+      .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Could not save diagnostics. Check the connection and administrator access, then try again."); })
       .finally(() => { if (!controller.signal.aborted) setExporting(false); });
     return () => controller.abort();
-  }, [enabled, exporting, connected, origin, token]);
+  }, [enabled, exporting, connected, origin, token, native]);
 
   return { exporting, setExporting, error, notice };
 }
@@ -104,7 +112,8 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
     retry: false,
   });
   const report = diagnostics.data ?? null;
-  const exportState = useExportDiagnostics({ credentials, connected, enabled: !!report });
+  const native = isNativeHost();
+  const exportState = useExportDiagnostics({ credentials, connected, enabled: !!report, native });
   const loading = diagnostics.isPending || diagnostics.isFetching;
   const error = diagnostics.error ? "Could not load diagnostics. Check the connection and administrator access, then refresh." : exportState.error;
   const notice = exportState.notice;
@@ -115,9 +124,9 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
     <p className="text-muted-foreground">System details and diagnostics.</p>
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" className="min-h-11" disabled={!connected || loading || exportState.exporting} onClick={refresh}><RefreshCw aria-hidden="true" />Refresh</Button>
-      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exportState.exporting || !report} onClick={() => exportState.setExporting(true)}><Download aria-hidden="true" />{exportState.exporting ? "Exporting…" : "Export diagnostics"}</Button>
+      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exportState.exporting || !report} onClick={() => exportState.setExporting(true)}><Download aria-hidden="true" />{exportState.exporting ? "Exporting…" : native ? "Save diagnostics" : "Export diagnostics"}</Button>
     </div>
-    <p className="text-xs text-muted-foreground">Downloads diagnostics with URLs and credentials removed.</p>
+    <p className="text-xs text-muted-foreground">{native ? "Choose where to save the sanitized JSON report." : "Downloads a sanitized JSON report."} URLs and credentials are removed.</p>
     {!connected && <p role="status">Connect to the TV to load diagnostics.</p>}
     {loading && <p role="status">Loading diagnostics…</p>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

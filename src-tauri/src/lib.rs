@@ -3,7 +3,9 @@ mod bluetooth;
 mod deb_update;
 mod desktop_lifecycle;
 mod diagnostics;
+mod diagnostics_export;
 mod display;
+mod file_export;
 mod metadata_export;
 mod operating_mode;
 mod player;
@@ -564,6 +566,7 @@ pub fn run() {
             choose_media,
             choose_folder,
             metadata_export::save_metadata_export,
+            diagnostics_export::save_diagnostics_export,
             operating_mode::playback_device,
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
