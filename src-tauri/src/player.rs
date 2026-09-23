@@ -58,6 +58,14 @@ fn command_error(replacement: bool, rejected_control: bool, error: String) -> Co
     }
 }
 
+fn observation_error(reconciling: &mut bool, error: tauri_plugin_video::Error) -> Result<(), String> {
+    if *reconciling && matches!(error, tauri_plugin_video::Error::DispatcherInFlight) {
+        return Ok(());
+    }
+    *reconciling = false;
+    Err(error.to_string())
+}
+
 // One worker preserves command order. The plugin dispatches GPU work onto GTK.
 pub fn run(app: AppHandle, receiver: Receiver<Request>) {
     let mut player = Player::default();
@@ -104,7 +112,10 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 let rejected_control = is_rejected_control(&command);
                 match player.command(&app, command) {
                     Err(error) => match command_error(replacement, rejected_control, error) {
-                        CommandError::Reconcile => player.observe(&app),
+                        CommandError::Reconcile => {
+                            player.reconciling_started_load = true;
+                            player.observe(&app)
+                        }
                         CommandError::Ignore(error) => { log::warn!("Native playback control was rejected without changing playback state: {error}"); continue; }
                         CommandError::Report(error) => Err(error),
                     },
@@ -155,11 +166,23 @@ mod layout_queue_tests {
         assert!(!is_rejected_control(&PlaybackCommand::Stop));
         assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
     }
+
+    #[test]
+    fn started_open_keeps_observing_after_repeated_stats_timeouts() {
+        let mut reconciling = true;
+        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::DispatcherInFlight).is_ok());
+        assert!(reconciling);
+        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::DispatcherInFlight).is_ok());
+        assert!(reconciling);
+        assert!(observation_error(&mut reconciling, tauri_plugin_video::Error::InvalidRequest("open failed".into())).is_err());
+        assert!(!reconciling);
+    }
 }
 
 #[derive(Default)]
 struct Player {
     diagnostics_pending: Arc<AtomicBool>,
+    reconciling_started_load: bool,
     state: PlayerState,
     rect: VideoRect,
     segment: Option<PlaybackSegment>,
@@ -208,6 +231,7 @@ impl Player {
                 event_start,
             } => {
                 self.segment = segment;
+                self.reconciling_started_load = false;
                 self.session_key = Some(playback_id.clone());
                 let start_position = segment.map(|bounds| bounds.absolute(start_position.filter(|position| *position < bounds.duration()).unwrap_or(0.0))).or(start_position);
                 self.state = PlayerState {
@@ -332,6 +356,7 @@ impl Player {
             }
             PlaybackCommand::Stop => {
                 self.segment = None;
+                self.reconciling_started_load = false;
                 let result = self.close(app);
                 if result.is_ok() {
                     self.session_key = None;
@@ -510,11 +535,11 @@ impl Player {
         if self.state.status == "error" {
             return Ok(());
         }
-        let snapshot = app
-            .video()
-            .desktop()
-            .stats_native(NativeSessionRequest { session_key })
-            .map_err(|error| error.to_string())?;
+        let snapshot = match app.video().desktop().stats_native(NativeSessionRequest { session_key }) {
+            Ok(snapshot) => snapshot,
+            Err(error) => return observation_error(&mut self.reconciling_started_load, error),
+        };
+        self.reconciling_started_load = false;
         self.apply(snapshot)
     }
 

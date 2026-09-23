@@ -105,6 +105,7 @@ struct Pending<T> {
     receiver: mpsc::Receiver<crate::Result<T>>,
     call: QueuedCall,
     session: Option<(Arc<std::sync::atomic::AtomicU64>, u64)>,
+    blocked_by_open: bool,
 }
 
 #[cfg(target_os = "linux")]
@@ -112,7 +113,7 @@ impl<T> Pending<T> {
     fn ready(result: crate::Result<T>) -> Self {
         let (sender, receiver) = mpsc::sync_channel(1);
         let _ = sender.send(result);
-        Self { receiver, call: QueuedCall::new(), session: None }
+        Self { receiver, call: QueuedCall::new(), session: None, blocked_by_open: false }
     }
 
     fn wait(self) -> crate::Result<T> {
@@ -122,7 +123,12 @@ impl<T> Pending<T> {
     fn wait_for(self, timeout: Duration) -> crate::Result<T> {
         let result = self.receiver.recv_timeout(timeout).map_err(|error| {
             if self.call.expire() {
-                crate::Error::Pipeline(format!("native mpv operation timed out: {error}"))
+                if self.blocked_by_open {
+                    // Stats expired in the queue while the earlier Open can still complete.
+                    crate::Error::DispatcherInFlight
+                } else {
+                    crate::Error::Pipeline(format!("native mpv operation timed out: {error}"))
+                }
             } else {
                 crate::Error::DispatcherInFlight
             }
@@ -453,8 +459,18 @@ mod dispatcher_tests {
         let (_reply, receiver) = mpsc::sync_channel::<crate::Result<()>>(1);
         let call = QueuedCall::new();
         assert!(call.start());
-        let pending = Pending { receiver, call, session: None };
+        let pending = Pending { receiver, call, session: None, blocked_by_open: false };
         assert!(matches!(pending.wait_for(Duration::from_millis(1)), Err(crate::Error::DispatcherInFlight)));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn queued_stats_timeout_keeps_reconciling_an_unfinished_open() {
+        let (_reply, receiver) = mpsc::sync_channel::<crate::Result<()>>(1);
+        let call = QueuedCall::new();
+        let pending = Pending { receiver, call: call.clone(), session: None, blocked_by_open: true };
+        assert!(matches!(pending.wait_for(Duration::from_millis(1)), Err(crate::Error::DispatcherInFlight)));
+        assert!(!call.start(), "expired Stats must not execute after the Open completes");
     }
 
     #[cfg(target_os = "linux")]
@@ -463,7 +479,7 @@ mod dispatcher_tests {
         let epoch = Arc::new(std::sync::atomic::AtomicU64::new(1));
         let pending = || {
             let (sender, receiver) = mpsc::sync_channel(1);
-            (sender, Pending { receiver, call: QueuedCall::new(), session: Some((Arc::clone(&epoch), 1)) })
+            (sender, Pending { receiver, call: QueuedCall::new(), session: Some((Arc::clone(&epoch), 1)), blocked_by_open: false })
         };
         let (first_reply, first) = pending();
         let (second_reply, second) = pending();
@@ -1523,7 +1539,7 @@ mod linux_mpv {
         let call = super::QueuedCall::new();
         let expected = player.epoch.load(Ordering::Acquire);
         player.worker.send(make(call.clone(), sender)).map_err(|_| Error::Pipeline("native mpv worker is unavailable".into()))?;
-        Ok(super::Pending { receiver, call, session: Some((Arc::clone(&player.epoch), expected)) })
+        Ok(super::Pending { receiver, call, session: Some((Arc::clone(&player.epoch), expected)), blocked_by_open: false })
     }
 
     #[derive(Clone)]
@@ -2342,7 +2358,9 @@ mod linux_mpv {
                 .as_ref()
                 .ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
             ensure_session(&player.session_key, &payload.session_key)?;
-            enqueue(player, |call, sender| WorkerCommand::Stats(payload.session_key, call, sender))
+            let mut pending = enqueue(player, |call, sender| WorkerCommand::Stats(payload.session_key, call, sender))?;
+            pending.blocked_by_open = player.session_key != player.confirmed_session_key;
+            Ok(pending)
         })
     }
 
