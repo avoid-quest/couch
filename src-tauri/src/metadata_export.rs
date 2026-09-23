@@ -1,31 +1,6 @@
-use std::io::Write;
-use std::path::Path;
-
 use tauri_plugin_dialog::DialogExt;
 
-fn write_archive(path: &Path, archive: &[u8]) -> Result<(), String> {
-    let name = path.file_name().ok_or("Choose a file destination.")?;
-    let temporary = path.with_file_name(format!(
-        ".{}.{}.partial",
-        name.to_string_lossy(),
-        uuid::Uuid::new_v4()
-    ));
-    let result = (|| -> std::io::Result<()> {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(archive)?;
-        file.sync_all()?;
-        std::fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temporary);
-    }
-    result.map_err(|error| {
-        format!("Could not save the metadata archive: {error}. No complete file was saved.")
-    })
-}
+use crate::file_export::write_atomic;
 
 #[tauri::command]
 pub async fn save_metadata_export(
@@ -71,25 +46,6 @@ pub async fn save_metadata_export(
         return Ok(false);
     };
     let path = path.into_path().map_err(|error| error.to_string())?;
-    write_archive(&path, archive)?;
+    write_atomic(&path, archive, "metadata archive")?;
     Ok(true)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::write_archive;
-
-    #[test]
-    fn failed_save_preserves_destination_and_cleans_partial_file() {
-        let directory = std::env::temp_dir().join(format!("couch-export-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&directory).unwrap();
-        let destination = directory.join("couch-metadata-test.tar");
-        std::fs::create_dir(&destination).unwrap();
-        assert!(write_archive(&destination, b"archive").is_err());
-        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
-        std::fs::remove_dir(&destination).unwrap();
-        write_archive(&destination, b"archive").unwrap();
-        assert_eq!(std::fs::read(&destination).unwrap(), b"archive");
-        std::fs::remove_dir_all(directory).unwrap();
-    }
 }

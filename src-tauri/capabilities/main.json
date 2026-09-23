@@ -10,6 +10,7 @@
     "allow-choose-media",
     "allow-choose-folder",
     "allow-save-metadata-export",
+    "allow-save-diagnostics-export",
     "allow-playback-device",
     "allow-select-playback-device",
     "allow-retry-playback-device",
