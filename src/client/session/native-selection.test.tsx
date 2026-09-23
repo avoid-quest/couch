@@ -5,7 +5,7 @@ import type { Root } from "react-dom/client";
 import * as core from "@tauri-apps/api/core";
 import * as events from "@tauri-apps/api/event";
 import type { ServerMessage } from "../../shared/protocol";
-import { screen } from "../testing";
+import { fireEvent, screen } from "../testing";
 
 const local = "http://127.0.0.1:4100";
 const remote = "http://192.168.1.20:4100";
@@ -15,6 +15,7 @@ let root: Root, window: Window, gate: ReturnType<typeof import("./session-contex
 let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevice").usePlaybackDevice>>;
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
+let remoteProtocol = 1;
 let invokeSpy: ReturnType<typeof spyOn>, listenSpy: ReturnType<typeof spyOn>, fetchSpy: ReturnType<typeof spyOn>;
 
 class Socket {
@@ -34,6 +35,7 @@ class Socket {
 beforeEach(async () => {
   installation = "remote-installation";
   remoteRole = "controller";
+  remoteProtocol = 1;
   requests.length = Socket.instances.length = 0;
   window = new Window({ url: "http://tauri.localhost" });
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
@@ -44,6 +46,7 @@ beforeEach(async () => {
   }
   let mode: "local" | "remote" = "local";
   invokeSpy = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
+    if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
     if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true } as T;
     if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true } as T; }
     if (command === "connection_info") return { origin: local, token: "local-owner", pairingCode: "", urls: [] } as T;
@@ -54,7 +57,7 @@ beforeEach(async () => {
     const url = String(input), authorization = new Headers(init?.headers).get("Authorization");
     requests.push({ url, authorization });
     const selected = new URL(url);
-    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: 1 });
+    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: selected.origin === local ? 1 : remoteProtocol });
     if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: remoteRole, controller: { id: "paired", name: "Desktop client", role: remoteRole }, claimAvailable: false });
     if (selected.pathname === "/api/pair") return Response.json({ token: "remote-pairing", installationId: installation });
     if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
@@ -123,4 +126,15 @@ test("remote administrator authority comes from the selected host", async () => 
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
   await act(async () => { await device.choose("local"); });
   expect(gate.identity?.authority).toBe("host");
+});
+
+test("Retry reconnects the bundled session after an incompatible host upgrades", async () => {
+  remoteProtocol = 2;
+  await act(async () => { await device.choose("remote", remote); });
+  expect(screen.getByRole("status").textContent).toContain("remote: protocol-mismatch");
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  remoteProtocol = 1;
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
 });

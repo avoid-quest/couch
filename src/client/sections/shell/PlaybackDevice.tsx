@@ -28,9 +28,11 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [localEpoch, setLocalEpoch] = useState(0);
+  const [recoveryEpoch, setRecoveryEpoch] = useState(0);
   const [selecting, setSelecting] = useState(false);
   const sequence = useRef(0);
   const busy = useRef(false);
+  const failedPreflight = useRef(false);
   useEffect(() => {
     if (!native) return;
     let disposed = false;
@@ -49,9 +51,16 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       setPending(true);
       try {
         await invoke("retry_playback_device");
-        if (!disposed && current === sequence.current) setError(null);
+        if (!disposed && current === sequence.current) {
+          setError(null);
+          if (choice.mode === "remote" && failedPreflight.current) {
+            failedPreflight.current = false;
+            setRecoveryEpoch(value => value + 1);
+          }
+        }
       } catch (reason) {
         if (!disposed && current === sequence.current) {
+          failedPreflight.current = true;
           setError(message(reason));
           // Automatic retries stay with the chosen remote; only the user can select local mode.
           if (choice.mode === "remote") timer = setTimeout(() => void connect(), Math.min(2_000 * 2 ** failures++, 15_000));
@@ -81,13 +90,13 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   };
   return <Context.Provider value={device}>
     {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment> : choice.mode === "remote" ? <>
-      <Fragment key={`remote:${choice.address}`}>{children}</Fragment>
-      {error && <aside className="fixed bottom-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))] rounded-lg border bg-card p-4 shadow-lg" aria-label="Playback device recovery">
+      <Fragment key={`remote:${choice.address}:${recoveryEpoch}`}>{children}</Fragment>
+      {error && <aside className="fixed bottom-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))]" aria-label="Playback device recovery"><Card className="gap-2 p-4 shadow-lg">
         <p className="font-medium">Another Couch needs attention</p>
         <p className="mt-1 text-sm text-muted-foreground" role="alert">{error}</p>
         <p className="mt-1 text-sm text-muted-foreground">Choose another address from Play on, or return to this computer.</p>
         <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
-      </aside>}
+      </Card></aside>}
     </> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">Where do you want to play?</h1><p className="text-muted-foreground">Play on this computer, or control another Couch on your network.</p><DeviceForm firstUse /></Card></main>}
   </Context.Provider>;
 }
