@@ -716,8 +716,8 @@ async fn supervised_restart() -> Result<(), String> {
     )
 }
 
-fn remote_blocks_install(when_idle: bool, remote_open: bool) -> bool {
-    when_idle && remote_open
+fn remote_blocks_install(when_idle: bool, remote_selected: bool) -> bool {
+    when_idle && remote_selected
 }
 
 pub async fn run(
@@ -854,7 +854,7 @@ pub async fn run(
                         crate::operating_mode::remote_selected(&app),
                     ) {
                         return Err(
-                            "Waiting for remote control to close before automatic installation."
+                            "Switch to This computer before automatic installation."
                                 .into(),
                         );
                     }
@@ -1024,7 +1024,7 @@ mod tests {
         );
     }
     #[test]
-    fn automatic_install_waits_for_remote_control_to_close() {
+    fn automatic_tv_install_waits_while_remote_playback_device_is_selected() {
         assert!(remote_blocks_install(true, true));
         assert!(!remote_blocks_install(true, false));
         assert!(!remote_blocks_install(false, true));
