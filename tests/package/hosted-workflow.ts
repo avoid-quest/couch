@@ -28,7 +28,7 @@ const cases = [
   { name: "native-draft", inputs: {}, want: ["build", "qualify", "sign", "upload"] },
   { name: "appimage-draft", inputs: { format: "appimage" }, want: ["build", "qualify", "sign", "upload"] },
   { name: "reject-appimage-publish", inputs: { format: "appimage", publish: true }, want: [], fail: true },
-  { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable" }, want: [], fail: true },
+  { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable", "build-run": 123 }, want: [], fail: true },
   { name: "native-publish", inputs: { publish: true }, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
   { name: "completed-draft-retry", inputs: { "build-run": 123, publish: true }, want: ["publish", "readiness"] },
   { name: "receipt-log-fallback", inputs: { "build-run": 123, publish: true }, fault: "Download retained receipts", want: ["logs", "publish", "readiness"] },
@@ -84,8 +84,10 @@ for (const test of cases) {
   await Bun.write(`${path}.log`, log);
   const observed = Object.entries(names).filter(([key, name]) => key !== "receipts" && log.includes(`| STEP:${name}`)).map(([key]) => key).sort();
   const expected = [...scenario.want].sort();
-  const pass = code === (scenario.fail ? 1 : 0) && JSON.stringify(observed) === JSON.stringify(expected);
-  results.push({ name: test.name, pass, exit: code, observed, expected, seconds: Number(((performance.now() - start) / 1000).toFixed(3)) });
+  const candidateReached = log.includes("| STEP:Check the candidate inputs");
+  const pass = code === (scenario.fail ? 1 : 0) && JSON.stringify(observed) === JSON.stringify(expected)
+    && (!scenario.name.startsWith("reject-appimage-") || candidateReached);
+  results.push({ name: test.name, pass, exit: code, candidateReached, observed, expected, seconds: Number(((performance.now() - start) / 1000).toFixed(3)) });
   console.log(`${pass ? "PASS" : "FAIL"} ${test.name}`);
 }
 await Bun.write(`${output}/results.json`, JSON.stringify({ workflowSha256: new Bun.CryptoHasher("sha256").update(source).digest("hex"), limits: "Inert action/build/provider replacements. No signing, compilation, package installation, permissions, artifact transport or CDN verification is established.", cases: results }, null, 2) + "\n");

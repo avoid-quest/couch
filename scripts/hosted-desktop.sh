@@ -8,7 +8,7 @@ case "$format" in deb|appimage) ;; *) echo 'Choose deb or appimage' >&2; exit 1 
 fixture="couch-native-${format}-${GITHUB_RUN_ID:-local}-$$"
 mkdir -p "$output/qualification" "$output/evidence"
 trap 'docker logs "$fixture" > "$output/runtime.log" 2>&1 || true; docker rm -f "$fixture" > /dev/null 2>&1 || true' EXIT
-docker exec -w /work "$builder" cargo install tauri-driver --version 2.0.6 --locked
+docker exec -w /work "$builder" bash -lc 'cargo install --list | grep -qx "tauri-driver v2.0.6:" || cargo install tauri-driver --version 2.0.6 --locked'
 version=$(docker exec -w /work "$builder" bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
 docker cp "$builder:/root/.cargo/bin/tauri-driver" "$output/qualification/tauri-driver"
 if [ "$format" = deb ]; then

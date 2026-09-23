@@ -51,7 +51,8 @@ launch on a native runner; the arm64 Mac's Docker emulator cannot execute the
 AppImage's static PIE runtime.
 For AppImage it starts the signed file through `APPIMAGE_EXTRACT_AND_RUN=1` in a
 fresh runtime container, because Docker provides no FUSE mount. That fixture
-selects Another Couch in the bundled app window and checks remote Client-only
+checks the rendered first view before installing WebDriver, then selects
+Another Couch in the bundled app window and checks remote Client-only
 mode, its private maintenance coordinator, a separate selected host and pairing.
 The same AppImage retains local playback. Installed FUSE, upgrade and Wayland
 acceptance remain open.
