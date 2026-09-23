@@ -1,7 +1,14 @@
 # Couch usage and development
 
 A Linux TV player controlled by everyone on the local network. Tauri embeds
-libmpv; Bun owns the shared queue, catalogs and paired browser remotes.
+libmpv on Linux; Bun owns the shared queue, catalogs and paired remotes. The
+native Mac app can run from source in local or remote mode, without Mac playback.
+
+The [public download page](https://couch.avoid.quest/download) currently offers
+Debian 13 amd64 packages. Source behavior described here may be newer than the
+published package. The [accepted desktop plan](https://github.com/avoid-quest/couch/issues/457#issuecomment-5782578695)
+and [installation gates](https://github.com/avoid-quest/couch/issues/447#issuecomment-5781937883)
+cover future Linux AppImage, Mac DMG and Windows NSIS delivery.
 
 ![Playback settings over native video in the Linux app](screenshots/linux-playback.png)
 
@@ -14,42 +21,45 @@ For a real TV, install the native Debian package from
 [couch.avoid.quest/download](https://couch.avoid.quest/download) and run
 `sudo couch-setup --tv`. Phones need only a browser.
 
-1. Join the TV's local network. A fresh unclaimed TV shows its address, pairing
-   QR and controller code on **Claim and name**. Scan that QR or type the address
-   into your phone browser, including any port. On a configured TV, open
-   **Pair a remote** for its address/code or **Settings > Connections** for the
-   QR. Setup hides the normal Settings navigation until it finishes.
+1. Join the TV's local network. On a fresh TV, choose **This computer**, allow
+   remote control, then open **Settings > Connections > Pair a remote** on the TV.
+   If you kept remote control private, turn on **Allow remote control** there
+   first. A configured TV also has **Pair a remote** in the header. Scan its QR
+   or type the shown address into your phone browser, including any port.
    The project website `couch.avoid.quest` is not your TV's address. The verified
    appliance uses `http://couch.avoid.local`; use the address your TV advertises.
-2. Name the browser and enter the six-digit controller code, or use the code
-   filled by the QR. Submit the pairing form to connect. On a fresh TV, continue
-   through **Claim and name** with the separate administrator code shown on the
-   TV, then finish the remaining setup steps before opening Search. An existing
-   administrator remote can also show a pairing QR in **Settings > Connections**.
-3. Open **Search** in the main navigation. Enter a title, artist, station or
-   supported media link, then select **Search**. **All** groups results by source;
-   select **YouTube**, **Radio**, **TV folders** or another source to narrow them.
+2. Name the browser and enter the six-digit pairing code, or use the code
+   filled by the QR. Submit the pairing form to connect. On a fresh TV, find the
+   separate one-use code under **Set up your administrator remote** on the TV's
+   Connections page. Enter it in the phone's **Settings > Connections > Claim
+   administrator**.
+3. Enter a title, artist, station or supported media link in **Now** or **Find**.
+   **Find** groups **All** results by source; select **YouTube**, **Radio**,
+   **TV folders** or another source to narrow them.
    Bandcamp accepts an album or track link, not free-text catalog search.
-4. Choose **Play** or **Play on TV** to start an item now. **Up next**, **Queue**
-   and **Add to queue** append it without starting it. Local results open details
-   with Play or Resume. A playlist can first open its tracks. Playback happens on
-   the TV; your phone has no video player.
-5. Return to **Home** for the current session and **Remote** controls. Confirm
-   picture and sound on the TV, then pause. **Up next** shows the shared queue;
-   **Saved** holds saved media. **Library** opens YouTube and other provider tabs,
-   with Radio, Live TV, Jellyfin and TV folders as additional destinations.
+4. Choose **Play** to start an item now or **Up next** to append it without
+   starting it. Local results open details with Play or Resume. A playlist can
+   first open its tracks. Playback happens on the TV; your phone has no video
+   player.
+5. Return to **Now** for playback controls, the shared **Up next** queue and
+   recent history. Use **Remote** in the header for the TV's directional pad.
+   Confirm picture and sound on the TV, then pause. **Saved** holds lists,
+   favorites and media kept for later. **Find** opens provider and source browsing.
 
-If Search reports no configured folders or a disconnected Jellyfin server, ask
+If Find reports no configured folders or a disconnected Jellyfin server, ask
 an administrator to open **Settings > Sources > TV folders** or **Jellyfin**.
-Try a configured source or another provider. If disconnected, use **Settings > Connections >
-Reconnect** and wait for both server and player availability before playing.
+Try a configured source or another provider. If disconnected, Couch retries
+when the TV returns; check the header's connection status and wait for both
+server and player availability before playing.
 Reopen the same origin and browser profile to reuse your pairing.
 
-The [dated check record](qualification/current-status-2026-09-14.md#browser-journey)
-records which steps were followed on the installed app. A fresh physical phone
-pairing, QR scan and picture/sound trial remain pending. Home discovery and the
-Pair a remote QR are separate open work in [#248](https://github.com/avoid-quest/couch/issues/248)
-and [#249](https://github.com/avoid-quest/couch/issues/249).
+The [14 September installed check](qualification/current-status-2026-09-14.md#browser-journey)
+and [first-use report](qualification/first-use-2026-09-14.md) describe their
+older builds. Current source defines [Now/Find/Saved/Settings navigation](../src/client/sections/shell/AppShell.tsx),
+the [pairing QR](../src/client/components/PairingDialog.tsx) and
+[administrator setup](../src/client/sections/settings/device/ConnectionsSettings.tsx).
+These source paths do not establish a fresh physical phone scan or TV
+picture/sound trial.
 
 ## Try it on this Mac
 
@@ -71,7 +81,8 @@ On a Linux mini PC, Tauri displays the app and embedded video directly. Phones
 and laptops use the web remote in both setups. The Docker preview has silent
 audio and software video rendering.
 
-Select **Library** to browse YouTube, Twitch, RaiPlay, StreamingCommunity or Bandcamp, then **Play on TV**.
+Select **Find** to browse YouTube, Twitch, RaiPlay, StreamingCommunity or Bandcamp,
+then **Play**.
 The launcher also prints a LAN URL for your phone. It keeps running after you
 close the browser; `bun run preview:linux stop` stops it. Restart after source
 changes to rebuild. See [preview options](../tests/preview/README.md) for mounting
@@ -95,11 +106,19 @@ bun run desktop
 
 On first launch, choose **This computer** and keep remote control off unless
 you need LAN clients. The app starts its own Bun coordinator from source with
-the existing private native pipe and owner token. Home, library, settings and
-queue are real; **native playback currently requires Linux**. Mac playback is
-separate work. There is no sidecar compilation, production frontend build,
+the existing private native pipe and owner token. Now, Find, Saved, Settings
+and the queue are real; **native playback currently requires Linux**. Mac playback
+is separate work. There is no sidecar compilation, production frontend build,
 container, signing setup or media-helper installation needed to start this UI.
 Providers that need external helpers still need `bun run setup:media`.
+
+Use the header's **Play on** control to switch to **Another Couch**. It shows
+the selected host's UI with that host's paired role; the local host stops after
+any playback or sharing interruption confirmation. If the target is offline,
+use **Retry**, check its address or choose **Use this computer**. The saved
+selection does not fall back or autoplay. Close keeps the Mac app running; Dock
+reopen or **Show Couch** restores it. **Quit Couch** stops its owned local host
+after any interruption confirmation.
 
 Tauri owns the development loop through its
 [Vite hook and dev URL](https://v2.tauri.app/start/frontend/vite/) and
@@ -116,8 +135,12 @@ Tauri owns the development loop through its
 
 Use one desktop development instance at a time. Vite uses port 1420; the local
 API uses 4100, or `COUCH_PORT` when set. Vite proxies HTTP and WebSocket traffic
-to that API. In Another Couch mode, this installation's private maintenance API
-uses its own ephemeral loopback port; the native app connects to it directly.
+to that API. In **Another Couch** mode, the selected host's UI opens in a separate
+window. This installation's private maintenance API uses its own ephemeral
+loopback port; the trusted app window connects to it directly for **Update this
+app**. This checks the local installation even when the selected host is down;
+source builds have no published Mac update to install. The selected host's
+Updates page is separate.
 Do not also run `bun run dev` on the same API port.
 
 Development uses the current account's persistent Tauri data at
@@ -160,17 +183,17 @@ scripts use the pinned Bun runtime and do not need Node.js. The desktop command
 uses Tauri's Vite development server and runs the Bun coordinator from source.
 Frontend changes hot reload; backend and Rust changes use Tauri's watcher.
 
-Use **Up next > Open file** on the TV, browse **Library > Radio**, or add a
+Browse **Find > TV folders** or **Find > Radio**, or add a
 local/mounted NAS folder or Jellyfin connection through **Settings > Sources**
 on an administrator remote. Direct HTTP/HTTPS media URLs also work.
 Press play in the shared queue. Open the LAN address shown in the app on another device
 and enter its six-digit pairing code. Give the remote a name so Settings can
 identify this browser. Every remote controls this one player.
-The TV always fills its display. Home opens browsing over the mounted player;
+The TV always fills its display. **Find** opens browsing over the mounted player;
 Back closes the current menu, browsing view or playback controls. Phones and
 laptops have a dedicated controller interface with no video surface.
-See [Mac and Windows controllers](desktop-controllers.md) for pairing, Dock or
-taskbar shortcuts, and reconnection. Controllers need only a browser.
+See [Mac and Windows controllers](desktop-controllers.md) for browser pairing,
+Dock or taskbar shortcuts, native Mac development mode and reconnection.
 
 In Settings > Sources > Radio, an administrator can use **Add avoid radio** to import
 the station index from
@@ -192,15 +215,15 @@ playback request and closing the TV cancel pending retries. Restart restores the
 queue without reconnecting or playing automatically. Live rewind needs a buffer
 and is not available.
 
-**Library** provides YouTube search, channel sections and playlists; Twitch live
+**Find** provides YouTube search, channel sections and playlists; Twitch live
 channels, categories and search; RaiPlay live TV, programs, episodes, search
 and recent replays; StreamingCommunity catalogue browsing, search, seasons,
 episodes and recent plays; and public Bandcamp albums and tracks. Save media, channels
 and collections for every paired remote. Browsing remains local to each screen; queue changes and saved items
 are shared. **Play** adds the selected item and starts it on the TV.
 
-For other website links, use **Search**, or select **Up next > Add media >
-Webpage**. A blank title requests the video's title and artwork automatically.
+For other website links, use **Find**, or select **Now > Add media** and choose
+**Webpage** as the link type. A blank title requests the video's title and artwork automatically.
 The default is **1080p (recommended)**. Choose **Unrestricted quality**,
 **Up to 1080p**, **Up to 720p** or **Up to 480p** for an override. The queue
 remembers the choice. The app resolves
@@ -224,16 +247,10 @@ restarts, as do library catalogs, radio playlists/favorites, online saved items
 and the Jellyfin connection.
 Playback does not start automatically after a restart. Press Play or Resume to
 continue from the saved position, or choose Play from start to restart an item.
-Local progress belongs to the selected watching profile, initially Household.
-Use the profile button beside Playback settings to create, select, rename or
-remove a watching profile from the TV or a paired remote. Renaming keeps the
-profile's saved preferences, resume points, watched marks and local history.
-Removal asks you to confirm that those local records will be deleted; other
-viewers keep theirs. The shared default can be renamed but cannot be removed,
-and becomes selected when you remove the current viewer. Stop playback before
-switching or removing profiles; pausing keeps that guard. Renaming is available
-during playback. Paired phones and laptops remain controllers. These operations
-leave Jellyfin's connected account and history, and administrator access unchanged.
+Local progress belongs to the active watching profile, initially Household.
+The current client shows that profile's playback defaults in **Settings > Playback**;
+it does not expose profile creation, switching, renaming or removal. Retained
+profile data remains separate from Jellyfin's account and administrator roles.
 
 For browser development without a native player:
 
@@ -256,56 +273,53 @@ bun run desktop:build --debug --bundles app
 ## Administrator and connection settings
 
 **Settings > Playback > Video quality** saves the default online-video quality
-in this browser. Search, Library and Add media use it for new videos; an override
+in this browser. Find and Add media use it for new videos; an override
 applies to one enqueue.
 Existing queued videos keep their quality, and each remote keeps its own
 default. This preference does not change the TV's display resolution.
 
-An unclaimed TV opens setup at **Claim and name**, with its local address, a
-controller-pairing QR code, the six-digit controller pairing code and a separate ten-digit
-administrator code. Pair your phone first, then enter that administrator code
-on the phone's **Claim and name** setup step. For administrator recovery on an
-already configured TV, use **Settings > TV**. The code expires after ten minutes
-and works once.
-If it expires before use, select **Get new code** on the TV. Competing first
-claims grant administration to one remote; existing paired devices remain ordinary
-controllers.
+On an unclaimed TV, choose **This computer** and enable remote control. In
+**Settings > Connections**, **Pair a remote** shows the pairing QR and six-digit
+code. The **Set up your administrator remote** section shows a separate ten-digit
+one-use code. Pair the phone first, then enter that code in its **Settings >
+Connections > Claim administrator**. If the code expires before use, reload the
+TV's Connections page for a new one. Competing first claims grant administration
+to one remote; other paired devices remain Controllers.
 
-The administrator phone can save the **TV name** in TV settings. The committed name
-appears on the TV and other remotes, and survives restart. TV settings show the name
-read-only on the TV and ordinary remotes. Administrator status belongs to the
+The trusted local host or an Administrator can save the playback device name in
+**Settings > General**. The committed name appears on the TV and other remotes,
+and survives restart. Controllers see it read-only. Administrator status belongs to the
 paired browser credential. It does not change the watching profile, local history
 or connected Jellyfin account.
 
-During first-run setup, use the QR on **Claim and name**; Connections is absent
-from the setup navigation. On a configured TV, **Connections** is available
-before pairing and while disconnected. It shows the known TV name, address and
-LAN links. When authenticated, it also shows this
-remote's name and role; the host and administrators can see the pairing QR. Server and player availability are separate: a
+On the local TV, **Settings > Connections** holds sharing, pairing and first
+administrator setup. An Administrator remote can manage paired devices there.
+Controllers see **Claim administrator** there only while a claim is available;
+otherwise the page explains that administration is required. The remote header
+shows the playback computer's name, address and connection status. The host and
+Administrators can open the pairing QR. Server and player availability are separate: a
 reachable server can still have an unavailable player. Rejected or revoked
 credentials return to pairing without repeatedly trying the same credential.
 
-**Reconnect** retains this browser's credential and retries the same TV, including
-its known LAN addresses if its hostname cannot be reached. Controls wait for a
-current snapshot. The server accepts requests only from its allowed local
-addresses and advertised origins; this does not enable Internet administration.
-**Pair again** forgets only this browser's current credential and returns to
-pairing. It does not revoke that credential on the server or change other remotes.
+The client retries the same TV after disconnection and waits for a current
+snapshot before enabling controls. Reopen the same address and browser profile
+to reuse a saved pairing. If the pairing is rejected or revoked, enter the
+current six-digit code from the TV in the pairing form. The server accepts
+requests only from its allowed local addresses and advertised origins; this
+does not enable Internet administration.
 
-Administrators can rename paired remotes, approve another administrator, remove
-administration, and revoke access in **Connections > Paired remotes**. Revocation
+Administrators can grant or remove administration and remove devices in
+**Settings > Connections > Devices**. Revocation
 closes the device's existing sockets, rejects later requests and cancels admitted
 mutations still waiting on a media lookup. Names and roles update on connected
 views. Controller pairing always grants browsing and playback only. Ordinary
-controllers can inspect their own connection and pair again, but cannot manage
-other devices. Existing pairings retain their exact token hashes across migration
+Controllers cannot manage other devices. Existing pairings retain their exact
+token hashes across migration
 and restart, with stable IDs and names such as Remote 1.
 
-The server rejects removing or demoting the last administrator. A connected sole
-administrator must approve another administrator before using **Pair again**.
-This browser safeguard cannot prevent lost browser storage or a lost device;
-use recovery below if no administrator remains accessible. Rejected credentials
-and disconnected browsers can still return to pairing.
+The server rejects removing or demoting the last administrator. Browser storage
+can still be lost; use recovery below if no administrator remains accessible.
+Rejected credentials return to the pairing form.
 
 Administrator phones can manage TV folders and Jellyfin in **Settings > Sources**.
 For folders, choose **TV folders > Add TV folder**, browse a permitted location,
@@ -332,7 +346,7 @@ bun run desktop
 unset COUCH_ADMIN_RECOVERY_CODE
 ```
 
-Pair the replacement browser, open **Settings > TV**, and enter that secret
+Pair the replacement browser, open **Settings > Connections > Claim administrator**, and enter that secret
 in **Administrator code**. Its ten-minute deadline starts when the server first
 accepts the configured secret. Restarting with the same value neither extends
 that deadline nor makes a consumed secret reusable. An expired or consumed secret
@@ -353,7 +367,7 @@ server tests. The native/HTTP gate tests first-time phone claiming and persisten
 
 ## Music and saved playlists
 
-Add a music folder through Settings > Sources, then open **Library > TV folders**
+Add a music folder through Settings > Sources, then open **Find > TV folders**
 and its **Artists** or **Albums** tab from any controller. Album artists keep compilations together. Tracks appear in
 numeric disc/track order; **Play album on TV** appends the album and starts its
 first track. **Add album to queue** leaves current playback running. Browsing
@@ -367,9 +381,9 @@ with a scan notice. Scans run at most two parser jobs and await them on shutdown
 a stalled mounted filesystem can delay shutdown because the parser has no
 cancellation API. Video metadata still uses ffprobe.
 
-Open **Saved playlists** in **Up next** to save, rename, reorder or remove items,
-update a saved list from the queue, or delete it. **Add to queue** appends;
-**Replace queue** stops playback and loads the list; **Play playlist** replaces
+Open **Saved > Lists** to save, rename, reorder or remove items,
+update a saved list from Up next, or delete it. **Up next** appends;
+**Replace** stops playback and loads the list; **Play** replaces
 the queue and starts the first item. Saved playlists belong to everyone paired
 with this TV. They preserve duplicate songs as separate entries and reject edits
 from an obsolete revision. Up to 100 playlists with 500 entries each persist
@@ -386,7 +400,7 @@ bounds, uncertainty and the tested controls. Crossfade remains outside this work
 
 ### Bandcamp albums and tracks
 
-In **Library > Bandcamp**, open a public album or track link, or choose a suggested
+In **Find > Bandcamp**, open a public album or track link, or choose a suggested
 album. Albums show artwork and their returned track order. **Add album to queue**
 appends all tracks; **Play album** appends them and starts the first. Individual
 tracks have Play, Queue and Save controls. Shared saved albums and tracks are
@@ -422,10 +436,10 @@ the links they were saved with.
 ## Resume, watched state and history
 
 TV folder cards show saved positions and watched marks, with Resume, Play from
-start, watched controls and Clear resume point. **Home > Recently played** shows
+start, watched controls and Clear resume point. **Now > Recently played** shows
 shared playback history; provider catalogs also show their recent items.
-Each watching profile has its own records. Individually opened files retain separate progress records from scanned library entries;
-open the file on the TV again if it is no longer in the queue. Local progress is
+Each watching profile has its own records. Existing file entries retain separate
+progress records from scanned library entries. Local progress is
 separate from shared playback history, which also records provider playback and
 the initiating controller.
 
@@ -440,8 +454,8 @@ profiles, progress and queue without autoplay.
 Jellyfin has All media and Continue watching views. Resume reads the latest
 upstream position before loading and passes it to native playback. One host
 reports progress, and an immediate replay waits for the preceding stop report.
-The connected Jellyfin account is shown in its panel; local profile selection
-does not change that account.
+The connected Jellyfin account is shown in its panel. Its history stays
+separate from Couch's active watching profile.
 
 ## TV and remote interface
 
@@ -479,9 +493,10 @@ tabs, sliders and selects keep their keyboard behavior. Escape closes the topmos
 menu or dialog and restores focus. The TV stays fullscreen throughout browsing,
 playback and Stop, with one continuously mounted VideoStage.
 
-Phones and desktop browsers use the same Home, Search, Library, Saved, Up next
-and Settings navigation. **Home > Remote** opens transport, volume and the TV
-directional pad. Home, Back, Info, arrows and OK operate the TV
+Phones and desktop browsers use the same **Now**, **Find**, **Saved** and
+**Settings** navigation. Now shows playback, Up next and recent history; Find
+combines search and browsing; Saved holds lists and favorites. **Remote** in
+the header opens the TV directional pad. Home, Back, Info, arrows and OK operate the TV
 through authenticated, ephemeral commands. These commands are never replayed
 after reconnect. Each browser retains its own catalog navigation.
 
@@ -641,10 +656,10 @@ Radio Browser search with mirror failover, and shared favorites. Jellyfin uses i
 direct-play negotiation and one host progress reporter. Credentials and resolved
 stream headers stay on the host.
 
-Implemented work includes profile editing/removal, CUE albums, ReplayGain,
+Implemented work includes retained profile data, CUE albums, ReplayGain,
 measured lossless continuity, local NFO/artwork and metadata corrections,
 collections and IPTV guides. Existing Couch recording entries remain stored but
-cannot be played through Couch; use Open file or a folder source for accessible
+cannot be played through Couch; use a folder source for accessible
 media files. Existing Tvheadend jobs remain under Tvheadend's control. Read the
 [dated capability and acceptance record](qualification/current-status-2026-09-14.md)
 for evidence and the remaining display, sound, sizing, real-folder, first-run and
@@ -663,11 +678,13 @@ proposal separately from its updated checkpoint. The
 
 ## Manual Couch updates
 
-Settings > Updates is visible on the TV and remote. Use an administrator remote
-for Check for updates, Download update, and Install update. Other controllers
-and the TV explain where to administer updates without granting update access.
-The page shows the running version/commit and available signed release. Download
-verifies the signed Debian package before Install update becomes available. Manual installation
+Settings > Updates is available to the trusted local host and paired
+Administrators. They can Check for updates, Download update and Install update;
+Controllers cannot. In native **Another Couch** mode, **Update this app** opens
+this installation's update status independently of the selected host's Updates page.
+On the published Debian installation, the page shows the running version/commit
+and available signed release. Download verifies the signed Debian package
+before Install update becomes available. Manual installation
 works with either Manual or Auto when idle selected.
 
 Install update asks before restarting and offers explicit playback interruption.
@@ -679,9 +696,11 @@ Installation uses the restricted root package-update service. It verifies the en
 
 ### Interface size
 
-TV Appearance uses Default, Larger and Largest with 100%, 135% and 175% interface
-scaling over the TV typography. Existing saved choices are retained. The remote
-keeps its separate 100%, 115% and 130% choices. TV sizing also applies to Settings,
+TV **Settings > Appearance** uses Default, Larger and Largest at 100%, 115% and
+130%. A paired Administrator can also change it in **Settings > TV appearance**.
+Each client has separate 100%, 115% and 130% choices in **Settings > Appearance**;
+the native desktop client keeps its choice when switching playback devices.
+TV sizing also applies to Settings,
 playback dialogs, icons and focus indicators; it does not zoom the native video
 or subtitles. Try a TV size and confirm it within 20 seconds, or it returns to
 the saved choice. Reset remains available from Appearance.
@@ -699,7 +718,7 @@ An old Unrestricted entry must be added again with Automatic to use the new defa
 
 ### Search across sources
 
-Open **Search** to search public YouTube, Twitch and RaiPlay catalogs, Radio,
+Open **Find** to search public YouTube, Twitch and RaiPlay catalogs, Radio,
 scanned TV folders and the configured Jellyfin library. Bandcamp opens pasted
 album/track links. Select a source to narrow results. Each source has its own
 results and retry control. A failed Jellyfin connection leaves local results available. Unavailable folders
@@ -717,7 +736,7 @@ ranking across different search engines.
 
 Open a result's details to inspect, play, resume or queue it. Closing details
 returns to the same result, query and scroll position. Each TV or phone retains
-its own search while visiting another catalog. **Library**, **Radio**, **Live TV**,
-**Jellyfin** and **TV folders** shortcuts open their catalogs when Search is empty.
+its own search while visiting another catalog. **Radio**, **Live TV**,
+**Jellyfin** and **TV folders** shortcuts open their catalogs when Find's search is empty.
 Existing movie/show hierarchies, music albums, collections, metadata editing and
 progress controls remain in their respective library views.
