@@ -628,7 +628,7 @@ mod tests {
             packaged: true,
         };
         assert!(validate(&manifest, "0.2.0", 1).is_ok());
-        manifest.target = "x86_64-unknown-linux-gnu".into();
+        manifest.target = "unsupported-target".into();
         assert!(validate(&manifest, "0.2.0", 1).is_err());
         manifest.target = expected.into();
         assert!(validate(&manifest, "0.1.0", 1).is_err());
