@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { lstat, mkdtemp, readdir, readlink, realpath, rm, stat } from "node:fs/promises";
+import { copyFile, lstat, mkdtemp, readdir, readlink, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 import { binaryArchitectures, isNativeLibrary, verifyPayload } from "./desktop-payload";
@@ -75,14 +75,22 @@ try {
   assert.deepEqual(release.host.packages, []);
   const inventory = await Bun.file(join(root, "usr/lib/Couch/payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
-  // linuxdeploy patches executable RPATHs after the build records source hashes.
-  // The full AppImage inventory below records the signed, patched bytes.
-  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffprobe"], [], {
-    "usr/bin/couch-server": `src-tauri/binaries/couch-server-${build.target}`,
-    "usr/lib/Couch/tools/yt-dlp": "src-tauri/resources/tools/yt-dlp",
-    "usr/lib/Couch/tools/deno": "src-tauri/resources/tools/deno",
-    "usr/lib/Couch/tools/ffprobe": "src-tauri/resources/tools/ffprobe",
-  });
+  // linuxdeploy sets fixed RPATHs after the build records source hashes.
+  // Replaying that edit must reproduce every packaged executable byte.
+  const relocated = [
+    ["usr/bin/couch-server", `src-tauri/binaries/couch-server-${build.target}`, "$ORIGIN/../lib"],
+    ["usr/lib/Couch/tools/yt-dlp", "src-tauri/resources/tools/yt-dlp", "$ORIGIN"],
+    ["usr/lib/Couch/tools/deno", "src-tauri/resources/tools/deno", "$ORIGIN"],
+    ["usr/lib/Couch/tools/ffprobe", "src-tauri/resources/tools/ffprobe", "$ORIGIN"],
+  ] as const;
+  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffprobe"], [], Object.fromEntries(relocated.map(([path, source]) => [path, source])));
+  for (const [index, [path, source, rpath]] of relocated.entries()) {
+    const copy = join(staging, `relocated-${index}`);
+    await copyFile(source, copy);
+    const patch = Bun.spawnSync([process.env.PATCHELF ?? "/usr/bin/patchelf", "--set-rpath", rpath, copy], { stderr: "inherit" });
+    assert.equal(patch.exitCode, 0, `Patch staged AppImage executable: ${path}`);
+    assert.equal(await hash(copy), await hash(join(root, path)), `linuxdeploy changed executable bytes beyond its RPATH edit: ${path}`);
+  }
   await verifyPackageHelpers("src-tauri/resources/tools", build.helpers);
   assert.ok(libraries.some(file => file.path.endsWith("/libmpv.so.2")), "Bundle the linked player library");
   for (const list of [files, links, libraries]) list.sort((a, b) => a.path.localeCompare(b.path));

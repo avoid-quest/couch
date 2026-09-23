@@ -10,10 +10,11 @@ the selected architecture. `scripts/desktop-payload.ts` verifies the same paths
 and bytes after extraction. The Debian and AppImage verifiers call it on their
 artifacts. linuxdeploy changes AppImage executable RPATHs after their source
 hashes are recorded. The AppImage verifier checks those hashes against the
-original build inputs and records the final packaged bytes in its separate
-signed inventory. Tauri and linuxdeploy add libraries after `payload.json` is
-written; the AppImage inventory records every extracted native library path,
-hash and architecture.
+original build inputs. It replays linuxdeploy's fixed RPATH edit and compares
+every resulting executable byte with the signed AppImage before recording the
+final packaged bytes in its separate inventory. Tauri and linuxdeploy add
+libraries after `payload.json` is written. The AppImage inventory records every
+extracted native library path, hash and architecture.
 
 | Package | Coordinator | Tauri resources | Notices |
 | --- | --- | --- | --- |
