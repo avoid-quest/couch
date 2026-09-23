@@ -57,6 +57,7 @@ assert.deepEqual(await binaryArchitectures(installer), ["i686"], "NSIS uses its 
 const releaseSource = "src-tauri/resources/release.json";
 const release = await Bun.file(releaseSource).json();
 const build = await Bun.file("src-tauri/build-info.json").json();
+assert.equal(build.clientOnly, true);
 assert.equal(release.version, tauri.version);
 assert.equal(release.revision, build.revision);
 assert.equal(release.revision, run(["git", "rev-parse", "HEAD"]).toString().trim());
@@ -68,6 +69,7 @@ assert.equal(release.schemaVersion, 1);
 assert.equal(release.dataFormat, 1);
 assert.deepEqual(release.readableDataFormats, [1]);
 assert.equal(release.packaged, true);
+assert.equal(release.clientOnly, true);
 assert.deepEqual(release.host, { target, os: "windows", architecture: "x64", packages: [] });
 assert.equal(release.helpers, null);
 
@@ -113,6 +115,7 @@ try {
   for (const [file, names] of Object.entries(imports)) assert.deepEqual(names.filter(name => !availableDlls.has(name)), [], `Unresolved PE imports in ${file}`);
   const appBytes = Buffer.from(await Bun.file(join(installed, "couch.exe")).arrayBuffer());
   assert.ok(appBytes.includes(Buffer.from(tauri.identifier)), "Bundled app identifier changed");
+  assert.ok(appBytes.includes(Buffer.from('"clientOnly":true')), "Native app must embed the Client-only build identity");
   for (const file of ["couch.exe", "couch-server.exe"]) assert.ok(Buffer.from(await Bun.file(join(installed, file)).arrayBuffer()).includes(Buffer.from(release.revision)), `Bundled ${file} build revision changed`);
   assert.ok(!files.some(file => /(^|\/)(\.git|\.env(?:\..*)?|Cookies|Login Data|History)$|\.(sqlite3?|db|map)$/.test(file)), "Private runtime material in installer");
   const installedRelease = await Bun.file(join(installed, "release.json")).json();
@@ -122,7 +125,7 @@ try {
   const payload = JSON.parse(inventory);
   await verifyPayload(installed, payload, target, "nsis", []);
   verifyBundledNativeLibraries(payload, files.filter(file => !file.startsWith("$PLUGINSDIR/")));
-  await Bun.write(".artifacts/windows-inventory.json", JSON.stringify({ revision: release.revision, version: release.version, identifier: tauri.identifier, target, installMode: config.bundle.windows.nsis.installMode, webviewInstallMode: config.bundle.windows.webviewInstallMode.type, feed: config.plugins.updater.endpoints[0], installer: { name: basename(installer), bytes: (await stat(installer)).size, sha256: await hash(installer) }, update: { name: basename(archive), bytes: (await stat(archive)).size, sha256: await hash(archive) }, imports, files: files.sort() }, null, 2) + "\n");
+  await Bun.write(".artifacts/windows-inventory.json", JSON.stringify({ revision: release.revision, version: release.version, clientOnly: release.clientOnly, identifier: tauri.identifier, target, installMode: config.bundle.windows.nsis.installMode, webviewInstallMode: config.bundle.windows.webviewInstallMode.type, feed: config.plugins.updater.endpoints[0], installer: { name: basename(installer), bytes: (await stat(installer)).size, sha256: await hash(installer) }, update: { name: basename(archive), bytes: (await stat(archive)).size, sha256: await hash(archive) }, imports, files: files.sort() }, null, 2) + "\n");
   console.log(`Verified ${installer}: ${files.length} files, x64 identity, payload and signed update`);
 } finally {
   await rm(scratch, { recursive: true, force: true });

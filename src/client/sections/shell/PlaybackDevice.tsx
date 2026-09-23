@@ -11,7 +11,7 @@ import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle, P
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { loadedBuild } from "../../../shared/build";
+import { buildInfo, loadedBuild } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useUpdateActivity } from "@/update-activity";
 
@@ -94,10 +94,10 @@ export function NativeModeGate({ children }: PropsWithChildren) {
       {error && <aside className="fixed bottom-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))]" aria-label="Playback device recovery"><Card className="gap-2 p-4 shadow-lg">
         <p className="font-medium">Another Couch needs attention</p>
         <p className="mt-1 text-sm text-muted-foreground" role="alert">{error}</p>
-        <p className="mt-1 text-sm text-muted-foreground">Choose another address from Play on, or return to this computer.</p>
-        <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button><Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button></div>
+        <p className="mt-1 text-sm text-muted-foreground">Choose another address from Play on{buildInfo.clientOnly ? "." : ", or return to this computer."}</p>
+        <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button>}</div>
       </Card></aside>}
-    </> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">Where do you want to play?</h1><p className="text-muted-foreground">Play on this computer, or control another Couch on your network.</p><DeviceForm firstUse /></Card></main>}
+    </> : <main className="grid min-h-dvh place-items-center p-6"><Card className="w-full max-w-md space-y-5 p-6"><h1 className="text-2xl font-semibold">{buildInfo.clientOnly ? "Connect to another Couch" : "Where do you want to play?"}</h1><p className="text-muted-foreground">{buildInfo.clientOnly ? "This Client-only app controls another Couch on your network. Local playback is unavailable." : "Play on this computer, or control another Couch on your network."}</p><DeviceForm firstUse /></Card></main>}
   </Context.Provider>;
 }
 
@@ -139,7 +139,7 @@ export function InstallationUpdates() {
 function DeviceForm({ firstUse = false, onDone }: { firstUse?: boolean; onDone?: () => void }) {
   const device = usePlaybackDevice()!;
   const [address, setAddress] = useState(device.address ?? "");
-  const [remote, setRemote] = useState(!firstUse && device.mode === "remote");
+  const [remote, setRemote] = useState(buildInfo.clientOnly || !firstUse && device.mode === "remote");
   const [confirm, setConfirm] = useState<string | null>(null);
   const selectRemote = async (confirmed = false) => {
     try { if (await device.choose("remote", address, confirmed)) onDone?.(); }
@@ -147,7 +147,7 @@ function DeviceForm({ firstUse = false, onDone }: { firstUse?: boolean; onDone?:
   };
   const submit = (event: FormEvent) => { event.preventDefault(); void selectRemote(); };
   return <div className="space-y-4">
-    <div className="flex flex-wrap gap-2"><Button disabled={device.pending} onClick={() => void device.choose("local").then(done => { if (done) onDone?.(); })}>This computer</Button><Button variant="outline" disabled={device.pending} onClick={() => setRemote(true)}>Another Couch</Button></div>
+    {!buildInfo.clientOnly && <div className="flex flex-wrap gap-2"><Button disabled={device.pending} onClick={() => void device.choose("local").then(done => { if (done) onDone?.(); })}>This computer</Button><Button variant="outline" disabled={device.pending} onClick={() => setRemote(true)}>Another Couch</Button></div>}
     {remote && <form className="space-y-3" onSubmit={submit}><Label htmlFor="playback-address">Couch address</Label><Input id="playback-address" autoFocus value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} /><p className="text-xs text-muted-foreground">Use the LAN address shown on the playback computer. A custom domain must point to that LAN. Sources, saved items and queues stay on each computer.</p>
       {confirm ? <Alert><AlertDescription>{confirm === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : confirm === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode."}<div className="mt-3 flex gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="outline" onClick={() => { setConfirm(null); onDone?.(); }}>Keep this computer</Button></div></AlertDescription></Alert> : <Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
     </form>}
@@ -181,7 +181,7 @@ export function PlaybackDevice() {
       <PopoverTrigger asChild><Button ref={trigger} variant="outline" size="sm" className="max-w-full"><Monitor aria-hidden="true" /><span className="truncate">Play on: {label}</span><ChevronDown aria-hidden="true" /></Button></PopoverTrigger>
       <PopoverContent align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="w-80 max-w-[calc(100vw-2rem)] gap-2" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
         <PopoverHeader><PopoverTitle>Playback device</PopoverTitle><PopoverDescription>Each computer keeps its own queue and saved items.</PopoverDescription></PopoverHeader>
-        <Button variant="ghost" className="justify-between" aria-pressed={device.mode === "local"} disabled={device.pending} onClick={() => void select("local")}><span>This computer</span>{device.mode === "local" && <Check aria-label="Selected" />}</Button>
+        {!buildInfo.clientOnly && <Button variant="ghost" className="justify-between" aria-pressed={device.mode === "local"} disabled={device.pending} onClick={() => void select("local")}><span>This computer</span>{device.mode === "local" && <Check aria-label="Selected" />}</Button>}
         {targets.map(target => <Button key={target} variant="ghost" className="justify-between" aria-pressed={device.mode === "remote" && device.address === target} disabled={device.pending} onClick={() => void select("remote", target)}><span className="truncate">{target}</span>{device.mode === "remote" && device.address === target && <Check aria-label="Selected" />}</Button>)}
         <Button variant="outline" disabled={device.pending} onClick={() => { setAddress(""); setDialog("address"); setOpen(false); }}>Another Couch</Button>
         {device.error && !device.error.startsWith("confirmation-required:") && <p role="alert" className="text-destructive">{device.error}</p>}

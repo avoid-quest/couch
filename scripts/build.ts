@@ -16,7 +16,7 @@ const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().
 const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? await Bun.file("src-tauri/resources/tools.json").json() : null;
 const format = process.env.COUCH_PACKAGE_FORMAT ?? (process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb");
 const packaged = !!process.env.COUCH_PACKAGE_FORMAT || helpers !== null;
-const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged, helpers });
+const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged, clientOnly: process.env.COUCH_CLIENT_ONLY === "1", helpers });
 await Bun.write("src-tauri/build-info.json", buildInfo);
 
 await mkdir("src-tauri/binaries", { recursive: true });

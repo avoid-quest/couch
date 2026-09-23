@@ -240,6 +240,9 @@ async fn choose_folder(window: tauri::WebviewWindow, app: tauri::AppHandle) -> R
 }
 
 fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
+    if operating_mode::local_playback_unavailable() {
+        return Err("Local playback is unavailable in this Client-only build. Connect to another Couch.".into());
+    }
     start_coordinator(app, true)
 }
 
