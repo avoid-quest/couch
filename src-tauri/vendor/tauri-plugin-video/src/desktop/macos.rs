@@ -564,40 +564,7 @@ impl<R: Runtime> Worker<R> {
 
 impl<R: Runtime> Player<R> {
     fn select_track(&self, index: i32, enabled: bool) -> Result<()> {
-        let mpv = &self.mpv;
-        let count = mpv
-            .get_property::<i64>("track-list/count")
-            .map_err(mpv_error)?;
-        if index < 0 || i64::from(index) >= count {
-            return Err(Error::InvalidRequest(format!(
-                "unknown native track index {index}"
-            )));
-        }
-        let prefix = format!("track-list/{index}");
-        let property = match mpv
-            .get_property::<String>(&format!("{prefix}/type"))
-            .map_err(mpv_error)?
-            .as_str()
-        {
-            "video" => "vid",
-            "audio" => "aid",
-            "sub" => "sid",
-            _ => {
-                return Err(Error::InvalidRequest(format!(
-                    "unknown native track index {index}"
-                )))
-            }
-        };
-        if enabled {
-            mpv.set_property(
-                property,
-                mpv.get_property::<i64>(&format!("{prefix}/id"))
-                    .map_err(mpv_error)?,
-            )
-        } else {
-            mpv.set_property(property, "no")
-        }
-        .map_err(mpv_error)
+        select_track(&self.mpv, index, enabled)
     }
 
     fn layout(&mut self, x: f64, y: f64, width: f64, height: f64) -> Result<()> {
@@ -650,59 +617,14 @@ impl<R: Runtime> Player<R> {
     fn snapshot(&mut self) -> Result<NativePlaybackSnapshot> {
         self.drain_events()?;
         let mpv = &self.mpv;
-        let mut tracks = Vec::new();
-        for index in 0..mpv.get_property::<i64>("track-list/count").unwrap_or(0) {
-            let prefix = format!("track-list/{index}");
-            let kind = match mpv
-                .get_property::<String>(&format!("{prefix}/type"))
-                .unwrap_or_default()
-                .as_str()
-            {
-                "video" => TrackKind::Video,
-                "audio" => TrackKind::Audio,
-                "sub" => TrackKind::Subtitle,
-                _ => continue,
-            };
-            tracks.push(NativeTrackInfo {
-                id: index.to_string(),
-                index: index as i32,
-                kind,
-                language: mpv
-                    .get_property::<String>(&format!("{prefix}/lang"))
-                    .unwrap_or_default(),
-                label: mpv
-                    .get_property::<String>(&format!("{prefix}/title"))
-                    .unwrap_or_default(),
-                codec: mpv
-                    .get_property::<String>(&format!("{prefix}/codec"))
-                    .unwrap_or_default(),
-                selected: mpv
-                    .get_property::<bool>(&format!("{prefix}/selected"))
-                    .unwrap_or(false),
-            });
-        }
+        let tracks = observed_tracks(mpv);
         let position = mpv
             .get_property::<f64>("time-pos")
             .ok()
             .filter(|value| value.is_finite())
             .unwrap_or(0.0);
         let (ended, buffering, playing) = playback_status(mpv, self.loaded, self.error.is_some());
-        let chapters = (0..mpv.get_property::<i64>("chapter-list/count").unwrap_or(0))
-            .filter_map(|index| {
-                let position = mpv
-                    .get_property::<f64>(&format!("chapter-list/{index}/time"))
-                    .ok()?;
-                if !position.is_finite() || position < 0.0 {
-                    return None;
-                }
-                let title = mpv
-                    .get_property::<String>(&format!("chapter-list/{index}/title"))
-                    .ok()
-                    .filter(|title| !title.trim().is_empty())
-                    .unwrap_or_else(|| format!("Chapter {}", index + 1));
-                Some(MpvChapter { title, position })
-            })
-            .collect();
+        let chapters = observed_chapters(mpv);
         let view = self.view;
         let (frames, render_error) = on_main(&self.app, move || {
             let (mut frames, mut error) = (0, 0);
@@ -766,6 +688,96 @@ impl<R: Runtime> Player<R> {
             average_frame_processing_us: 0.0,
         })
     }
+}
+
+fn select_track(mpv: &Mpv, index: i32, enabled: bool) -> Result<()> {
+    let count = mpv
+        .get_property::<i64>("track-list/count")
+        .map_err(mpv_error)?;
+    if index < 0 || i64::from(index) >= count {
+        return Err(Error::InvalidRequest(format!(
+            "unknown native track index {index}"
+        )));
+    }
+    let prefix = format!("track-list/{index}");
+    let property = match mpv
+        .get_property::<String>(&format!("{prefix}/type"))
+        .map_err(mpv_error)?
+        .as_str()
+    {
+        "video" => "vid",
+        "audio" => "aid",
+        "sub" => "sid",
+        _ => {
+            return Err(Error::InvalidRequest(format!(
+                "unknown native track index {index}"
+            )))
+        }
+    };
+    if enabled {
+        mpv.set_property(
+            property,
+            mpv.get_property::<i64>(&format!("{prefix}/id"))
+                .map_err(mpv_error)?,
+        )
+    } else {
+        mpv.set_property(property, "no")
+    }
+    .map_err(mpv_error)
+}
+
+fn observed_tracks(mpv: &Mpv) -> Vec<NativeTrackInfo> {
+    let mut tracks = Vec::new();
+    for index in 0..mpv.get_property::<i64>("track-list/count").unwrap_or(0) {
+        let prefix = format!("track-list/{index}");
+        let kind = match mpv
+            .get_property::<String>(&format!("{prefix}/type"))
+            .unwrap_or_default()
+            .as_str()
+        {
+            "video" => TrackKind::Video,
+            "audio" => TrackKind::Audio,
+            "sub" => TrackKind::Subtitle,
+            _ => continue,
+        };
+        tracks.push(NativeTrackInfo {
+            id: index.to_string(),
+            index: index as i32,
+            kind,
+            language: mpv
+                .get_property::<String>(&format!("{prefix}/lang"))
+                .unwrap_or_default(),
+            label: mpv
+                .get_property::<String>(&format!("{prefix}/title"))
+                .unwrap_or_default(),
+            codec: mpv
+                .get_property::<String>(&format!("{prefix}/codec"))
+                .unwrap_or_default(),
+            selected: mpv
+                .get_property::<bool>(&format!("{prefix}/selected"))
+                .unwrap_or(false),
+        });
+    }
+    tracks
+}
+
+fn observed_chapters(mpv: &Mpv) -> Vec<MpvChapter> {
+    (0..mpv.get_property::<i64>("chapter-list/count").unwrap_or(0))
+        .filter_map(|index| {
+            let position = mpv
+                .get_property::<f64>(&format!("chapter-list/{index}/time"))
+                .ok()?;
+            if !position.is_finite() || position < 0.0 {
+                return None;
+            }
+            let title = mpv
+                .get_property::<String>(&format!("chapter-list/{index}/title"))
+                .ok()
+                .filter(|title| !title.trim().is_empty())
+                .unwrap_or_else(|| format!("Chapter {}", index + 1));
+            Some(MpvChapter { title, position })
+        })
+        .collect()
 }
 
 #[cfg(test)]

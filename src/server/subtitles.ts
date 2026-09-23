@@ -97,9 +97,25 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
       pending++;
       let path: string | undefined;
       try {
-        const bytes = new Uint8Array(await request.arrayBuffer());
+        if (Number(request.headers.get("content-length")) > subtitleSizeLimit) return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
+        const reader = request.body?.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          while (reader) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > subtitleSizeLimit) {
+              void reader.cancel().catch(() => {});
+              return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
+            }
+            chunks.push(value);
+          }
+        } finally { reader?.releaseLock(); }
+        const bytes = Buffer.concat(chunks, size);
         authorize();
-        if (!bytes.length || bytes.length > subtitleSizeLimit) return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
+        if (!bytes.length) return json({ error: "Choose a subtitle file up to 2 MiB." }, 413);
         const content = new TextDecoder().decode(bytes);
         if (content.includes("\0") || (extension === ".ass" || extension === ".ssa" ? !/\[Events\]/i.test(content) : !/\d{2}:\d{2}[,.]\d{3}\s+-->/.test(content))) return json({ error: "This file does not contain supported text subtitles." }, 400);
         // Reading the upload yields. Stop or a newer source must win that race.
@@ -112,7 +128,7 @@ export function createSubtitles(player: () => PlayerState, attach: (playbackId: 
       } catch (error) {
         if (path) remove(path);
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        return json({ error: "Could not add the subtitle. Check the current playback and the TV's storage." }, 400);
+        return json({ error: "Could not add the subtitle. Check the current playback and the host's storage." }, 400);
       } finally { pending--; }
     },
     observe(state: PlayerState) {
