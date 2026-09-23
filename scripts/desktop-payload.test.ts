@@ -50,9 +50,13 @@ for (const [target, format] of [
     for (const name of ["build-inputs.json", "build-packages.tsv"]) await write(join(resources, name), "{}\n");
     await write(join(resources, "notices", "NOTICE"), "Couch notices\n");
     const payload = await createPayload(target, format, sidecar, resources);
+    if (format === "nsis") expect(payload.files.map(file => file.path)).toEqual(expect.arrayContaining([
+      "couch-server.exe", "tools/deno.exe", "tools.json", "build-inputs.json", "notices/NOTICE",
+    ]));
+    if (format === "nsis") expect(payload.files.some(file => file.path.startsWith("resources/"))).toBe(false);
     const installed = join(directory, "installed");
     for (const file of payload.files) {
-      const source = file.path === paths.sidecar ? sidecar : file.path.includes("/tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
+      const source = file.path === paths.sidecar ? sidecar : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
       const path = join(installed, file.path);
       await write(path, new Uint8Array(await Bun.file(source).arrayBuffer()));
       if (file.architecture) await chmod(path, 0o755);
@@ -65,10 +69,10 @@ for (const [target, format] of [
     await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
     await write(join(installed, paths.sidecar), executable(target));
     await chmod(join(installed, paths.sidecar), 0o755);
-    await rm(join(installed, `${paths.resources}/tools/deno${suffix}`));
+    await rm(join(installed, paths.resources, "tools", `deno${suffix}`));
     await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
-    await write(join(installed, `${paths.resources}/tools/deno${suffix}`), executable(target));
-    await chmod(join(installed, `${paths.resources}/tools/deno${suffix}`), 0o755);
+    await write(join(installed, paths.resources, "tools", `deno${suffix}`), executable(target));
+    await chmod(join(installed, paths.resources, "tools", `deno${suffix}`), 0o755);
     const wrong = target.startsWith("aarch64") ? target.replace("aarch64", "x86_64") : target.replace("x86_64", "aarch64");
     await write(sidecar, executable(wrong));
     await expect(createPayload(target, format, sidecar, resources)).rejects.toThrow("Wrong architecture");

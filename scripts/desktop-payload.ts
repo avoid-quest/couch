@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { lstat, readdir, stat } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 
 export const desktopTargets = {
   "darwin-arm64": "aarch64-apple-darwin",
@@ -18,7 +18,7 @@ export function desktopTarget(platform = process.platform, arch = process.arch) 
 
 export function payloadPaths(target: string, format: string) {
   if (target.endsWith("-apple-darwin") && format === "dmg") return { sidecar: "Contents/MacOS/couch-server", resources: "Contents/Resources" };
-  if (target.endsWith("-pc-windows-msvc") && format === "nsis") return { sidecar: "couch-server.exe", resources: "resources" };
+  if (target.endsWith("-pc-windows-msvc") && format === "nsis") return { sidecar: "couch-server.exe", resources: "" };
   if (target.endsWith("-unknown-linux-gnu") && ["deb", "appimage"].includes(format)) return { sidecar: "usr/bin/couch-server", resources: "usr/lib/Couch" };
   throw new Error(`Unsupported package target: ${target}/${format}`);
 }
@@ -63,10 +63,10 @@ export async function createPayload(target: string, format: string, sidecar: str
     files.push({ path: destination, sha256: await hash(source), ...(architecture ? { architecture } : {}) });
   }
   await add(sidecar, paths.sidecar, true);
-  for (const name of enabledHelpers) await add(join(resources, "tools", name + (target.includes("windows") ? ".exe" : "")), `${paths.resources}/tools/${name}${target.includes("windows") ? ".exe" : ""}`, true);
-  if (enabledHelpers.length) await add(join(resources, "tools.json"), `${paths.resources}/tools.json`);
-  await add(join(resources, "build-inputs.json"), `${paths.resources}/build-inputs.json`);
-  if (await Bun.file(join(resources, "build-packages.tsv")).exists()) await add(join(resources, "build-packages.tsv"), `${paths.resources}/build-packages.tsv`);
+  for (const name of enabledHelpers) await add(join(resources, "tools", name + (target.includes("windows") ? ".exe" : "")), posix.join(paths.resources, "tools", name + (target.includes("windows") ? ".exe" : "")), true);
+  if (enabledHelpers.length) await add(join(resources, "tools.json"), posix.join(paths.resources, "tools.json"));
+  await add(join(resources, "build-inputs.json"), posix.join(paths.resources, "build-inputs.json"));
+  if (await Bun.file(join(resources, "build-packages.tsv")).exists()) await add(join(resources, "build-packages.tsv"), posix.join(paths.resources, "build-packages.tsv"));
   const notices = join(resources, "notices");
   async function walk(directory: string) {
     for (const name of await readdir(directory)) {
@@ -74,7 +74,7 @@ export async function createPayload(target: string, format: string, sidecar: str
       if ((await stat(source)).isDirectory()) await walk(source);
       else {
         const name = relative(notices, source).split(sep).join("/");
-        const destination = format === "deb" || format === "appimage" ? `usr/share/doc/couch/${name}` : `${paths.resources}/notices/${name}`;
+        const destination = format === "deb" || format === "appimage" ? `usr/share/doc/couch/${name}` : posix.join(paths.resources, "notices", name);
         await add(source, destination);
       }
     }
@@ -88,10 +88,10 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
   assert.equal(payload.format, expectedFormat);
   assert.deepEqual(payload.enabledHelpers, expectedHelpers);
   const paths = payloadPaths(expectedTarget, expectedFormat);
-  const binaries = [paths.sidecar, ...expectedHelpers.map(name => `${paths.resources}/tools/${name}${expectedTarget.includes("windows") ? ".exe" : ""}`)];
-  const required = [...binaries, ...(expectedHelpers.length ? [`${paths.resources}/tools.json`] : []), `${paths.resources}/build-inputs.json`, ...(expectedFormat === "deb" ? [`${paths.resources}/build-packages.tsv`] : [])];
+  const binaries = [paths.sidecar, ...expectedHelpers.map(name => posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : "")))];
+  const required = [...binaries, ...(expectedHelpers.length ? [posix.join(paths.resources, "tools.json")] : []), posix.join(paths.resources, "build-inputs.json"), ...(expectedFormat === "deb" ? [posix.join(paths.resources, "build-packages.tsv")] : [])];
   for (const path of required) assert.ok(payload.files.some(file => file.path === path), `Missing payload entry: ${path}`);
-  assert.ok(payload.files.some(file => file.path.endsWith("/notices/NOTICE") || file.path === "usr/share/doc/couch/NOTICE"), "Missing redistribution notice");
+  assert.ok(payload.files.some(file => file.path.endsWith("notices/NOTICE") || file.path === "usr/share/doc/couch/NOTICE"), "Missing redistribution notice");
   const seen = new Set<string>();
   const architecture = expectedTarget.split("-")[0];
   for (const file of payload.files) {
@@ -108,7 +108,7 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
   if (expectedHelpers.length) {
     const helpers = await Bun.file(join(root, paths.resources, "tools.json")).json();
     for (const name of expectedHelpers) {
-      const path = `${paths.resources}/tools/${name}${expectedTarget.includes("windows") ? ".exe" : ""}`;
+      const path = posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : ""));
       assert.equal(payload.files.find(file => file.path === path)?.sha256, helpers[name]?.sha256, `Helper provenance mismatch: ${name}`);
     }
   }

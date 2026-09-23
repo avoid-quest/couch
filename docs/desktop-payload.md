@@ -12,7 +12,7 @@ and bytes after extraction; the Debian verifier calls it on the `.deb`.
 | --- | --- | --- | --- |
 | Debian or AppImage | `usr/bin/couch-server` | `usr/lib/Couch/` | `usr/share/doc/couch/` |
 | macOS DMG app | `Contents/MacOS/couch-server` | `Contents/Resources/` | `Contents/Resources/notices/` |
-| Windows NSIS | `couch-server.exe` | `resources/` | `resources/notices/` |
+| Windows NSIS | `couch-server.exe` | install root | `notices/` |
 
 The paths are relative to an extracted package, AppDir, `.app` root or NSIS
 installation directory. Tauri's
