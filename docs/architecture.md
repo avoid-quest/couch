@@ -30,9 +30,10 @@ is still checked before opening the control WebSocket.
 
 ## Development and qualification
 
-`bun run dev` retains Bun's source-mode HTML/HMR adapter. `bun run client:dev`
-uses Vite on port 1420 with an API proxy to the coordinator on port 4100. Neither
-proves that the production remote works.
+`bun run dev` starts the source-mode Bun coordinator and Vite together. Browser
+development uses Vite on port 1420 with an API proxy to the coordinator on port
+4100; Client-only remotes use Bun's non-HMR hosted UI. Neither proves that the
+production remote works.
 
 After committing and building, run `bun tests/linux/built-remote.ts` inside the
 existing Linux test environment with WebKitWebDriver, X11/Openbox, xdotool and

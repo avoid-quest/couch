@@ -8,7 +8,8 @@
     "bun": ">=1.4.0 <1.5.0"
   },
   "scripts": {
-    "dev": "bun --watch src/main.ts",
+    "dev": "bun run --parallel server:dev client:dev",
+    "server:dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "client:dev": "bun --bun vite",
     "build": "bun scripts/build.ts",
