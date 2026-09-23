@@ -1,73 +1,48 @@
 {
-  "revision": "fbebfa45d3bd27df06cdeb6c52ceb41aa25b1a4d",
+  "revision": "6da32a77aecba078b0e661f0fc03fcaa7f9a67e4",
   "latency": {
-    "seek-4": 0.5,
-    "seek-8": 0.34,
-    "seek-2": 0.4,
-    "diagnostics": 521.7,
-    "replacement": 2.61,
-    "stop": 1.93
+    "seek-4": 0.39,
+    "seek-8": 0.3,
+    "seek-2": 0.37,
+    "diagnostics": 436.95,
+    "replacement": 3.38,
+    "stop": 3.43
   },
   "frames": [
     {
       "presented": 3,
       "dropped": 0,
-      "fps": 5.99
-    },
-    {
-      "presented": 3,
-      "dropped": 0,
-      "fps": 0
-    },
-    {
-      "presented": 3,
-      "dropped": 0,
-      "fps": 0
-    },
-    {
-      "presented": 3,
-      "dropped": 0,
-      "fps": 0
-    },
-    {
-      "presented": 15,
-      "dropped": 0,
-      "fps": 23.75
-    },
-    {
-      "presented": 28,
-      "dropped": 0,
-      "fps": 25.08
-    },
-    {
-      "presented": 44,
-      "dropped": 0,
-      "fps": 22.44
-    },
-    {
-      "presented": 55,
-      "dropped": 0,
       "fps": 3.92
     },
     {
-      "presented": 55,
+      "presented": 3,
       "dropped": 0,
       "fps": 0
     },
     {
-      "presented": 55,
+      "presented": 3,
       "dropped": 0,
       "fps": 0
     },
     {
-      "presented": 56,
+      "presented": 4,
       "dropped": 0,
-      "fps": 1.99
+      "fps": 1.91
     },
     {
-      "presented": 69,
+      "presented": 17,
       "dropped": 0,
-      "fps": 25.46
+      "fps": 25.14
+    },
+    {
+      "presented": 30,
+      "dropped": 0,
+      "fps": 23.55
+    },
+    {
+      "presented": 57,
+      "dropped": 0,
+      "fps": 25.71
     }
   ],
   "nativePixels": [
@@ -75,7 +50,7 @@
     "native-replacement-video.png"
   ],
   "stuckRenderLog": false,
-  "diagnosticsMs": 521.7,
+  "diagnosticsMs": 436.95,
   "checks": [
     "Tauri WebDriver starts",
     "compiled Tauri app starts its compiled sidecar",
