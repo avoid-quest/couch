@@ -1,7 +1,5 @@
 name: Release
 "on":
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,4 +26,4 @@ jobs:
             exit 0
           fi
           gh workflow run package.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f channel=preview -f publish=true
+            -f channel=preview -f publish=false

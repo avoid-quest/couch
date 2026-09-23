@@ -33,6 +33,7 @@ if (!/^ID=debian$/m.test(os) || !/^VERSION_ID="13"$/m.test(os)) throw new Error(
 if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManager}`);
 if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean committed source revision");
 const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
+if (format !== "deb" && format !== "appimage") throw new Error("The Debian builder supports deb or appimage only");
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
 if (format === "deb") {

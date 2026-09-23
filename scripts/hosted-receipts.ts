@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 const allowed = /^(?:(?:manifest|qualified)\.json(?:\.sig)?|(?:draft|readiness)-(?:preview|stable)\.json|receipts\/(?:upload|publish)-(?:preview|stable)\.json)$/;
 const maximum = 256 * 1024;
@@ -30,7 +31,11 @@ if (import.meta.main) {
   } else if (operation === "restore") {
     assert.ok(destination, "Supply a receipt destination");
     const files = parseReceiptLog(await Bun.file(input).text());
-    for (const [name, contents] of Object.entries(files)) await Bun.write(join(destination, name), contents);
+    for (const [name, contents] of Object.entries(files)) {
+      const path = join(destination, name);
+      await mkdir(dirname(path), { recursive: true });
+      await Bun.write(path, contents);
+    }
     // The caller must verify the signatures and original run provenance before using these files.
   } else throw Error("Use export or restore");
 }

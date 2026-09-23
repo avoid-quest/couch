@@ -126,6 +126,10 @@ with the `catthehacker/ubuntu:full-latest` image. Its inert provider/build steps
 check dispatch control flow; they do not replace the exact signed package and
 fresh runtime fixture. Publication requires separate authorization. The T480
 installs/runs Couch; it is never a build worker.
+For desktop packaging and four-platform publication workflow edits, also run
+`bun tests/package/preview-workflow.ts "$(command -v act)" .artifacts/act-preview`.
+Its macOS mapping uses Linux to check dispatch control flow only; the actual
+Mac and Windows cross-builds require GitHub's Apple Silicon runner.
 Apply `qualify-package` to an AppImage PR for the native x86_64 clean-launch
 check. It uses a disposable signing key without release credentials or
 publication. Without the label, the job is skipped. With it, one runner job has

@@ -13,6 +13,7 @@ const architecture = process.env.COUCH_ACT_ARCH ?? `linux/${process.arch === "ar
 const source = await Bun.file(".github/workflows/package.yml").text();
 const workflow = Bun.YAML.parse(source) as any;
 const release = Bun.YAML.parse(await Bun.file(".github/workflows/release.yml").text()) as any;
+assert.equal(release.on.push, undefined, "The coordinated Preview gate must not dispatch from a merge.");
 const names = {
   build: "Build and sign the selected package",
   qualify: "Qualify the exact signed bytes",
@@ -27,23 +28,25 @@ const names = {
 const cases = [
   { name: "native-draft", inputs: {}, want: ["build", "qualify", "sign", "upload"] },
   { name: "appimage-draft", inputs: { format: "appimage" }, want: ["build", "qualify", "sign", "upload"] },
+  { name: "appimage-attach", inputs: { format: "appimage", "release-id": "AAAAAAAAAAAAAAAAAAAAAAAAAA" }, want: ["build", "qualify", "sign", "upload"] },
   { name: "reject-appimage-publish", inputs: { format: "appimage", publish: true }, want: [], fail: true },
   { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable", "build-run": 123 }, want: [], fail: true },
-  { name: "native-publish", inputs: { publish: true }, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
-  { name: "completed-draft-retry", inputs: { "build-run": 123, publish: true }, want: ["publish", "readiness"] },
-  { name: "receipt-log-fallback", inputs: { "build-run": 123, publish: true }, fault: "Download retained receipts", want: ["logs", "publish", "readiness"] },
+  { name: "reject-native-preview-publish", inputs: { publish: true }, want: [], fail: true },
+  { name: "reject-preview-retry-publish", inputs: { "build-run": 123, publish: true }, want: [], fail: true },
+  { name: "completed-draft-retry", inputs: { "build-run": 123 }, want: [] },
+  { name: "receipt-log-fallback", inputs: { "build-run": 123 }, fault: "Download retained receipts", want: ["logs"] },
   { name: "stable-promotion", inputs: { "build-run": 123, channel: "stable", publish: true }, want: ["restore", "upload", "publish", "readiness"] },
   { name: "readiness-only", inputs: { "build-run": 123, "readiness-only": true }, want: ["readiness"] },
   { name: "reject-fresh-stable", inputs: { channel: "stable" }, want: [], fail: true },
   { name: "reject-fresh-readiness", inputs: { "readiness-only": true }, want: [], fail: true },
   { name: "branch-guard", inputs: {}, ref: "refs/heads/feature", want: [] },
   { name: "disabled-guard", inputs: {}, enabled: false, want: [] },
-  { name: "builder-fails", inputs: { publish: true }, fault: "Prepare the pinned Debian builder", want: [], fail: true },
-  { name: "qualification-fails", inputs: { publish: true }, fault: names.qualify, want: ["build", "qualify"], fail: true },
-  { name: "signing-fails", inputs: { publish: true }, fault: names.sign, want: ["build", "qualify", "sign"], fail: true },
-  { name: "upload-fails", inputs: { publish: true }, fault: names.upload, want: ["build", "qualify", "sign", "upload"], fail: true },
-  { name: "publish-fails", inputs: { publish: true }, fault: names.publish, want: ["build", "qualify", "sign", "upload", "publish"], fail: true },
-  { name: "receipt-quota-nonblocking", inputs: { publish: true }, fault: names.receipts, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
+  { name: "builder-fails", inputs: {}, fault: "Prepare the pinned Debian builder", want: [], fail: true },
+  { name: "qualification-fails", inputs: {}, fault: names.qualify, want: ["build", "qualify"], fail: true },
+  { name: "signing-fails", inputs: {}, fault: names.sign, want: ["build", "qualify", "sign"], fail: true },
+  { name: "upload-fails", inputs: {}, fault: names.upload, want: ["build", "qualify", "sign", "upload"], fail: true },
+  { name: "publish-fails", inputs: { "build-run": 123, channel: "stable", publish: true }, fault: names.publish, want: ["restore", "upload", "publish"], fail: true },
+  { name: "receipt-quota-nonblocking", inputs: {}, fault: names.receipts, want: ["build", "qualify", "sign", "upload"] },
 ] as const;
 assert.deepEqual(Object.keys(workflow.jobs), ["release"]);
 const receiptStep = workflow.jobs.release.steps.find((step: any) => step.name === names.receipts);
@@ -53,9 +56,13 @@ assert.equal(workflow.jobs.release.environment, "couch-release");
 assert.equal(workflow.on.workflow_dispatch.inputs.notes, undefined);
 const candidate = workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs");
 assert.match(candidate.run, /release-notes\.ts "\$revision"/);
+const previewGuard = candidate.run.match(/^\s*if \[ "\$CHANNEL" = preview \]; then[^\n]*$/m)?.[0];
+assert.ok(previewGuard, "Exercise the real Preview publication guard in act");
 const appimageGuard = candidate.run.match(/^\s*if \[ "\$FORMAT" = appimage \]; then[^\n]*$/m)?.[0];
 assert.ok(appimageGuard, "Exercise the real AppImage input guard in act");
 assert.doesNotMatch(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /release-notes|notes=/);
+assert.match(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /-f publish=false/);
+assert.match(workflow.jobs.release.steps.find((step: any) => step.id === "draft").env.RELEASE_ID, /inputs\.release-id/);
 await mkdir(`${output}/home`, { recursive: true });
 await mkdir(`${output}/workspace`, { recursive: true });
 const results = [];
@@ -68,7 +75,7 @@ for (const test of cases) {
   job.steps = job.steps.map((step: any) => {
     const replacement: any = { name: step.name ?? step.uses, run: `printf '%s\\n' ${JSON.stringify(`STEP:${step.name ?? step.uses}`)}` };
     for (const key of ["if", "id", "env", "continue-on-error"]) if (key in step) replacement[key] = step[key];
-    if (step.name === "Check the candidate inputs") replacement.run += `\n${appimageGuard}\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi`;
+    if (step.name === "Check the candidate inputs") replacement.run += `\n${previewGuard}\n${appimageGuard}\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi`;
     if (step.id === "draft") replacement.run += '\necho "release-id=AAAAAAAAAAAAAAAAAAAAAAAAAA" >> "$GITHUB_OUTPUT"';
     if (scenario.fault && step.name === scenario.fault) replacement.run += "\nexit 17";
     return replacement;
@@ -86,7 +93,7 @@ for (const test of cases) {
   const expected = [...scenario.want].sort();
   const candidateReached = log.includes("| STEP:Check the candidate inputs");
   const pass = code === (scenario.fail ? 1 : 0) && JSON.stringify(observed) === JSON.stringify(expected)
-    && (!scenario.name.startsWith("reject-appimage-") || candidateReached);
+    && (!scenario.name.startsWith("reject-") || candidateReached);
   results.push({ name: test.name, pass, exit: code, candidateReached, observed, expected, seconds: Number(((performance.now() - start) / 1000).toFixed(3)) });
   console.log(`${pass ? "PASS" : "FAIL"} ${test.name}`);
 }
