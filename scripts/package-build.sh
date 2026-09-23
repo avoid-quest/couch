@@ -2,7 +2,7 @@
 set -euo pipefail
 export COUCH_PACKAGE_FORMAT="${1:-deb}"
 case "$COUCH_PACKAGE_FORMAT" in deb|appimage) ;; *) echo 'Use package:build deb or appimage' >&2; exit 1 ;; esac
-export SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
+if [ "$COUCH_PACKAGE_FORMAT" = deb ]; then export SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD); else unset SOURCE_DATE_EPOCH; fi
 export PATCHELF=/usr/bin/patchelf
 tool_cache="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
 export LDAI_RUNTIME_FILE="$tool_cache/runtime-x86_64"
