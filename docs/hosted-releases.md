@@ -112,8 +112,9 @@ feed accumulates previews as before. For a final release run
 `0.1.6` can be assembled on Preview. Stable promotion remains a separate
 decision after installed acceptance.
 
-The dispatch commands below remain valid for single-format releases. For a
-four-platform Preview, use the [assembly guide](multiplatform-preview.md).
+Package builds and uploads Preview drafts. The four-manifest
+[assembly guide](multiplatform-preview.md) owns Preview publication. Package
+rejects `channel=preview,publish=true`, including receipt retries.
 
 A fresh build defaults to a Preview draft. Publication is explicit:
 
@@ -122,12 +123,7 @@ A fresh build defaults to a Preview draft. Publication is explicit:
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=deb -f channel=preview -f publish=false
 
-# Publish that completed draft using its signed receipts, without rebuilding.
-gh workflow run package.yml --repo avoid-quest/couch --ref main \
-  -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
-  -f publish=true
-
-# Retry public verification after publication, without publishing again.
+# Recheck the Debian public route after publication; full readiness uses the assembler.
 gh workflow run package.yml --repo avoid-quest/couch --ref main \
   -f format=deb -f channel=preview -f build-run=RUN -f build-attempt=ATTEMPT \
   -f readiness-only=true
@@ -156,8 +152,8 @@ export. Retain the small receipts outside GitHub before their 90-day artifact or
 run-log retention expires. These are verification records, not another binary
 store.
 
-A completed unpublished draft can be published using its signed qualification
-and Cloud metadata, without downloading private draft bytes. Public Preview
+A completed four-format draft can be published using its signed qualification
+receipts and Cloud metadata, without downloading private draft bytes. Stable
 promotion downloads the exact provider-issued `/asset/<ID>` URLs already
 recorded by readiness, verifies every byte and signature, and uploads unchanged
 files to Stable. It does not use a moving `latest` URL for restored bytes or
@@ -168,14 +164,15 @@ same runner. If that runner disappears before a complete upload, its missing
 private draft bytes cannot be recovered by the supported Cloud CLI. A retry
 without the completed upload receipt stops. Use a retained local candidate or
 build a new candidate under a new version. Never replace uploaded bytes under an
-existing version; a fresh build refuses a nonempty draft. A completed publication
+existing version; a fresh Debian build refuses a nonempty draft, while AppImage
+may attach to the recorded Debian-only draft. A completed publication
 with delayed CDN readiness needs only another readiness run.
 
 ## GitHub Releases mirror
 
-After a publication passes public readiness, the Package workflow also mirrors
-the version to GitHub Releases with the workflow token, which needs
-`contents: write` for the release job. The release carries only the changelog
+After public readiness, the Preview assembler or Stable Package workflow mirrors
+the version to GitHub Releases. Package needs `contents: write` for its release
+job; the local assembler uses the owner's `gh` authentication. The release carries only the changelog
 notes from the dispatch; downloads stay on CrabNebula. The tag is `v<version>`
 pinned to the built revision with `target_commitish`, so Preview publication of
 `0.1.5-preview.2` produces prerelease `v0.1.5-preview.2` and Stable promotion of
@@ -218,10 +215,11 @@ bun scripts/hosted-release.ts qualify .artifacts/hosted-release
 bun x --no-install tauri signer sign .artifacts/hosted-release/qualified.json
 ```
 
-Retain that directory privately, then use the existing `draft`, `upload`,
-`publish` and `readiness` operations in `scripts/hosted-release.ts`, with the
-qualified directory, channel and recorded release ID. These commands work
-without a GitHub build run. They upload only the selected public allowlist.
+Retain that directory privately, then use the existing `draft` and `upload`
+operations in `scripts/hosted-release.ts`, with the qualified directory,
+Preview channel and recorded release ID. These commands work without a GitHub
+build run and upload only the selected public allowlist. Preview publication
+requires the four signed receipts in the [assembly guide](multiplatform-preview.md).
 Keep the same version identity only when using the same retained bytes; a
 fresh fallback build after a partial upload needs a new candidate identity.
 

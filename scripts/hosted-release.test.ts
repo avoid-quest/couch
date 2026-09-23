@@ -239,7 +239,7 @@ describe("native package delivery", () => {
     }
   });
 
-  test.skipIf(!Bun.which("minisign"))("a qualified native upload and later publication reuse only signed receipts", async () => {
+  test.skipIf(!Bun.which("minisign"))("a qualified native upload reuses signed receipts but cannot publish Preview alone", async () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-native-cloud-"));
     // The child's publish rechecks the live feed; stage a version newer than whatever it serves.
     const feed = await fetch(`${cdn}/update/${application}/linux-x86_64-deb/0.0.0?channel=preview`).then(response => response.ok ? response.json() as Promise<{ version: string }> : null).catch(() => null);
@@ -298,8 +298,10 @@ console.log(JSON.stringify(operation === "list" ? [] : state));
       expect(uploaded.assets[0].updatePlatform).toBe("linux-x86_64-deb");
       await rm(join(directory, "public"), { recursive: true });
       await execute(command("resume"), env);
-      await execute(command("publish"), env);
-      expect((await Bun.file(stateFile).json()).status).toBe("Published");
+      const direct = Bun.spawnSync(command("publish"), { env, stderr: "pipe" });
+      expect(direct.exitCode).not.toBe(0);
+      expect(direct.stderr.toString()).toContain("four-manifest assembler");
+      expect((await Bun.file(stateFile).json()).status).toBe("Draft");
       expect(await Bun.file(join(directory, "public", name)).exists()).toBe(false);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });

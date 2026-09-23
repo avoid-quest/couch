@@ -91,6 +91,7 @@ jobs:
           GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p .artifacts/hosted-release
+          if [ "$CHANNEL" = preview ]; then test "$PUBLISH" = false || exit 1; fi
           if [ "$FORMAT" = appimage ]; then test "$CHANNEL" = preview && test "$PUBLISH" = false || exit 1; fi
           if [ "$BUILD_RUN" = 0 ]; then
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false

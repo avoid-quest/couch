@@ -12,8 +12,10 @@ tarball, not the disk image.
 ## Gate and build identity
 
 Wait for the desktop Wayfinder implementation list and required source/package
-checks to pass before dispatching. The Release workflow has no push trigger and its
-manual dispatch produces an unpublished Debian draft. Use one committed
+checks to pass before dispatching. The Release workflow has no push trigger.
+Its manual dispatch produces an unpublished Debian draft. Package and the
+single-format release script reject direct Preview publication, including
+retries from signed receipts. Use one committed
 `main` revision and one `X.Y.Z-preview.N` version for all four formats. A
 different source revision or signing key blocks assembly. Do not reuse a Cloud
 draft after an upload failure with different bytes; retain the same candidate

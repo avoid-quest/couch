@@ -275,6 +275,7 @@ if (import.meta.main) {
   const directory = resolve(input);
   const channel = channelInput as Channel;
   const channels = channelArgs(channel);
+  if (operation === "publish" && channel === "preview") throw new Error("Publish Preview through the four-manifest assembler.");
   if (operation === "draft-source") {
     assert.equal(channel, "preview", "Fresh builds go through Preview before Stable.");
     const version = releaseVersion((await Bun.file("src-tauri/tauri.conf.json").json()).version);
