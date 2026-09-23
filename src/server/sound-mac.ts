@@ -4,9 +4,9 @@ import { testTone, type SoundBackend } from "./sound-pulse";
 import type { NativeSoundAction } from "./sound-native";
 
 type NativeSound = (action: NativeSoundAction) => Promise<unknown>;
-const mpv = `${process.env.COUCH_MPV_PREFIX ?? (process.arch === "arm64" ? "/opt/homebrew/opt/mpv" : "/usr/local/opt/mpv")}/bin/mpv`;
 
 export function macSound(native: NativeSound) {
+  const mpv = process.env.COUCH_MPV ?? `${process.env.COUCH_MPV_PREFIX ?? (process.arch === "arm64" ? "/opt/homebrew/opt/mpv" : "/usr/local/opt/mpv")}/bin/mpv`;
   const inventory = async () => {
     const value = await native({ op: "inventory" }) as SoundInventory;
     if (!Array.isArray(value?.outputs) || !value.outputs.every(output => typeof output.id === "string" && typeof output.name === "string")) throw new Error("Core Audio returned an invalid output list.");

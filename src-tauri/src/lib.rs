@@ -350,6 +350,8 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         ("COUCH_YT_DLP", "yt-dlp"),
         ("COUCH_DENO", "deno"),
         ("COUCH_FFPROBE", "ffprobe"),
+        #[cfg(target_os = "macos")]
+        ("COUCH_MPV", "mpv"),
     ] {
         let filename = format!("{name}{}", if cfg!(windows) { ".exe" } else { "" });
         let bundled = app
