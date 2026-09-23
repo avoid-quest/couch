@@ -3,6 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import * as core from "@tauri-apps/api/core";
+import { onlineManager } from "@tanstack/react-query";
 import { screen, fireEvent, within } from "@/testing";
 import { isNativeHost } from "@/session/native-context";
 
@@ -42,7 +43,7 @@ beforeEach(async () => {
 afterEach(async () => {
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
   await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
-  invoke.mockRestore(); request.mockRestore(); await window.happyDOM.abort();
+  invoke.mockRestore(); request.mockRestore(); onlineManager.setOnline(true); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
@@ -198,9 +199,10 @@ test("Another Couch opens focused address entry without a submenu", async () => 
 });
 
 
-test("an unreachable remote cannot prevent this installation's update controls", async () => {
+test("an offline remote keeps this installation's update controls and shared-window activity", async () => {
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   connectionError = "Cannot reach that Couch.";
+  onlineManager.setOnline(false);
   request.mockImplementation((async (input, init) => {
     expect(String(input)).toStartWith("http://127.0.0.1:54321/");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer own-installation");
@@ -213,6 +215,8 @@ test("an unreachable remote cannot prevent this installation's update controls",
   expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
   expect(screen.getByText(/Updates and recovery for this app/)).toBeDefined();
   expect(screen.getByText("Hosted update")).toBeDefined();
+  await act(async () => fireEvent.pointerDown(button("Update this app"))); await flush();
+  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(true);
   expect(button("Install update on this app").disabled).toBe(false);
   expect(screen.getByLabelText("Release channel for this app")).toBeDefined();
   expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
