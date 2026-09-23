@@ -716,6 +716,10 @@ async fn supervised_restart() -> Result<(), String> {
     )
 }
 
+fn remote_blocks_install(when_idle: bool, remote_open: bool) -> bool {
+    when_idle && remote_open
+}
+
 pub async fn run(
     app: tauri::AppHandle,
     directory: PathBuf,
@@ -845,7 +849,10 @@ pub async fn run(
                     if repair {
                         return Err("Recover the retained verified app with couch-recover. Hosted downloads may expire.".into());
                     }
-                    if when_idle && crate::operating_mode::remote_selected(&app) {
+                    if remote_blocks_install(
+                        when_idle,
+                        crate::operating_mode::remote_selected(&app),
+                    ) {
                         return Err(
                             "Waiting for remote control to close before automatic installation."
                                 .into(),
@@ -1015,6 +1022,12 @@ mod tests {
             update_url("0.2.0", Channel::Preview).unwrap().query(),
             Some("channel=preview")
         );
+    }
+    #[test]
+    fn automatic_install_waits_for_remote_control_to_close() {
+        assert!(remote_blocks_install(true, true));
+        assert!(!remote_blocks_install(true, false));
+        assert!(!remote_blocks_install(false, true));
     }
     #[test]
     fn signed_requirements_reject_incompatible_data_and_host_before_interruption() {
