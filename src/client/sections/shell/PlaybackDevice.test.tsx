@@ -232,3 +232,18 @@ test("an offline remote keeps this installation's update controls and shared-win
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   expect(choice.mode).toBe("remote");
 });
+
+test("this app gives recovery guidance without Linux appliance instructions", async () => {
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  request.mockImplementation((async input => {
+    if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
+    return Response.json({ channel: "stable", policy: "manual", status: "unavailable", currentCheck: false, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, lastSuccessfulCheck: null, error: "Updates require the installed Debian AppImage.", installation: { enabled: false, repairAvailable: false, transaction: { updateId: "e".repeat(32), requestId: "f".repeat(32), candidateId: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), phase: "operator-required", error: null, createdAt: 1, updatedAt: 1 } } });
+  }) as typeof fetch);
+  await render();
+  await act(async () => fireEvent.click(button("Update this app"))); await flush();
+  expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
+  expect(screen.getByText("Update needs recovery")).toBeDefined();
+  expect(screen.getAllByText(/Reinstall a verified compatible Couch release for this computer/)).toHaveLength(2);
+  expect(screen.getByText(/In-app updates are unavailable on this installation/)).toBeDefined();
+  expect(screen.queryByText(/SSH|AppImage|journal|Debian/)).toBeNull();
+});

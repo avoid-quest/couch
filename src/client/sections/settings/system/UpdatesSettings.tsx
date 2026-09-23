@@ -87,6 +87,8 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
   const phaseSentence = transaction && !installing ? null : transaction?.phase === "accepted" ? "The app accepted the update." : transaction?.phase === "preflight" ? "Checking storage and recovery material." : transaction?.phase === "quiescing" ? "Waiting for playback and downloads to stop." : transaction?.phase === "installing" ? "Installing the update." : transaction?.phase === "trial" || transaction?.phase === "committing" ? "Restarting into the new version. This page reconnects when the app is back." : transaction?.phase === "restoring" ? "Restoring the previous release." : "Waiting for the app to confirm this request.";
   const waitingStatus = !!state && (state.status === "checking" || state.status === "downloading");
   const statusText = state ? state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status] : null;
+  const ownApp = target === "this app";
+  const appRecovery = "Reinstall a verified compatible Couch release for this computer without deleting this app's data, then reopen Updates.";
   return <div className="min-w-0 space-y-4">
     <p className="text-sm text-muted-foreground">Updates and recovery for {target}. Running {state?.running.version ?? "unknown version"}{state?.running.revision ? `, commit ${state.running.revision}` : ""}.</p>
     {state && <Card className="min-w-0 gap-4 p-4 text-sm">
@@ -106,13 +108,13 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       <p className="text-xs text-muted-foreground">Last check: {state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "none yet"}.</p>
     </Card>}
     {(retry || transaction) && <Card role="status" className="min-w-0 gap-3 p-4 text-sm">
-      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
+      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? ownApp ? "Update needs recovery" : "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       {phaseSentence && <p className="text-muted-foreground">{phaseSentence}</p>}
       {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
       {transaction?.error && <p>Update for {target}: {transaction.error}</p>}
       {!connected && <p>{target} is restarting or offline. This page will reconnect; keep it open.</p>}
-      {transaction?.phase === "operator-required" && <p className="text-muted-foreground">From the administrator's SSH account, inspect the Couch journal before retrying and keep the data directory.</p>}
+      {transaction?.phase === "operator-required" && <p className="text-muted-foreground">{ownApp ? appRecovery : "From the administrator's SSH account, inspect the Couch journal before retrying and keep the data directory."}</p>}
       {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again for {target}</Button></div>}
       {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry request for {target}</Button></div>}
     </Card>}
@@ -125,7 +127,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
       </div>}
-      {state.error && <Alert variant="destructive"><AlertDescription>Update for {target}: {state.error}</AlertDescription></Alert>}
+      {state.error && <Alert variant="destructive"><AlertDescription>Update for {target}: {ownApp && state.status === "unavailable" ? "In-app updates are unavailable on this installation. Use a compatible Couch installer for this computer without deleting its data." : state.error}</AlertDescription></Alert>}
       {!retry && !installing && confirming === "install" && <div className="space-y-2">
           <p>Install {candidate?.version} on {target} and restart it. Its remotes will disconnect; viewing data is preserved.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
@@ -139,8 +141,8 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
     </Card>}
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <Card className="min-w-0 gap-2 p-4 text-sm">
-      <p className="font-medium">Manual installation is not enabled on this installation.</p>
-      <p className="text-muted-foreground">From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects.</p>
+      <p className="font-medium">In-app installation is not enabled on this installation.</p>
+      <p className="text-muted-foreground">{ownApp ? appRecovery : "From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects."}</p>
     </Card>}
     {state?.installation?.enabled && state.installation.repairAvailable && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>
