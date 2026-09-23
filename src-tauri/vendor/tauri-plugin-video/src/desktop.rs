@@ -2,10 +2,13 @@ use serde::de::DeserializeOwned;
 use std::{
     sync::{
         atomic::{AtomicU8, Ordering},
-        mpsc, Arc,
+        Arc,
     },
-    time::Duration,
 };
+#[cfg(any(target_os = "linux", windows))]
+use std::sync::mpsc;
+#[cfg(any(target_os = "linux", windows))]
+use std::time::Duration;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
 use crate::models::{
@@ -32,7 +35,11 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
             main_sender,
         })
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        Ok(DesktopVideo { _app: app.clone(), mac: macos::MacVideo::new(app.clone()) })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         Ok(DesktopVideo { _app: app.clone() })
     }
@@ -64,6 +71,8 @@ pub struct DesktopVideo<R: Runtime> {
     _app: AppHandle<R>,
     #[cfg(target_os = "linux")]
     main_sender: gtk::glib::SyncSender<MainJob<R>>,
+    #[cfg(target_os = "macos")]
+    mac: macos::MacVideo<R>,
 }
 
 impl<R: Runtime> DesktopVideo<R> {
@@ -138,13 +147,30 @@ impl<R: Runtime> DesktopVideo<R> {
     pub fn diagnostic_properties(&self, payload: NativeSessionRequest) -> crate::Result<std::collections::BTreeMap<String, Option<String>>> {
         #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
         { self.run_on_main(move |_| linux_mpv::diagnostic_properties(payload)) }
-        #[cfg(not(all(target_os = "linux", feature = "mpv-runtime")))]
+        #[cfg(target_os = "macos")]
+        { self.mac.diagnostic_properties(payload) }
+        #[cfg(not(any(all(target_os = "linux", feature = "mpv-runtime"), target_os = "macos")))]
         { let _ = payload; Ok(std::collections::BTreeMap::new()) }
     }
 
     #[cfg(target_os = "linux")]
     pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> {
         self.run_on_main(move |_| linux::close(payload))
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.open(payload) }
+    #[cfg(target_os = "macos")]
+    pub fn control_native(&self, payload: NativeControlRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.control(payload) }
+    #[cfg(target_os = "macos")]
+    pub fn layout_native(&self, payload: NativeLayoutRequest) -> crate::Result<()> { self.mac.layout(payload) }
+    #[cfg(target_os = "macos")]
+    pub fn stats_native(&self, payload: NativeSessionRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.stats(payload) }
+    #[cfg(target_os = "macos")]
+    pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> { self.mac.close(payload) }
+    #[cfg(target_os = "macos")]
+    pub fn prepare_native(&self, _: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> {
+        Err(crate::Error::InvalidRequest("Mac gapless preparation is not available yet".into()))
     }
 
     #[cfg(windows)]
@@ -225,34 +251,34 @@ impl<R: Runtime> DesktopVideo<R> {
             })?
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     fn unsupported<T>(&self) -> crate::Result<T> {
         Err(crate::Error::InvalidRequest(
             "native desktop surfaces are currently implemented on Linux and Windows".into(),
         ))
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     pub fn open_native(&self, _: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> {
         self.unsupported()
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     pub fn control_native(&self, _: NativeControlRequest) -> crate::Result<NativePlaybackSnapshot> {
         self.unsupported()
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     pub fn layout_native(&self, _: NativeLayoutRequest) -> crate::Result<()> {
         self.unsupported()
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     pub fn stats_native(&self, _: NativeSessionRequest) -> crate::Result<NativePlaybackSnapshot> {
         self.unsupported()
     }
 
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     pub fn close_native(&self, _: NativeSessionRequest) -> crate::Result<()> {
         self.unsupported()
     }
@@ -261,6 +287,7 @@ impl<R: Runtime> DesktopVideo<R> {
 #[cfg(test)]
 mod dispatcher_tests {
     use super::*;
+    use std::sync::mpsc;
 
     #[test]
     fn expired_queued_call_does_not_start_after_dispatcher_delay() {
@@ -276,6 +303,9 @@ mod dispatcher_tests {
 
 #[cfg(windows)]
 mod windows;
+
+#[cfg(target_os = "macos")]
+mod macos;
 
 #[cfg(target_os = "linux")]
 mod linux {

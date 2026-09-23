@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -32,6 +33,9 @@
   "bundle": {
     "active": true,
     "shortDescription": "A media player for your library and online sources",
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    },
     "targets": [
       "deb"
     ],

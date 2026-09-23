@@ -4325,6 +4325,7 @@ dependencies = [
 name = "tauri-plugin-video"
 version = "0.3.0"
 dependencies = [
+ "cc",
  "gtk",
  "jni 0.21.1",
  "libc",
