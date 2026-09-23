@@ -67,7 +67,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     })().catch(error => {
       if (!closed) {
         state.status = "failed";
-        state.error = error instanceof UpdateError ? error.message : "Could not complete the update operation. Check the TV's storage and feed enrollment, then retry.";
+        state.error = error instanceof UpdateError ? error.message : "Could not complete the update operation. Check this installation's storage and feed enrollment, then retry.";
       }
     }).finally(() => { job = undefined; });
   };
@@ -106,7 +106,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
       guard();
       await automation.install(id, attempt!.requestId, guard);
       state.waiting = "The native updater accepted the idle installation.";
-    } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and the TV connection."; }
+    } catch { if (!closed) state.waiting = "Automatic installation is waiting. Check the update result and this installation's connection."; }
   })().finally(() => { polling = undefined; });
   const automaticTimer = automation ? setInterval(() => void automatic(), 30_000) : undefined;
   automaticTimer?.unref();
@@ -119,7 +119,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
     candidateReady: (id: string) => !busy() && state.status === "ready" && state.currentCheck && candidate?.summary.id === id && (candidate.summary.expiresAt === undefined || candidate.summary.expiresAt > Date.now()),
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
-        if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+        if (!admitted()) throw new ControllerError("This installation is preparing an update. Controls are paused.", 503);
         const caller = identity();
         if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
         if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage updates.", 403);
@@ -163,7 +163,7 @@ export function createUpdates(directory: string, running: UpdateState["running"]
         }
         return json(state, 202);
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "Could not save update settings. Check the TV's storage and retry." }, error instanceof ControllerError ? error.status : 500);
+        return json({ error: error instanceof ControllerError ? error.message : "Could not save update settings. Check this installation's storage and retry." }, error instanceof ControllerError ? error.status : 500);
       }
     },
     async close() { closed = true; clearTimeout(startup); clearInterval(timer); clearInterval(automaticTimer); shutdown.abort(); await Promise.allSettled([job, saving, polling]); },

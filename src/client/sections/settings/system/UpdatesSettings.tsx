@@ -48,7 +48,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       const result = await response.json() as { accepted?: boolean; error?: string; transaction?: NonNullable<UpdateState["installation"]>["transaction"] };
       if (!response.ok) {
         if (maintenanceRequest && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
-        setError(result.error || "Could not start the update operation. Refresh its status and retry."); return;
+        setError(result.error || `Could not start the update on ${target}. Refresh its status and retry.`); return;
       }
       if (maintenanceRequest) {
         const transaction = result.transaction;
@@ -58,7 +58,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       }
       else setState(result as UpdateState);
       await updates.refetch();
-    } catch { setError("The request did not finish. Reconnect to see whether the app accepted it."); }
+    } catch { setError(`The request for ${target} did not finish. Reconnect to see whether it was accepted.`); }
     finally { setPending(false); }
   }
   const transaction = state?.installation?.transaction;
@@ -72,14 +72,14 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       const { candidateId, requestId, confirmInterrupt } = saved;
       if (saved.intent === "repair-current") await update("repair", { repair: { expectedCurrentId: candidateId, requestId, confirmInterrupt, repairRuntime: saved.repairRuntime } });
       else await update("install", { install: { candidateId, requestId, confirmInterrupt } });
-    } catch { setError("Could not save this update's retry identity. Allow local storage before installing."); }
+    } catch { setError(`Could not save the retry identity for ${target}. Allow local storage before installing.`); }
   };
   const downloadAgain = async () => {
     clearUpdateRequest(credentials.origin); setRetry(null);
     if (state?.candidate) await update("stage", { candidateId: state.candidate.id });
   };
   if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to {target} to check updates.</p>;
-  const problem = error ?? (updates.error ? `Could not load update status for ${target}. Check the connection and try again.` : null);
+  const problem = error ? `Update for ${target}: ${error}` : updates.error ? `Could not load update status for ${target}. Check the connection and try again.` : null;
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
   const canStage = state?.currentCheck && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now()) && state.status !== "ready";
@@ -90,13 +90,13 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
   return <div className="min-w-0 space-y-4">
     <p className="text-sm text-muted-foreground">Updates and recovery for {target}. Running {state?.running.version ?? "unknown version"}{state?.running.revision ? `, commit ${state.running.revision}` : ""}.</p>
     {state && <Card className="min-w-0 gap-4 p-4 text-sm">
-      <div className="space-y-2"><Label htmlFor="release-channel">Release channel</Label>
+      <div className="space-y-2"><Label htmlFor="release-channel">Release channel for {target}</Label>
         <Select value={state.channel} disabled={busy || state.status === "unavailable"} onValueChange={value => void update("channel", { channel: value })}>
           <SelectTrigger id="release-channel" className="min-h-11 w-full"><SelectValue>{state.channel === "stable" ? "Stable" : "Preview"}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
         </Select>
       </div>
-      <div className="space-y-2"><Label htmlFor="update-policy">Install updates</Label>
+      <div className="space-y-2"><Label htmlFor="update-policy">Install updates on {target}</Label>
         <Select value={state.policy} disabled={busy || state.status === "unavailable"} onValueChange={value => void update("policy", { policy: value })}>
           <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
           <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
@@ -110,13 +110,13 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       {phaseSentence && <p className="text-muted-foreground">{phaseSentence}</p>}
       {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
-      {transaction?.error && <p>{transaction.error}</p>}
-      {!connected && <p>Couch is restarting or offline. This page will reconnect; keep it open.</p>}
+      {transaction?.error && <p>Update for {target}: {transaction.error}</p>}
+      {!connected && <p>{target} is restarting or offline. This page will reconnect; keep it open.</p>}
       {transaction?.phase === "operator-required" && <p className="text-muted-foreground">From the administrator's SSH account, inspect the Couch journal before retrying and keep the data directory.</p>}
-      {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button></div>}
-      {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button></div>}
+      {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again for {target}</Button></div>}
+      {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry request for {target}</Button></div>}
     </Card>}
-    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void updates.refetch(); }}>Refresh status</Button>}</AlertDescription></Alert>}
+    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again for {target}</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void updates.refetch(); }}>Refresh {target} status</Button>}</AlertDescription></Alert>}
     {!state && !problem && <Card className="min-w-0 gap-3 p-4 text-sm"><p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading update status…</p></Card>}
     {state && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p role="status" className={waitingStatus ? "flex items-center gap-2" : undefined}>{waitingStatus && <Spinner className="size-3.5" />}{statusText}</p>
@@ -125,16 +125,16 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
       </div>}
-      {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
+      {state.error && <Alert variant="destructive"><AlertDescription>Update for {target}: {state.error}</AlertDescription></Alert>}
       {!retry && !installing && confirming === "install" && <div className="space-y-2">
           <p>Install {candidate?.version} on {target} and restart it. Its remotes will disconnect; viewing data is preserved.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
+          <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install on {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
       </div>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" className="min-h-11" disabled={busy || state.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check for updates</Button>
-        {candidate && state.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update</Button>}
-        {!retry && !installing && confirming !== "install" && <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update</Button>}
+        <Button variant="outline" className="min-h-11" disabled={busy || state.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check {target} for updates</Button>
+        {candidate && state.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update for {target}</Button>}
+        {!retry && !installing && confirming !== "install" && <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update on {target}</Button>}
       </div>
     </Card>}
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
@@ -147,8 +147,8 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       {confirming === "repair" ? <>
         <p>Repair {state.installation.current.version} on {target} and restart it. Its remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
-        </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button></div>}
+        <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
+        </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release on {target}</Button></div>}
     </Card>}
   </div>;
 }
