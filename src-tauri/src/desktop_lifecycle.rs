@@ -22,11 +22,11 @@ pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
     api.prevent_close();
     app.state::<Host>().window_closed.store(true, Ordering::SeqCst);
     if let Some(main) = app.get_webview_window("main") {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let result = main.hide();
         #[cfg(target_os = "linux")]
         let result = if linux_tray_usable(app) { main.hide() } else { main.minimize() };
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         let result = main.minimize();
         if let Err(error) = result {
             log::warn!("Cannot close Couch window: {error}");
@@ -182,33 +182,36 @@ pub(crate) fn recover_window(window: &tauri::WebviewWindow) -> tauri::Result<()>
     window.center()
 }
 
-#[cfg(target_os = "macos")]
-pub(crate) fn install_mac_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn install_desktop_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
 
-    let menu = Menu::default(app)?;
-    if let Some(application) = menu
-        .items()?
-        .first()
-        .and_then(|item| item.as_submenu())
-        .cloned()
+    #[cfg(target_os = "macos")]
     {
-        let last = application.items()?.len() - 1;
-        application.remove_at(last)?;
-        application.insert(
-            &MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?,
-            0,
-        )?;
-        application.append(&MenuItem::with_id(
-            app,
-            "quit-couch",
-            "Quit Couch",
-            true,
-            Some("Cmd+Q"),
-        )?)?;
+        let menu = Menu::default(app)?;
+        if let Some(application) = menu
+            .items()?
+            .first()
+            .and_then(|item| item.as_submenu())
+            .cloned()
+        {
+            let last = application.items()?.len() - 1;
+            application.remove_at(last)?;
+            application.insert(
+                &MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?,
+                0,
+            )?;
+            application.append(&MenuItem::with_id(
+                app,
+                "quit-couch",
+                "Quit Couch",
+                true,
+                Some("Cmd+Q"),
+            )?)?;
+        }
+        app.set_menu(menu)?;
     }
-    app.set_menu(menu)?;
     app.on_menu_event(|app, event| match event.id().as_ref() {
         "show-couch" => show(app),
         "quit-couch" => request_quit(app),

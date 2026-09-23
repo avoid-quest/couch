@@ -553,6 +553,21 @@ fn tv_presentation() -> bool {
     cfg!(target_os = "linux") && std::env::var("COUCH_TV_PRESENTATION").as_deref() == Ok("1")
 }
 
+async fn stop_player_before_quit(
+    player: &mpsc::Sender<player::Request>,
+    workers: &Mutex<Option<(mpsc::Receiver<player::Request>, mpsc::Receiver<display::Request>)>>,
+) {
+    if workers.lock().expect("worker lock poisoned").is_some() {
+        return;
+    }
+    let (reply, done) = tokio::sync::oneshot::channel();
+    if player.send(player::Request::Stop(reply)).is_ok() {
+        if !matches!(tokio::time::timeout(Duration::from_secs(5), done).await, Ok(Ok(Ok(())))) {
+            log::warn!("Native playback did not stop before Quit");
+        }
+    }
+}
+
 pub fn run() {
     if std::env::args().any(|arg| arg == "--version") {
         println!(
@@ -662,8 +677,8 @@ pub fn run() {
                         .with_filename(data_dir.join("window-state.json").to_string_lossy())
                         .build(),
                 )?;
-                #[cfg(target_os = "macos")]
-                desktop_lifecycle::install_mac_menu(app.handle())?;
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                desktop_lifecycle::install_desktop_menu(app.handle())?;
                 #[cfg(target_os = "linux")]
                 desktop_lifecycle::install_linux_menu(app.handle())?;
             }
@@ -730,12 +745,7 @@ pub fn run() {
                         log::warn!("Media server did not exit within two seconds; terminating it");
                         let _ = child.kill();
                     }
-                    let (reply, done) = tokio::sync::oneshot::channel();
-                    if host.player.send(player::Request::Stop(reply)).is_ok() {
-                        if !matches!(tokio::time::timeout(Duration::from_secs(5), done).await, Ok(Ok(Ok(())))) {
-                            log::warn!("Native playback did not stop before Quit");
-                        }
-                    }
+                    stop_player_before_quit(&host.player, &host.workers).await;
                     handle.exit(code.unwrap_or(0));
                 });
             }
@@ -748,6 +758,40 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod quit_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn quit_skips_an_unstarted_player_and_stops_a_started_worker() {
+        let (player, receiver) = mpsc::channel();
+        let (_, display_receiver) = mpsc::channel();
+        let workers = Mutex::new(Some((receiver, display_receiver)));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), stop_player_before_quit(&player, &workers))
+                .await
+                .is_ok(),
+            "Client-only Quit must not wait for a player worker that never started"
+        );
+        assert!(matches!(
+            workers.lock().unwrap().as_mut().unwrap().0.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+
+        let (player, receiver) = mpsc::channel();
+        let workers = Mutex::new(None);
+        let worker = std::thread::spawn(move || match receiver.recv().unwrap() {
+            player::Request::Stop(reply) => {
+                let _ = reply.send(Ok(()));
+            }
+            _ => panic!("Quit did not request Stop"),
+        });
+        stop_player_before_quit(&player, &workers).await;
+        drop(player);
+        worker.join().unwrap();
+    }
 }
 
 #[cfg(all(test, unix))]

@@ -46,6 +46,9 @@ objc2-core-bluetooth = { version = "=0.3.2", default-features = false, features 
 objc2-foundation = { version = "=0.3.2", features = ["NSArray", "NSDate", "NSRunLoop", "NSString"] }
 objc2-io-bluetooth = { version = "=0.3.2", features = ["Bluetooth", "IOBluetoothDevice", "IOBluetoothDeviceInquiry", "IOBluetoothDevicePair", "IOBluetoothHostController"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri = { version = "=2.11.5", features = ["tray-icon"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
 dbus = "0.9"
