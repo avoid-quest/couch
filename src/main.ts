@@ -77,7 +77,8 @@ hub = createHub({
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   frontend, assets,
-  development: !native && process.env.NODE_ENV !== "production",
+  // Bun's HMR bundle breaks TanStack Router; Vite handles native hot reload.
+  development: false,
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
   sendPlayer(command) {
     if (native) send({ type: "playback", command });
