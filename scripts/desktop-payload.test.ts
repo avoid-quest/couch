@@ -25,6 +25,7 @@ function executable(target: string) {
 
 for (const [target, format] of [
   ["x86_64-unknown-linux-gnu", "deb"],
+  ["x86_64-unknown-linux-gnu", "appimage"],
   ["aarch64-apple-darwin", "dmg"],
   ["x86_64-pc-windows-msvc", "nsis"],
 ] as const) test(`${format} payload checks installed paths, required files and architecture`, async () => {
@@ -66,6 +67,16 @@ for (const [target, format] of [
       if (file.architecture) await chmod(path, 0o755);
     }
     await verify();
+    if (format === "appimage") {
+      const patched = executable(target);
+      patched[90] = 1;
+      await write(join(installed, paths.sidecar), patched);
+      await expect(verify()).rejects.toThrow("Missing or changed payload file");
+      await verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffprobe"], [], { [paths.sidecar]: sidecar });
+      await write(join(installed, paths.sidecar), executable("aarch64-unknown-linux-gnu"));
+      await expect(verifyPayload(installed, payload, target, format, ["yt-dlp", "deno", "ffprobe"], [], { [paths.sidecar]: sidecar })).rejects.toThrow("Wrong architecture");
+      await write(join(installed, paths.sidecar), executable(target));
+    }
     if (format === "deb") await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
     const missingArch = structuredClone(payload);
     delete missingArch.files.find(file => file.path === paths.sidecar)!.architecture;

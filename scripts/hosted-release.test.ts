@@ -2,17 +2,18 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { application, cdn, channelArgs, downloadUrl, publicFiles, releaseVersion } from "./hosted-policy";
+import { application, cdn, channelArgs, downloadUrl, packageFormat, publicFiles, releasePlatforms, releaseVersion, updaterEndpoint } from "./hosted-policy";
 import { assertIncreasing, githubRelease, githubTag, hash, qualificationChecks, restorePublic, verifyCloud, verifyFiles, verifyPublic, verifyQualification, verifyReceipt, type CloudRelease, type Manifest } from "./hosted-release";
 
 const key = (await Bun.file("src-tauri/tests/fixtures/update/public.key").text()).trim();
 const signature = (await Bun.file("src-tauri/tests/fixtures/update/archive.sig").text()).trim();
 const archive = new Uint8Array(await Bun.file("src-tauri/tests/fixtures/update/archive").arrayBuffer());
-function fixture(version = "0.1.0"): Manifest {
-  return { schemaVersion: 1, format: "deb", version, revision: "a".repeat(40), publicKey: key, inventorySha256: "b".repeat(64), files: Object.fromEntries(publicFiles(version).map(name => [name, { bytes: archive.length, sha256: hash(archive), signature }])) };
+function fixture(version = "0.1.0", format: "deb" | "appimage" = "deb"): Manifest {
+  return { schemaVersion: 1, format, version, revision: "a".repeat(40), publicKey: key, inventorySha256: "b".repeat(64), files: Object.fromEntries(publicFiles(version, format).map(name => [name, { bytes: archive.length, sha256: hash(archive), signature }])) };
 }
 function cloud(manifest: Manifest): CloudRelease {
-  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: filename.endsWith(".deb") ? "deb-x86_64" : null, updatePlatform: filename.endsWith(".deb") ? "linux-x86_64-deb" : null })) };
+  const platforms = releasePlatforms(packageFormat(manifest.format));
+  return { id: "A".repeat(26), version: manifest.version, channel: null, status: "Draft", assets: Object.entries(manifest.files).map(([filename, file]) => ({ id: filename, filename, size: String(file.bytes), signature: file.signature ?? null, publicPlatform: platforms.public, updatePlatform: platforms.update })) };
 }
 
 describe("hosted versions and promotion", () => {
@@ -50,6 +51,23 @@ describe("hosted versions and promotion", () => {
       (r: CloudRelease) => { r.assets[0]!.updatePlatform = "linux-x86_64-appimage"; },
       (r: CloudRelease) => { r.channel = "stable"; },
     ]) { const release = cloud(manifest); mutate(release); expect(() => verifyCloud(release, manifest, "stable")).toThrow(); }
+  });
+  test("AppImage uses its own signed artifact and updater platform", async () => {
+    const manifest = fixture("0.1.5-preview.11", "appimage");
+    expect(publicFiles(manifest.version, "appimage")).toEqual(["Couch_0.1.5-preview.11_amd64.AppImage"]);
+    expect(updaterEndpoint("appimage")).toContain("linux-x86_64-appimage");
+    expect(qualificationChecks("appimage")).toContain("appimage-client");
+    expect(() => verifyCloud(cloud(manifest), manifest, "stable")).not.toThrow();
+    expect(() => packageFormat("rpm")).toThrow();
+    const directory = await mkdtemp(join(tmpdir(), "couch-appimage-signature-"));
+    try {
+      await Bun.write(join(directory, "public", Object.keys(manifest.files)[0]!), archive);
+      if (Bun.which("minisign")) {
+        await verifyFiles(directory, manifest);
+        await Bun.write(join(directory, "public", "unexpected.sig"), signature);
+        await expect(verifyFiles(directory, manifest)).rejects.toThrow("Unexpected or missing public file");
+      }
+    } finally { await rm(directory, { recursive: true, force: true }); }
   });
   test.skipIf(!Bun.which("minisign"))("retained bytes and signatures are verified before reuse", async () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-hosted-test-"));

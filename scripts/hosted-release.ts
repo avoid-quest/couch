@@ -51,7 +51,7 @@ export function validateManifest(manifest: Manifest) {
   for (const [name, file] of Object.entries(manifest.files)) {
     assert.ok(Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= 2 * 1024 ** 3, `Invalid size: ${name}`);
     assert.match(file.sha256, /^[a-f0-9]{64}$/);
-    if (!name.endsWith(".sig")) assert.ok(file.signature, `Missing signature: ${name}`);
+    assert.ok(file.signature, `Missing signature: ${name}`);
   }
 }
 
@@ -64,10 +64,7 @@ export async function verifyFiles(directory: string, manifest: Manifest) {
     const bytes = await read(path);
     assert.equal(bytes.length, expected.bytes, `Size changed: ${name}`);
     assert.equal(hash(bytes), expected.sha256, `Bytes changed: ${name}`);
-    if (!name.endsWith(".sig")) {
-      if (manifest.format !== "deb") assert.equal((await Bun.file(`${path}.sig`).text()).trim(), expected.signature, `Signature changed: ${name}`);
-      await verifySignature(path, manifest.publicKey, expected.signature);
-    }
+    await verifySignature(path, manifest.publicKey, expected.signature);
   }
 }
 
@@ -89,7 +86,7 @@ export function verifyCloud(release: CloudRelease, manifest: Manifest, channel: 
 }
 
 export function qualificationChecks(format: PackageFormat) {
-  return ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", format === "deb" ? "debian-desktop" : "installer"];
+  return ["signatures", "typecheck", "bun", "native", "signed-manifest-extraction", format === "deb" ? "debian-desktop" : "appimage-client"];
 }
 
 export function verifyQualification(qualified: { version: string; revision: string; files: Manifest["files"]; checks: string[] }, manifest: Manifest) {
@@ -250,13 +247,15 @@ async function seal(directory: string) {
   assert.equal(config.plugins.updater.pubkey, publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY));
   const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
   const inventory = await read(format === "deb" ? ".artifacts/deb-inventory.json" : ".artifacts/appimage-inventory.json");
-  assert.deepEqual(JSON.parse(new TextDecoder().decode(inventory)).build, build);
+  const details = JSON.parse(new TextDecoder().decode(inventory));
+  assert.deepEqual(details.build, build);
   const manifest: Manifest = { schemaVersion: 1, format, version: build.version, revision: build.revision, publicKey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), inventorySha256: hash(inventory), files: {} };
   if (process.env.GITHUB_RUN_ID) manifest.buildRun = { id: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT) };
   for (const name of publicFiles(build.version, format)) {
     const path = join(directory, "public", name);
     const bytes = await read(path);
-    manifest.files[name] = { bytes: bytes.length, sha256: hash(bytes), ...(!name.endsWith(".sig") ? { signature: (await Bun.file(format === "deb" ? join(directory, "signatures", `${name}.sig`) : `${path}.sig`).text()).trim() } : {}) };
+    assert.equal(details.sha256, hash(bytes), "The package inventory describes another artifact");
+    manifest.files[name] = { bytes: bytes.length, sha256: hash(bytes), signature: (await Bun.file(join(directory, "signatures", `${name}.sig`)).text()).trim() };
   }
   await verifyFiles(directory, manifest);
   await Bun.write(join(directory, "inventory.json"), inventory);
@@ -344,8 +343,8 @@ if (import.meta.main) {
           const platforms = releasePlatforms(packageFormat(manifest.format));
           const applicationAsset = name === publicFiles(manifest.version, packageFormat(manifest.format))[0];
           const signaturePath = join(directory, "signatures", `${name}.sig`);
-          if (manifest.format === "deb") await Bun.write(signaturePath, manifest.files[name]!.signature!);
-          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(applicationAsset ? ["--public-platform", platforms.public, "--update-platform", platforms.update] : []), ...(manifest.format === "deb" ? ["--signature", signaturePath] : [])]);
+          await Bun.write(signaturePath, manifest.files[name]!.signature!);
+          cn(["upload", application, releaseId!, ...channels, "--file", join(directory, "public", name), ...(applicationAsset ? ["--public-platform", platforms.public, "--update-platform", platforms.update] : []), "--signature", signaturePath]);
         }
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       }

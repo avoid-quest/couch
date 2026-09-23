@@ -13,6 +13,14 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked --release
 version=$(bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
 inspection=$(mktemp -d)
 trap 'rm -rf "$inspection"' EXIT
-dpkg-deb --extract ".artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$inspection"
-cmp src-tauri/resources/release.json "$inspection/usr/lib/Couch/release.json"
+if [ "${1:-deb}" = deb ]; then
+  dpkg-deb --extract ".artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$inspection"
+  release="$inspection/usr/lib/Couch/release.json"
+else
+  archive="$(pwd)/.artifacts/hosted-release/public/Couch_${version}_amd64.AppImage"
+  runtime="${XDG_CACHE_HOME:-$HOME/.cache}/tauri/runtime-x86_64"
+  unsquashfs -no-progress -o "$(stat -c %s "$runtime")" -d "$inspection/squashfs-root" "$archive" usr/lib/Couch/release.json > /dev/null
+  release="$inspection/squashfs-root/usr/lib/Couch/release.json"
+fi
+cmp src-tauri/resources/release.json "$release"
 # The workflow writes qualified.json only after the separate installer fixture passes.

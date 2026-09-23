@@ -11,12 +11,15 @@ version=$(bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
 output=.artifacts/hosted-release
 rm -rf "$output/public"
 mkdir -p "$output/public"
+mkdir -p "$output/signatures"
 if [ "$COUCH_PACKAGE_FORMAT" = deb ]; then
-  mkdir -p "$output/signatures"
-  bun x --no-install tauri signer sign "src-tauri/target/release/bundle/deb/Couch_${version}_amd64.deb"
-  cp "src-tauri/target/release/bundle/deb/Couch_${version}_amd64.deb" "$output/public/"
-  cp "src-tauri/target/release/bundle/deb/Couch_${version}_amd64.deb.sig" "$output/signatures/"
+  artifact="src-tauri/target/release/bundle/deb/Couch_${version}_amd64.deb"
+  bun x --no-install tauri signer sign "$artifact"
+else
+  artifact="src-tauri/target/release/bundle/appimage/Couch_${version}_amd64.AppImage"
 fi
+cp "$artifact" "$output/public/"
+cp "$artifact.sig" "$output/signatures/"
 bun scripts/hosted-release.ts seal "$output"
 bun x --no-install tauri signer sign "$output/manifest.json"
 unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD

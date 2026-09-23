@@ -55,11 +55,6 @@
     "linuxdeploy-plugin-gstreamer.sh": {
       "url": "https://raw.githubusercontent.com/tauri-apps/linuxdeploy-plugin-gstreamer/2a2e67491c32995a3f279ad0ecbe77abd512b42a/linuxdeploy-plugin-gstreamer.sh",
       "sha256": "c107b49d84edbffc6ab226ed1007e0626a4f7aa2c3a36b7782bef62351d49e94"
-    },
-    "linuxdeploy-plugin-appimage.AppImage": {
-      "release": "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/tag/1-alpha-20250213-1",
-      "url": "https://api.github.com/repos/linuxdeploy/linuxdeploy-plugin-appimage/releases/assets/228937581",
-      "sha256": "992d502a248e14ab185448ddf6f6e7d25558cb84d4623c354c3af350c25fccb3"
     }
   },
   "appimageRuntime": {

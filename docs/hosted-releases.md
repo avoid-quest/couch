@@ -27,19 +27,22 @@ tested final-version Preview bytes and signatures unchanged, and requires the
 final version. Stable is CrabNebula's unnamed channel, with no `--channel`
 argument. Each channel rejects a version equal to or below one already published.
 
-`format=appimage` retains the existing six-file AppImage/setup/dependency-material
-contract and `linux-x86_64-appimage` updater platform. Ordinary
-`bun run package:build` and `bash scripts/hosted-build.sh` still default to
-AppImage for the existing Mac path. Select `deb` explicitly for a native local
-build. A native-only publication must separately check the existing AppImage
-feed and retained download URLs before announcing a migration; mocked Cloud
-responses do not establish provider behavior across formats.
+`format=appimage` selects `Couch_<V>_amd64.AppImage` and the
+`linux-x86_64-appimage` updater platform. Tauri signs the AppImage as its Linux
+update artifact. The detached signature stays in signed release receipts and
+provider metadata, as with the Debian package. `package:build` and
+`hosted-build.sh` still default to Debian; select `appimage` explicitly. The
+AppImage draft is package qualification only. Installed upgrades, X11/Wayland
+behavior and download migration remain separate acceptance before publication.
+The Package workflow rejects AppImage publication and Stable dispatch until
+those acceptance checks have passed.
 
 Both public feeds use normal HTTPS redirects:
 
 ```text
 https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/<current-version>
 https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-deb/<current-version>?channel=preview
+https://cdn.crabnebula.app/update/avoid-quest/couch/linux-x86_64-appimage/<current-version>
 ```
 
 Downloads and installed updates come from CrabNebula. The Mac can be offline.
@@ -65,22 +68,27 @@ original run/attempt, inventory hash, package size/hash and signature.
 
 Qualification includes signature checks, typecheck, the isolated-clock Bun
 suite, locked native tests and extraction of the signed internal release
-metadata. Native builds then install the exact package in a fresh disposable
+metadata. Debian builds then install the exact package in a fresh disposable
 Debian container, launch through Tauri WebDriver, scan/play generated media,
 relaunch its desktop entry, and check reinstall/removal data preservation.
 [scripts/hosted-desktop.sh](../scripts/hosted-desktop.sh) runs that fixture on the
 Docker host and stops it afterward. Software rendering, a null audio sink and
 container instrumentation limit this proof; it is not hardware or installed
 native-update acceptance. The integrated TV/update package must pass this
-fixture again after those changes merge. AppImage builds retain the existing
-installer fixture.
+fixture again after those changes merge. AppImage builds inspect the extracted
+AppDir and start the exact signed file in a fresh disposable desktop runtime.
+The `qualify-package` PR check runs that launch on native x86_64 with a
+disposable key, without release credentials or publication.
+The AppImage fixture pairs with a separate packaged coordinator in the sole
+bundled Couch window. It verifies that remote mode cannot call local media
+commands and that this installation's maintenance coordinator stays separate.
+It uses extraction because the container has no FUSE device; this does not
+qualify a normal FUSE mount or Wayland.
 
 The Debian builder layers, Cargo dependencies and Bun downloads remain caches.
 Cache misses build normally. No cache hit or hosted duration is claimed by local
 act checks. The workflow has a 60-minute cap; observe the actual cold run before
 changing that budget.
-
-## Build and retry
 
 ## Automated releases (changesets)
 

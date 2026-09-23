@@ -8,7 +8,7 @@ assert.ok(actInput && outputInput, "Supply the act binary and disposable output 
 const act = resolve(actInput), output = resolve(outputInput);
 const dockerHost = process.env.DOCKER_HOST ?? Bun.spawnSync(["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], { stderr: "inherit" }).stdout.toString().trim();
 assert.ok(dockerHost, "Select an available Docker context or set DOCKER_HOST");
-const image = process.env.COUCH_ACT_IMAGE ?? "debian:13-slim";
+const image = process.env.COUCH_ACT_IMAGE ?? "catthehacker/ubuntu:full-latest";
 const architecture = process.env.COUCH_ACT_ARCH ?? `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`;
 const source = await Bun.file(".github/workflows/package.yml").text();
 const workflow = Bun.YAML.parse(source) as any;
@@ -27,6 +27,8 @@ const names = {
 const cases = [
   { name: "native-draft", inputs: {}, want: ["build", "qualify", "sign", "upload"] },
   { name: "appimage-draft", inputs: { format: "appimage" }, want: ["build", "qualify", "sign", "upload"] },
+  { name: "reject-appimage-publish", inputs: { format: "appimage", publish: true }, want: [], fail: true },
+  { name: "reject-appimage-stable", inputs: { format: "appimage", channel: "stable", "build-run": 123 }, want: [], fail: true },
   { name: "native-publish", inputs: { publish: true }, want: ["build", "qualify", "sign", "upload", "publish", "readiness"] },
   { name: "completed-draft-retry", inputs: { "build-run": 123, publish: true }, want: ["publish", "readiness"] },
   { name: "receipt-log-fallback", inputs: { "build-run": 123, publish: true }, fault: "Download retained receipts", want: ["logs", "publish", "readiness"] },
@@ -49,7 +51,10 @@ assert.equal(receiptStep["continue-on-error"], true);
 assert.ok(!receiptStep.with.path.includes("public") && !receiptStep.with.path.includes("inventory"));
 assert.equal(workflow.jobs.release.environment, "couch-release");
 assert.equal(workflow.on.workflow_dispatch.inputs.notes, undefined);
-assert.match(workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs").run, /release-notes\.ts "\$revision"/);
+const candidate = workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs");
+assert.match(candidate.run, /release-notes\.ts "\$revision"/);
+const appimageGuard = candidate.run.match(/^\s*if \[ "\$FORMAT" = appimage \]; then[^\n]*$/m)?.[0];
+assert.ok(appimageGuard, "Exercise the real AppImage input guard in act");
 assert.doesNotMatch(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /release-notes|notes=/);
 await mkdir(`${output}/home`, { recursive: true });
 await mkdir(`${output}/workspace`, { recursive: true });
@@ -63,7 +68,7 @@ for (const test of cases) {
   job.steps = job.steps.map((step: any) => {
     const replacement: any = { name: step.name ?? step.uses, run: `printf '%s\\n' ${JSON.stringify(`STEP:${step.name ?? step.uses}`)}` };
     for (const key of ["if", "id", "env", "continue-on-error"]) if (key in step) replacement[key] = step[key];
-    if (step.name === "Check the candidate inputs") replacement.run += '\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi';
+    if (step.name === "Check the candidate inputs") replacement.run += `\n${appimageGuard}\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi`;
     if (step.id === "draft") replacement.run += '\necho "release-id=AAAAAAAAAAAAAAAAAAAAAAAAAA" >> "$GITHUB_OUTPUT"';
     if (scenario.fault && step.name === scenario.fault) replacement.run += "\nexit 17";
     return replacement;
@@ -79,8 +84,10 @@ for (const test of cases) {
   await Bun.write(`${path}.log`, log);
   const observed = Object.entries(names).filter(([key, name]) => key !== "receipts" && log.includes(`| STEP:${name}`)).map(([key]) => key).sort();
   const expected = [...scenario.want].sort();
-  const pass = code === (scenario.fail ? 1 : 0) && JSON.stringify(observed) === JSON.stringify(expected);
-  results.push({ name: test.name, pass, exit: code, observed, expected, seconds: Number(((performance.now() - start) / 1000).toFixed(3)) });
+  const candidateReached = log.includes("| STEP:Check the candidate inputs");
+  const pass = code === (scenario.fail ? 1 : 0) && JSON.stringify(observed) === JSON.stringify(expected)
+    && (!scenario.name.startsWith("reject-appimage-") || candidateReached);
+  results.push({ name: test.name, pass, exit: code, candidateReached, observed, expected, seconds: Number(((performance.now() - start) / 1000).toFixed(3)) });
   console.log(`${pass ? "PASS" : "FAIL"} ${test.name}`);
 }
 await Bun.write(`${output}/results.json`, JSON.stringify({ workflowSha256: new Bun.CryptoHasher("sha256").update(source).digest("hex"), limits: "Inert action/build/provider replacements. No signing, compilation, package installation, permissions, artifact transport or CDN verification is established.", cases: results }, null, 2) + "\n");
