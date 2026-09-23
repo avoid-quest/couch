@@ -16,6 +16,7 @@ use std::{
 
 const LIMIT: Duration = Duration::from_secs(60);
 const DISCONNECT_RETRY_AFTER: Duration = Duration::from_secs(1);
+const CLEANUP_LIMIT: Duration = Duration::from_secs(2);
 const SETTINGS: &str = "Check in System Settings on the playback host.";
 
 fn canonical_address(address: &NSString) -> String {
@@ -285,14 +286,15 @@ impl Bluetooth {
         running(&self.pending.lock().unwrap(), id)
     }
 
-    fn wait(&self, id: &str, end: Instant, done: impl Fn() -> bool) -> Result<(), String> {
+    fn wait(&self, id: Option<&str>, end: Instant, done: impl Fn() -> bool) -> Result<(), String> {
         let run_loop = NSRunLoop::currentRunLoop();
-        while self.active(id) && Instant::now() < end && !done() {
+        let active = || id.is_none_or(|id| self.active(id));
+        while active() && Instant::now() < end && !done() {
             objc2::rc::autoreleasepool(|_| {
                 run_loop.runUntilDate(&NSDate::dateWithTimeIntervalSinceNow(0.05))
             });
         }
-        if !self.active(id) {
+        if !active() {
             Err("Bluetooth operation cancelled.".into())
         } else if Instant::now() >= end {
             Err("Bluetooth timed out. Try again.".into())
@@ -303,7 +305,7 @@ impl Bluetooth {
 
     fn verify_connection(
         &self,
-        id: &str,
+        id: Option<&str>,
         desired: bool,
         end: Instant,
         observed: impl Fn() -> bool,
@@ -313,6 +315,42 @@ impl Bluetooth {
             return Err("Bluetooth connection readback did not match the request.".into());
         }
         Ok(())
+    }
+
+    fn close_link(
+        &self,
+        id: Option<&str>,
+        end: Instant,
+        connected: impl Fn() -> bool,
+        close: impl Fn() -> i32,
+    ) -> Result<(), String> {
+        let mut retried = false;
+        loop {
+            if id.is_some_and(|id| !self.active(id)) {
+                return Err("Bluetooth operation cancelled.".into());
+            }
+            if !connected() {
+                return Ok(());
+            }
+            let status = close();
+            if status != 0 && connected() {
+                return Err(format!("Bluetooth disconnection failed ({status})."));
+            }
+            let check_end = if retried {
+                end
+            } else {
+                (Instant::now() + DISCONNECT_RETRY_AFTER).min(end)
+            };
+            match self.verify_connection(id, false, check_end, &connected) {
+                Ok(()) => return Ok(()),
+                Err(_)
+                    if !retried && id.is_none_or(|id| self.active(id)) && Instant::now() < end =>
+                {
+                    retried = true
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     fn set_connection(
@@ -332,35 +370,32 @@ impl Bluetooth {
             return Ok(());
         }
         if !desired {
-            let mut retried = false;
-            loop {
-                if !self.active(id) {
-                    return Err("Bluetooth operation cancelled.".into());
-                }
-                let status = close();
-                if status != 0 && connected() {
-                    return Err(format!("Bluetooth disconnection failed ({status})."));
-                }
-                let check_end = if retried {
-                    end
-                } else {
-                    (Instant::now() + DISCONNECT_RETRY_AFTER).min(end)
-                };
-                match self.verify_connection(id, false, check_end, &connected) {
-                    Ok(()) => return Ok(()),
-                    Err(_) if !retried && self.active(id) && Instant::now() < end => retried = true,
-                    Err(error) => return Err(error),
-                }
-            }
+            return self.close_link(Some(id), end, &connected, &close);
         }
         let status = open();
         let result = if status != 0 && !connected() {
             Err(format!("Bluetooth connection failed ({status})."))
         } else {
-            self.verify_connection(id, true, end, &connected)
+            self.verify_connection(Some(id), true, end, &connected)
         };
         if status == 0 && !was_connected && !self.active(id) && connected() {
-            let _ = close();
+            if let Err(error) =
+                self.close_link(None, Instant::now() + CLEANUP_LIMIT, &connected, &close)
+            {
+                if connected() {
+                    let mut pending = self.pending.lock().unwrap();
+                    if let Some(op) = pending
+                        .operation
+                        .as_mut()
+                        .filter(|op| op["id"] == id && op["status"] != "running")
+                    {
+                        op["status"] = json!("error");
+                        op["message"] = json!(format!(
+                            "Bluetooth cancellation could not disconnect the device: {error} {SETTINGS}"
+                        ));
+                    }
+                }
+            }
         }
         result
     }
@@ -401,7 +436,9 @@ impl Bluetooth {
                 unsafe { inquiry.setDelegate(None) };
                 return Err(format!("Bluetooth search failed ({status})."));
             }
-            let result = self.wait(id, end, || self.pending.lock().unwrap().result.is_some());
+            let result = self.wait(Some(id), end, || {
+                self.pending.lock().unwrap().result.is_some()
+            });
             if result.is_err() {
                 unsafe { inquiry.stop() };
             }
@@ -440,7 +477,7 @@ impl Bluetooth {
                     unsafe { pair.setDelegate(None) };
                     return Err(format!("Bluetooth pairing failed ({status})."));
                 }
-                let result = self.wait(id, end, || {
+                let result = self.wait(Some(id), end, || {
                     let mut pending = self.pending.lock().unwrap();
                     let reply = pending.response.take().map(|answer| {
                         let kind = pending
@@ -476,7 +513,7 @@ impl Bluetooth {
                 if code != 0 {
                     return Err(format!("Bluetooth pairing did not complete ({code})."));
                 }
-                self.wait(id, end, || unsafe { device.isPaired() })?;
+                self.wait(Some(id), end, || unsafe { device.isPaired() })?;
                 self.connect(id, &device, true, end)
             }
             "connect" | "reconnect" | "disconnect" => {
@@ -716,7 +753,7 @@ mod tests {
         let connected = std::cell::Cell::new(false);
         bluetooth
             .verify_connection(
-                "one",
+                Some("one"),
                 true,
                 Instant::now() + Duration::from_millis(100),
                 || {
@@ -727,7 +764,7 @@ mod tests {
             .unwrap();
         bluetooth
             .verify_connection(
-                "one",
+                Some("one"),
                 false,
                 Instant::now() + Duration::from_millis(100),
                 || {
@@ -738,7 +775,7 @@ mod tests {
             .unwrap();
         assert!(bluetooth
             .verify_connection(
-                "one",
+                Some("one"),
                 true,
                 Instant::now() + Duration::from_millis(1),
                 || false
@@ -777,6 +814,74 @@ mod tests {
         assert_eq!(result.unwrap_err(), "Bluetooth operation cancelled.");
         assert!(!connected.get());
         assert_eq!(closes.get(), 1);
+    }
+
+    #[test]
+    fn cancelled_pair_connection_retries_a_stale_successful_close() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(false);
+        let closes = std::cell::Cell::new(0);
+        let result = bluetooth.set_connection(
+            "one",
+            true,
+            Instant::now() + Duration::from_millis(100),
+            || connected.get(),
+            || {
+                connected.set(true);
+                retire(
+                    &mut bluetooth.pending.lock().unwrap(),
+                    "cancelled",
+                    "Cancelled.",
+                );
+                0
+            },
+            || {
+                closes.set(closes.get() + 1);
+                if closes.get() == 2 {
+                    connected.set(false);
+                }
+                0
+            },
+        );
+        assert_eq!(result.unwrap_err(), "Bluetooth operation cancelled.");
+        assert!(!connected.get());
+        assert_eq!(closes.get(), 2);
+    }
+
+    #[test]
+    fn failed_cancel_cleanup_reports_the_connected_link() {
+        let bluetooth = Bluetooth {
+            pending: pending(),
+            ..Default::default()
+        };
+        let connected = std::cell::Cell::new(false);
+        let result = bluetooth.set_connection(
+            "one",
+            true,
+            Instant::now() + Duration::from_millis(100),
+            || connected.get(),
+            || {
+                connected.set(true);
+                retire(
+                    &mut bluetooth.pending.lock().unwrap(),
+                    "cancelled",
+                    "Cancelled.",
+                );
+                0
+            },
+            || -1,
+        );
+        assert_eq!(result.unwrap_err(), "Bluetooth operation cancelled.");
+        let pending = bluetooth.pending.lock().unwrap();
+        let operation = pending.operation.as_ref().unwrap();
+        assert_eq!(operation["status"], "error");
+        assert!(operation["message"]
+            .as_str()
+            .unwrap()
+            .contains("could not disconnect"));
     }
 
     #[test]
