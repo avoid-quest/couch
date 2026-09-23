@@ -115,6 +115,15 @@ test("an unavailable remembered target retains recovery and only switches after 
   expect(document.body.textContent).toContain("Local installation");
 });
 
+test("a selected remote stays in the bundled app shell with one playback device control", async () => {
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  connectionError = "Cannot reach that Couch.";
+  await render();
+  expect(screen.getByText("Local installation")).toBeDefined();
+  expect(screen.getAllByRole("button", { name: `Play on: ${choice.address}` })).toHaveLength(1);
+  expect(screen.queryByRole("banner", { name: "App playback device controls" })).toBeNull();
+});
+
 test("sharing-only interruption needs a deliberate confirmation and preserves the selected address", async () => {
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   interruption = "sharing";

@@ -129,7 +129,7 @@ test("a known IP accepts the advertised TV origin while arbitrary origins and ho
   await new Promise<void>((resolve, reject) => { peer.onmessage = () => resolve(); peer.onerror = () => reject(new Error("Known-IP connection failed")); });
   peer.close();
   const details = await fetch(`${hub.origin}/api/connection`, { headers: { Origin: advertised } });
-  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1, tvPresentation: false });
+  expect(await details.json()).toEqual({ name: "Couch", installationId: expect.any(String), urls: [advertised, hub.origin], player: "unavailable", remoteControlEnabled: true, desktopRemoteUi: 1, desktopClientProtocol: 1, tvPresentation: false });
   for (const origin of ["http://unrelated.example", "null", "http://couch.local:4101", "https://couch.local:4100"]) expect((await fetch(`${hub.origin}/api/connection`, { headers: { Origin: origin } })).status).toBe(403);
   expect((await fetch(`${hub.origin}/api/connection`, { headers: { Host: "unrelated.example" } })).status).toBe(403);
 });
@@ -1173,6 +1173,26 @@ test("packaged control connections reject missing or stale asset identity before
     try { await new Promise<void>((resolve, reject) => { socket.onmessage = () => resolve(); socket.onerror = () => reject(new Error("Matching assets were rejected")); }); }
     finally { socket.close(); }
   } finally { Object.assign(buildInfo, previous); db.close(); }
+});
+
+test("a paired desktop client can use a different build revision with the same protocol", async () => {
+  const { hub } = fixture();
+  const token = await pair(hub), previous = { ...buildInfo };
+  try {
+    const clientBuild = buildKey({ version: "2", revision: "c".repeat(40), dataFormat: 1 })!;
+    for (const [version, revision] of [["1", "a".repeat(40)], ["3", "b".repeat(40)]]) {
+      Object.assign(buildInfo, { packaged: true, version, revision, dataFormat: 1 });
+      expect(buildKey(buildInfo)).not.toBe(clientBuild);
+      expect(await (await fetch(`${hub.origin}/api/connection`)).json()).toMatchObject({ desktopRemoteUi: 1, desktopClientProtocol: 1 });
+      const address = `${hub.origin}/api/ws?token=${token}&build=${encodeURIComponent(clientBuild)}`;
+      expect((await fetch(address, { headers: { Origin: hub.origin } })).status).toBe(409);
+      for (const clientProtocol of ["0", "2"]) expect((await fetch(`${address}&clientProtocol=${clientProtocol}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(409);
+      expect((await fetch(`${hub.origin}/api/ws?token=bad&clientProtocol=1&build=${encodeURIComponent(clientBuild)}`, { headers: { Origin: "http://tauri.localhost" } })).status).toBe(401);
+      const socket = new BunWebSocket(`${address.replace("http", "ws")}&clientProtocol=1`, { headers: { Origin: "http://tauri.localhost" } });
+      try { await new Promise<void>((resolve, reject) => { socket.onmessage = () => resolve(); socket.onerror = () => reject(new Error("Compatible desktop client was rejected")); }); }
+      finally { socket.close(); }
+    }
+  } finally { Object.assign(buildInfo, previous); }
 });
 
 

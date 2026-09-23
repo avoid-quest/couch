@@ -11,7 +11,7 @@ import { MediaArtwork } from "@/components/MediaArtwork";
 import { ProviderPanel } from "@/components/ProviderPanel";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
-import { LocalSharingPrompt, PlaybackDevice } from "@/sections/shell/PlaybackDevice";
+import { InstallationUpdates, LocalSharingPrompt, PlaybackDevice, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
@@ -49,7 +49,7 @@ import { useShell } from "./shell-context";
 
 function useShellValue() {
   const gate = useSessionGate();
-  const { nativeHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, connected, run, unpair, host, booting, error, setError, tv, registerBackHandler, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = gate;
+  const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, connected, run, unpair, host, booting, error, setError, tv, registerBackHandler, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = gate;
   const router = useRouter();
   const location = useLocation();
   const section = sectionForPath(location.pathname) ?? "Now";
@@ -170,7 +170,7 @@ function useShellValue() {
   const available = connected && !!player && player.status !== "unavailable";
   const active = !!player?.playbackId && ["loading", "playing", "paused"].includes(player.status);
   const statusLabel = booting ? "Starting player" : {
-    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected", "build-mismatch": "Refresh this page to load the selected host's current version",
+    connecting: "Connecting", syncing: "Getting current state", connected: player?.status === "unavailable" ? "Player unavailable" : "Connected", reconnecting: "Reconnecting", "server-unavailable": "Server unavailable", "pairing-required": credentials ? "Pairing required" : "Not paired", "connection-rejected": "Connection rejected", "build-mismatch": "Refresh this page to load the selected host's current version", "protocol-mismatch": "Update this app or the selected Couch for protocol compatibility",
   }[status];
 
   return {
@@ -207,14 +207,15 @@ export function AppShell() {
 
 export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
-  const { nativeHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
+  const device = usePlaybackDevice();
+  const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
   const { section, statusLabel, available, active, programme, current } = shell;
   const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   const player = state?.player;
   const pairingRef = useRef<HTMLButtonElement>(null);
   const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const videoStage = nativeHost && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
+  const videoStage = localHost && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
     subtitle={programme ? `Programme: ${programme.title}` : undefined}
     artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />;
 
@@ -235,6 +236,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
         <div className="header-status">
           {!tvPresentation && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
           {nativeHost && !tvPresentation && <PlaybackDevice />}
+          {nativeHost && !localHost && !tvPresentation && <InstallationUpdates />}
           {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !tvPresentation && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
@@ -246,11 +248,11 @@ export function ShellChrome({ children }: PropsWithChildren) {
         {!credentials || pairingRequired ? (
           <Card className="pair-card">
             <div className="pair-icon"><Icon name="screen" /></div>
-            <p className="eyebrow">{nativeHost ? "Your media center" : "Play on another computer"}</p>
-            <h1>{nativeHost ? "Starting your player" : "Connect to Couch"}</h1>
-            {!nativeHost && credentials && <p role="alert">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
-            <p className="muted">{nativeHost ? "The local player and your remotes connect here." : "Scan the QR or enter the code shown on the playback computer."}</p>
-            {nativeHost ? <Button disabled={booting} className="primary-button" onClick={shell.retryHost}>{booting ? "Starting…" : "Try again"}</Button> : (
+            <p className="eyebrow">{localHost ? "Your media center" : "Play on another computer"}</p>
+            <h1>{localHost ? "Starting your player" : "Connect to Couch"}</h1>
+            {!localHost && credentials && <p role="alert">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
+            <p className="muted">{localHost ? "The local player and your remotes connect here." : "Scan the QR or enter the code shown on the playback computer."}</p>
+            {localHost ? <Button disabled={booting} className="primary-button" onClick={shell.retryHost}>{booting ? "Starting…" : "Try again"}</Button> : status === "protocol-mismatch" ? <p role="alert">This playback computer uses an incompatible desktop protocol. Update this app or the playback computer, or choose another address.</p> : (
               <form onSubmit={pair} className="pair-form">
                 <Label htmlFor="remote-name">Device name</Label>
                 <Input id="remote-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required />
@@ -270,18 +272,18 @@ export function ShellChrome({ children }: PropsWithChildren) {
           </Card>
         ) : (
           <>
-            {!connected && <p className="notice" role="status">Connecting to the player.</p>}
+            {!connected && <div className="notice" role="status">{status === "server-unavailable" ? "The selected Couch is offline. Its address stays selected." : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="ml-3 inline-flex gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button><Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button></span>}</div>}
             {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
             <div className="workspace">
               <nav className="primary-nav" aria-label="Main navigation">
                 {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined} aria-label={label}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
               </nav>
               <div className="media-browser">
-                {nativeHost && !tvPresentation && active && !audioOnly && videoStage}
+                {localHost && !tvPresentation && active && !audioOnly && videoStage}
                 {children}
               </div>
             </div>
-            <SourceSetupDialog localOnly={nativeHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={nativeHost || identity?.authority === "administrator"} />
+            <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             {/* On the TV the bar is always available while playing and returns to the
                 playback view; remotes open the inline Now playing page instead. */}
             {current && (active || player?.status === "error") && (tvPresentation ? tv.browsing && section !== "Now" : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tvPresentation ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={!tvPresentation && details?.tvPresentation ? () => shell.setRemoteOpen(true) : undefined} />}
@@ -301,7 +303,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={() => tv.openHome()}><House aria-hidden="true" />Home</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}
-        {nativeHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
+        {localHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
         {host && remoteControlEnabled && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} openerRef={pairingRef} />}
 
       </main>

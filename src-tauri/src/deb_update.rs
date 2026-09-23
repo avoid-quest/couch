@@ -474,7 +474,7 @@ pub async fn run(
                     if !previous.is_null() {
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
                     }
-                    if when_idle && app.get_webview_window("remote").is_some() {
+                    if when_idle && crate::operating_mode::remote_selected(&app) {
                         return Err(
                             "Waiting for remote control to close before automatic installation."
                                 .into(),

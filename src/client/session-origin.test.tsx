@@ -44,8 +44,8 @@ function deferred<T>() {
 function online() {
   request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? details : identity));
 }
-function Remote({ credentials, onNavigation, pending }: { credentials: Credentials | null; onNavigation?: (key: NavigationKey) => void; pending?: Promise<void> }) {
-  const session = useSession(credentials, onNavigation);
+function Remote({ credentials, onNavigation, pending, selectedOrigin, desktopProtocol }: { credentials: Credentials | null; onNavigation?: (key: NavigationKey) => void; pending?: Promise<void>; selectedOrigin?: string; desktopProtocol?: number }) {
+  const session = useSession(credentials, onNavigation, selectedOrigin, desktopProtocol);
   useLayoutEffect(() => { current = session; });
   if (pending) use(pending);
   return <output>{session.status}</output>;
@@ -101,6 +101,32 @@ test("a replaced installation at the same origin requires pairing before any cre
     expect(url).toBe(location.origin + "/api/connection");
     expect(new Headers(options?.headers).has("Authorization")).toBe(false);
   }
+});
+
+test("bundled remote discovery rejects incompatible hosts before sending a pairing", async () => {
+  request.mockImplementation(async () => Response.json({ ...details, desktopClientProtocol: 2 }));
+  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  expect(current.status).toBe("protocol-mismatch");
+  expect(Socket.instances).toHaveLength(0);
+  expect(request.mock.calls.map(([url]: [unknown]) => String(url))).toEqual([`${credentials.origin}/api/connection`]);
+  expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
+});
+
+test("bundled remote discovery rejects a host without a protocol marker", async () => {
+  request.mockImplementation(async () => Response.json(details));
+  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  expect(current.status).toBe("protocol-mismatch");
+  expect(Socket.instances).toHaveLength(0);
+  expect(request.mock.calls.map(([url]: [unknown]) => String(url))).toEqual([`${credentials.origin}/api/connection`]);
+});
+
+test("bundled remote sessions accept a different host revision under the same protocol", async () => {
+  loadedBuild.revision = "desktop-client";
+  request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? { ...details, desktopClientProtocol: 1 } : identity));
+  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  expect(Socket.instances).toHaveLength(1);
+  expect(Socket.instances[0]!.url.searchParams.get("clientProtocol")).toBe("1");
+  expect(request.mock.calls.some(([url]: [unknown]) => String(url).endsWith("/api/build"))).toBe(false);
 });
 
 

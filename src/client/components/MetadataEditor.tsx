@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { isNativeHost } from "@/session/native-context";
+import { usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,8 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
   const fileRead = useRef<FileReader | null>(null);
   const artworkInput = useRef<HTMLInputElement | null>(null);
   const prefix = useId();
-  const native = isNativeHost();
+  const device = usePlaybackDevice();
+  const native = isNativeHost() && device?.mode !== "remote";
   const page = useQuery({
     enabled: open && connected,
     queryKey: ["metadata", "item", id],

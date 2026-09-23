@@ -837,7 +837,7 @@ pub async fn run(
                     if repair {
                         return Err("Recover the retained verified app with couch-recover. Hosted downloads may expire.".into());
                     }
-                    if when_idle && app.get_webview_window("remote").is_some() {
+                    if when_idle && crate::operating_mode::remote_selected(&app) {
                         return Err(
                             "Waiting for remote control to close before automatic installation."
                                 .into(),

@@ -1,0 +1,140 @@
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import * as core from "@tauri-apps/api/core";
+import * as events from "@tauri-apps/api/event";
+import type { ServerMessage } from "../../shared/protocol";
+import { fireEvent, screen } from "../testing";
+
+const local = "http://127.0.0.1:4100";
+const remote = "http://192.168.1.20:4100";
+const originals = new Map<string, PropertyDescriptor | undefined>();
+const requests: Array<{ url: string; authorization: string | null }> = [];
+let root: Root, window: Window, gate: ReturnType<typeof import("./session-context").useSessionGate>;
+let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevice").usePlaybackDevice>>;
+let installation = "remote-installation";
+let remoteRole: "controller" | "administrator" = "controller";
+let remoteProtocol = 1;
+let invokeSpy: ReturnType<typeof spyOn>, listenSpy: ReturnType<typeof spyOn>, fetchSpy: ReturnType<typeof spyOn>;
+
+class Socket {
+  static OPEN = 1;
+  static instances: Socket[] = [];
+  readyState = 1;
+  onopen?: () => void;
+  onmessage?: (event: MessageEvent<string>) => void;
+  onclose?: (event: CloseEvent) => void;
+  onerror?: () => void;
+  constructor(readonly url: URL) { Socket.instances.push(this); }
+  send() {}
+  emit(message: ServerMessage) { this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent<string>); }
+  close(code = 1000) { this.readyState = 3; this.onclose?.({ code } as CloseEvent); }
+}
+
+beforeEach(async () => {
+  installation = "remote-installation";
+  remoteRole = "controller";
+  remoteProtocol = 1;
+  requests.length = Socket.instances.length = 0;
+  window = new Window({ url: "http://tauri.localhost" });
+  Object.assign(window, { __COUCH_NATIVE_HOST__: true });
+  for (const key of ["CSS", "window", "document", "location", "history", "navigator", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "Event", "MouseEvent", "KeyboardEvent", "CustomEvent", "MutationObserver", "ResizeObserver", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "WebSocket", "IS_REACT_ACT_ENVIRONMENT"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
+  }
+  let mode: "local" | "remote" = "local";
+  invokeSpy = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
+    if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
+    if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true } as T;
+    if (command === "select_playback_device") { mode = (args as { mode: typeof mode }).mode; return { mode, address: remote, targets: [remote], localSetupComplete: true } as T; }
+    if (command === "connection_info") return { origin: local, token: "local-owner", pairingCode: "", urls: [] } as T;
+    return undefined as T;
+  });
+  listenSpy = spyOn(events, "listen").mockResolvedValue(() => {});
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input), authorization = new Headers(init?.headers).get("Authorization");
+    requests.push({ url, authorization });
+    const selected = new URL(url);
+    if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: selected.origin === local ? 1 : remoteProtocol });
+    if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: remoteRole, controller: { id: "paired", name: "Desktop client", role: remoteRole }, claimAvailable: false });
+    if (selected.pathname === "/api/pair") return Response.json({ token: "remote-pairing", installationId: installation });
+    if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
+    throw new Error(`Unexpected request: ${url}`);
+  }) as typeof fetch);
+  const { NativeModeGate, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
+  const { SessionGate, useSessionGate } = await import("./session-context");
+  const { createRoot } = await import("react-dom/client");
+  function Probe() {
+    gate = useSessionGate(); device = usePlaybackDevice()!;
+    return <output role="status">{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output>;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(<NativeModeGate><SessionGate><Probe /></SessionGate></NativeModeGate>));
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  invokeSpy.mockRestore(); listenSpy.mockRestore(); fetchSpy.mockRestore();
+  await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+});
+
+test("switching playback targets never sends local owner credentials to a selected host", async () => {
+  expect(screen.getByRole("status").textContent).toContain("local: connecting");
+  await act(async () => { await device.choose("remote", remote); });
+  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization === null)).toBe(true);
+  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  expect(Socket.instances.at(-1)?.url.origin).toBe("ws://192.168.1.20:4100");
+  expect(Socket.instances.at(-1)?.url.searchParams.get("token")).toBe("remote-pairing");
+  expect(Socket.instances.at(-1)?.url.searchParams.get("clientProtocol")).toBe("1");
+  expect(Socket.instances.at(-1)?.url.searchParams.has("build")).toBe(false);
+  expect(requests.filter(request => request.url.startsWith(remote) && request.authorization !== null).every(request => request.authorization === "Bearer remote-pairing")).toBe(true);
+  expect(JSON.parse(localStorage.getItem(`couch.pairing:${remote}`)!)).toEqual({ token: "remote-pairing", installationId: installation });
+  await act(async () => { await device.choose("local"); });
+  expect(gate.credentials).toMatchObject({ origin: local, token: "local-owner" });
+  await act(async () => { await device.choose("remote", remote); });
+  expect(gate.credentials).toMatchObject({ origin: remote, token: "remote-pairing" });
+  installation = "replacement-installation";
+  await act(async () => { await device.choose("local"); });
+  await act(async () => { await device.choose("remote", remote); });
+  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(requests.filter(request => request.url.startsWith(remote) && request.authorization === "Bearer remote-pairing").length).toBeGreaterThan(0);
+  const lastDiscovery = requests.findLast(request => request.url === `${remote}/api/connection`)!;
+  expect(lastDiscovery.authorization).toBeNull();
+});
+
+test("revoking the selected host's pairing keeps local owner authority isolated", async () => {
+  await act(async () => { await device.choose("remote", remote); });
+  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  await act(async () => Socket.instances.at(-1)?.close(4001));
+  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required: none");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
+  await act(async () => { await device.choose("local"); });
+  expect(gate.credentials).toMatchObject({ origin: local, token: "local-owner" });
+});
+
+test("remote administrator authority comes from the selected host", async () => {
+  remoteRole = "administrator";
+  await act(async () => { await device.choose("remote", remote); });
+  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  expect(gate.identity?.authority).toBe("administrator");
+  expect(gate.identity?.controller?.role).toBe("administrator");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
+  await act(async () => { await device.choose("local"); });
+  expect(gate.identity?.authority).toBe("host");
+});
+
+test("Retry reconnects the bundled session after an incompatible host upgrades", async () => {
+  remoteProtocol = 2;
+  await act(async () => { await device.choose("remote", remote); });
+  expect(screen.getByRole("status").textContent).toContain("remote: protocol-mismatch");
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  remoteProtocol = 1;
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Retry" })));
+  expect(screen.getByRole("status").textContent).toContain("remote: pairing-required");
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+});

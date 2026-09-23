@@ -5,7 +5,7 @@ import type { ConnectionDetails, ControllerIdentity } from "../../shared/control
 import { knownConnection, rememberConnection } from "./connection";
 
 export type Credentials = { origin: string; token: string; installationId?: string };
-export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch";
+export type ConnectionStatus = "connecting" | "syncing" | "connected" | "reconnecting" | "server-unavailable" | "pairing-required" | "connection-rejected" | "build-mismatch" | "protocol-mismatch";
 type Pending = { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 const sameCredentials = (a: Credentials | null, b: Credentials | null) => a?.origin === b?.origin && a?.token === b?.token && a?.installationId === b?.installationId;
 
@@ -14,7 +14,7 @@ export function createId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void) {
+export function useSession(credentials: Credentials | null, onNavigation?: (key: NavigationKey) => void, selectedOrigin?: string, desktopProtocol?: number) {
   const navigate = useEffectEvent((key: NavigationKey) => onNavigation?.(key));
   const [connectionDetails, setConnectionDetails] = useState(knownConnection);
   const [owner, setOwner] = useState(credentials);
@@ -60,7 +60,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (authenticate) setStatus(attempt ? "reconnecting" : "connecting");
       // A remembered pairing belongs to this origin. Advertised aliases are
       // address guidance, not permission to send a credential elsewhere.
-      const origin = credentials?.origin ?? location.origin;
+      const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)]);
         const response = await fetch(`${origin}/api/connection`, { signal });
@@ -68,10 +68,11 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
         const next = await response.json() as ConnectionDetails;
         if (disposed) return;
         setConnectionDetails({ origin, details: next });
+        if (desktopProtocol && next.desktopClientProtocol !== desktopProtocol) { setStatus("protocol-mismatch"); setState(null); setIdentity(null); return; }
         if (authenticate && credentials?.installationId && next.installationId !== credentials.installationId) { pairingRequired(); return; }
         if (authenticate && credentials) {
           const asset = buildKey(loadedBuild);
-          if (asset) {
+          if (asset && !desktopProtocol) {
             const response = await fetch(`${origin}/api/build`, { headers: { Authorization: `Bearer ${credentials.token}` }, signal });
             if (disposed) return;
             if (response.status === 401) { pairingRequired(); return; }
@@ -111,7 +112,8 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.searchParams.set("token", credentials.token);
       const asset = buildKey(loadedBuild);
-      if (asset) url.searchParams.set("build", asset);
+      if (asset && !desktopProtocol) url.searchParams.set("build", asset);
+      if (desktopProtocol) url.searchParams.set("clientProtocol", String(desktopProtocol));
       const connection = new WebSocket(url);
       socket.current = connection;
       socketCredentials.current = credentials;
@@ -175,12 +177,12 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       socket.current = null;
       socketCredentials.current = null;
     };
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, reconnectAttempt]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, selectedOrigin, desktopProtocol, reconnectAttempt]);
 
   const current = sameCredentials(owner, credentials);
   const snapshot = current ? state : null;
   const connectionStatus: ConnectionStatus = current ? status : credentials ? "connecting" : "pairing-required";
-  const origin = credentials?.origin ?? location.origin;
+  const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
   const publicDetails = connectionDetails?.origin === origin ? connectionDetails.details : null;
   const installationName = snapshot?.installationName;
   const player = snapshot?.player.status;
