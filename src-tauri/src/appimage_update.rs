@@ -874,6 +874,10 @@ pub async fn run(
                         verify(&bytes, &update.signature, &trust.pubkey)?;
                         known_good(&application, &trust)?;
                         preflight(&application, &directory, bytes.len() as u64).await?;
+                        if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                            transaction["idleDeferred"] = true.into();
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "quiescing", None)?;
                         let nonce = uuid::Uuid::new_v4().to_string();
                         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -887,7 +891,19 @@ pub async fn run(
                         if when_idle && !closed { transaction["idleDeferred"] = true.into(); }
                         result?;
                         if !closed { return Err("The data writers did not stop.".into()); }
+                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         backup(&application, &trust, &directory, request_id).await?;
+                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         journal(&directory, &mut transaction, "installing", None)?;
                         update.install(&bytes).map_err(error)?;
                         save(&application.join("build.json"), &serde_json::to_vec(&serde_json::json!({"version":summary.version,"revision":requirements.revision,"dataFormat":requirements.data_format,"readableDataFormats":requirements.readable_data_formats,"archiveSha256":format!("{:x}", Sha256::digest(&bytes))})).map_err(error)?)?;

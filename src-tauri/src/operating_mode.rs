@@ -134,6 +134,25 @@ pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
     Ok(remote_busy(visible, focused, since))
 }
 
+pub(crate) const IDLE_WAIT: &str = "Waiting for this app to be idle before automatic installation.";
+
+pub(crate) async fn resume_idle_quiesce(app: &tauri::AppHandle, nonce: &str) -> Result<(), String> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let host = app.state::<crate::Host>();
+    *host.update_checkpoint.lock().expect("checkpoint lock poisoned") = Some((nonce.to_owned(), sender));
+    host.report_message(serde_json::json!({"type":"appimageResume","nonce":nonce}));
+    let (closed, result) = tokio::time::timeout(Duration::from_secs(10), receiver).await
+        .map_err(|_| "Resuming local maintenance timed out.")?.map_err(error)?;
+    if closed { return Err("Local maintenance remained closed after deferring the update.".into()); }
+    result
+}
+
+pub(crate) async fn defer_after_checkpoint(app: &tauri::AppHandle, when_idle: bool, nonce: &str) -> Result<bool, String> {
+    if !when_idle || !idle_blocked(app)? { return Ok(false); }
+    resume_idle_quiesce(app, nonce).await?;
+    Ok(true)
+}
+
 #[tauri::command]
 pub async fn local_update_activity(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     trusted(&window)?;
@@ -506,6 +525,9 @@ mod tests {
         assert!(!remote_busy(false, true, recent));
         assert!(!remote_busy(true, false, recent));
         assert!(!remote_busy(true, true, Duration::from_secs(600)));
+        // Input between the early updater check and the stopped-writer reply changes the final decision.
+        assert!(!remote_busy(true, true, Duration::from_secs(601)));
+        assert!(remote_busy(true, true, Duration::ZERO));
     }
 
     #[test]

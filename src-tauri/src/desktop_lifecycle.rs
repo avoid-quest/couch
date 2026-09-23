@@ -3,6 +3,37 @@ use std::sync::atomic::Ordering;
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
+fn main_window_activated(event: &tauri::WindowEvent, closed: bool, visible: bool, minimized: bool) -> bool {
+    matches!(event, tauri::WindowEvent::Focused(true))
+        || closed && visible && !minimized && matches!(event, tauri::WindowEvent::Resized(_))
+}
+
+pub(crate) fn on_main_window_event(app: &tauri::AppHandle, event: &tauri::WindowEvent) {
+    let host = app.state::<Host>();
+    let closed = host.window_closed.load(Ordering::SeqCst);
+    let (visible, minimized) = if matches!(event, tauri::WindowEvent::Resized(_)) {
+        app.get_webview_window("main").map(|main| (main.is_visible().unwrap_or(false), main.is_minimized().unwrap_or(true))).unwrap_or((false, true))
+    } else { (false, false) };
+    if main_window_activated(event, closed, visible, minimized) {
+        host.window_closed.store(false, Ordering::SeqCst);
+        crate::operating_mode::window_opened(app);
+    }
+}
+
+#[cfg(test)]
+mod activity_tests {
+    use super::*;
+
+    #[test]
+    fn focus_and_taskbar_restore_count_as_window_activity() {
+        assert!(main_window_activated(&tauri::WindowEvent::Focused(true), false, true, false));
+        assert!(main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, true, false));
+        assert!(!main_window_activated(&tauri::WindowEvent::Focused(false), false, true, false));
+        assert!(!main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, true, true));
+        assert!(!main_window_activated(&tauri::WindowEvent::Resized(PhysicalSize::new(800, 600)), true, false, false));
+    }
+}
+
 pub(crate) fn show(app: &tauri::AppHandle) {
     app.state::<Host>().window_closed.store(false, Ordering::SeqCst);
     crate::operating_mode::window_opened(app);

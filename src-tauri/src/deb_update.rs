@@ -490,6 +490,10 @@ pub async fn run(
                     report(serde_json::json!({"ok":true,"accepted":true,"transaction":transaction}));
                     let mut disrupted = false;
                     let installation = async {
+                        if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                            transaction["idleDeferred"] = true.into();
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
+                        }
                         let nonce = uuid::Uuid::new_v4().to_string();
                         let (sender, receiver) = tokio::sync::oneshot::channel();
                         *app.state::<crate::Host>()
@@ -512,6 +516,12 @@ pub async fn run(
                         result?;
                         if !closed {
                             return Err("The data writers did not stop.".into());
+                        }
+                        if crate::operating_mode::defer_after_checkpoint(&app, when_idle, &nonce).await? {
+                            transaction["idleDeferred"] = true.into();
+                            disrupted = false;
+                            disrupted_request.store(false, std::sync::atomic::Ordering::Relaxed);
+                            return Err(crate::operating_mode::IDLE_WAIT.into());
                         }
                         journal(&directory, &mut transaction, "installing", None)?;
                         let user = account()?;

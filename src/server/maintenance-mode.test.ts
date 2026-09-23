@@ -70,6 +70,29 @@ test("remote maintenance owns only a private installation API and retains playba
   expect((await readdir(f.directory)).some(name => name.includes("wal"))).toBe(false);
 });
 
+test("a deferred idle install reopens local maintenance after the checkpoint", async () => {
+  const f = await fixture();
+  let ready = false;
+  for (let attempt = 0; attempt < 100 && !ready; attempt++) {
+    ready = (await f.fetchLocal("/api/updates/channel", { channel: "preview" })).status === 202;
+    if (!ready) await Bun.sleep(10);
+  }
+  expect(ready).toBe(true);
+  f.send({ type: "appimageResume", nonce: "premature" });
+  expect(await f.wait(m => m.type === "appimageResumed" && m.nonce === "premature")).toMatchObject({ error: "No matching local update checkpoint to resume." });
+  f.send({ type: "appimageQuiesce", nonce: "close", whenIdle: false, confirmInterrupt: true });
+  expect(await f.wait(m => m.type === "appimageQuiesced" && m.nonce === "close")).toMatchObject({ closed: true, error: null });
+  expect((await f.fetchLocal("/api/updates/channel", { channel: "stable" })).status).toBe(503);
+  expect((await f.fetchLocal("/api/activity", { activity: true })).status).toBe(204);
+  f.send({ type: "appimageResume", nonce: "other" });
+  expect(await f.wait(m => m.type === "appimageResumed" && m.nonce === "other")).toMatchObject({ error: "No matching local update checkpoint to resume." });
+  f.send({ type: "appimageResume", nonce: "close" });
+  expect(await f.wait(m => m.type === "appimageResumed" && m.nonce === "close")).toMatchObject({ error: null });
+  expect((await f.fetchLocal("/api/updates/channel", { channel: "stable" })).status).toBe(202);
+  f.send({ type: "appimageQuiesce", nonce: "retry", whenIdle: true, confirmInterrupt: false });
+  expect(await f.wait(m => m.type === "appimageQuiesced" && m.nonce === "retry")).toMatchObject({ closed: false, error: expect.stringContaining("ten continuous") });
+});
+
 test("remote startup trial reports local readiness without probing media tools", async () => {
   const f = await fixture({ trial: true, corrupt: true, desktop: true });
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "wrong" } })).status).toBe(409);
