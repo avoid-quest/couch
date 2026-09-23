@@ -237,6 +237,7 @@ impl<R: Runtime> Player<R> {
         }
         let position = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
         let paused = mpv.get_property::<bool>("pause").unwrap_or(true);
+        let buffering = mpv.get_property::<bool>("paused-for-cache").unwrap_or(false);
         let view = self.view;
         let frames = on_main(&self.app, move || unsafe { couch_video_frames(view as *mut c_void) })?;
         Ok(NativePlaybackSnapshot {
@@ -245,14 +246,14 @@ impl<R: Runtime> Player<R> {
                 volume: mpv.get_property::<f64>("volume").unwrap_or(80.0) / 100.0,
                 seekable: mpv.get_property::<bool>("seekable").unwrap_or(false),
                 ended: self.ended || mpv.get_property::<bool>("eof-reached").unwrap_or(false),
-                loading: !self.loaded && self.error.is_none(),
+                loading: (!self.loaded || buffering) && self.error.is_none(),
                 speed: mpv.get_property::<f64>("speed").unwrap_or(1.0),
                 audio_delay: mpv.get_property::<f64>("audio-delay").unwrap_or(0.0),
                 subtitle_delay: mpv.get_property::<f64>("sub-delay").unwrap_or(0.0),
                 replay_gain: None, subtitle_error: None, now_playing: None, chapters: vec![],
             }),
             duration_seconds: mpv.get_property::<f64>("duration").unwrap_or(0.0),
-            current_time_seconds: position, buffered_seconds: 0.0, playing: self.loaded && !paused && !self.ended,
+            current_time_seconds: position, buffered_seconds: 0.0, playing: self.loaded && !paused && !buffering && !self.ended,
             video_width: mpv.get_property::<i64>("video-params/w").unwrap_or(0).max(0) as u32,
             video_height: mpv.get_property::<i64>("video-params/h").unwrap_or(0).max(0) as u32,
             tracks, presented_frames: frames,
