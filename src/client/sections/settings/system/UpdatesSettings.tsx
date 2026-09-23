@@ -5,13 +5,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "../../../update-request";
 import { verificationFailure, type UpdateState } from "../../../../shared/updates";
 
-type Props = { credentials: ApiCredentials; connected: boolean };
+type Props = { credentials: ApiCredentials; connected: boolean; target?: "this app" | "selected host" };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
-export function UpdatesSettings({ credentials, connected }: Props) {
+export function UpdatesSettings({ credentials, connected, target = "selected host" }: Props) {
   const [state, setState] = useState<UpdateState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -47,7 +48,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       const result = await response.json() as { accepted?: boolean; error?: string; transaction?: NonNullable<UpdateState["installation"]>["transaction"] };
       if (!response.ok) {
         if (maintenanceRequest && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
-        setError(result.error || "Could not start the update operation. Refresh its status and retry."); return;
+        setError(result.error || `Could not start the update on ${target}. Refresh its status and retry.`); return;
       }
       if (maintenanceRequest) {
         const transaction = result.transaction;
@@ -57,7 +58,7 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       }
       else setState(result as UpdateState);
       await updates.refetch();
-    } catch { setError("The request did not finish. Reconnect to see whether the app accepted it."); }
+    } catch { setError(`The request for ${target} did not finish. Reconnect to see whether it was accepted.`); }
     finally { setPending(false); }
   }
   const transaction = state?.installation?.transaction;
@@ -71,14 +72,14 @@ export function UpdatesSettings({ credentials, connected }: Props) {
       const { candidateId, requestId, confirmInterrupt } = saved;
       if (saved.intent === "repair-current") await update("repair", { repair: { expectedCurrentId: candidateId, requestId, confirmInterrupt, repairRuntime: saved.repairRuntime } });
       else await update("install", { install: { candidateId, requestId, confirmInterrupt } });
-    } catch { setError("Could not save this update's retry identity. Allow local storage before installing."); }
+    } catch { setError(`Could not save the retry identity for ${target}. Allow local storage before installing.`); }
   };
   const downloadAgain = async () => {
     clearUpdateRequest(credentials.origin); setRetry(null);
     if (state?.candidate) await update("stage", { candidateId: state.candidate.id });
   };
-  if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to the app to check updates.</p>;
-  const problem = error ?? (updates.error ? "Could not load update status. Check the app connection and try again." : null);
+  if (!connected && !retry && !transaction) return <p role="status" className="text-muted-foreground">Connect to {target} to check updates.</p>;
+  const problem = error ? `Update for ${target}: ${error}` : updates.error ? `Could not load update status for ${target}. Check the connection and try again.` : null;
   const busy = !connected || pending || installing || !!retry || !state || state.status === "checking" || state.status === "downloading";
   const candidate = state?.candidate;
   const canStage = state?.currentCheck && candidate && (candidate.expiresAt === undefined || candidate.expiresAt > Date.now()) && state.status !== "ready";
@@ -86,19 +87,38 @@ export function UpdatesSettings({ credentials, connected }: Props) {
   const phaseSentence = transaction && !installing ? null : transaction?.phase === "accepted" ? "The app accepted the update." : transaction?.phase === "preflight" ? "Checking storage and recovery material." : transaction?.phase === "quiescing" ? "Waiting for playback and downloads to stop." : transaction?.phase === "installing" ? "Installing the update." : transaction?.phase === "trial" || transaction?.phase === "committing" ? "Restarting into the new version. This page reconnects when the app is back." : transaction?.phase === "restoring" ? "Restoring the previous release." : "Waiting for the app to confirm this request.";
   const waitingStatus = !!state && (state.status === "checking" || state.status === "downloading");
   const statusText = state ? state.status === "idle" && !state.currentCheck ? "Waiting for a fresh check" : statuses[state.status] : null;
+  const ownApp = target === "this app";
+  const appRecovery = "Reinstall a verified compatible Couch release for this computer without deleting this app's data, then reopen Updates.";
   return <div className="min-w-0 space-y-4">
+    <p className="text-sm text-muted-foreground">Updates and recovery for {target}. Running {state?.running.version ?? "unknown version"}{state?.running.revision ? `, commit ${state.running.revision}` : ""}.</p>
+    {state && <Card className="min-w-0 gap-4 p-4 text-sm">
+      <div className="space-y-2"><Label htmlFor="release-channel">Release channel for {target}</Label>
+        <Select value={state.channel} disabled={busy || state.status === "unavailable"} onValueChange={value => void update("channel", { channel: value })}>
+          <SelectTrigger id="release-channel" className="min-h-11 w-full"><SelectValue>{state.channel === "stable" ? "Stable" : "Preview"}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value="stable">Stable</SelectItem><SelectItem value="preview">Preview</SelectItem></SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2"><Label htmlFor="update-policy">Install updates on {target}</Label>
+        <Select value={state.policy} disabled={busy || state.status === "unavailable"} onValueChange={value => void update("policy", { policy: value })}>
+          <SelectTrigger id="update-policy" className="min-h-11 w-full"><SelectValue>{state.policy === "idle" ? "Auto when idle" : "Manual"}</SelectValue></SelectTrigger>
+          <SelectContent><SelectItem value="manual">Manual</SelectItem><SelectItem value="idle" disabled={!state.installation?.enabled}>Auto when idle</SelectItem></SelectContent>
+        </Select>
+        {state.policy === "idle" && <p role="status">{state.waiting || "Waiting until Couch is idle."}</p>}
+      </div>
+      <p className="text-xs text-muted-foreground">Last check: {state.lastSuccessfulCheck ? new Date(state.lastSuccessfulCheck).toLocaleString() : "none yet"}.</p>
+    </Card>}
     {(retry || transaction) && <Card role="status" className="min-w-0 gap-3 p-4 text-sm">
-      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
+      <p className="font-medium">{transaction?.phase === "succeeded" ? state?.running.version === transaction.version && state.running.revision === transaction.revision ? transaction.intent === "repair-current" ? "Current release repaired and verified" : "Update installed and running" : "Update committed. The running build differs from this release." : transaction?.phase === "restored" ? transaction.intent === "repair-current" ? "Repair did not finish. Previous release restored" : "Previous release restored" : transaction?.phase === "operator-required" ? ownApp ? "Update needs recovery" : "Update needs SSH recovery" : transaction?.phase === "failed" ? transaction.intent === "repair-current" ? "Repair stopped before installation" : "Update stopped before installation" : transaction?.intent === "repair-current" ? "Repairing the current release" : "Updating Couch"}</p>
       <p>{transaction?.phase === "restored" ? transaction.restoredVersion : transaction?.version || retry?.version}</p>
       {phaseSentence && <p className="text-muted-foreground">{phaseSentence}</p>}
       {transaction?.progress && <p>{Math.floor(transaction.progress.received / 1024 / 1024)} / {Math.ceil(transaction.progress.total / 1024 / 1024)} MB repair download</p>}
-      {transaction?.error && <p>{transaction.error}</p>}
-      {!connected && <p>Couch is restarting or offline. This page will reconnect; keep it open.</p>}
-      {transaction?.phase === "operator-required" && <p className="text-muted-foreground">From the administrator's SSH account, inspect the Couch journal before retrying and keep the data directory.</p>}
-      {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button></div>}
-      {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry same request</Button></div>}
+      {transaction?.error && <p>Update for {target}: {transaction.error}</p>}
+      {!connected && <p>{target} is restarting or offline. This page will reconnect; keep it open.</p>}
+      {transaction?.phase === "operator-required" && <p className="text-muted-foreground">{ownApp ? appRecovery : "From the administrator's SSH account, inspect the Couch journal before retrying and keep the data directory."}</p>}
+      {!installing && state?.candidate && verificationFailure(transaction?.error) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again for {target}</Button></div>}
+      {retry && (!transaction || !installing && transaction.requestId !== retry.requestId) && <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={pending} onClick={() => void install()}>Retry request for {target}</Button></div>}
     </Card>}
-    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void updates.refetch(); }}>Refresh status</Button>}</AlertDescription></Alert>}
+    {problem && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{problem}</span>{verificationFailure(problem) && state?.candidate ? <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void downloadAgain()}>Download again for {target}</Button> : <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { setError(null); void updates.refetch(); }}>Refresh {target} status</Button>}</AlertDescription></Alert>}
     {!state && !problem && <Card className="min-w-0 gap-3 p-4 text-sm"><p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading update status…</p></Card>}
     {state && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p role="status" className={waitingStatus ? "flex items-center gap-2" : undefined}>{waitingStatus && <Spinner className="size-3.5" />}{statusText}</p>
@@ -107,30 +127,30 @@ export function UpdatesSettings({ credentials, connected }: Props) {
         <p className="font-medium">{state.currentCheck ? "Available release" : "Last known release"}: <span className="break-all">{candidate.version}</span></p>
         <p className="whitespace-pre-wrap break-words">{candidate.notes}</p>
       </div>}
-      {state.error && <Alert variant="destructive"><AlertDescription>{state.error}</AlertDescription></Alert>}
+      {state.error && <Alert variant="destructive"><AlertDescription>Update for {target}: {ownApp && state.status === "unavailable" ? "In-app updates are unavailable on this installation. Use a compatible Couch installer for this computer without deleting its data." : state.error}</AlertDescription></Alert>}
       {!retry && !installing && confirming === "install" && <div className="space-y-2">
-          <p>Install {candidate?.version} and restart Couch. Other remotes will disconnect; viewing data is preserved.</p>
+          <p>Install {candidate?.version} on {target} and restart it. Its remotes will disconnect; viewing data is preserved.</p>
           <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-          <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
+          <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install on {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
       </div>}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" className="min-h-11" disabled={busy || state.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check for updates</Button>
-        {candidate && state.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update</Button>}
-        {!retry && !installing && confirming !== "install" && <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update</Button>}
+        <Button variant="outline" className="min-h-11" disabled={busy || state.status === "unavailable"} onClick={() => void update("check", { check: true })}>Check {target} for updates</Button>
+        {candidate && state.status !== "ready" && <Button className="min-h-11" disabled={busy || !canStage} onClick={() => void update("stage", { candidateId: candidate.id })}>Download update for {target}</Button>}
+        {!retry && !installing && confirming !== "install" && <Button className="min-h-11" disabled={!canInstall} onClick={() => setConfirming("install")}>Install update on {target}</Button>}
       </div>
     </Card>}
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <Card className="min-w-0 gap-2 p-4 text-sm">
-      <p className="font-medium">Manual installation is not enabled on this installation.</p>
-      <p className="text-muted-foreground">From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects.</p>
+      <p className="font-medium">In-app installation is not enabled on this installation.</p>
+      <p className="text-muted-foreground">{ownApp ? appRecovery : "From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects."}</p>
     </Card>}
     {state?.installation?.enabled && state.installation.repairAvailable && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>
       {confirming === "repair" ? <>
-        <p>Repair {state.installation.current.version} and restart Couch. Other remotes will disconnect.</p>
+        <p>Repair {state.installation.current.version} on {target} and restart it. Its remotes will disconnect.</p>
         <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
-        <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
-        </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release</Button></div>}
+        <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
+        </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release on {target}</Button></div>}
     </Card>}
   </div>;
 }

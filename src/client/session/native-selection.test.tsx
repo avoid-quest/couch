@@ -16,6 +16,7 @@ let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevi
 let installation = "remote-installation";
 let remoteRole: "controller" | "administrator" = "controller";
 let remoteProtocol = 1;
+let mode: "local" | "remote" = "local";
 let invokeSpy: ReturnType<typeof spyOn>, listenSpy: ReturnType<typeof spyOn>, fetchSpy: ReturnType<typeof spyOn>;
 
 class Socket {
@@ -32,10 +33,23 @@ class Socket {
   close(code = 1000) { this.readyState = 3; this.onclose?.({ code } as CloseEvent); }
 }
 
+async function renderGate() {
+  const { NativeModeGate, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
+  const { SessionGate, useSessionGate } = await import("./session-context");
+  const { createRoot } = await import("react-dom/client");
+  function Probe() {
+    gate = useSessionGate(); device = usePlaybackDevice()!;
+    return <output role="status">{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output>;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root.render(<NativeModeGate><SessionGate><Probe /></SessionGate></NativeModeGate>));
+}
+
 beforeEach(async () => {
   installation = "remote-installation";
   remoteRole = "controller";
   remoteProtocol = 1;
+  mode = "local";
   requests.length = Socket.instances.length = 0;
   window = new Window({ url: "http://tauri.localhost" });
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
@@ -44,7 +58,6 @@ beforeEach(async () => {
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "WebSocket" ? Socket : key === "window" ? window : Reflect.get(window, key);
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
-  let mode: "local" | "remote" = "local";
   invokeSpy = spyOn(core, "invoke").mockImplementation(async <T,>(command: string, args?: core.InvokeArgs): Promise<T> => {
     if (command === "retry_playback_device" && mode === "remote" && remoteProtocol !== 1) throw new Error("incompatible desktop client protocol");
     if (command === "playback_device" || command === "retry_playback_device") return { mode, address: remote, targets: [remote], localSetupComplete: true } as T;
@@ -63,15 +76,7 @@ beforeEach(async () => {
     if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
     throw new Error(`Unexpected request: ${url}`);
   }) as typeof fetch);
-  const { NativeModeGate, usePlaybackDevice } = await import("../sections/shell/PlaybackDevice");
-  const { SessionGate, useSessionGate } = await import("./session-context");
-  const { createRoot } = await import("react-dom/client");
-  function Probe() {
-    gate = useSessionGate(); device = usePlaybackDevice()!;
-    return <output role="status">{device.mode}: {gate.status}: {gate.identity?.authority ?? "none"}</output>;
-  }
-  root = createRoot(document.body.appendChild(document.createElement("div")));
-  await act(async () => root.render(<NativeModeGate><SessionGate><Probe /></SessionGate></NativeModeGate>));
+  await renderGate();
 });
 
 afterEach(async () => {
@@ -126,6 +131,22 @@ test("remote administrator authority comes from the selected host", async () => 
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
   await act(async () => { await device.choose("local"); });
   expect(gate.identity?.authority).toBe("host");
+});
+
+test("a restart reloads the selected host and its paired authority", async () => {
+  remoteRole = "administrator";
+  await act(async () => { await device.choose("remote", remote); });
+  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  expect(screen.getByRole("status").textContent).toContain("remote:");
+  expect(gate.identity?.authority).toBe("administrator");
+  await act(async () => root.unmount());
+  requests.length = 0;
+  await renderGate();
+  expect(invokeSpy.mock.calls.filter(([command]: [string]) => command === "playback_device")).toHaveLength(2);
+  expect(screen.getByRole("status").textContent).toContain("remote:");
+  expect(gate.credentials).toMatchObject({ origin: remote, token: "remote-pairing", installationId: installation });
+  expect(gate.identity?.authority).toBe("administrator");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
 });
 
 test("Retry reconnects the bundled session after an incompatible host upgrades", async () => {

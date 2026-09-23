@@ -1,14 +1,15 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
-import { screen } from "@/testing";
+import { fireEvent, screen } from "@/testing";
 import type { ShellValue } from "./AppShell";
 import { ShellContext } from "./shell-context";
 
 let root: Root, window: Window;
+let fetchSpy: ReturnType<typeof spyOn> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 
 beforeEach(async () => {
@@ -26,9 +27,50 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
+  fetchSpy?.mockRestore(); fetchSpy = null;
   await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
+});
+
+async function renderUpdates(authority: "host" | "administrator" | "controller", localHost: boolean) {
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const { UpdatesPage } = await import("../settings/system/UpdatesPage");
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const origin = localHost ? "http://127.0.0.1:4100" : "http://192.168.1.20:4100";
+  const shell = { nativeHost: true, localHost, tvPresentation: false, credentials: { origin, token: localHost ? "local-owner" : "remote-pairing" }, connected: true, identity: { authority }, details: { tvPresentation: false } } as unknown as ShellValue;
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input, init) => {
+    expect(String(input)).toBe(`${origin}/api/updates${init?.method === "POST" ? "/check" : ""}`);
+    expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${localHost ? "local-owner" : "remote-pairing"}`);
+    return Response.json({ channel: "stable", policy: "manual", status: "idle", currentCheck: true, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, installation: { enabled: true, repairAvailable: false, transaction: null } }, { status: init?.method === "POST" ? 202 : 200 });
+  }) as typeof fetch);
+  const base = createRootRoute({ component: () => <QueryClientProvider client={client}><ShellContext.Provider value={shell}><Outlet /></ShellContext.Provider></QueryClientProvider> });
+  const updates = createRoute({ getParentRoute: () => base, path: "/settings/updates", component: UpdatesPage });
+  const router = createRouter({ routeTree: base.addChildren([updates]), history: createMemoryHistory({ initialEntries: ["/settings/updates"] }) });
+  await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+}
+
+test("a remote administrator manages only the selected host's update policy", async () => {
+  await renderUpdates("administrator", false);
+  expect(screen.getByLabelText("Release channel for selected host")).toBeDefined();
+  expect(screen.getByLabelText("Install updates on selected host")).toBeDefined();
+  expect(screen.queryByLabelText("Release channel for this app")).toBeNull();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check selected host for updates" })));
+  expect(fetchSpy?.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input) === "http://192.168.1.20:4100/api/updates/check" && init?.method === "POST")).toBe(true);
+});
+
+test("a remote controller cannot manage the selected host's updates", async () => {
+  await renderUpdates("controller", false);
+  expect(screen.getByText("An administrator can install updates.")).toBeDefined();
+  expect(screen.queryByLabelText("Install updates on selected host")).toBeNull();
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("the local host's update page names this app", async () => {
+  await renderUpdates("host", true);
+  expect(screen.getByLabelText("Release channel for this app")).toBeDefined();
+  expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
 });
 
 async function render(status: "playing" | "unavailable") {

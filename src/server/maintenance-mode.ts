@@ -59,6 +59,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
         } catch { return reply(Response.json({ error: "This installation's updater is unavailable." }, { status: 503 })); }
       }
       if (path === "/api/updates/install" && request.method === "POST") return reply(await manual.install(request, identity));
+      if (path === "/api/updates/repair" && request.method === "POST") return reply(await manual.repair(request, identity));
       if (path.startsWith("/api/updates/")) return reply(await updates.handle(request, identity));
       return reply(new Response(null, { status: 404 }));
     },
