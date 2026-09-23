@@ -12,7 +12,7 @@ const directory = "src-tauri/target/release/bundle/appimage";
 const names = await readdir(directory);
 const images = names.filter(name => name.endsWith(".AppImage"));
 assert.equal(images.length, 1, "Build exactly one AppImage");
-assert.deepEqual(names.sort(), [images[0], `${images[0]}.sig`].sort(), "Only the AppImage and its updater signature may be bundled");
+assert.deepEqual(names.sort(), ["Couch.AppDir", images[0], `${images[0]}.sig`].sort(), "Only Tauri's staging directory, the AppImage and its updater signature may be bundled");
 const archive = join(directory, images[0]!);
 assert.ok((await stat(archive)).mode & 0o111, "The AppImage must be executable");
 assert.deepEqual(await binaryArchitectures(archive), ["x86_64"]);
@@ -20,8 +20,12 @@ assert.ok((await Bun.file(`${archive}.sig`).text()).trim(), "Tauri must sign the
 
 const staging = await mkdtemp(join(tmpdir(), "couch-appimage-"));
 try {
-  const extraction = Bun.spawnSync([archive.startsWith("/") ? archive : join(process.cwd(), archive), "--appimage-extract"], { cwd: staging, stdout: "ignore", stderr: "inherit" });
-  assert.equal(extraction.exitCode, 0, "Extract the AppImage without a FUSE mount");
+  const runtime = process.env.LDAI_RUNTIME_FILE;
+  assert.ok(runtime, "The pinned AppImage runtime must set LDAI_RUNTIME_FILE");
+  const offset = (await stat(runtime)).size;
+  assert.equal(await Bun.file(archive).slice(offset, offset + 4).text(), "hsqs", "The pinned runtime must precede the squashfs payload");
+  const extraction = Bun.spawnSync(["unsquashfs", "-no-progress", "-o", String(offset), "-d", join(staging, "squashfs-root"), archive], { stdout: "ignore", stderr: "inherit" });
+  assert.equal(extraction.exitCode, 0, "Extract the signed AppImage squashfs payload");
   const root = join(staging, "squashfs-root");
   const files: { path: string; size: number; sha256: string }[] = [];
   const links: { path: string; target: string }[] = [];
@@ -71,8 +75,15 @@ try {
   assert.deepEqual(release.host.packages, []);
   const inventory = await Bun.file(join(root, "usr/lib/Couch/payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
-  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffprobe"], []);
-  await verifyPackageHelpers(join(root, "usr/lib/Couch/tools"), build.helpers);
+  // linuxdeploy patches executable RPATHs after the build records source hashes.
+  // The full AppImage inventory below records the signed, patched bytes.
+  await verifyPayload(root, JSON.parse(inventory), build.target, "appimage", ["yt-dlp", "deno", "ffprobe"], [], {
+    "usr/bin/couch-server": `src-tauri/binaries/couch-server-${build.target}`,
+    "usr/lib/Couch/tools/yt-dlp": "src-tauri/resources/tools/yt-dlp",
+    "usr/lib/Couch/tools/deno": "src-tauri/resources/tools/deno",
+    "usr/lib/Couch/tools/ffprobe": "src-tauri/resources/tools/ffprobe",
+  });
+  await verifyPackageHelpers("src-tauri/resources/tools", build.helpers);
   assert.ok(libraries.some(file => file.path.endsWith("/libmpv.so.2")), "Bundle the linked player library");
   for (const list of [files, links, libraries]) list.sort((a, b) => a.path.localeCompare(b.path));
   await Bun.write(".artifacts/appimage-inventory.json", JSON.stringify({ build, release, files, links, libraries, sha256: await hash(archive) }, null, 2) + "\n");

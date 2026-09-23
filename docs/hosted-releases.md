@@ -75,6 +75,8 @@ container instrumentation limit this proof; it is not hardware or installed
 native-update acceptance. The integrated TV/update package must pass this
 fixture again after those changes merge. AppImage builds inspect the extracted
 AppDir and start the exact signed file in a fresh disposable desktop runtime.
+The `qualify-package` PR check runs that launch on native x86_64 with a
+disposable key, without release credentials or publication.
 The AppImage fixture pairs with a separate packaged coordinator in the sole
 bundled Couch window. It verifies that remote mode cannot call local media
 commands and that this installation's maintenance coordinator stays separate.

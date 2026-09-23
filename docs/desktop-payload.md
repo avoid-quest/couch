@@ -8,9 +8,12 @@ helper metadata, build inputs and redistribution notices. `native` records bundl
 shared-library paths and declared host packages. Executable headers must match
 the selected architecture. `scripts/desktop-payload.ts` verifies the same paths
 and bytes after extraction. The Debian and AppImage verifiers call it on their
-artifacts. Tauri and linuxdeploy add libraries after `payload.json` is written;
-the AppImage verifier separately records every extracted native library path,
-hash and architecture in the sealed `appimage-inventory.json`.
+artifacts. linuxdeploy changes AppImage executable RPATHs after their source
+hashes are recorded. The AppImage verifier checks those hashes against the
+original build inputs and records the final packaged bytes in its separate
+signed inventory. Tauri and linuxdeploy add libraries after `payload.json` is
+written; the AppImage inventory records every extracted native library path,
+hash and architecture.
 
 | Package | Coordinator | Tauri resources | Notices |
 | --- | --- | --- | --- |
@@ -47,7 +50,7 @@ target-specific inventory and license evidence before Full qualification.
 The Debian payload records its direct APT requirements as declared host packages
 and an empty bundled-library list. `package-deb-verify.ts` compares that list
 with every shared library found in the extracted archive. The AppImage verifier
-checks the payload bytes and records all libraries found in the extracted
+checks source provenance and records all packaged bytes and libraries found in the extracted
 AppDir. Its inventory is hashed in the signed release manifest. Source
 configuration alone cannot establish which libraries Tauri actually bundled.
 

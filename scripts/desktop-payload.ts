@@ -88,7 +88,7 @@ export async function createPayload(target: string, format: string, sidecar: str
   return { target, format, enabledHelpers, native: { bundledLibraries: files.filter(file => isNativeLibrary(file.path)).map(file => file.path), declaredHostPackages }, files };
 }
 
-export async function verifyPayload(root: string, payload: Payload, expectedTarget: string, expectedFormat: string, expectedHelpers: string[] = [...helperNames], expectedHostPackages: string[] = []) {
+export async function verifyPayload(root: string, payload: Payload, expectedTarget: string, expectedFormat: string, expectedHelpers: string[] = [...helperNames], expectedHostPackages: string[] = [], sourceFiles: Record<string, string> = {}) {
   assert.equal(payload.target, expectedTarget);
   assert.equal(payload.format, expectedFormat);
   assert.deepEqual(payload.enabledHelpers, expectedHelpers);
@@ -107,7 +107,7 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
     const source = join(root, file.path);
     const info = await lstat(source);
     assert.ok(info.isFile(), `Not a regular payload file: ${file.path}`);
-    assert.equal(await hash(source), file.sha256, `Missing or changed payload file: ${file.path}`);
+    assert.equal(await hash(sourceFiles[file.path] ?? source), file.sha256, `Missing or changed payload file: ${file.path}`);
     if (binaries.includes(file.path) || isNativeLibrary(file.path)) assert.equal(file.architecture, architecture, `Missing architecture: ${file.path}`);
     if (binaries.includes(file.path) && !expectedTarget.includes("windows")) assert.ok(info.mode & 0o111, `Not executable: ${file.path}`);
     if (file.architecture) assert.ok((await binaryArchitectures(source)).includes(file.architecture), `Wrong architecture: ${file.path}`);

@@ -1,0 +1,68 @@
+name: AppImage qualification
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+    paths:
+      - .github/workflows/appimage-qualification.yml
+      - .github/workflows/package.yml
+      - packaging/**
+      - scripts/desktop-payload.ts
+      - scripts/hosted-*.sh
+      - scripts/hosted-*.ts
+      - scripts/package-*.ts
+      - scripts/package-build.sh
+      - src-tauri/**
+      - tests/package/**
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    if: contains(github.event.pull_request.labels.*.name, 'qualify-package')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - name: Build the pinned Debian image
+        run: |
+          docker build --platform linux/amd64 -f packaging/Dockerfile.builder -t couch-qualification-builder \
+            --build-arg DEBIAN_IMAGE="$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
+            --build-arg DEBIAN_SNAPSHOT="$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" \
+            --build-arg BUN_VERSION="$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" \
+            --build-arg RUST_VERSION="$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" \
+            packaging
+      - name: Build and sign with a disposable key
+        run: |
+          docker create --name couch-qualification --init --cpus 4 --memory 10g couch-qualification-builder
+          docker start couch-qualification
+          git bundle create /tmp/couch-source.bundle HEAD
+          docker cp /tmp/couch-source.bundle couch-qualification:/source.bundle
+          docker exec couch-qualification git clone /source.bundle /work
+          docker exec -w /work couch-qualification git checkout --detach "$(git rev-parse HEAD)"
+          docker exec -w /work couch-qualification bun install --frozen-lockfile
+          docker exec -w /work couch-qualification bun x --no-install tauri signer generate --ci -w /tmp/couch-qualification.key
+          docker exec -w /work couch-qualification bash -lc '
+            export COUCH_UPDATER_PUBLIC_KEY=$(base64 -w0 /tmp/couch-qualification.key.pub)
+            export TAURI_SIGNING_PRIVATE_KEY=/tmp/couch-qualification.key
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+            bash scripts/hosted-build.sh appimage
+          '
+      - name: Verify signed bytes and launch the clean Client
+        run: |
+          docker exec -w /work couch-qualification bun scripts/hosted-release.ts verify .artifacts/hosted-release
+          mkdir -p .artifacts/appimage-qualification
+          bash scripts/hosted-desktop.sh couch-qualification .artifacts/appimage-qualification appimage
+          cat .artifacts/appimage-qualification/evidence/result.json
+      - name: Report exact revision and artifact digest
+        if: always()
+        run: |
+          git rev-parse HEAD
+          docker exec -w /work couch-qualification bash -lc 'sha256sum .artifacts/hosted-release/public/*.AppImage' || true
+          tail -80 .artifacts/appimage-qualification/runtime.log 2>/dev/null || true

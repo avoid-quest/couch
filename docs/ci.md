@@ -126,3 +126,7 @@ with the `catthehacker/ubuntu:full-latest` image. Its inert provider/build steps
 check dispatch control flow; they do not replace the exact signed package and
 fresh runtime fixture. Publication requires separate authorization. The T480
 installs/runs Couch; it is never a build worker.
+Apply `qualify-package` to an AppImage PR for the native x86_64 clean-launch
+check. It uses a disposable signing key without release credentials or
+publication. The act package/updater fixture and Debian regression remain
+separate local gates.
