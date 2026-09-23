@@ -92,9 +92,36 @@ try {
     assert.equal(await hash(copy), await hash(join(root, path)), `linuxdeploy changed executable bytes beyond its RPATH edit: ${path}`);
   }
   await verifyPackageHelpers("src-tauri/resources/tools", build.helpers);
-  assert.ok(libraries.some(file => file.path.endsWith("/libmpv.so.2")), "Bundle the linked player library");
+  const media = {
+    "libmpv.so.2": "libmpv2", "libavcodec.so.61": "libavcodec61", "libavformat.so.61": "libavformat61",
+    "libavutil.so.59": "libavutil59", "libswresample.so.5": "libswresample5", "libswscale.so.8": "libswscale8",
+    "libass.so.9": "libass9", "libplacebo.so.349": "libplacebo349", "libpulse.so.0": "libpulse0",
+    "libasound.so.2": "libasound2t64", "libepoxy.so.0": "libepoxy0", "libva.so.2": "libva2",
+    "libvulkan.so.1": "libvulkan1", "alsa-lib/libasound_module_pcm_pulse.so": "libasound2-plugins",
+  };
+  const patcher = process.env.PATCHELF ?? "/usr/bin/patchelf";
+  function elf(path: string) {
+    const file = join(root, path);
+    const inspect = (flag: string) => {
+      const result = Bun.spawnSync([patcher, flag, file], { stderr: "inherit" });
+      assert.equal(result.exitCode, 0, `Inspect ELF loader metadata: ${path}`);
+      return result.stdout.toString().trim();
+    };
+    const rpath = inspect("--print-rpath");
+    assert.ok(!rpath || rpath.split(":").every(entry => entry.startsWith("$ORIGIN")), `Nonportable loader path: ${path}: ${rpath}`);
+    return { path, rpath, needed: inspect("--print-needed").split("\n").filter(Boolean) };
+  }
+  const mediaClosure = [elf("usr/bin/couch"), elf("usr/lib/Couch/tools/ffprobe")];
+  assert.ok(mediaClosure[0]!.needed.includes("libmpv.so.2"), "The desktop must link its bundled libmpv player");
+  assert.ok(mediaClosure[1]!.needed.includes("libavformat.so.61"), "Bundled ffprobe must use the packaged media libraries");
+  for (const [name, notice] of Object.entries(media)) {
+    const path = `usr/lib/${name}`;
+    assert.ok(libraries.some(file => file.path === path), `Missing media library: ${path}`);
+    assert.ok(files.some(file => file.path === `usr/share/doc/couch/debian/${notice}/copyright`), `Missing media library notice: ${notice}`);
+    mediaClosure.push(elf(path));
+  }
   for (const list of [files, links, libraries]) list.sort((a, b) => a.path.localeCompare(b.path));
-  await Bun.write(".artifacts/appimage-inventory.json", JSON.stringify({ build, release, files, links, libraries, sha256: await hash(archive) }, null, 2) + "\n");
+  await Bun.write(".artifacts/appimage-inventory.json", JSON.stringify({ build, release, files, links, libraries, mediaClosure, sha256: await hash(archive) }, null, 2) + "\n");
   console.log(`Verified ${archive}: ${files.length} files, ${libraries.length} native library paths and packaged helpers`);
 } finally {
   await rm(staging, { recursive: true, force: true });
