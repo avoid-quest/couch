@@ -14,6 +14,7 @@ import type { Credentials } from "@/session/session";
 import { loadedBuild } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useUpdateActivity } from "@/update-activity";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 export type Choice = { mode: "local" | "remote" | null; address: string | null; targets: string[]; localSetupComplete: boolean };
 type Device = Choice & { pending: boolean; error: string | null; choose: (mode: "local" | "remote", address?: string, confirm?: boolean) => Promise<boolean>; retry: () => void; show: () => void; dismiss: () => void; completeLocalSetup: () => Promise<void> };
@@ -103,11 +104,12 @@ export function NativeModeGate({ children }: PropsWithChildren) {
 
 export function InstallationUpdates() {
   const device = usePlaybackDevice()!;
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } }));
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useUpdateActivity(credentials, !!credentials);
+  useEffect(() => () => queryClient.clear(), [queryClient]);
   useEffect(() => {
     const stop = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -130,7 +132,7 @@ export function InstallationUpdates() {
     <DialogContent>
       <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      {credentials ? <UpdatesSettings credentials={credentials} connected /> : <p role="status">Connecting to this installation…</p>}
+      {credentials ? <UpdatesSettings credentials={credentials} connected target="this app" /> : <p role="status">Connecting to this installation…</p>}
     </DialogContent>
   </Dialog></QueryClientProvider>;
 }

@@ -3,7 +3,7 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import * as core from "@tauri-apps/api/core";
-import { screen, fireEvent } from "@/testing";
+import { screen, fireEvent, within } from "@/testing";
 import { isNativeHost } from "@/session/native-context";
 
 let root: Root, window: Window, invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
@@ -56,19 +56,19 @@ async function render(sharing = false) {
 
 test("first launch chooses a device before requesting local startup", async () => {
   await render();
-  expect(document.body.textContent).toContain("Where do you want to play?");
+  expect(screen.getByRole("heading", { name: "Where do you want to play?" })).toBeDefined();
   expect(invoke.mock.calls.map(([name]) => name)).toEqual(["playback_device"]);
-  expect(document.body.textContent).not.toContain("Local installation");
+  expect(screen.queryByText("Local installation")).toBeNull();
   await act(async () => fireEvent.click(button("This computer"))); await flush();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(true);
-  expect(document.body.textContent).toContain("Local installation");
+  expect(screen.getByText("Local installation")).toBeDefined();
 });
 
 test("an external Tauri page uses browser UI without accessing local commands", async () => {
   Object.assign(window, { __COUCH_NATIVE_HOST__: undefined, isTauri: true });
   expect(isNativeHost()).toBe(false);
   await render();
-  expect(document.body.textContent).toContain("Local installation");
+  expect(screen.getByText("Local installation")).toBeDefined();
   expect(invoke).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: /^Play on:/ })).toBeNull();
 });
@@ -103,7 +103,7 @@ test("an unavailable remembered target retains recovery and only switches after 
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   connectionError = "Cannot reach that Couch.";
   await render();
-  expect(document.body.textContent).toContain("Cannot reach that Couch.");
+  expect(screen.getByText("Cannot reach that Couch.")).toBeDefined();
   expect(button("Retry")).toBeDefined();
   expect(button("Use this computer")).toBeDefined();
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
@@ -112,7 +112,7 @@ test("an unavailable remembered target retains recovery and only switches after 
   connectionError = null;
   await act(async () => fireEvent.click(button("Use this computer"))); await flush();
   expect(choice.mode).toBe("local");
-  expect(document.body.textContent).toContain("Local installation");
+  expect(screen.getByText("Local installation")).toBeDefined();
 });
 
 test("a selected remote stays in the bundled app shell with one playback device control", async () => {
@@ -130,8 +130,8 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
   await render();
   await act(async () => fireEvent.click(button(`Play on: ${choice.mode === "local" ? "This computer" : choice.address}`))); await flush();
   await act(async () => fireEvent.click(button("http://192.168.1.10:4100"))); await flush();
-  expect(document.body.textContent).toContain("turns off this computer's remote control");
-  expect(document.body.textContent).not.toContain("stops playback on this computer");
+  expect(screen.getByText(/turns off this computer's remote control/)).toBeDefined();
+  expect(screen.queryByText(/stops playback on this computer/)).toBeNull();
   expect(choice.mode).toBe("local");
   await act(async () => fireEvent.click(button("Stop and switch"))); await flush();
   expect(choice.mode).toBe("remote");
@@ -142,7 +142,7 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
 test("local first use records private choice after the host saves it", async () => {
   choice.mode = "local";
   await render(true);
-  expect(screen.queryByRole("dialog")?.textContent).toContain("Allow remote control?");
+  expect(within(screen.getByRole("dialog")).getByText("Allow remote control?")).toBeDefined();
   await act(async () => fireEvent.click(button("Keep private"))); await flush();
   expect(request.mock.calls[0]?.[0]).toBe("http://127.0.0.1:4100/api/settings/sharing");
   expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ enabled: false });
@@ -155,7 +155,7 @@ test("failed local sharing save leaves the prompt available and does not mark se
   request.mockResolvedValue(Response.json({ error: "Could not save sharing." }, { status: 500 }));
   await render(true);
   await act(async () => fireEvent.click(button("Keep private"))); await flush();
-  expect(screen.queryByRole("dialog")?.textContent).toContain("Could not save sharing.");
+  expect(within(screen.getByRole("dialog")).getByText("Could not save sharing.")).toBeDefined();
   expect(choice.localSetupComplete).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "complete_local_setup")).toBe(false);
 });
@@ -169,7 +169,7 @@ test("closing the device chooser reconnects the same remote and restores trigger
   await act(async () => fireEvent.click(button(`Play on: ${choice.address}`))); await flush();
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial + 1);
   expect(choice.mode).toBe("remote");
-  expect(document.activeElement?.textContent).toBe(`Play on: ${choice.address}`);
+  expect(document.activeElement).toBe(button(`Play on: ${choice.address}`));
 });
 
 test("Play on marks the current computer and switches directly to a remembered Couch", async () => {
@@ -191,9 +191,10 @@ test("Another Couch opens focused address entry without a submenu", async () => 
   await act(async () => fireEvent.click(button("Play on: This computer"))); await flush();
   await act(async () => fireEvent.click(button("Another Couch"))); await flush();
   expect(screen.queryByRole("button", { name: "This computer Selected", exact: true })).toBeNull();
-  expect(screen.queryByRole("dialog")?.textContent).toContain("Another Couch");
-  expect(document.activeElement?.id).toBe("another-couch-address");
-  expect((document.activeElement as HTMLInputElement).value).toBe("");
+  expect(screen.getByRole("dialog", { name: "Another Couch" })).toBeDefined();
+  const address = screen.getByRole("textbox", { name: "Couch address" }) as HTMLInputElement;
+  expect(document.activeElement).toBe(address);
+  expect(address.value).toBe("");
 });
 
 
@@ -206,16 +207,21 @@ test("an unreachable remote cannot prevent this installation's update controls",
     if (String(input).endsWith("/api/maintenance/frontend")) return new Response(null, { status: 204 });
     return Response.json({ channel: "preview", policy: "manual", status: "ready", currentCheck: true, running: { version: "0.1.0-preview.1", revision: "a".repeat(40) }, candidate: { id: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), notes: "Hosted update", bytes: 1024, publishedAt: 1 }, installation: { enabled: true, current: { candidateId: "d".repeat(64), version: "0.1.0-preview.1", revision: "a".repeat(40) }, repairAvailable: false, transaction: null } });
   }) as typeof fetch);
-  // Render UpdatesSettings directly: the Radix portal strips QueryClient context in happy-dom.
-  const { UpdatesSettings } = await import("@/sections/settings/system/UpdatesSettings");
-  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const credentials = { origin: "http://127.0.0.1:54321", token: "own-installation" };
-  await act(async () => root.render(<QueryClientProvider client={client!}><UpdatesSettings credentials={credentials} connected /></QueryClientProvider>));
+  await render();
+  await act(async () => fireEvent.click(button("Update this app")));
   await flush();
-  expect(document.body.textContent).toContain("Hosted update");
+  expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
+  expect(screen.getByText(/Updates and recovery for this app/)).toBeDefined();
+  expect(screen.getByText("Hosted update")).toBeDefined();
   expect(button("Install update").disabled).toBe(false);
-  expect(screen.queryByLabelText("Release channel")).toBeNull();
+  expect(screen.getByLabelText("Release channel")).toBeDefined();
+  expect(screen.getByLabelText("Install updates")).toBeDefined();
+  await act(async () => fireEvent.click(screen.getByLabelText("Release channel"))); await flush();
+  await act(async () => fireEvent.click(screen.getByRole("option", { name: "Stable" }))); await flush();
+  expect(request.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input).endsWith("/api/updates/channel") && JSON.parse(String(init?.body)).channel === "stable")).toBe(true);
+  await act(async () => fireEvent.click(screen.getByLabelText("Install updates"))); await flush();
+  await act(async () => fireEvent.click(screen.getByRole("option", { name: "Auto when idle" }))); await flush();
+  expect(request.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input).endsWith("/api/updates/policy") && JSON.parse(String(init?.body)).policy === "idle")).toBe(true);
   expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Repair current release" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);

@@ -57,6 +57,8 @@ test("remote maintenance owns only a private installation API and retains playba
   expect((await f.fetchLocal("/api/updates", undefined, { Origin: "https://other-couch.example" })).status).toBe(403);
   expect((await f.fetchLocal("/api/updates", undefined, { Origin: "http://localhost:1420" })).status).toBe(403);
   expect((await f.fetchLocal("/api/sources")).status).toBe(404);
+  expect((await f.fetchLocal("/api/updates/repair", { repair: {} }, { Authorization: "Bearer remote-token" })).status).toBe(401);
+  expect((await f.fetchLocal("/api/updates/repair", { repair: {} })).status).toBe(400);
   expect((await f.fetchLocal("/api/updates/channel", { channel: "preview" })).status).toBe(202);
   await f.wait(m => m.action?.type === "check");
   const state = await (await f.fetchLocal("/api/updates")).json();
@@ -82,6 +84,8 @@ test("development maintenance accepts only its configured local webview origin a
   const build = { build: f.build };
   expect((await fetch(f.ready.origin + "/api/maintenance/frontend", { method: "OPTIONS", headers: { Origin: "http://localhost:1420", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type" } })).status).toBe(204);
   expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://localhost:1420" })).status).toBe(204);
+  expect((await f.fetchLocal("/api/updates", undefined, { Origin: "http://localhost:1420" })).status).toBe(200);
+  expect((await f.fetchLocal("/api/updates/policy", { policy: "manual" }, { Origin: "http://localhost:1420" })).status).toBe(409);
   expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://localhost:1420", Authorization: "Bearer remote-token" })).status).toBe(401);
   expect((await f.fetchLocal("/api/maintenance/frontend", build, { Origin: "http://192.168.1.10:4100" })).status).toBe(403);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "other" } }, { Origin: "http://localhost:1420" })).status).toBe(409);
