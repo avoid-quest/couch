@@ -58,8 +58,13 @@ try {
     assert.ok(!paths.some(file => file.path === name), `Debian TV component leaked into AppImage: ${name}`);
   }
   const release = await Bun.file(join(root, "usr/lib/Couch/release.json")).json();
+  assert.equal(release.schemaVersion, 1);
   assert.equal(release.revision, build.revision);
   assert.equal(release.version, build.version);
+  assert.equal(release.target, build.target);
+  assert.equal(release.packaged, true);
+  assert.equal(release.dataFormat, build.dataFormat);
+  assert.ok(release.readableDataFormats.includes(build.dataFormat), "The signed AppImage must read its current data format");
   assert.equal(release.packageFormat, "appimage");
   assert.equal(release.host.target, build.target);
   assert.equal(release.host.os, "linux");

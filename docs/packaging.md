@@ -42,6 +42,11 @@ For AppImage it starts the signed file through `APPIMAGE_EXTRACT_AND_RUN=1` in a
 fresh runtime container, because Docker provides no FUSE mount. That fixture
 checks first launch, the private Client-only coordinator, a separate selected
 host and pairing. Installed FUSE, upgrade and Wayland acceptance remain open.
+Normal AppImage launch needs a FUSE 2 runtime; the container's extraction path
+does not test it. A desktop also needs a DBus session, graphics drivers and an
+audio service. Tauri bundles GTK/WebKit and selected GStreamer libraries, while
+glibc and the display stack remain host requirements. The Debian 13 builder
+sets the current glibc floor; older distributions require their own proof.
 
 ## Release
 

@@ -86,8 +86,6 @@ Cache misses build normally. No cache hit or hosted duration is claimed by local
 act checks. The workflow has a 60-minute cap; observe the actual cold run before
 changing that budget.
 
-## Build and retry
-
 ## Automated releases (changesets)
 
 Versioning and changelogs run on [changesets](https://changesets.dev). Every
