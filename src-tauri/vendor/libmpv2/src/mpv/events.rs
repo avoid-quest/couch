@@ -121,6 +121,14 @@ unsafe extern "C" fn wu_wrapper<F: Fn() + Send + 'static>(ctx: *mut c_void) {
 }
 
 impl Mpv {
+    /// Subscribe to libmpv log events at the requested severity.
+    pub fn request_log_messages(&self, level: &str) -> Result<()> {
+        let level = CString::new(level)?;
+        mpv_err((), unsafe {
+            libmpv2_sys::mpv_request_log_messages(self.ctx.as_ptr(), level.as_ptr())
+        })
+    }
+
     /// Register a libmpv hook. Every emitted Hook event must be continued.
     pub fn hook_add(&self, name: &str, priority: i32) -> Result<()> {
         let name = CString::new(name)?;

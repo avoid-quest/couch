@@ -67,6 +67,33 @@ impl QueuedCall {
     }
 }
 
+#[cfg(target_os = "linux")]
+struct Pending<T> {
+    receiver: mpsc::Receiver<crate::Result<T>>,
+    call: QueuedCall,
+    session: Option<(Arc<std::sync::atomic::AtomicU64>, u64)>,
+}
+
+#[cfg(target_os = "linux")]
+impl<T> Pending<T> {
+    fn ready(result: crate::Result<T>) -> Self {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let _ = sender.send(result);
+        Self { receiver, call: QueuedCall::new(), session: None }
+    }
+
+    fn wait(self) -> crate::Result<T> {
+        let result = self.receiver.recv_timeout(Duration::from_secs(15)).map_err(|error| {
+            self.call.expire();
+            crate::Error::Pipeline(format!("native mpv operation timed out: {error}"))
+        })?;
+        if self.session.as_ref().is_some_and(|(epoch, expected)| epoch.load(Ordering::Acquire) != *expected) {
+            return Err(crate::Error::InvalidRequest("native player session is stale".into()));
+        }
+        result
+    }
+}
+
 pub struct DesktopVideo<R: Runtime> {
     _app: AppHandle<R>,
     #[cfg(target_os = "linux")]
@@ -78,12 +105,12 @@ pub struct DesktopVideo<R: Runtime> {
 impl<R: Runtime> DesktopVideo<R> {
     #[cfg(target_os = "linux")]
     pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |app| linux::open(app, payload))
+        self.run_on_main(move |app| linux::open(app, payload))?.wait()
     }
 
     #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
     pub fn prepare_native(&self, payload: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |_| linux_mpv::prepare(payload))
+        self.run_on_main(move |_| linux_mpv::prepare(payload))?.wait()
     }
 
     #[cfg(target_os = "linux")]
@@ -91,7 +118,7 @@ impl<R: Runtime> DesktopVideo<R> {
         &self,
         payload: NativeControlRequest,
     ) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |_| linux::control(payload))
+        self.run_on_main(move |_| linux::control(payload))?.wait()
     }
 
     #[cfg(target_os = "linux")]
@@ -106,7 +133,7 @@ impl<R: Runtime> DesktopVideo<R> {
         &self,
         payload: NativeSessionRequest,
     ) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |_| linux::stats(payload))
+        self.run_on_main(move |_| linux::stats(payload))?.wait()
     }
 
     // Readiness shares GTK's existing singleton and never opens a media source.
@@ -146,7 +173,7 @@ impl<R: Runtime> DesktopVideo<R> {
     // Private host diagnostics use a fixed property allowlist, never media URLs or headers.
     pub fn diagnostic_properties(&self, payload: NativeSessionRequest) -> crate::Result<std::collections::BTreeMap<String, Option<String>>> {
         #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
-        { self.run_on_main(move |_| linux_mpv::diagnostic_properties(payload)) }
+        { self.run_on_main(move |_| linux_mpv::diagnostic_properties(payload))?.wait() }
         #[cfg(target_os = "macos")]
         { self.mac.diagnostic_properties(payload) }
         #[cfg(not(any(all(target_os = "linux", feature = "mpv-runtime"), target_os = "macos")))]
@@ -155,7 +182,7 @@ impl<R: Runtime> DesktopVideo<R> {
 
     #[cfg(target_os = "linux")]
     pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> {
-        self.run_on_main(move |_| linux::close(payload))
+        self.run_on_main(move |_| linux::close(payload))?.wait()
     }
 
     #[cfg(target_os = "macos")]
@@ -299,6 +326,27 @@ mod dispatcher_tests {
         release.send(()).unwrap();
         assert!(!worker.join().unwrap());
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mpv_replies_keep_their_request_and_reject_retired_sessions() {
+        let epoch = Arc::new(std::sync::atomic::AtomicU64::new(1));
+        let pending = || {
+            let (sender, receiver) = mpsc::sync_channel(1);
+            (sender, Pending { receiver, call: QueuedCall::new(), session: Some((Arc::clone(&epoch), 1)) })
+        };
+        let (first_reply, first) = pending();
+        let (second_reply, second) = pending();
+        second_reply.send(Ok(2)).unwrap();
+        first_reply.send(Ok(1)).unwrap();
+        assert_eq!(first.wait().unwrap(), 1);
+        assert_eq!(second.wait().unwrap(), 2);
+
+        let (retired_reply, retired) = pending();
+        retired_reply.send(Ok(3)).unwrap();
+        epoch.store(2, Ordering::Release);
+        assert!(matches!(retired.wait(), Err(crate::Error::InvalidRequest(_))));
+    }
 }
 
 #[cfg(windows)]
@@ -334,7 +382,7 @@ mod linux {
     pub fn open<R: Runtime>(
         app: &AppHandle<R>,
         payload: NativeOpenRequest,
-    ) -> Result<NativePlaybackSnapshot> {
+    ) -> Result<super::Pending<NativePlaybackSnapshot>> {
         let requested = select_backend(payload.backend.as_deref())?;
         let previous = ACTIVE_BACKEND.with(|active| *active.borrow());
         if previous != Some(requested) {
@@ -348,7 +396,7 @@ mod linux {
             ACTIVE_BACKEND.with(|active| *active.borrow_mut() = None);
         }
         let result = match requested {
-            Backend::Gstreamer => super::linux_gstreamer::open(app, payload),
+            Backend::Gstreamer => Ok(super::Pending::ready(Ok(super::linux_gstreamer::open(app, payload)?))),
             Backend::Mpv => super::linux_mpv::open(app, payload),
         };
         if result.is_ok() {
@@ -357,9 +405,9 @@ mod linux {
         result
     }
 
-    pub fn control(payload: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn control(payload: NativeControlRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         match active_backend()? {
-            Backend::Gstreamer => super::linux_gstreamer::control(payload),
+            Backend::Gstreamer => Ok(super::Pending::ready(super::linux_gstreamer::control(payload))),
             Backend::Mpv => super::linux_mpv::control(payload),
         }
     }
@@ -371,24 +419,24 @@ mod linux {
         }
     }
 
-    pub fn stats(payload: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn stats(payload: NativeSessionRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         match active_backend()? {
-            Backend::Gstreamer => super::linux_gstreamer::stats(payload),
+            Backend::Gstreamer => Ok(super::Pending::ready(super::linux_gstreamer::stats(payload))),
             Backend::Mpv => super::linux_mpv::stats(payload),
         }
     }
 
-    pub fn close(payload: NativeSessionRequest) -> Result<()> {
+    pub fn close(payload: NativeSessionRequest) -> Result<super::Pending<()>> {
         let backend = active_backend()?;
         let owns_session = match backend {
             Backend::Gstreamer => super::linux_gstreamer::owns_session(&payload.session_key),
             Backend::Mpv => super::linux_mpv::owns_session(&payload.session_key),
         };
         if !owns_session {
-            return Ok(());
+            return Ok(super::Pending::ready(Ok(())));
         }
         let result = match backend {
-            Backend::Gstreamer => super::linux_gstreamer::close(payload),
+            Backend::Gstreamer => Ok(super::Pending::ready(super::linux_gstreamer::close(payload))),
             Backend::Mpv => super::linux_mpv::close(payload),
         };
         if result.is_ok() {
@@ -1256,7 +1304,8 @@ mod linux_mpv {
         cell::{Cell, RefCell},
         ffi::{c_void, CString},
         rc::Rc,
-        time::Instant,
+        sync::{atomic::{AtomicBool, AtomicU64, Ordering}, mpsc, Arc, Mutex},
+        time::{Duration, Instant},
     };
 
     use gtk::prelude::*;
@@ -1284,7 +1333,40 @@ mod linux_mpv {
     }
 
     thread_local! {
-        static PLAYER: RefCell<Option<MpvPlayer>> = const { RefCell::new(None) };
+        static PLAYER: RefCell<Option<GtkPlayer>> = const { RefCell::new(None) };
+    }
+
+    enum WorkerCommand {
+        Open(NativeOpenRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
+        Prepare(crate::NativePrepareRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
+        Control(NativeControlRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
+        Stats(String, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
+        Diagnostics(String, super::QueuedCall, mpsc::SyncSender<Result<std::collections::BTreeMap<String, Option<String>>>>),
+        Park(super::QueuedCall, mpsc::SyncSender<Result<()>>),
+        Shutdown,
+    }
+
+    struct GtkPlayer {
+        session_key: String,
+        epoch: Arc<AtomicU64>,
+        closed: Arc<AtomicBool>,
+        worker: mpsc::Sender<WorkerCommand>,
+        render_context: Rc<RefCell<Option<RenderContext>>>,
+        gl_area: gtk::GLArea,
+        widget: gtk::Widget,
+        render_signal: Option<gtk::glib::SignalHandlerId>,
+        update_source: Option<gtk::glib::SourceId>,
+        layout_redraw_pending: Rc<Cell<bool>>,
+        layout_commits: Cell<u64>,
+        layout_sample_at: Cell<Instant>,
+    }
+
+    fn enqueue<T>(player: &GtkPlayer, make: impl FnOnce(super::QueuedCall, mpsc::SyncSender<Result<T>>) -> WorkerCommand) -> Result<super::Pending<T>> {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let call = super::QueuedCall::new();
+        let expected = player.epoch.load(Ordering::Acquire);
+        player.worker.send(make(call.clone(), sender)).map_err(|_| Error::Pipeline("native mpv worker is unavailable".into()))?;
+        Ok(super::Pending { receiver, call, session: Some((Arc::clone(&player.epoch), expected)) })
     }
 
     #[derive(Clone)]
@@ -1323,7 +1405,6 @@ mod linux_mpv {
         playback_error: Option<String>,
         source_headers: std::collections::BTreeMap<String, String>,
         next: Option<crate::NativeNextSource>,
-        event_source: Option<gtk::glib::SourceId>,
         cue: bool,
         radio: bool,
         replay_gain: crate::mpv_replaygain::ReplayGain,
@@ -1333,18 +1414,10 @@ mod linux_mpv {
         loaded: bool,
         start_seen: bool,
         mpv: Mpv,
-        render_context: Rc<RefCell<Option<RenderContext>>>,
-        gl_area: gtk::GLArea,
-        widget: gtk::Widget,
-        render_signal: Option<gtk::glib::SignalHandlerId>,
-        update_source: Option<gtk::glib::SourceId>,
-        layout_redraw_pending: Rc<Cell<bool>>,
-        presented_frames: Rc<Cell<u64>>,
+        presented_frames: Arc<AtomicU64>,
         last_presented_frames: u64,
         last_sample_at: Instant,
         measured_fps: f64,
-        layout_commits: Cell<u64>,
-        layout_sample_at: Cell<Instant>,
         tracks: Vec<NativeTrackInfo>,
         track_targets: Vec<TrackTarget>,
         tracks_dirty: bool,
@@ -1352,15 +1425,13 @@ mod linux_mpv {
         startup_buffer: crate::mpv_startup::StartupBuffer,
         default_network: crate::mpv_radio::NetworkDefaults,
         default_live_start: crate::mpv_iptv::LiveStartDefaults,
-        error: Rc<RefCell<Option<String>>>,
+        error: Arc<Mutex<Option<String>>>,
     }
 
-    impl Drop for MpvPlayer {
+    impl Drop for GtkPlayer {
         fn drop(&mut self) {
-            let _ = self.mpv.command("stop", &[]);
-            if let Some(source) = self.event_source.take() {
-                source.remove();
-            }
+            self.epoch.fetch_add(1, Ordering::Release);
+            self.closed.store(true, Ordering::Release);
             if let Some(source) = self.update_source.take() {
                 source.remove();
             }
@@ -1372,31 +1443,29 @@ mod linux_mpv {
             self.gl_area.make_current();
             *self.render_context.borrow_mut() = None;
             self.widget.hide();
+            // The worker owns the mpv handle. It may destroy that handle only
+            // after the render context above has gone away.
+            let _ = self.worker.send(WorkerCommand::Shutdown);
         }
     }
 
     pub fn open<R: Runtime>(
         app: &AppHandle<R>,
         payload: NativeOpenRequest,
-    ) -> Result<NativePlaybackSnapshot> {
+    ) -> Result<super::Pending<NativePlaybackSnapshot>> {
         super::linux_surface::ensure_host(app)?;
         PLAYER.with(|slot| {
             let mut slot = slot.borrow_mut();
-            if let Some(player) = slot.as_mut() {
-                load_source(player, &payload)?;
-                return snapshot(player);
+            if slot.is_none() {
+                *slot = Some(create_player()?);
             }
-            let mut player = create_player()?;
-            load_source(&mut player, &payload)?;
-            if std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some() {
-                eprintln!("mpv init: collecting initial snapshot");
-            }
-            let result = snapshot(&mut player)?;
-            if std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some() {
-                eprintln!("mpv init: initial snapshot complete");
-            }
-            *slot = Some(player);
-            Ok(result)
+            let player = slot.as_mut().unwrap();
+            super::linux_surface::place_widget(&player.widget, payload.x, payload.y, payload.width, payload.height)?;
+            schedule_layout_render(player);
+            player.epoch.fetch_add(1, Ordering::Release);
+            let pending = enqueue(player, |call, sender| WorkerCommand::Open(payload.clone(), call, sender))?;
+            player.session_key = payload.session_key;
+            Ok(pending)
         })
     }
 
@@ -1407,16 +1476,14 @@ mod linux_mpv {
             if slot.is_none() {
                 *slot = Some(create_player()?);
             }
-            let player = slot.as_ref().unwrap();
-            if !player.session_key.is_empty() {
+            if !slot.as_ref().unwrap().session_key.is_empty() {
                 return Err(Error::Pipeline("native readiness cannot interrupt a media session".into()));
             }
-            player.mpv.get_property::<String>("mpv-version").map_err(mpv_error)?;
             Ok(())
         })
     }
 
-    fn create_player() -> Result<MpvPlayer> {
+    fn create_player() -> Result<GtkPlayer> {
         let trace = std::env::var_os("TAURI_VIDEO_TELEMETRY").is_some();
         if trace {
             eprintln!("mpv init: begin");
@@ -1500,24 +1567,11 @@ mod linux_mpv {
         }
         mpv.disable_deprecated_events().map_err(mpv_error)?;
         mpv.disable_event(mpv_event_id::Tick).map_err(mpv_error)?;
+        mpv.request_log_messages("warn").map_err(mpv_error)?;
         mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
-        // A preload hook cannot wait for the host's 250 ms snapshot poll: that
-        // can exhaust the output buffer between two already prepared tracks.
-        #[allow(deprecated)]
-        let (event_sender, event_receiver) = gtk::glib::MainContext::sync_channel::<()>(gtk::glib::Priority::DEFAULT, 1);
-        mpv.set_wakeup_callback(move || { let _ = event_sender.try_send(()); });
-        let event_source = event_receiver.attach(None, |_| {
-            PLAYER.with(|slot| {
-                if let Ok(mut slot) = slot.try_borrow_mut() {
-                    if let Some(player) = slot.as_mut() {
-                        if let Err(error) = drain_events(player) {
-                            player.playback_error = Some(error.to_string());
-                        }
-                    }
-                }
-            });
-            gtk::glib::ControlFlow::Continue
-        });
+        // Read immutable defaults before the GTK thread becomes this core's
+        // render thread. All subsequent normal client calls belong to worker.
+        mpv.get_property::<String>("mpv-version").map_err(mpv_error)?;
         let default_buffer = MpvBufferDefaults::read(&mpv);
         let startup_buffer = crate::mpv_startup::StartupBuffer::read(&mpv)?;
         let default_network = crate::mpv_radio::NetworkDefaults::read(&mpv)?;
@@ -1568,11 +1622,11 @@ mod linux_mpv {
             gtk::glib::ControlFlow::Continue
         });
 
-        let presented_frames = Rc::new(Cell::new(0_u64));
-        let render_error = Rc::new(RefCell::new(None));
+        let presented_frames = Arc::new(AtomicU64::new(0));
+        let render_error = Arc::new(Mutex::new(None));
         let context_for_render = Rc::clone(&render_context);
-        let frames_for_render = Rc::clone(&presented_frames);
-        let error_for_render = Rc::clone(&render_error);
+        let frames_for_render = Arc::clone(&presented_frames);
+        let error_for_render = Arc::clone(&render_error);
         let render_signal = gl_area.connect_render(move |area, _| {
             const GL_FRAMEBUFFER_BINDING: u32 = 0x8CA6;
             let scale = area.scale_factor().max(1);
@@ -1594,10 +1648,10 @@ mod linux_mpv {
                     Ok(())
                 });
             match rendered {
-                Ok(()) => frames_for_render.set(frames_for_render.get().saturating_add(1)),
+                Ok(()) => { frames_for_render.fetch_add(1, Ordering::Relaxed); }
                 Err(error) => {
                     eprintln!("mpv render error: {error}");
-                    *error_for_render.borrow_mut() = Some(error);
+                    *error_for_render.lock().unwrap() = Some(error);
                 }
             }
             gtk::glib::Propagation::Stop
@@ -1616,7 +1670,6 @@ mod linux_mpv {
             playback_error: None,
             source_headers: std::collections::BTreeMap::new(),
             next: None,
-            event_source: Some(event_source),
             cue: false,
             radio: false,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
@@ -1626,18 +1679,10 @@ mod linux_mpv {
             loaded: false,
             start_seen: false,
             mpv,
-            render_context,
-            gl_area,
-            widget,
-            render_signal: Some(render_signal),
-            update_source: Some(update_source),
-            layout_redraw_pending: Rc::new(Cell::new(false)),
             presented_frames,
             last_presented_frames: 0,
             last_sample_at: Instant::now(),
             measured_fps: 0.0,
-            layout_commits: Cell::new(0),
-            layout_sample_at: Cell::new(Instant::now()),
             tracks: Vec::new(),
             track_targets: Vec::new(),
             tracks_dirty: true,
@@ -1647,8 +1692,64 @@ mod linux_mpv {
             default_live_start,
             error: render_error,
         };
-        player.widget.hide();
-        Ok(player)
+        let (worker, receiver) = mpsc::channel();
+        let closed = Arc::new(AtomicBool::new(false));
+        let worker_closed = Arc::clone(&closed);
+        std::thread::Builder::new().name("couch-mpv-control".into()).spawn(move || run_worker(player, receiver, worker_closed))
+            .map_err(|error| Error::Pipeline(format!("could not start mpv control thread: {error}")))?;
+        widget.hide();
+        Ok(GtkPlayer {
+            session_key: String::new(), epoch: Arc::new(AtomicU64::new(0)), closed, worker, render_context, gl_area, widget,
+            render_signal: Some(render_signal), update_source: Some(update_source),
+            layout_redraw_pending: Rc::new(Cell::new(false)),
+            layout_commits: Cell::new(0), layout_sample_at: Cell::new(Instant::now()),
+        })
+    }
+
+    fn run_worker(mut player: MpvPlayer, receiver: mpsc::Receiver<WorkerCommand>, closed: Arc<AtomicBool>) {
+        loop {
+            let command = receiver.recv_timeout(Duration::from_millis(10));
+            if closed.load(Ordering::Acquire) {
+                match &command {
+                    Ok(WorkerCommand::Open(_, _, sender))
+                    | Ok(WorkerCommand::Prepare(_, _, sender))
+                    | Ok(WorkerCommand::Control(_, _, sender))
+                    | Ok(WorkerCommand::Stats(_, _, sender)) => { let _ = sender.send(Err(Error::InvalidRequest("native player session is stale".into()))); continue; }
+                    Ok(WorkerCommand::Diagnostics(_, _, sender)) => { let _ = sender.send(Err(Error::InvalidRequest("native player session is stale".into()))); continue; }
+                    Ok(WorkerCommand::Park(_, sender)) => { let _ = sender.send(Err(Error::InvalidRequest("native player session is stale".into()))); continue; }
+                    Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                    _ => {}
+                }
+            }
+            match command {
+                Ok(WorkerCommand::Open(payload, call, sender)) if call.start() => {
+                    let _ = sender.send(load_source(&mut player, &payload).and_then(|()| snapshot(&mut player)));
+                }
+                Ok(WorkerCommand::Prepare(payload, call, sender)) if call.start() => {
+                    let _ = sender.send(prepare_worker(&mut player, payload));
+                }
+                Ok(WorkerCommand::Control(payload, call, sender)) if call.start() => {
+                    let _ = sender.send(control_worker(&mut player, payload));
+                }
+                Ok(WorkerCommand::Stats(session, call, sender)) if call.start() => {
+                    let _ = sender.send(ensure_session(&player.session_key, &session).and_then(|()| snapshot(&mut player)));
+                }
+                Ok(WorkerCommand::Diagnostics(session, call, sender)) if call.start() => {
+                    let _ = sender.send(ensure_session(&player.session_key, &session).map(|()| diagnostic_properties_worker(&player)));
+                }
+                Ok(WorkerCommand::Park(call, sender)) if call.start() => {
+                    let _ = sender.send(park_player(&mut player));
+                }
+                Ok(WorkerCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Ok(_) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            // A preload hook needs prompt service independently of the host's
+            // snapshot poll. This worker never owns or waits for the GL context.
+            if let Err(error) = drain_events(&mut player) {
+                player.playback_error = Some(error.to_string());
+            }
+        }
+        let _ = player.mpv.command("stop", &[]);
     }
 
     fn load_source(player: &mut MpvPlayer, payload: &NativeOpenRequest) -> Result<()> {
@@ -1708,14 +1809,6 @@ mod linux_mpv {
             .mpv
             .command("loadfile", &[&payload.uri, "replace"])
             .map_err(mpv_error)?;
-        super::linux_surface::place_widget(
-            &player.widget,
-            payload.x,
-            payload.y,
-            payload.width,
-            payload.height,
-        )?;
-        schedule_layout_render(player);
         player.session_key.clone_from(&payload.session_key);
         player.playback_id.clone_from(&payload.session_key);
         player.source_headers.clone_from(&payload.headers);
@@ -1723,19 +1816,23 @@ mod linux_mpv {
         player.tracks.clear();
         player.track_targets.clear();
         player.tracks_dirty = true;
-        *player.error.borrow_mut() = None;
-        player.last_presented_frames = player.presented_frames.get();
+        *player.error.lock().unwrap() = None;
+        player.last_presented_frames = player.presented_frames.load(Ordering::Relaxed);
         player.last_sample_at = Instant::now();
         player.measured_fps = 0.0;
-        player.layout_commits.set(0);
-        player.layout_sample_at.set(Instant::now());
         Ok(())
     }
 
-    pub fn prepare(payload: crate::NativePrepareRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn prepare(payload: crate::NativePrepareRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         PLAYER.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            let player = slot.as_mut().ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
+            let slot = slot.borrow();
+            let player = slot.as_ref().ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
+            ensure_session(&player.session_key, &payload.session_key)?;
+            enqueue(player, |call, sender| WorkerCommand::Prepare(payload, call, sender))
+        })
+    }
+
+    fn prepare_worker(player: &mut MpvPlayer, payload: crate::NativePrepareRequest) -> Result<NativePlaybackSnapshot> {
             ensure_session(&player.session_key, &payload.session_key)?;
             drain_events(player)?;
             player.next = None;
@@ -1763,7 +1860,6 @@ mod linux_mpv {
                 player.next = Some(next);
             }
             snapshot(player)
-        })
     }
 
     fn configure_start(mpv: &Mpv, position: Option<f64>, cue: bool) -> Result<()> {
@@ -1886,12 +1982,18 @@ mod linux_mpv {
         Ok(())
     }
 
-    pub fn control(payload: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn control(payload: NativeControlRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         PLAYER.with(|slot| {
-            let mut slot = slot.borrow_mut();
+            let slot = slot.borrow();
             let player = slot
-                .as_mut()
+                .as_ref()
                 .ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
+            ensure_session(&player.session_key, &payload.session_key)?;
+            enqueue(player, |call, sender| WorkerCommand::Control(payload, call, sender))
+        })
+    }
+
+    fn control_worker(player: &mut MpvPlayer, payload: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
             ensure_session(&player.session_key, &payload.session_key)?;
             drain_events(player)?;
             if payload.playback_id.as_ref().is_some_and(|id| id != &player.playback_id) {
@@ -1983,7 +2085,6 @@ mod linux_mpv {
                 }
             }
             snapshot(player)
-        })
     }
 
     pub fn layout(payload: NativeLayoutRequest) -> Result<()> {
@@ -2019,7 +2120,7 @@ mod linux_mpv {
         })
     }
 
-    fn schedule_layout_render(player: &MpvPlayer) {
+    fn schedule_layout_render(player: &GtkPlayer) {
         if player.layout_redraw_pending.replace(true) {
             return;
         }
@@ -2034,37 +2135,44 @@ mod linux_mpv {
         });
     }
 
-    pub fn diagnostic_properties(payload: NativeSessionRequest) -> Result<std::collections::BTreeMap<String, Option<String>>> {
+    pub fn diagnostic_properties(payload: NativeSessionRequest) -> Result<super::Pending<std::collections::BTreeMap<String, Option<String>>>> {
         PLAYER.with(|slot| {
             let slot = slot.borrow();
             let player = slot.as_ref().ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
             ensure_session(&player.session_key, &payload.session_key)?;
-            Ok(["mpv-version", "hwdec-current", "current-vo", "current-ao", "audio-device", "video-codec", "gpu-dumb-mode"]
-                .into_iter().map(|name| (name.to_string(), property::<String>(&player.mpv, name).map(|value| value.chars().take(200).collect()))).collect())
+            enqueue(player, |call, sender| WorkerCommand::Diagnostics(payload.session_key, call, sender))
         })
     }
 
-    pub fn stats(payload: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
+    fn diagnostic_properties_worker(player: &MpvPlayer) -> std::collections::BTreeMap<String, Option<String>> {
+        ["mpv-version", "hwdec-current", "current-vo", "current-ao", "audio-device", "video-codec", "gpu-dumb-mode"]
+            .into_iter().map(|name| (name.to_string(), property::<String>(&player.mpv, name).map(|value| value.chars().take(200).collect()))).collect()
+    }
+
+    pub fn stats(payload: NativeSessionRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         PLAYER.with(|slot| {
-            let mut slot = slot.borrow_mut();
+            let slot = slot.borrow();
             let player = slot
-                .as_mut()
+                .as_ref()
                 .ok_or_else(|| Error::InvalidRequest("native player is not open".into()))?;
             ensure_session(&player.session_key, &payload.session_key)?;
-            snapshot(player)
+            enqueue(player, |call, sender| WorkerCommand::Stats(payload.session_key, call, sender))
         })
     }
 
-    pub fn close(payload: NativeSessionRequest) -> Result<()> {
-        let owns_player = PLAYER.with(|slot| {
-            slot.borrow()
-                .as_ref()
-                .is_some_and(|player| player.session_key == payload.session_key)
-        });
-        if owns_player {
-            park_player()?;
-        }
-        Ok(())
+    pub fn close(payload: NativeSessionRequest) -> Result<super::Pending<()>> {
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let Some(player) = slot.as_mut() else { return Ok(super::Pending::ready(Ok(()))); };
+            if player.session_key != payload.session_key { return Ok(super::Pending::ready(Ok(()))); }
+            player.epoch.fetch_add(1, Ordering::Release);
+            let pending = enqueue(player, |call, sender| WorkerCommand::Park(call, sender))?;
+            // Keep GtkGLArea and its render context alive between sources.
+            // Recreating a native GL child can invalidate WebKit composition.
+            player.widget.hide();
+            player.session_key.clear();
+            Ok(pending)
+        })
     }
 
     pub fn owns_session(session_key: &str) -> bool {
@@ -2082,21 +2190,11 @@ mod linux_mpv {
         Ok(())
     }
 
-    fn park_player() -> Result<()> {
-        PLAYER.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            let Some(player) = slot.as_mut() else {
-                return Ok(());
-            };
-            // Keep GtkGLArea and libmpv's render context alive between source
-            // changes. Destroying and immediately recreating a native GL child
-            // can invalidate WebKit's transparent composited layer on Wayland,
-            // leaving a live DOM whose pixels are no longer presented.
+    fn park_player(player: &mut MpvPlayer) -> Result<()> {
             player.next = None;
             player.mpv.set_property("prefetch-playlist", false).map_err(mpv_error)?;
             player.mpv.command("stop", &[]).map_err(mpv_error)?;
             discard_events(&mut player.mpv)?;
-            player.widget.hide();
             player.session_key.clear();
             player.cue = false;
             player.radio = false;
@@ -2105,14 +2203,13 @@ mod linux_mpv {
             player.tracks.clear();
             player.track_targets.clear();
             player.tracks_dirty = true;
-            *player.error.borrow_mut() = None;
+            *player.error.lock().unwrap() = None;
             Ok(())
-        })
     }
 
     fn snapshot(player: &mut MpvPlayer) -> Result<NativePlaybackSnapshot> {
         drain_events(player)?;
-        if let Some(error) = player.error.borrow().clone() {
+        if let Some(error) = player.error.lock().unwrap().clone() {
             return Err(Error::Pipeline(error));
         }
         if player.tracks_dirty {
@@ -2129,7 +2226,7 @@ mod linux_mpv {
             .unwrap_or(position)
             .max(position)
             .min(duration.max(position));
-        let rendered = player.presented_frames.get();
+        let rendered = player.presented_frames.load(Ordering::Relaxed);
         let dropped = property::<i64>(&player.mpv, "frame-drop-count")
             .unwrap_or(0)
             .max(0) as u64;
@@ -2335,6 +2432,9 @@ mod linux_mpv {
                 error
             })? {
                 Event::Shutdown => return Err(Error::Pipeline("mpv shut down".into())),
+                Event::LogMessage { text, .. } if text.contains("mpv_render_context_render() not being called or stuck") => {
+                    eprintln!("mpv stuck render: {text}");
+                }
                 Event::StartFile => {
                     if let Some(next) = player.next.take() {
                         player.playback_id = next.playback_id;
@@ -2633,20 +2733,20 @@ mod linux_mpv {
     pub fn open<R: Runtime>(
         _: &AppHandle<R>,
         _: NativeOpenRequest,
-    ) -> Result<NativePlaybackSnapshot> {
+    ) -> Result<super::Pending<NativePlaybackSnapshot>> {
         unavailable()
     }
-    pub fn control(_: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn control(_: NativeControlRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         unavailable()
     }
     pub fn layout(_: NativeLayoutRequest) -> Result<()> {
         unavailable()
     }
-    pub fn stats(_: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
+    pub fn stats(_: NativeSessionRequest) -> Result<super::Pending<NativePlaybackSnapshot>> {
         unavailable()
     }
-    pub fn close(_: NativeSessionRequest) -> Result<()> {
-        Ok(())
+    pub fn close(_: NativeSessionRequest) -> Result<super::Pending<()>> {
+        Ok(super::Pending::ready(Ok(())))
     }
     pub fn owns_session(_: &str) -> bool {
         false
