@@ -323,25 +323,28 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         ("COUCH_DENO", "deno"),
         ("COUCH_FFPROBE", "ffprobe"),
     ] {
+        let filename = format!("{name}{}", if cfg!(windows) { ".exe" } else { "" });
         let bundled = app
             .path()
             .resource_dir()
             .map_err(|error| error.to_string())?
             .join("tools")
-            .join(name);
+            .join(&filename);
         if !cfg!(debug_assertions) {
-            if !bundled.is_file() {
+            if !bundled.is_file() && playback {
                 return Err(format!(
-                    "This Couch bundle is missing {name}. Reinstall a verified complete AppImage."
+                    "This Couch bundle is missing {name}. Reinstall a verified complete package."
                 ));
             }
-            sidecar = sidecar.env(variable, bundled);
+            if bundled.is_file() {
+                sidecar = sidecar.env(variable, bundled);
+            }
             continue;
         }
         let path = if bundled.is_file() {
             bundled
         } else {
-            host.data_dir.join("tools").join(name)
+            host.data_dir.join("tools").join(filename)
         };
         if std::env::var_os(variable).is_none() && path.is_file() {
             sidecar = sidecar.env(variable, path);

@@ -3,29 +3,20 @@ import { relative, resolve, sep } from "node:path";
 import { version } from "../package.json";
 import tauri from "../src-tauri/tauri.conf.json";
 import { releaseVersion } from "./hosted-policy";
-import debian from "../packaging/debian.json";
+import { createPayload, desktopTarget } from "./desktop-payload";
 import { build as viteBuild } from "vite";
 import { frontendPaths } from "../src/shared/page-paths";
 
-const targets: Record<string, string> = {
-  "darwin-arm64": "aarch64-apple-darwin",
-  "darwin-x64": "x86_64-apple-darwin",
-  "linux-arm64": "aarch64-unknown-linux-gnu",
-  "linux-x64": "x86_64-unknown-linux-gnu",
-};
-const target = targets[`${process.platform}-${process.arch}`];
-if (!target) throw new Error("Build on Linux or macOS for this first desktop slice.");
+const target = desktopTarget();
 const cargo = Bun.TOML.parse(await Bun.file("src-tauri/Cargo.toml").text()) as { package: { version: string } };
 if (version !== tauri.version || version !== cargo.package.version) throw new Error("package.json, Tauri and Cargo versions must match");
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
 const dirty = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim() !== "";
 const helpers = await Bun.file("src-tauri/resources/tools.json").exists() ? await Bun.file("src-tauri/resources/tools.json").json() : null;
-const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged: helpers !== null, helpers });
+const format = process.env.COUCH_PACKAGE_FORMAT ?? (process.platform === "darwin" ? "dmg" : process.platform === "win32" ? "nsis" : "deb");
+const packaged = !!process.env.COUCH_PACKAGE_FORMAT || helpers !== null;
+const buildInfo = JSON.stringify({ version: releaseVersion(version), sourceVersion: version, revision: /^[a-f0-9]{40}$/.test(revision) ? revision : null, dirty, target, dataFormat: 1, readableDataFormats: [1], maintenanceProtocol: "maintenance-v1", bun: Bun.version, packaged, helpers });
 await Bun.write("src-tauri/build-info.json", buildInfo);
-if (helpers) {
-  const host = process.env.COUCH_PACKAGE_FORMAT === "deb" ? debian.depends.map(dependency => dependency.split(" ")[0]) : (await Bun.file("packaging/setup/files.json").json()).common;
-  await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, host: { os: "debian", version: "13", architecture: "amd64", session: "x11", packages: host } }));
-}
 
 await mkdir("src-tauri/binaries", { recursive: true });
 
@@ -62,4 +53,13 @@ const server = await Bun.build({
   define: { "process.env.NODE_ENV": JSON.stringify("production"), "COUCH_BUILD_INFO": JSON.stringify(buildInfo), "import.meta.env.DEV": "false" },
 });
 if (!server.success) throw new AggregateError(server.logs, "Sidecar build failed");
+if (packaged) {
+  const hostFile = Bun.file("src-tauri/resources/host.json");
+  const host = await hostFile.exists() ? await hostFile.json() : { target, os: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux", architecture: process.arch };
+  if (host.target !== target) throw new Error(`Package resources target ${host.target}, build target ${target}`);
+  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${process.platform === "win32" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffprobe"] : []);
+  const inventory = JSON.stringify(payload);
+  await Bun.write("src-tauri/resources/payload.json", inventory);
+  await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, packageFormat: format, host, payloadSha256: new Bun.CryptoHasher("sha256").update(inventory).digest("hex") }));
+}
 console.log(`Built one frontend (Vite), embedded in Tauri assets and the Bun sidecar for ${target}`);

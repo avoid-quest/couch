@@ -11,6 +11,7 @@ const cacheSeconds = 10;
 const checkMilliseconds = 10_000;
 const maximumBytes = 256 * 1024 * 1024;
 const managedTools = [{ name: "yt-dlp", file: "yt-dlp", variable: "COUCH_YT_DLP" }, { name: "Deno", file: "deno", variable: "COUCH_DENO" }] as const;
+const packagedFile = (name: string) => name + (process.platform === "win32" ? ".exe" : "");
 type Options = { packaged: boolean; helpers: unknown; env?: NodeJS.ProcessEnv; directory?: string; command?: typeof runDiagnosticCommand; packageStatus?: typeof readAptPackageStatus };
 const observation = (status: ToolObservation["status"], error: string | null, version: string | null = null): ToolObservation => ({ status, version, error });
 const unknown = () => observation("unknown", "The local check did not finish. Try again after the TV responds.");
@@ -44,7 +45,7 @@ async function verifyPackage(path: string, expected: string, signal: AbortSignal
     const after = await lstat(path);
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== bytes || before.size !== after.size || before.mtimeMs !== after.mtimeMs) return observation("unknown", "The package tool changed during its check. Try again.");
     if (hash.digest("hex") !== expected) return observation("corrupt", "The package tool does not match this Couch release. It was not executed.");
-    if (!(before.mode & 0o111)) return observation("error", "The verified package tool is not executable.");
+    if (process.platform !== "win32" && !(before.mode & 0o111)) return observation("error", "The verified package tool is not executable.");
     return null;
   } finally { await file.close(); }
 }
@@ -78,7 +79,7 @@ export function createToolHealth(options: Options) {
   async function collect(signal: AbortSignal, installedOnly = false): Promise<ToolHealth> {
     const packages: { installed: ToolObservation; path: string; resolved: string | null; identity: { dev: number; ino: number } | null; expectedVersion: string | null }[] = [];
     for (const tool of managedTools) {
-      const expected = expectedHelper(options.helpers, tool.file), packagePath = join(directory, tool.file);
+      const expected = expectedHelper(options.helpers, tool.file), packagePath = join(directory, packagedFile(tool.file));
       let installed: ToolObservation = observation("unknown", "Package integrity is available only for a packaged build with release helper metadata.");
       if (options.packaged && expected && !signal.aborted) {
         try {
@@ -92,7 +93,7 @@ export function createToolHealth(options: Options) {
       packages.push({ installed, path: packagePath, resolved: signal.aborted ? null : await realpath(packagePath).catch(() => null), identity: signal.aborted ? null : await stat(packagePath).catch(() => null), expectedVersion: expected?.version ?? null });
     }
     let ffprobe: ToolObservation = unknown();
-    const probePath = options.packaged ? join(directory, "ffprobe") : env.COUCH_FFPROBE ?? Bun.which("ffprobe", { PATH: env.PATH ?? "/usr/bin:/bin" });
+    const probePath = options.packaged ? join(directory, packagedFile("ffprobe")) : env.COUCH_FFPROBE ?? Bun.which("ffprobe", { PATH: env.PATH ?? "/usr/bin:/bin" });
     try {
       const expected = expectedHelper(options.helpers, "ffprobe");
       if (options.packaged) {
@@ -102,7 +103,7 @@ export function createToolHealth(options: Options) {
         }
       } else ffprobe = await probe("ffprobe", probePath, signal);
     } catch (error) {
-      ffprobe = observation((error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "corrupt", "The bundled ffprobe is unavailable. Reinstall a verified Couch AppImage.");
+      ffprobe = observation((error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "corrupt", "The bundled ffprobe is unavailable. Reinstall a verified Couch package.");
     }
     if (installedOnly) return { checkedAt: new Date().toISOString(), cacheSeconds: 0, ffprobe, tools: packages.map((value, index) => ({ name: managedTools[index]!.name, expectedVersion: value.expectedVersion, installed: value.installed, effective: { ...value.installed, source: "package" } })) };
     const tools: ManagedToolHealth[] = [];
