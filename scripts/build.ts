@@ -7,7 +7,8 @@ import { createPayload, desktopTarget } from "./desktop-payload";
 import { build as viteBuild } from "vite";
 import { frontendPaths } from "../src/shared/page-paths";
 
-const target = desktopTarget();
+const target = process.env.COUCH_DESKTOP_TARGET ?? desktopTarget();
+if (process.env.COUCH_DESKTOP_TARGET && target !== "x86_64-pc-windows-msvc") throw new Error(`Unsupported cross-build target: ${target}`);
 const cargo = Bun.TOML.parse(await Bun.file("src-tauri/Cargo.toml").text()) as { package: { version: string } };
 if (version !== tauri.version || version !== cargo.package.version) throw new Error("package.json, Tauri and Cargo versions must match");
 const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim();
@@ -43,6 +44,7 @@ const server = await Bun.build({
   entrypoints: ["src/main.ts"],
   compile: {
     outfile: `src-tauri/binaries/couch-server-${target}`,
+    ...(target === "x86_64-pc-windows-msvc" ? { target: "bun-windows-x64" as const } : {}),
     autoloadDotenv: false,
     autoloadBunfig: false,
   },
@@ -57,7 +59,7 @@ if (packaged) {
   const hostFile = Bun.file("src-tauri/resources/host.json");
   const host = await hostFile.exists() ? await hostFile.json() : { target, os: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux", architecture: process.arch };
   if (host.target !== target) throw new Error(`Package resources target ${host.target}, build target ${target}`);
-  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${process.platform === "win32" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffprobe"] : [], host.packages ?? []);
+  const payload = await createPayload(target, format, `src-tauri/binaries/couch-server-${target}${target === "x86_64-pc-windows-msvc" ? ".exe" : ""}`, "src-tauri/resources", helpers ? ["yt-dlp", "deno", "ffprobe"] : [], host.packages ?? []);
   const inventory = JSON.stringify(payload);
   await Bun.write("src-tauri/resources/payload.json", inventory);
   await Bun.write("src-tauri/resources/release.json", JSON.stringify({ ...JSON.parse(buildInfo), schemaVersion: 1, packageFormat: format, host, payloadSha256: new Bun.CryptoHasher("sha256").update(inventory).digest("hex") }));
