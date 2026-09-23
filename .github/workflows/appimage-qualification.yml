@@ -53,7 +53,7 @@ jobs:
           docker exec -w /work couch-qualification bun x --no-install tauri signer generate --ci -w /tmp/couch-qualification.key
           docker exec -w /work couch-qualification bash -lc '
             export COUCH_UPDATER_PUBLIC_KEY=$(base64 -w0 /tmp/couch-qualification.key.pub)
-            export TAURI_SIGNING_PRIVATE_KEY=/tmp/couch-qualification.key
+            export TAURI_SIGNING_PRIVATE_KEY=$(cat /tmp/couch-qualification.key)
             export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
             bash scripts/hosted-build.sh appimage
           '
