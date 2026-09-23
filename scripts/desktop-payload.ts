@@ -43,7 +43,7 @@ export async function binaryArchitectures(path: string): Promise<string[]> {
   if (magic === 0x4d5a9000 || (bytes[0] === 0x4d && bytes[1] === 0x5a)) {
     const offset = view.getUint32(0x3c, true);
     if (offset + 6 > bytes.length || view.getUint32(offset, true) !== 0x00004550) return [];
-    return [{ 0x8664: "x86_64", 0xaa64: "aarch64" }[view.getUint16(offset + 4, true)]].filter((value): value is string => !!value);
+    return [{ 0x014c: "i686", 0x8664: "x86_64", 0xaa64: "aarch64" }[view.getUint16(offset + 4, true)]].filter((value): value is string => !!value);
   }
   const little = magic === 0xcefaedfe || magic === 0xcffaedfe;
   if (little || magic === 0xfeedface || magic === 0xfeedfacf) return [{ 0x01000007: "x86_64", 0x0100000c: "aarch64" }[view.getUint32(4, little)]].filter((value): value is string => !!value);

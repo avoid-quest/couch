@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPayload, desktopTarget, isNativeLibrary, payloadPaths, verifyBundledNativeLibraries, verifyPayload } from "./desktop-payload";
+import { binaryArchitectures, createPayload, desktopTarget, isNativeLibrary, payloadPaths, verifyBundledNativeLibraries, verifyPayload } from "./desktop-payload";
 
 function executable(target: string) {
   const bytes = Buffer.alloc(128);
@@ -92,6 +92,16 @@ test("build target selection includes Windows and rejects unsupported targets", 
 test("native library paths cover shared objects on each desktop target", () => {
   for (const path of ["usr/lib/Couch/libmpv.so.2", "Contents/Frameworks/libmpv.dylib", "libmpv.dll"]) expect(isNativeLibrary(path)).toBe(true);
   expect(isNativeLibrary("usr/bin/couch-server")).toBe(false);
+});
+
+test("32-bit NSIS stub is distinct from the required x64 application", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "couch-nsis-stub-"));
+  try {
+    const path = join(directory, "setup.exe"), bytes = executable("x86_64-pc-windows-msvc");
+    bytes.writeUInt16LE(0x014c, 68);
+    await Bun.write(path, bytes);
+    expect(await binaryArchitectures(path)).toEqual(["i686"]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test("Client-only payload records the coordinator without claiming local media helpers", async () => {

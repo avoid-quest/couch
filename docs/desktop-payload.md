@@ -30,7 +30,7 @@ actual artifact layout and include notices in their resource map.
 | Client-only, all targets | Tauri/WebView runtime and Bun maintenance coordinator. The existing Debian package also carries the three local-media helpers. | A limited Client-only artifact may omit those helpers; its payload records an empty enabled-helper list. The target installer tickets must prove their installed runtime closure. |
 | Full on Linux | Client-only closure plus `yt-dlp`, Deno, `ffprobe`, GTK/WebKit, `libmpv2`, FFmpeg libraries, GL/video drivers and audio libraries. The Linux video plugin's `mpv-runtime` feature is linked into the app even when the user selects a remote host. | Debian declares host packages in `packaging/debian.json`; its artifact verifier checks those dependencies and rejects bundled shared libraries missing from the payload inventory. The current Debian archive bundles no shared libraries; APT supplies them and the installed fixture checks their linkage. `src-tauri/tauri.package.conf.json` lists AppImage native file inputs, which [#477](https://github.com/avoid-quest/couch/issues/477) must verify after bundling. |
 | Full on macOS | Client-only closure plus the selected libmpv runtime and its transitive libraries. | [#478](https://github.com/avoid-quest/couch/issues/478) owns the Client-only DMG's installed closure; the production Mac player and native dependency bundle belong to the Mac playback and helper tickets. A development Homebrew link is not installed proof. |
-| Full on Windows | Client-only closure plus the native player and its DLL closure after the Windows composition decision. | [#479](https://github.com/avoid-quest/couch/issues/479) owns the Client-only NSIS artifact's installed closure. No production Windows native player is present yet; the Windows installer and player tickets must record the selected binaries and notices. |
+| Full on Windows | Client-only closure plus the native player and its DLL closure after the Windows composition decision. | [#479](https://github.com/avoid-quest/couch/issues/479) owns the Client-only NSIS artifact's static closure; [#492](https://github.com/avoid-quest/couch/issues/492) owns installed Windows runtime and trust checks. No production Windows native player is present yet. |
 
 `packaging/inputs.json` pins the current Debian helper archives, Bun notice,
 Tauri AppImage tools and builder images. `resources/tools.json` records each
@@ -51,3 +51,31 @@ The current Debian package and TV setup remain on `package:build deb` and their
 existing qualification path. This source inventory cannot establish a clean
 installed launch on macOS, Windows or broad Linux. Those checks belong to the
 target installer tickets and their downloaded-artifact acceptance tests.
+
+## Windows Client-only package
+
+On a macOS cross-build host, install Rust's `x86_64-pc-windows-msvc` target,
+`cargo-xwin`, LLVM, NSIS, `cargo-about`, Minisign and 7-Zip. With the enrolled
+`COUCH_UPDATER_PUBLIC_KEY` and `TAURI_SIGNING_PRIVATE_KEY` set, run
+`bun run package:windows` on a clean commit. It uses Tauri's current-user NSIS
+mode and downloaded WebView2 bootstrapper. The app identifier stays
+`quest.avoid.couch`; the package contains no existing user database or selected
+host state. This macOS command cross-builds a Windows artifact for static
+qualification; it is not the Linux release delivery path. The existing Package
+workflow keeps its pinned Debian builder, and the T480 never builds packages.
+
+The command cross-compiles the Bun coordinator and Tauri app, then inspects the
+real installer. It checks its extracted app and coordinator as x64 PE files,
+payload hashes and paths, notices, native DLL list, direct PE imports, release
+identity, and both Tauri signatures. Every direct import must resolve to a
+bundled root DLL or the reviewed Windows system/API-set allowlist. Windows
+[API sets](https://learn.microsoft.com/en-us/windows/win32/apiindex/windows-apisets)
+are loader contracts, and the
+[Universal CRT](https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment)
+ships with Windows 10 and later. This static check cannot find DLLs loaded by
+name at runtime. NSIS itself uses a 32-bit installer stub. The updater ZIP
+contains that installer and a root `release.json`; the final ZIP bytes are signed
+again after the manifest is added. The feed target is `windows-x86_64-nsis`.
+The receipt is `.artifacts/windows-inventory.json`. Windows 11 installation,
+WebView2 startup, OS trust prompts and retained state after reinstall remain
+the installed qualification in [#492](https://github.com/avoid-quest/couch/issues/492).
