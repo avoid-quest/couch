@@ -1,5 +1,8 @@
 use serde::Deserialize;
-use serde_json::{json, Value};
+#[cfg(not(target_os = "macos"))]
+use serde_json::Value;
+#[cfg(target_os = "linux")]
+use serde_json::json;
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,12 +15,18 @@ pub struct Action {
     pub answer: Option<String>,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+#[path = "bluetooth_macos.rs"]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::Bluetooth;
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 #[derive(Default)]
 pub struct Bluetooth;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 impl Bluetooth {
-    pub async fn request(&self, _: Action) -> Result<Value, String> { Err("Bluetooth requires the native Ubuntu TV session.".into()) }
+    pub async fn request(&self, _: Action) -> Result<Value, String> { Err("Bluetooth management is unavailable on this playback host.".into()) }
     pub fn close(&self) {}
 }
 

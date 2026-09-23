@@ -85,9 +85,9 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
     <h3>Bluetooth</h3>
     <p>Put your device in pairing mode, then search and choose it below.</p>
     {error && <p role="alert">{error}</p>}
-    {!connected && <p>Reconnect to manage Bluetooth on the TV.</p>}
-    {state?.adapter === "absent" && <p>No Bluetooth adapter is attached to the TV.</p>}
-    {state?.adapter === "blocked" && <p>Bluetooth is blocked. Turn off airplane mode or release the TV computer's Bluetooth switch.</p>}
+    {!connected && <p>Reconnect to manage Bluetooth on the playback computer.</p>}
+    {state?.adapter === "absent" && <p>No Bluetooth adapter is attached to the playback computer.</p>}
+    {state?.adapter === "blocked" && <p>Bluetooth is blocked. Turn off airplane mode or release the playback computer's Bluetooth switch.</p>}
     {state?.adapter === "off" && <Button disabled={disabled} onClick={() => change({ op: "power" })}>Turn Bluetooth on</Button>}
     {state?.adapter === "available" && <Button disabled={!connected || pending || active && !(own && searching)} onClick={() => change(own && searching ? { op: "cancel", token: current.id } : { op: "scan" })}>{searching ? own ? "Stop search" : "Searching…" : "Search"}</Button>}
     {current && <div role="status" className="space-y-2">
@@ -104,6 +104,6 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
         <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => change({ op: device.connected ? "disconnect" : device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => change({ op: "forget", device: device.address })}>Forget</Button>}</div>
       </li>;
     })}</ul>
-    <p className="text-sm text-muted-foreground">Search again to find unavailable devices. For speakers and headphones, choose the connected output in Sound. Connecting does not change your sound output or start playback.</p>
+    <p className="text-sm text-muted-foreground">Search again to find unavailable devices. For speakers and headphones, check Sound for the connected output before playback. Connecting does not start playback.</p>
   </section>;
 }
