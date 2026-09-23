@@ -77,7 +77,8 @@ hub = createHub({
   adminRecoveryCode,
   hostToken: process.env.COUCH_HOST_TOKEN ?? crypto.randomUUID(),
   frontend, assets,
-  development: !native && process.env.NODE_ENV !== "production",
+  // Tauri and browser development use Vite HMR; Bun serves the Client-only page.
+  development: false,
   advertisedUrls: process.env.COUCH_ADVERTISE_URLS?.split(",").map(value => value.trim()).filter(Boolean),
   sendPlayer(command) {
     if (native) send({ type: "playback", command });

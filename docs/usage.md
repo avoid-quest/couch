@@ -258,10 +258,12 @@ For browser development without a native player:
 bun run dev
 ```
 
-Bun serves the UI with hot reload and prints the pairing code in the terminal.
-Queue and pairing work; playback is explicitly unavailable. Run either this
-server or the desktop app on port 4100. `COUCH_PORT` can select another
-port, but keep it stable so remotes retain their address.
+Open `http://localhost:1420` for the browser UI. Vite hot reloads frontend edits
+and proxies the API to the Bun server on port 4100, which prints the pairing code
+in the terminal. Queue and pairing work; playback is explicitly unavailable.
+Run either this command or the desktop app on port 4100. `COUCH_PORT` can select
+another API port, but keep it stable so remotes retain their address. Client-only
+remotes continue to load the Bun-hosted UI on the server's advertised URLs.
 
 macOS can build and run the desktop UI/server, but this first native playback
 implementation is Linux-only. To produce a local macOS debug app:
