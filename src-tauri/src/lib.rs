@@ -1,6 +1,7 @@
 mod appimage_update;
 mod bluetooth;
 mod deb_update;
+mod desktop_lifecycle;
 mod diagnostics;
 mod display;
 mod metadata_export;
@@ -51,6 +52,9 @@ struct Host {
         )>,
     >,
     shutting_down: AtomicBool,
+    window_closed: AtomicBool,
+    quit_pending: AtomicBool,
+    quit_confirmed: AtomicBool,
     child_exited: watch::Sender<bool>,
 }
 
@@ -95,7 +99,10 @@ fn prepare_data_dir(path: &std::path::Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-async fn connection_info(_app: tauri::AppHandle, host: tauri::State<'_, Host>) -> Result<ConnectionInfo, String> {
+async fn connection_info(
+    _app: tauri::AppHandle,
+    host: tauri::State<'_, Host>,
+) -> Result<ConnectionInfo, String> {
     let mut connection = host.connection.subscribe();
     tokio::time::timeout(Duration::from_secs(15), async move {
         loop {
@@ -150,7 +157,14 @@ fn set_video_rect(rect: VideoRect, host: tauri::State<'_, Host>) -> Result<(), S
     {
         return Err("Invalid video rectangle".into());
     }
-    if !host.layouts.lock().expect("layout queue poisoned").push(rect) { return Ok(()); }
+    if !host
+        .layouts
+        .lock()
+        .expect("layout queue poisoned")
+        .push(rect)
+    {
+        return Ok(());
+    }
     host.player.send(player::Request::Layout).map_err(|_| {
         host.layouts.lock().expect("layout queue poisoned").cancel();
         "Native player stopped".into()
@@ -249,10 +263,18 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         uuid::Uuid::new_v4().simple()
     );
     #[cfg(dev)]
-    let sidecar = app.shell().command(std::env::var_os("COUCH_DEV_BUN")
-        .ok_or("Start development with bun run desktop so Couch can locate Bun.")?)
+    let sidecar = app
+        .shell()
+        .command(
+            std::env::var_os("COUCH_DEV_BUN")
+                .ok_or("Start development with bun run desktop so Couch can locate Bun.")?,
+        )
         .args(["run", "src/main.ts"])
-        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap());
+        .current_dir(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .unwrap(),
+        );
     #[cfg(not(dev))]
     let sidecar = app
         .shell()
@@ -278,11 +300,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
         )
         .env(
             "COUCH_PACKAGE_UPDATE",
-            if deb_update::running(app) {
-                "1"
-            } else {
-                "0"
-            },
+            if deb_update::running(app) { "1" } else { "0" },
         )
         .env("COUCH_HOST_TOKEN", token)
         .env("COUCH_DATA_DIR", &host.data_dir)
@@ -504,6 +522,10 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
     Ok(())
 }
 
+fn tv_presentation() -> bool {
+    cfg!(target_os = "linux") && std::env::var("COUCH_TV_PRESENTATION").as_deref() == Ok("1")
+}
+
 pub fn run() {
     if std::env::args().any(|arg| arg == "--version") {
         println!(
@@ -514,10 +536,7 @@ pub fn run() {
     }
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            desktop_lifecycle::show(app);
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -572,6 +591,9 @@ pub fn run() {
                 deb_busy: AtomicBool::new(false),
                 update_checkpoint: Mutex::new(None),
                 shutting_down: AtomicBool::new(false),
+                window_closed: AtomicBool::new(false),
+                quit_pending: AtomicBool::new(false),
+                quit_confirmed: AtomicBool::new(false),
                 child_exited,
             });
             tauri::async_runtime::spawn(appimage_update::run(
@@ -588,12 +610,23 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
-            let tv_presentation = cfg!(target_os = "linux")
-                && std::env::var("COUCH_TV_PRESENTATION").as_deref() == Ok("1");
+            let tv_presentation = tv_presentation();
             config.fullscreen = tv_presentation;
             config.decorations = !tv_presentation;
+            if !tv_presentation {
+                use tauri_plugin_window_state::StateFlags;
+                app.handle().plugin(
+                    tauri_plugin_window_state::Builder::default()
+                        .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                        .with_denylist(&["remote"])
+                        .with_filename(data_dir.join("window-state.json").to_string_lossy())
+                        .build(),
+                )?;
+                #[cfg(target_os = "macos")]
+                desktop_lifecycle::install_mac_menu(app.handle())?;
+            }
             let handle = app.handle().clone();
-            tauri::WebviewWindowBuilder::from_config(app, &config)?
+            let main = tauri::WebviewWindowBuilder::from_config(app, &config)?
                 .initialization_script(format!(
                     "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', {{ value: true }}); Object.defineProperty(window, '__COUCH_TV_PRESENTATION__', {{ value: {} }});",
                     tv_presentation
@@ -601,12 +634,20 @@ pub fn run() {
                 .on_navigation(move |url| operating_mode::app_origin(handle.config(), url))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;
+            if !tv_presentation {
+                desktop_lifecycle::recover_window(&main)?;
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("Cannot start Couch")
         .run(|app, event| {
             if let tauri::RunEvent::WindowEvent { label, event, .. } = &event {
+                if label == "main" && !tv_presentation() {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        desktop_lifecycle::close(app, api);
+                    }
+                }
                 if label == "remote" && matches!(event, tauri::WindowEvent::Destroyed) {
                     app.state::<operating_mode::Modes>().remote_destroyed();
                 }
@@ -625,8 +666,21 @@ pub fn run() {
                     }
                 }
             }
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                desktop_lifecycle::show(app);
+            }
             if let tauri::RunEvent::ExitRequested { ref api, code, .. } = event {
                 let host = app.state::<Host>();
+                log::info!("Exit requested with code {code:?}");
+                if code.is_none()
+                    && !tv_presentation()
+                    && !host.quit_confirmed.load(Ordering::SeqCst)
+                {
+                    api.prevent_exit();
+                    desktop_lifecycle::request_quit(app);
+                    return;
+                }
                 if host.child.lock().expect("sidecar lock poisoned").is_none() {
                     return;
                 }
