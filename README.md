@@ -17,20 +17,22 @@ queue together. Movies, music, radio, and online video play on the same screen.
   highest available format. Existing explicit browser choices are retained.
 - **Tune in.** Add avoid radio in one click, import a radio M3U playlist, or find
   stations through Radio Browser.
-- **Share the controls.** Pair a browser with the TV's six-digit code. Everyone
-  can browse independently, add to the shared queue, and control playback.
-  The TV stays fullscreen; phones and laptops get a compact remote with TV
-  navigation, built with shadcn/ui Mira. Claim the first administrator from your
-  phone with the separate TV setup code, then name the TV in Settings.
-- **Come back later.** Save playlists, track local viewing progress by profile,
-  and resume where you left off.
+- **Share the controls.** Scan the TV's pairing QR or enter its six-digit code.
+  Everyone can browse independently, add to the shared queue, and control
+  playback. The TV stays fullscreen; phones and laptops get a compact remote
+  with TV navigation, built with shadcn/ui Mira. The first remote claims
+  Administrator access with the separate setup code.
+- **Come back later.** Save playlists, track local viewing progress, and resume
+  where you left off.
 
 Couch runs the player and its server on your TV computer. Browser remotes connect
 on your local network. `couch.avoid.quest` is the project identity; the commands
 below run a local app and do not deploy a hosted service.
 
 On Mac or Windows, [connect as a browser controller](docs/desktop-controllers.md)
-or save the TV's address as a Dock or taskbar app. The Debian TV plays the media.
+or save the TV's address as a Dock or taskbar app. A native Mac app can also run
+from source in local or remote mode, but local Mac playback is not implemented.
+The Debian TV plays the media.
 
 ## Try it with Docker
 
@@ -42,9 +44,9 @@ bun run preview:linux
 ```
 
 The launcher opens the web remote and prints a Linux TV screen URL. Open that
-screen to get the pairing code, then name and pair your remote. It also prints a
-LAN address for your phone. An unclaimed TV opens Settings with a QR address and
-separate administrator code. See [setup and recovery](docs/usage.md#administrator-and-connection-settings).
+screen to get the pairing QR and code, then name and pair your remote. It also
+prints a LAN address for your phone. An unclaimed TV shows **Claim and name**
+with a separate administrator code. See [setup and recovery](docs/usage.md#administrator-and-connection-settings).
 
 The preview runs the real Linux app in a container with silent audio and software
 rendering. It keeps running when you close the browser. Stop it with:
@@ -67,15 +69,15 @@ For a dedicated TV, run `sudo couch-setup --tv` after installing the package.
 This explicitly enables the dedicated account and TV login/power configuration.
 See [TV setup](docs/native-tv.md).
 
-Paired Administrators can install signed native updates remotely. Manual updates
-are the default; automatic updates wait for ten continuous idle minutes. A
+The local host and paired Administrators can install signed native updates;
+ordinary Controllers cannot. Manual updates are the default; optional automatic
+updates wait for ten continuous idle minutes. A
 restricted system service verifies the package before APT installs it. It does
 not give the Couch account general package-manager privileges.
 
 CrabNebula hosts downloads independently of the build machine. GitHub Actions
-builds and qualifies releases in the pinned Debian container. If hosted capacity
-is unavailable, the Mac runs the same build; the T480 only installs and runs
-Couch. See [hosted releases](docs/hosted-releases.md).
+builds and qualifies releases in the pinned Debian container. The T480 only
+installs and runs Couch. See [hosted releases](docs/hosted-releases.md).
 
 On first launch, choose **This computer** for local playback. Enable remote
 control to pair a phone using the displayed code or QR address. Existing
@@ -127,14 +129,21 @@ development uses `.data/`.
 
 ## Where things stand
 
-The native Debian delivery replaces the earlier AppImage setup archive with one
-package. The [release guide](docs/hosted-releases.md) records qualification and
-publication, and the [Debian delivery tickets](https://github.com/avoid-quest/couch/issues/301)
-track its installed acceptance. Earlier dated qualification records describe
-their tested builds, not the current release.
+The [public download page](https://couch.avoid.quest/download) currently offers
+a Debian 13 amd64 `.deb` for desktop or dedicated TV use. Merged source changes
+are not automatically in that download. The [release guide](docs/hosted-releases.md)
+records qualification and publication; earlier dated qualification records
+describe their tested builds.
+
+The [accepted desktop plan](https://github.com/avoid-quest/couch/issues/457#issuecomment-5782578695)
+targets one switchable local/remote app per OS, with broad Linux AppImage,
+macOS DMG and Windows NSIS delivery. Those installers and Desktop Full parity
+still need implementation and downloaded-artifact qualification. A limited
+Client-only release may come first, but it does not establish local playback.
+See the [accepted installation gates](https://github.com/avoid-quest/couch/issues/447#issuecomment-5781937883).
 
 Implemented software includes shared search and history, controller
-administration, phone source setup, profiles, local/NAS and Jellyfin playback,
+administration, phone source setup, watching progress, local/NAS and Jellyfin playback,
 subtitles, CUE albums, ReplayGain, NFO metadata, collections and IPTV guides.
 Provider and format limits still apply.
 Software captures do not qualify every physical display, speaker or media source.
