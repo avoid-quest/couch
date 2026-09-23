@@ -43,10 +43,11 @@ bun install --frozen-lockfile
 bun run preview:linux
 ```
 
-The launcher opens the web remote and prints a Linux TV screen URL. Open that
-screen to get the pairing QR and code, then name and pair your remote. It also
-prints a LAN address for your phone. An unclaimed TV shows **Claim and name**
-with a separate administrator code. See [setup and recovery](docs/usage.md#administrator-and-connection-settings).
+The launcher opens the web remote and prints a Linux TV screen URL. On a fresh
+TV, choose **This computer**, allow remote control, then open **Settings >
+Connections** for the pairing QR and separate administrator code. Name and pair
+your remote, then claim administration on that remote. The launcher also prints
+a LAN address for your phone. See [setup and recovery](docs/usage.md#administrator-and-connection-settings).
 
 The preview runs the real Linux app in a container with silent audio and software
 rendering. It keeps running when you close the browser. Stop it with:
@@ -80,8 +81,9 @@ builds and qualifies releases in the pinned Debian container. The T480 only
 installs and runs Couch. See [hosted releases](docs/hosted-releases.md).
 
 On first launch, choose **This computer** for local playback. Enable remote
-control to pair a phone using the displayed code or QR address. Existing
-installations retain their operating mode and pairings. An Administrator manages
+control, then open **Settings > Connections** to pair a phone using the QR or
+six-digit code. Existing installations retain their operating mode and pairings.
+An Administrator manages
 folders and Jellyfin in **Settings > Sources**.
 
 The coordinator's default port is `4100`; a configured named address can use

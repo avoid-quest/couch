@@ -22,10 +22,13 @@ manual verification utility is needed.
 Keep your administrator account, password and SSH access. Setup does not alter
 them. From SSH or Ctrl+Alt+F3, use `sudo couch-session logs`, `status` or `restart`.
 The initial session offers **This computer** or **Another Couch**. Select this
-computer for TV playback, optionally allow remote control, then pair a phone
-using Couch's displayed QR or code. An unclaimed TV shows **Claim and name**
-with a separate administrator code. Later, **Pair a remote** in the header or
-**Settings > Connections** shows the current pairing QR and six-digit code.
+computer for TV playback and allow remote control to pair a phone. On an
+unclaimed TV, open **Settings > Connections**. It shows the one-use administrator
+code under **Set up your administrator remote**; **Pair a remote** opens the
+pairing QR and six-digit code. Pair the phone, then enter the administrator code
+in the phone's **Settings > Connections > Claim administrator**. If you kept
+remote control private at first, turn on **Allow remote control** in Connections
+before pairing. On a configured TV, **Pair a remote** is also in the header.
 Use **Now** for playback and Up next, **Find** for search and sources, and
 **Saved** for lists and favorites. TV **Settings > Appearance** offers Default,
 Larger and Largest at 100%, 115% and 130%; confirm a trial size within 20

@@ -21,17 +21,18 @@ For a real TV, install the native Debian package from
 [couch.avoid.quest/download](https://couch.avoid.quest/download) and run
 `sudo couch-setup --tv`. Phones need only a browser.
 
-1. Join the TV's local network. A fresh unclaimed TV shows its address, pairing
-   QR and controller code on **Claim and name**. Scan that QR or type the address
-   into your phone browser, including any port. On a configured TV, open
-   **Pair a remote** in the header or **Settings > Connections > Pair a remote**
-   for a QR with the current code. Setup hides normal navigation until it finishes.
+1. Join the TV's local network. On a fresh TV, choose **This computer**, allow
+   remote control, then open **Settings > Connections > Pair a remote** on the TV.
+   If you kept remote control private, turn on **Allow remote control** there
+   first. A configured TV also has **Pair a remote** in the header. Scan its QR
+   or type the shown address into your phone browser, including any port.
    The project website `couch.avoid.quest` is not your TV's address. The verified
    appliance uses `http://couch.avoid.local`; use the address your TV advertises.
-2. Name the browser and enter the six-digit controller code, or use the code
-   filled by the QR. Submit the pairing form to connect. On a fresh TV, continue
-   through **Claim and name** with the separate administrator code shown on the
-   TV, then finish the remaining setup steps before opening **Find**.
+2. Name the browser and enter the six-digit pairing code, or use the code
+   filled by the QR. Submit the pairing form to connect. On a fresh TV, find the
+   separate one-use code under **Set up your administrator remote** on the TV's
+   Connections page. Enter it in the phone's **Settings > Connections > Claim
+   administrator**.
 3. Enter a title, artist, station or supported media link in **Now** or **Find**.
    **Find** groups **All** results by source; select **YouTube**, **Radio**,
    **TV folders** or another source to narrow them.
@@ -47,15 +48,18 @@ For a real TV, install the native Debian package from
 
 If Find reports no configured folders or a disconnected Jellyfin server, ask
 an administrator to open **Settings > Sources > TV folders** or **Jellyfin**.
-Try a configured source or another provider. If disconnected, use **Settings > Connections >
-Reconnect** and wait for both server and player availability before playing.
+Try a configured source or another provider. If disconnected, Couch retries
+when the TV returns; check the header's connection status and wait for both
+server and player availability before playing.
 Reopen the same origin and browser profile to reuse your pairing.
 
-The [14 September check record](qualification/current-status-2026-09-14.md#browser-journey)
-describes its tested build. The later [first-use source check](qualification/first-use-2026-09-14.md)
-and [pairing dialog](../src/client/components/PairingDialog.tsx) show the current
-navigation and QR. A fresh physical phone scan and TV picture/sound trial remain
-separate installed acceptance checks.
+The [14 September installed check](qualification/current-status-2026-09-14.md#browser-journey)
+and [first-use report](qualification/first-use-2026-09-14.md) describe their
+older builds. Current source defines [Now/Find/Saved/Settings navigation](../src/client/sections/shell/AppShell.tsx),
+the [pairing QR](../src/client/components/PairingDialog.tsx) and
+[administrator setup](../src/client/sections/settings/device/ConnectionsSettings.tsx).
+These source paths do not establish a fresh physical phone scan or TV
+picture/sound trial.
 
 ## Try it on this Mac
 
@@ -274,51 +278,48 @@ applies to one enqueue.
 Existing queued videos keep their quality, and each remote keeps its own
 default. This preference does not change the TV's display resolution.
 
-An unclaimed TV opens setup at **Claim and name**, with its local address, a
-controller-pairing QR code, the six-digit controller pairing code and a separate ten-digit
-administrator code. Pair your phone first, then enter that administrator code
-on the phone's **Claim and name** setup step. For administrator recovery on an
-already configured TV, use **Settings > TV**. The code expires after ten minutes
-and works once.
-If it expires before use, select **Get new code** on the TV. Competing first
-claims grant administration to one remote; existing paired devices remain ordinary
-controllers.
+On an unclaimed TV, choose **This computer** and enable remote control. In
+**Settings > Connections**, **Pair a remote** shows the pairing QR and six-digit
+code. The **Set up your administrator remote** section shows a separate ten-digit
+one-use code. Pair the phone first, then enter that code in its **Settings >
+Connections > Claim administrator**. If the code expires before use, reload the
+TV's Connections page for a new one. Competing first claims grant administration
+to one remote; other paired devices remain Controllers.
 
-The administrator phone can save the **TV name** in TV settings. The committed name
-appears on the TV and other remotes, and survives restart. TV settings show the name
-read-only on the TV and ordinary remotes. Administrator status belongs to the
+The trusted local host or an Administrator can save the playback device name in
+**Settings > General**. The committed name appears on the TV and other remotes,
+and survives restart. Controllers see it read-only. Administrator status belongs to the
 paired browser credential. It does not change the watching profile, local history
 or connected Jellyfin account.
 
-During first-run setup, use the QR on **Claim and name**; Connections is absent
-from the setup navigation. On a configured TV, **Connections** is available
-before pairing and while disconnected. It shows the known TV name, address and
-LAN links. When authenticated, it also shows this
-remote's name and role; the host and administrators can see the pairing QR. Server and player availability are separate: a
+On the local TV, **Settings > Connections** holds sharing, pairing and first
+administrator setup. An Administrator remote can manage paired devices there.
+Controllers see **Claim administrator** there only while a claim is available;
+otherwise the page explains that administration is required. The remote header
+shows the playback computer's name, address and connection status. The host and
+Administrators can open the pairing QR. Server and player availability are separate: a
 reachable server can still have an unavailable player. Rejected or revoked
 credentials return to pairing without repeatedly trying the same credential.
 
-**Reconnect** retains this browser's credential and retries the same TV, including
-its known LAN addresses if its hostname cannot be reached. Controls wait for a
-current snapshot. The server accepts requests only from its allowed local
-addresses and advertised origins; this does not enable Internet administration.
-**Pair again** forgets only this browser's current credential and returns to
-pairing. It does not revoke that credential on the server or change other remotes.
+The client retries the same TV after disconnection and waits for a current
+snapshot before enabling controls. Reopen the same address and browser profile
+to reuse a saved pairing. If the pairing is rejected or revoked, enter the
+current six-digit code from the TV in the pairing form. The server accepts
+requests only from its allowed local addresses and advertised origins; this
+does not enable Internet administration.
 
-Administrators can rename paired remotes, approve another administrator, remove
-administration, and revoke access in **Connections > Paired remotes**. Revocation
+Administrators can grant or remove administration and remove devices in
+**Settings > Connections > Devices**. Revocation
 closes the device's existing sockets, rejects later requests and cancels admitted
 mutations still waiting on a media lookup. Names and roles update on connected
 views. Controller pairing always grants browsing and playback only. Ordinary
-controllers can inspect their own connection and pair again, but cannot manage
-other devices. Existing pairings retain their exact token hashes across migration
+Controllers cannot manage other devices. Existing pairings retain their exact
+token hashes across migration
 and restart, with stable IDs and names such as Remote 1.
 
-The server rejects removing or demoting the last administrator. A connected sole
-administrator must approve another administrator before using **Pair again**.
-This browser safeguard cannot prevent lost browser storage or a lost device;
-use recovery below if no administrator remains accessible. Rejected credentials
-and disconnected browsers can still return to pairing.
+The server rejects removing or demoting the last administrator. Browser storage
+can still be lost; use recovery below if no administrator remains accessible.
+Rejected credentials return to the pairing form.
 
 Administrator phones can manage TV folders and Jellyfin in **Settings > Sources**.
 For folders, choose **TV folders > Add TV folder**, browse a permitted location,
@@ -345,7 +346,7 @@ bun run desktop
 unset COUCH_ADMIN_RECOVERY_CODE
 ```
 
-Pair the replacement browser, open **Settings > TV**, and enter that secret
+Pair the replacement browser, open **Settings > Connections > Claim administrator**, and enter that secret
 in **Administrator code**. Its ten-minute deadline starts when the server first
 accepts the configured secret. Restarting with the same value neither extends
 that deadline nor makes a consumed secret reusable. An expired or consumed secret

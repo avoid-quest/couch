@@ -6,13 +6,16 @@ Docker or a native Couch package on the controller computer.
 
 ## Connect
 
-1. Connect your computer to the playback computer's network. A fresh TV shows
-   its address and pairing QR on **Claim and name**. On a configured TV, open
-   **Pair a remote** in the header or **Settings > Connections > Pair a remote**.
-   Both show a QR with the current six-digit code. Scan it or type the shown
-   address into your browser, including any port.
+1. Connect your computer to the playback computer's network. On a fresh TV,
+   choose **This computer**, allow remote control and open **Settings >
+   Connections > Pair a remote**. If you kept the TV private, turn on **Allow
+   remote control** there first. A configured TV also has **Pair a remote** in
+   the header. Scan its QR or type the shown address into your browser, including
+   any port.
 2. Give this browser a name, such as **Living room Mac** or **Windows laptop**,
-   and enter the TV's six-digit pairing code.
+   and enter the TV's six-digit pairing code. On a fresh TV, claim Administrator
+   access in this browser's **Settings > Connections** using the separate
+   one-use code shown on the TV's Connections page.
 3. Open **Now** for current playback and **Up next**. Use its search field or
    **Find** for a title, link, provider catalog or configured source. **Play**
    starts now; **Up next** adds without starting. **Saved** holds lists and
@@ -72,11 +75,11 @@ Reopen the same address in the same browser profile or installed web app to
 reuse its pairing. Private browsing, another profile, cleared website data or
 a changed address can require pairing again.
 
-**Settings > Connections** shows the TV address, connection status and this
-remote's authority. Use **Reconnect** after the TV or network returns. Use
-**Pair again** when you need a new pairing. That action forgets this browser's
-credential; an administrator can revoke an old remote on the TV through
-**Connections > Paired remotes**. Neither action deletes the TV's media or queue.
+The client retries when the TV or network returns; the header shows connection
+status and the playback computer's address. If Couch rejects the saved pairing,
+the pairing form appears. Get a current QR or code from the TV and pair again.
+An Administrator can remove an old device in **Settings > Connections > Devices**.
+Pairing again does not delete the TV's media or queue.
 
 For a configured HTTPS address, the computer must trust the deployment's
 certificate. Follow the administrator's [named-origin setup](lan-origin.md)
