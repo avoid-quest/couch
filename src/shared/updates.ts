@@ -38,7 +38,6 @@ export type AppImageUpdateReply = { requestId: string; ok?: boolean; accepted?: 
 // The deb worker mirrors the AppImage wire shape over its own sidecar channel.
 export type DebUpdateAction = AppImageUpdateAction;
 export type DebUpdateReply = AppImageUpdateReply;
-// Native deb_update.rs messages for a rejected saved download; the Updates
-// page offers Download again only for these two exact causes.
+// Native verification failures offer Download again in the Updates page.
 export const verificationFailure = (error: string | null | undefined) =>
-  !!error && (error.includes("failed verification. Download it again") || error.includes("digest does not match the staged package"));
+  !!error && (error.includes("Download it again.") || error.includes("digest does not match the staged package"));

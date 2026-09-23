@@ -7,7 +7,7 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
   const request = (action: AppImageUpdateAction, signal: AbortSignal, progress?: (value: { received: number; total: number }) => void): Promise<AppImageUpdateReply> => {
     signal.throwIfAborted();
     const readOnly = action.type === "status";
-    if (!readOnly && mutation) return Promise.reject(new UpdateError("An AppImage update operation is already running."));
+    if (!readOnly && mutation) return Promise.reject(new UpdateError("An app update operation is already running."));
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
       const aborted = () => { if (readOnly) finish(); reject(new UpdateError("The update operation was interrupted. Use Check now before retrying.")); };
@@ -16,7 +16,7 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
       pending.set(id, current);
       if (!readOnly) mutation = id;
       signal.addEventListener("abort", aborted, { once: true });
-      try { send(id, action); } catch { current.reject(new UpdateError("The native AppImage updater is unavailable.")); }
+      try { send(id, action); } catch { current.reject(new UpdateError("The native app updater is unavailable.")); }
     });
   };
   const feed: UpdateFeed<UpdateRelease> = {

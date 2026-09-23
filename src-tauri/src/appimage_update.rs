@@ -109,6 +109,12 @@ pub fn running(app: &tauri::AppHandle) -> bool {
         false
     }
 }
+pub fn tv_running(app: &tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    { app.env().appimage.as_ref().is_some_and(|path| PathBuf::from(path) == Path::new(TV_APPLICATION).join("Couch.AppImage")) }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = app; false }
+}
 pub(crate) fn enrollment(app: &tauri::AppHandle) -> Result<Enrollment, String> {
     let trust: Enrollment = serde_json::from_value(
         app.config()

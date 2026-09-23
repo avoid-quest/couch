@@ -6,7 +6,7 @@ import { join } from "node:path";
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 
-async function fixture({ trial = false, corrupt = false, development = false, packagedWithoutUpdater = false } = {}) {
+async function fixture({ trial = false, corrupt = false, development = false, packagedWithoutUpdater = false, desktop = false } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "couch-maintenance-"));
   cleanup.push(() => rm(directory, { recursive: true, force: true }));
   const db = new Database(join(directory, "couch.sqlite"));
@@ -24,7 +24,7 @@ async function fixture({ trial = false, corrupt = false, development = false, pa
   const build = { version: "0.3.0", revision: "a".repeat(40), dataFormat: 1, packaged: !development, helpers };
   if (corrupt) await Bun.write(join(directory, "deno"), "changed");
   const messages: any[] = [];
-  const format = development || packagedWithoutUpdater ? "null" : '"appimage"';
+  const format = development || packagedWithoutUpdater ? "null" : desktop ? '"desktop"' : '"appimage"';
   const script = `import { runMaintenanceMode } from ${JSON.stringify(join(import.meta.dir, "maintenance-mode.ts"))}; await runMaintenanceMode(${JSON.stringify(directory)}, "local-secret", ${format}, "http://localhost:1420");`;
   const process = Bun.spawn([Bun.which("bun") ?? "bun", "--define", `COUCH_BUILD_INFO=${JSON.stringify(JSON.stringify(build))}`, "-e", script], { env: { ...globalThis.process.env, COUCH_BUNDLED_TOOLS: directory }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const send = (message: unknown) => process.stdin.write(JSON.stringify(message) + "\n");
@@ -71,7 +71,7 @@ test("remote maintenance owns only a private installation API and retains playba
 });
 
 test("remote startup trial reports local readiness without probing media tools", async () => {
-  const f = await fixture({ trial: true, corrupt: true });
+  const f = await fixture({ trial: true, corrupt: true, desktop: true });
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: { ...f.build, revision: "wrong" } })).status).toBe(409);
   expect((await f.fetchLocal("/api/maintenance/frontend", { build: f.build })).status).toBe(204);
   const complete = await f.wait(m => m.action?.type === "complete");

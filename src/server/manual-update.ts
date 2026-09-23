@@ -22,7 +22,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
   };
   const status = async (requestId?: string) => {
     const result = await worker.request({ op: "status", ...(requestId ? { requestId } : {}) }) as { ok?: boolean; transaction?: UpdateTransaction | null; current?: typeof current; repairCurrent?: boolean; installationAvailable?: boolean };
-    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Check Couch through SSH.", 503);
+    if (result?.ok !== true || result.transaction === undefined) throw new ControllerError("The native updater is unavailable. Reopen Couch and check this installation's update status.", 503);
     current = result.current && /^[a-f0-9]{64}$/.test(result.current.candidateId) && typeof result.current.version === "string" && typeof result.current.revision === "string" ? result.current : null;
     repairAvailable = result.repairCurrent === true;
     installationAvailable = result.installationAvailable ?? result.repairCurrent ?? false;
@@ -35,7 +35,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
     guard();
     if (!previous && installationAvailable === false) {
       onUnaccepted();
-      throw new ControllerError("AppImage installation is not available. Check the enrolled installation through SSH.", 409);
+      throw new ControllerError("App installation is not available. Reopen Couch from a supported installed location, then check again.", 409);
     }
     const repairing = "expectedCurrentId" in body;
     const ready = repairing ? canRepair() && current?.candidateId === body.expectedCurrentId : candidateReady(body.candidateId);
@@ -60,7 +60,7 @@ export function createManualUpdate(worker: Worker, admitted: () => boolean, cand
       if (!body || typeof body !== "object" || Object.keys(body).sort().join(",") !== keys || typeof id !== "string" || !/^[a-f0-9]{64}$/.test(id) || repairing && typeof (body as Repair).repairRuntime !== "boolean" || typeof body.requestId !== "string" || !/^[a-f0-9]{32}$/.test(body.requestId) || typeof body.confirmInterrupt !== "boolean") throw new ControllerError("Choose the verified candidate and confirm whether playback may stop.");
       if (repairing && (body as Repair).repairRuntime !== false) {
         unaccepted = true;
-        throw new ControllerError("The machine administrator maintains Debian host packages. Refresh and choose Repair current release to reinstall Couch files.", 409);
+        throw new ControllerError("Host package repair is unavailable through Couch updates. Refresh and choose Repair current release to reinstall Couch files.", 409);
       }
       authorize(identity);
       const transaction = await submit(body, () => authorize(identity), false, () => { unaccepted = true; });
