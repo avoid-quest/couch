@@ -14,6 +14,7 @@ const requests: Array<{ url: string; authorization: string | null }> = [];
 let root: Root, window: Window, gate: ReturnType<typeof import("./session-context").useSessionGate>;
 let device: NonNullable<ReturnType<typeof import("../sections/shell/PlaybackDevice").usePlaybackDevice>>;
 let installation = "remote-installation";
+let remoteRole: "controller" | "administrator" = "controller";
 let invokeSpy: ReturnType<typeof spyOn>, listenSpy: ReturnType<typeof spyOn>, fetchSpy: ReturnType<typeof spyOn>;
 
 class Socket {
@@ -32,6 +33,7 @@ class Socket {
 
 beforeEach(async () => {
   installation = "remote-installation";
+  remoteRole = "controller";
   requests.length = Socket.instances.length = 0;
   window = new Window({ url: "http://tauri.localhost" });
   Object.assign(window, { __COUCH_NATIVE_HOST__: true });
@@ -53,7 +55,7 @@ beforeEach(async () => {
     requests.push({ url, authorization });
     const selected = new URL(url);
     if (selected.pathname === "/api/connection") return Response.json({ name: selected.origin === local ? "This computer" : "Other Couch", installationId: selected.origin === local ? "local-installation" : installation, urls: [selected.origin], player: "idle", remoteControlEnabled: true, desktopClientProtocol: 1 });
-    if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: "controller", controller: { id: "paired", name: "Desktop client", role: "controller" }, claimAvailable: false });
+    if (selected.pathname === "/api/controllers/me") return Response.json(selected.origin === local ? { authority: "host", controller: null, claimAvailable: false } : { authority: remoteRole, controller: { id: "paired", name: "Desktop client", role: remoteRole }, claimAvailable: false });
     if (selected.pathname === "/api/pair") return Response.json({ token: "remote-pairing", installationId: installation });
     if (selected.pathname === "/api/maintenance/frontend" || selected.pathname === "/api/activity") return new Response(null, { status: 204 });
     throw new Error(`Unexpected request: ${url}`);
@@ -110,4 +112,15 @@ test("revoking the selected host's pairing keeps local owner authority isolated"
   expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
   await act(async () => { await device.choose("local"); });
   expect(gate.credentials).toMatchObject({ origin: local, token: "local-owner" });
+});
+
+test("remote administrator authority comes from the selected host", async () => {
+  remoteRole = "administrator";
+  await act(async () => { await device.choose("remote", remote); });
+  await act(async () => { gate.setPairingCode("123456"); await gate.pair({ preventDefault() {} }); });
+  expect(gate.identity?.authority).toBe("administrator");
+  expect(gate.identity?.controller?.role).toBe("administrator");
+  expect(requests.filter(request => request.url.startsWith(remote)).every(request => request.authorization !== "Bearer local-owner")).toBe(true);
+  await act(async () => { await device.choose("local"); });
+  expect(gate.identity?.authority).toBe("host");
 });

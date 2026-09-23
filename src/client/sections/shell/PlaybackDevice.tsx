@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
 import { loadedBuild } from "../../../shared/build";
@@ -93,6 +94,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
 
 export function InstallationUpdates() {
   const device = usePlaybackDevice()!;
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,24 +115,15 @@ export function InstallationUpdates() {
     void connect();
     return () => { stop.abort(); clearTimeout(timer); };
   }, []);
-  useEffect(() => {
-    if (!credentials || open) return;
-    const stop = new AbortController();
-    // Controlling another app or reconnecting is activity, even when its page is isolated.
-    const activity = () => { void fetch(`${credentials.origin}/api/activity`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}` }, signal: stop.signal }).catch(() => {}); };
-    activity();
-    const timer = setInterval(activity, 5_000);
-    return () => { stop.abort(); clearInterval(timer); };
-  }, [credentials, open]);
   const change = (value: boolean) => { setOpen(value); if (value) device.show(); else device.dismiss(); };
-  return <Dialog open={open} onOpenChange={change}>
+  return <QueryClientProvider client={queryClient}><Dialog open={open} onOpenChange={change}>
     <DialogTrigger asChild><Button variant="outline">Update this app</Button></DialogTrigger>
     <DialogContent>
       <DialogHeader><DialogTitle>Updates for this computer</DialogTitle><DialogDescription>The selected playback computer updates independently. Your saved playback device stays selected.</DialogDescription></DialogHeader>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {credentials ? <UpdatesSettings credentials={credentials} connected /> : <p role="status">Connecting to this installation…</p>}
     </DialogContent>
-  </Dialog>;
+  </Dialog></QueryClientProvider>;
 }
 
 function DeviceForm({ firstUse = false, onDone }: { firstUse?: boolean; onDone?: () => void }) {
