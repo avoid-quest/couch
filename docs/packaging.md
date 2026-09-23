@@ -23,8 +23,9 @@ running application code as root.
 
 Select `appimage` to stage the desktop payload without Debian TV setup or update
 broker files. Tauri builds and signs the AppImage; `package-appimage-verify.ts`
-extracts its squashfs payload at the pinned runtime offset and records every packaged file, symlink, native library and SHA-256
-in `.artifacts/appimage-inventory.json`. The bundle includes the coordinator,
+extracts its squashfs payload at the pinned runtime offset. It records every
+packaged file, symlink, native library and SHA-256 in
+`.artifacts/appimage-inventory.json`. The bundle includes the coordinator,
 helpers, libmpv and redistribution notices. The build checks the pinned Tauri
 AppImage tools and runtime before and after bundling. Its Linux ABI floor is set
 by this Debian 13 builder. Compatibility with older distributions has not been
@@ -50,8 +51,10 @@ launch on a native runner; the arm64 Mac's Docker emulator cannot execute the
 AppImage's static PIE runtime.
 For AppImage it starts the signed file through `APPIMAGE_EXTRACT_AND_RUN=1` in a
 fresh runtime container, because Docker provides no FUSE mount. That fixture
-checks first launch, the private Client-only coordinator, a separate selected
-host and pairing. Installed FUSE, upgrade and Wayland acceptance remain open.
+selects Another Couch in the bundled app window and checks remote Client-only
+mode, its private maintenance coordinator, a separate selected host and pairing.
+The same AppImage retains local playback. Installed FUSE, upgrade and Wayland
+acceptance remain open.
 Normal AppImage launch needs a FUSE 2 runtime; the container's extraction path
 does not test it. A desktop also needs a DBus session, graphics drivers and an
 audio service. Tauri bundles GTK/WebKit and selected GStreamer libraries, while
