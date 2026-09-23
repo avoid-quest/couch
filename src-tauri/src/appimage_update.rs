@@ -716,10 +716,6 @@ async fn supervised_restart() -> Result<(), String> {
     )
 }
 
-fn remote_blocks_install(when_idle: bool, remote_selected: bool) -> bool {
-    when_idle && remote_selected
-}
-
 pub async fn run(
     app: tauri::AppHandle,
     directory: PathBuf,
@@ -849,14 +845,8 @@ pub async fn run(
                     if repair {
                         return Err("Recover the retained verified app with couch-recover. Hosted downloads may expire.".into());
                     }
-                    if remote_blocks_install(
-                        when_idle,
-                        crate::operating_mode::remote_selected(&app),
-                    ) {
-                        return Err(
-                            "Switch to This computer before automatic installation."
-                                .into(),
-                        );
+                    if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                        return Err("Waiting for this app to be idle before automatic installation.".into());
                     }
                     let application = application(&app)?;
                     let _lock = installation_lock(&application)?;
@@ -1022,12 +1012,6 @@ mod tests {
             update_url("0.2.0", Channel::Preview).unwrap().query(),
             Some("channel=preview")
         );
-    }
-    #[test]
-    fn automatic_tv_install_waits_while_remote_playback_device_is_selected() {
-        assert!(remote_blocks_install(true, true));
-        assert!(!remote_blocks_install(true, false));
-        assert!(!remote_blocks_install(false, true));
     }
     #[test]
     fn signed_requirements_reject_incompatible_data_and_host_before_interruption() {

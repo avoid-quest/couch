@@ -15,6 +15,7 @@ fn main() {
             "select_playback_device",
             "retry_playback_device",
             "complete_local_setup",
+            "local_update_activity",
             "desktop_interface_size",
         ]),
     ))

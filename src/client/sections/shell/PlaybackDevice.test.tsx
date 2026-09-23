@@ -242,7 +242,12 @@ test("an offline remote keeps this installation's update controls and shared-win
   }) as typeof fetch);
   await render();
   await act(async () => fireEvent.pointerDown(screen.getByText("Local installation"))); await flush();
-  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(true);
+  expect(invoke.mock.calls.some(([name]) => name === "local_update_activity")).toBe(false);
+  const activity = new Event("pointerdown", { bubbles: true });
+  Object.defineProperty(activity, "isTrusted", { value: true });
+  await act(async () => fireEvent(screen.getByText("Local installation"), activity)); await flush();
+  expect(invoke.mock.calls.some(([name]) => name === "local_update_activity")).toBe(true);
+  expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(false);
   await act(async () => fireEvent.click(button("Update this app")));
   await flush();
   expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();

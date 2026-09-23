@@ -5,6 +5,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 pub(crate) fn show(app: &tauri::AppHandle) {
     app.state::<Host>().window_closed.store(false, Ordering::SeqCst);
+    crate::operating_mode::window_opened(app);
     let Some(main) = app.get_webview_window("main") else {
         return;
     };

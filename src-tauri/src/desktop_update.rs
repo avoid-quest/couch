@@ -561,6 +561,9 @@ pub async fn run(
                     if !previous.is_null() {
                         return Ok(serde_json::json!({"ok":true,"transaction":previous}));
                     }
+                    if when_idle && crate::operating_mode::idle_blocked(&app)? {
+                        return Err("Waiting for this app to be idle before automatic installation.".into());
+                    }
                     let (_, update, summary) = selected
                         .as_ref()
                         .filter(|(_, _, c)| &c.id == candidate_id)

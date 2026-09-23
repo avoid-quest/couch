@@ -4,7 +4,7 @@ use std::{
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::PathBuf,
     sync::{atomic::Ordering, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{Manager, Url};
 
@@ -36,6 +36,7 @@ pub struct Modes {
     path: PathBuf,
     choice: Mutex<Choice>,
     operation: tokio::sync::Mutex<()>,
+    last_input: Mutex<Instant>,
 }
 
 impl Modes {
@@ -49,6 +50,7 @@ impl Modes {
             path,
             choice: Mutex::new(choice),
             operation: tokio::sync::Mutex::new(()),
+            last_input: Mutex::new(Instant::now()),
         })
     }
     fn saved(&self) -> Choice {
@@ -110,6 +112,42 @@ pub(crate) fn trusted(window: &tauri::WebviewWindow) -> Result<(), String> {
 
 pub(crate) fn remote_selected(app: &tauri::AppHandle) -> bool {
     app.state::<Modes>().current().mode == Some(Mode::Remote)
+}
+
+pub(crate) fn window_opened(app: &tauri::AppHandle) {
+    if remote_selected(app) {
+        *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
+    }
+}
+
+fn remote_busy(visible: bool, focused: bool, since: Duration) -> bool {
+    visible && focused && since < Duration::from_secs(600)
+}
+
+pub(crate) fn idle_blocked(app: &tauri::AppHandle) -> Result<bool, String> {
+    if !remote_selected(app) { return Ok(false); }
+    let Some(main) = app.get_webview_window("main") else { return Ok(false); };
+    let visible = main.is_visible().map_err(error)? && !main.is_minimized().map_err(error)?;
+    if !visible { return Ok(false); }
+    let focused = main.is_focused().map_err(error)?;
+    let since = app.state::<Modes>().last_input.lock().expect("input lock poisoned").elapsed();
+    Ok(remote_busy(visible, focused, since))
+}
+
+#[tauri::command]
+pub async fn local_update_activity(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    trusted(&window)?;
+    if !remote_selected(&app) { return Ok(()); }
+    *app.state::<Modes>().last_input.lock().expect("input lock poisoned") = Instant::now();
+    let connection = app.state::<crate::Host>().connection.borrow().clone();
+    if let Some(Ok(info)) = connection {
+        connection_client().timeout(Duration::from_secs(2)).build().map_err(error)?
+            .post(format!("{}/api/activity", info.origin))
+            .bearer_auth(info.token)
+            .json(&serde_json::json!({"activity": true}))
+            .send().await.map_err(error)?.error_for_status().map_err(error)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn local_authority(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -412,6 +450,7 @@ pub async fn select_playback_device(
         choice.address = Some(address);
         // Remember the deliberate choice even when the target is unavailable. Never fall back to local.
         modes.save(choice.clone())?;
+        *modes.last_input.lock().expect("input lock poisoned") = Instant::now();
     } else {
         stop_local(&app, true).await?;
         crate::start_local(&app)?;
@@ -459,6 +498,15 @@ pub async fn complete_local_setup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_install_waits_for_recent_input_in_a_visible_focused_window() {
+        let recent = Duration::from_secs(599);
+        assert!(remote_busy(true, true, recent));
+        assert!(!remote_busy(false, true, recent));
+        assert!(!remote_busy(true, false, recent));
+        assert!(!remote_busy(true, true, Duration::from_secs(600)));
+    }
 
     #[test]
     fn mode_change_waits_for_trial_or_unreadable_update_status() {

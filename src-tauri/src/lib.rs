@@ -606,6 +606,7 @@ pub fn run() {
             operating_mode::select_playback_device,
             operating_mode::retry_playback_device,
             operating_mode::complete_local_setup,
+            operating_mode::local_update_activity,
             operating_mode::desktop_interface_size
         ])
         .setup(|app| {
