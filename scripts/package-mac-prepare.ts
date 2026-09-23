@@ -29,6 +29,7 @@ async function download(input: { url: string; sha256: string }, path: string) {
 if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("Build the Apple Silicon DMG on an Apple Silicon Mac");
 if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManager}`);
 if (!process.env.TAURI_SIGNING_PRIVATE_KEY) throw new Error("Supply the Tauri updater signing key");
+if (!("TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in process.env)) throw new Error("Supply the Tauri updater key password (empty for an unencrypted test key)");
 process.env.PATH = `${join(homedir(), ".cargo", "bin")}${delimiter}${process.env.PATH ?? ""}`;
 const key = publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY);
 await rm(resources, { recursive: true, force: true });

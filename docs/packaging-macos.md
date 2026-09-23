@@ -2,7 +2,8 @@
 
 On an Apple Silicon Mac, use Bun 1.4.2 and the locked Rust toolchain. Supply the
 same enrolled Tauri updater key pair used by Couch's existing release process as
-`TAURI_SIGNING_PRIVATE_KEY` and `COUCH_UPDATER_PUBLIC_KEY`, then run:
+`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` and
+`COUCH_UPDATER_PUBLIC_KEY`, then run:
 
 ```sh
 bun install --frozen-lockfile
