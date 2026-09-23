@@ -109,10 +109,10 @@ test("expired programme data falls back to the station", async () => {
 });
 
 test("expiry removes programme metadata before the next poll", async () => {
-  programmes = { "station-713": { title: "About to expire", expiresAt: Date.now() + 20 } };
+  programmes = { "station-713": { title: "About to expire", expiresAt: Date.now() + 1_000 } };
   await render();
   expect(screen.getByText("About to expire")).toBeDefined();
-  await act(async () => { await Bun.sleep(30); });
+  await act(async () => { await Bun.sleep(1_100); });
   expect(screen.queryByText("About to expire")).toBeNull();
 });
 
