@@ -1,68 +1,83 @@
 {
-  "revision": "330e4fcf8514922f2f1a015ec3b37778a81f664b",
+  "revision": "7d9add058e4f87ac415f41049b81b95412bbb20e",
   "latency": {
-    "seek-4": 0.36,
-    "seek-8": 0.31,
-    "seek-2": 0.29,
-    "diagnostics": 430.59,
-    "replacement": 3.12,
-    "stop": 19.25
+    "seek-4": 1.69,
+    "seek-8": 0.7,
+    "seek-2": 1.46,
+    "diagnostics": 773.85,
+    "replacement": 100.22,
+    "stop": 11.55
   },
   "frames": [
     {
-      "presented": 3,
+      "presented": 4,
       "dropped": 0,
-      "fps": 5.87
+      "fps": 6.17
     },
     {
-      "presented": 3,
-      "dropped": 0,
-      "fps": 0
-    },
-    {
-      "presented": 3,
+      "presented": 4,
       "dropped": 0,
       "fps": 0
     },
     {
       "presented": 4,
       "dropped": 0,
-      "fps": 1.92
+      "fps": 0
     },
     {
-      "presented": 17,
+      "presented": 7,
       "dropped": 0,
-      "fps": 25.33
+      "fps": 5.74
     },
     {
-      "presented": 29,
+      "presented": 20,
       "dropped": 0,
-      "fps": 23.82
+      "fps": 24.8
     },
     {
-      "presented": 47,
+      "presented": 33,
       "dropped": 0,
-      "fps": 3.96
+      "fps": 24.41
     },
     {
-      "presented": 47,
+      "presented": 44,
+      "dropped": 0,
+      "fps": 20.62
+    },
+    {
+      "presented": 59,
+      "dropped": 0,
+      "fps": 20.24
+    },
+    {
+      "presented": 74,
+      "dropped": 0,
+      "fps": 26.43
+    },
+    {
+      "presented": 79,
+      "dropped": 0,
+      "fps": 3.84
+    },
+    {
+      "presented": 79,
       "dropped": 0,
       "fps": 0
     },
     {
-      "presented": 47,
+      "presented": 79,
       "dropped": 0,
       "fps": 0
     },
     {
-      "presented": 48,
+      "presented": 81,
       "dropped": 0,
-      "fps": 1.97
+      "fps": 3.94
     },
     {
-      "presented": 61,
+      "presented": 93,
       "dropped": 0,
-      "fps": 25.52
+      "fps": 23.75
     }
   ],
   "nativePixels": [
@@ -70,7 +85,7 @@
     "native-replacement-video.png"
   ],
   "stuckRenderLog": false,
-  "diagnosticsMs": 430.59,
+  "diagnosticsMs": 773.85,
   "checks": [
     "Tauri WebDriver starts",
     "compiled Tauri app starts its compiled sidecar",
