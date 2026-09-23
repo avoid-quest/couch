@@ -60,6 +60,7 @@ try {
     if (state?.currentEntryId === entryId && state.player.status === "error") throw new Error(`Public provider playback failed: ${state.player.error ?? "unknown"}`);
     return state?.currentEntryId === entryId && state.player.status === "playing" && state.player.tracks?.some(track => track.kind === "audio") && state.player.tracks.some(track => track.kind === "video");
   }, 90_000);
+  await until("public provider advances past its dark opening", () => state?.currentEntryId === entryId && state.player.status === "playing" && state.player.position >= 15, 45_000);
   await tv.watching();
   await assertNativeVideoPixels(tv.execute, "/artifacts", "native-public-provider");
   checks.push("public provider presents native video pixels");
