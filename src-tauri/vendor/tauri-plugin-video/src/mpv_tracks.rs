@@ -56,7 +56,7 @@ fn error(error: libmpv2::Error) -> Error {
     Error::Pipeline(format!("mpv video selection: {error}"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     use libmpv2::events::Event;

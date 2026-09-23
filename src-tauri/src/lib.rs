@@ -548,7 +548,7 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         );
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_video::init());
 
     builder
@@ -613,6 +613,12 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
+            #[cfg(target_os = "macos")]
+            {
+                config.transparent = true;
+                // Match Couch's existing #0a0a0a theme behind the transparent WebView.
+                config.background_color = Some(tauri::window::Color(10, 10, 10, 255));
+            }
             let tv_presentation = tv_presentation();
             config.fullscreen = tv_presentation;
             config.decorations = !tv_presentation;
@@ -709,6 +715,12 @@ pub fn run() {
                     if let Some(child) = host.child.lock().expect("sidecar lock poisoned").take() {
                         log::warn!("Media server did not exit within two seconds; terminating it");
                         let _ = child.kill();
+                    }
+                    let (reply, done) = tokio::sync::oneshot::channel();
+                    if host.player.send(player::Request::Stop(reply)).is_ok() {
+                        if !matches!(tokio::time::timeout(Duration::from_secs(5), done).await, Ok(Ok(Ok(())))) {
+                            log::warn!("Native playback did not stop before Quit");
+                        }
                     }
                     handle.exit(code.unwrap_or(0));
                 });

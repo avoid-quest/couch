@@ -120,7 +120,10 @@ pub fn run(app: AppHandle, receiver: Receiver<Request>) {
                 continue;
             }
             Ok(Request::Observe) | Err(RecvTimeoutError::Timeout) => player.observe(&app),
-            Ok(Request::Shutdown) | Err(RecvTimeoutError::Disconnected) => return,
+            Ok(Request::Shutdown) | Err(RecvTimeoutError::Disconnected) => {
+                let _ = player.close(&app);
+                return;
+            }
         };
         if let Err(error) = result {
             player.state.status = "error";
@@ -345,7 +348,7 @@ impl Player {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl Player {
     fn prepare(&mut self, app: &AppHandle, playback_id: String, next: Option<crate::protocol::PreparedAudio>) -> Result<(), String> {
         use tauri_plugin_video::{NativePrepareRequest, VideoExt};
@@ -632,7 +635,7 @@ impl Player {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 impl Player {
     fn prepare(&mut self, _: &AppHandle, _: String, _: Option<crate::protocol::PreparedAudio>) -> Result<(), String> { Ok(()) }
     fn load(
@@ -676,7 +679,7 @@ impl Player {
     }
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::*;
 
@@ -769,5 +772,27 @@ mod tests {
             assert!(player.apply(invalid).is_err());
             assert!(player.state == previous);
         }
+    }
+
+    #[test]
+    fn native_loading_eof_and_error_remain_observed_states() {
+        let mut player = Player::default();
+        player.state.playback_id = Some("local-clip".into());
+        let mut observation = snapshot();
+        observation.mpv_state.as_mut().unwrap().loading = true;
+        observation.playing = false;
+        player.apply(observation.clone()).unwrap();
+        assert_eq!(player.state.status, "loading");
+        observation.mpv_state.as_mut().unwrap().loading = false;
+        observation.playing = true;
+        player.apply(observation.clone()).unwrap();
+        assert_eq!(player.state.status, "playing");
+        observation.mpv_state.as_mut().unwrap().ended = true;
+        player.apply(observation.clone()).unwrap();
+        assert_eq!(player.state.status, "ended");
+        observation.mpv_state.as_mut().unwrap().error = Some("Decoder failed".into());
+        player.apply(observation).unwrap();
+        assert_eq!(player.state.status, "error");
+        assert_eq!(player.state.playback_id.as_deref(), Some("local-clip"));
     }
 }

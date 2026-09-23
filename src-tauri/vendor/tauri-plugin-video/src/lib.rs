@@ -12,15 +12,15 @@ mod error;
 #[cfg(mobile)]
 mod mobile;
 mod models;
-#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+#[cfg(any(all(target_os = "macos", test), all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_tracks;
-#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_subtitles;
 #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
 mod mpv_radio;
 #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
 mod mpv_iptv;
-#[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
+#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_replaygain;
 #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
 mod mpv_cue;
