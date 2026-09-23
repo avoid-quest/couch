@@ -18,7 +18,8 @@ if [ "${1:-deb}" = deb ]; then
   release="$inspection/usr/lib/Couch/release.json"
 else
   archive="$(pwd)/.artifacts/hosted-release/public/Couch_${version}_amd64.AppImage"
-  (cd "$inspection" && "$archive" --appimage-extract usr/lib/Couch/release.json > /dev/null)
+  runtime="${XDG_CACHE_HOME:-$HOME/.cache}/tauri/runtime-x86_64"
+  unsquashfs -no-progress -o "$(stat -c %s "$runtime")" -d "$inspection/squashfs-root" "$archive" usr/lib/Couch/release.json > /dev/null
   release="$inspection/squashfs-root/usr/lib/Couch/release.json"
 fi
 cmp src-tauri/resources/release.json "$release"
