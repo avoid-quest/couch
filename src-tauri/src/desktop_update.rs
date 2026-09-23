@@ -208,7 +208,7 @@ fn mac_manifest(bytes: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(any(target_os = "windows", test))]
-fn pe_x64(bytes: &mut impl Read) -> Result<bool, String> {
+fn nsis_installer(bytes: &mut impl Read) -> Result<bool, String> {
     let mut header = Vec::new();
     bytes
         .take(1024 * 1024)
@@ -218,9 +218,10 @@ fn pe_x64(bytes: &mut impl Read) -> Result<bool, String> {
         return Ok(false);
     }
     let offset = u32::from_le_bytes(header[60..64].try_into().unwrap()) as usize;
-    Ok(header
+    let pe_i686 = header
         .get(offset..offset + 6)
-        .is_some_and(|pe| pe == b"PE\0\0\x64\x86"))
+        .is_some_and(|pe| pe == b"PE\0\0\x4c\x01");
+    Ok(pe_i686 && header.windows(16).any(|bytes| bytes == b"\xef\xbe\xad\xdeNullsoftInst"))
 }
 
 #[cfg(any(target_os = "windows", test))]
@@ -238,8 +239,8 @@ fn windows_manifest(bytes: &[u8]) -> Result<Vec<u8>, String> {
             file.read_to_end(&mut content).map_err(error)?;
             manifest = Some(content);
         } else if file.name().ends_with(".exe") && !file.name().contains('/') {
-            if installer || !pe_x64(&mut file)? {
-                return Err("The signed update is not one x64 NSIS installer.".into());
+            if installer || !nsis_installer(&mut file)? {
+                return Err("The signed update is not one NSIS installer.".into());
             }
             installer = true;
         } else if file.name().ends_with(".msi") {
@@ -247,7 +248,7 @@ fn windows_manifest(bytes: &[u8]) -> Result<Vec<u8>, String> {
         }
     }
     if !installer {
-        return Err("The signed update has no x64 NSIS installer.".into());
+        return Err("The signed update has no NSIS installer.".into());
     }
     manifest.ok_or_else(|| "The signed installer archive has no release manifest.".into())
 }
@@ -741,14 +742,18 @@ mod tests {
         assert!(verify(&changed, signature, key).is_err());
     }
     #[test]
-    fn windows_installer_requires_an_x64_pe() {
+    fn windows_installer_requires_an_i686_nsis_stub() {
         let mut pe = vec![0; 128];
         pe[..2].copy_from_slice(b"MZ");
         pe[60..64].copy_from_slice(&(80u32).to_le_bytes());
-        pe[80..86].copy_from_slice(b"PE\0\0\x64\x86");
-        assert!(pe_x64(&mut pe.as_slice()).unwrap());
+        pe[80..86].copy_from_slice(b"PE\0\0\x4c\x01");
+        pe[100..116].copy_from_slice(b"\xef\xbe\xad\xdeNullsoftInst");
+        assert!(nsis_installer(&mut pe.as_slice()).unwrap());
+        pe[84] = 0x64;
+        assert!(!nsis_installer(&mut pe.as_slice()).unwrap());
         pe[84] = 0x4c;
-        assert!(!pe_x64(&mut pe.as_slice()).unwrap());
+        pe[100] = 0;
+        assert!(!nsis_installer(&mut pe.as_slice()).unwrap());
     }
 
     #[test]
@@ -783,7 +788,8 @@ mod tests {
         let mut pe = vec![0; 128];
         pe[..2].copy_from_slice(b"MZ");
         pe[60..64].copy_from_slice(&(80u32).to_le_bytes());
-        pe[80..86].copy_from_slice(b"PE\0\0\x64\x86");
+        pe[80..86].copy_from_slice(b"PE\0\0\x4c\x01");
+        pe[100..116].copy_from_slice(b"\xef\xbe\xad\xdeNullsoftInst");
         let archive = |installer: &[u8], include_manifest: bool| {
             let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
             let options = zip::write::SimpleFileOptions::default();
@@ -800,7 +806,7 @@ mod tests {
         assert!(windows_manifest(&good).is_ok());
         assert!(windows_manifest(&good[..good.len() - 1]).is_err());
         assert!(windows_manifest(&archive(&pe, false)).is_err());
-        pe[84] = 0x4c;
+        pe[84] = 0x64;
         assert!(windows_manifest(&archive(&pe, true)).is_err());
         assert!(mac_manifest(&good).is_err());
     }

@@ -10,7 +10,7 @@ The desktop adapter accepts these CrabNebula update targets:
 | --- | --- | --- |
 | User owned Linux x86_64 AppImage | `linux-x86_64-appimage` | AppImage with `usr/lib/Couch/release.json` |
 | Apple Silicon Mac app from DMG | `darwin-aarch64` | Tauri `.app.tar.gz` with `Contents/Resources/release.json` |
-| Per user Windows x64 NSIS | `windows-x86_64-nsis` | Tauri supported NSIS ZIP with one x64 `.exe` and a root `release.json` |
+| Per user Windows x64 NSIS | `windows-x86_64-nsis` | Tauri supported NSIS ZIP with one i686 installer stub (containing the x64 app) and a root `release.json` |
 
 The Windows packaging ticket must put `release.json` beside the NSIS executable
 inside the ZIP and sign the final ZIP bytes with the enrolled Tauri key. A
