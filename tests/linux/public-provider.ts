@@ -1,9 +1,9 @@
 import { seedConfiguredFixture } from "./configured-fixture";
 seedConfiguredFixture();
 import { strict as assert } from "node:assert";
+import { createHash } from "node:crypto";
 import type { Action, ServerMessage, SessionState } from "../../src/shared/protocol";
 import { remoteSocketUrl } from "./build";
-import { assertNativeVideoPixels } from "./pixels";
 import { UiDriver, keys } from "./ui";
 
 const origin = "http://127.0.0.1:4100", driverOrigin = "http://127.0.0.1:4444";
@@ -29,6 +29,14 @@ let session = "", state: SessionState | undefined, controller: WebSocket | undef
 const tv = new UiDriver(request, () => session);
 const driver = Bun.spawn(["tauri-driver"], { stdout: Bun.file("/artifacts/public-provider-driver.log"), stderr: Bun.file("/artifacts/public-provider-native.log") });
 const write = (result: Record<string, unknown>) => Bun.write("/artifacts/public-provider.json", JSON.stringify({ revision, url, checks, ...result }, null, 2));
+const captureVideo = async () => {
+  const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "x11grab", "-video_size", "800x450", "-i", `${process.env.DISPLAY}+400,275`, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { stdout: "pipe", stderr: "pipe" });
+  const [bytes, error, code] = await Promise.all([new Response(child.stdout).arrayBuffer(), new Response(child.stderr).text(), child.exited]);
+  assert.equal(code, 0, `Public video capture: ${error}`);
+  const pixels = new Uint8Array(bytes);
+  assert.equal(pixels.length, 800 * 450 * 3);
+  return pixels;
+};
 
 try {
   await until("provider WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
@@ -62,9 +70,17 @@ try {
   }, 90_000);
   await until("public provider advances past its dark opening", () => state?.currentEntryId === entryId && state.player.status === "playing" && state.player.position >= 15, 45_000);
   await tv.watching();
-  await assertNativeVideoPixels(tv.execute, "/artifacts", "native-public-provider");
+  const pixels = await captureVideo();
+  let lit = 0;
+  const colors = new Set<number>();
+  for (let index = 0; index < pixels.length; index += 3) {
+    if (Math.max(pixels[index]!, pixels[index + 1]!, pixels[index + 2]!) > 50) lit++;
+    colors.add((pixels[index]! >> 4) << 8 | (pixels[index + 1]! >> 4) << 4 | pixels[index + 2]! >> 4);
+  }
+  assert.ok(lit > 800 * 450 * 0.3, `Public video is visibly lit (${lit} pixels)`);
+  assert.ok(colors.size > 100, `Public video has varied picture content (${colors.size} color buckets)`);
   checks.push("public provider presents native video pixels");
-  await write({ status: "passed", tracks: state!.player.tracks?.map(track => track.kind), limitations: "Xvfb and a null audio sink; no physical output qualification." });
+  await write({ status: "passed", tracks: state!.player.tracks?.map(track => track.kind), position: state!.player.position, pixels: { lit, colorBuckets: colors.size, sha256: createHash("sha256").update(pixels).digest("hex") }, limitations: "Xvfb and a null audio sink; no physical output qualification." });
 } catch (error) {
   await write({ status: "failed", phase: checks.at(-1) ?? "startup", error: error instanceof Error ? error.message : String(error), playerStatus: state?.player.status ?? null });
   throw error;
