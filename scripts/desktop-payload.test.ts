@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPayload, desktopTarget, payloadPaths, verifyPayload } from "./desktop-payload";
+import { createPayload, desktopTarget, isNativeLibrary, payloadPaths, verifyBundledNativeLibraries, verifyPayload } from "./desktop-payload";
 
 function executable(target: string) {
   const bytes = Buffer.alloc(128);
@@ -49,28 +49,33 @@ for (const [target, format] of [
     await write(join(resources, "tools.json"), JSON.stringify(helpers));
     for (const name of ["build-inputs.json", "build-packages.tsv"]) await write(join(resources, name), "{}\n");
     await write(join(resources, "notices", "NOTICE"), "Couch notices\n");
-    const payload = await createPayload(target, format, sidecar, resources);
+    const hostPackages = format === "deb" ? ["libmpv2"] : [];
+    const payload = await createPayload(target, format, sidecar, resources, ["yt-dlp", "deno", "ffprobe"], hostPackages);
+    expect(payload.native).toEqual({ bundledLibraries: [], declaredHostPackages: hostPackages });
+    if (format === "deb") expect(() => verifyBundledNativeLibraries(payload, payload.files.map(file => file.path).concat("usr/lib/Couch/libmpv.so.2"))).toThrow("Bundled native libraries differ");
     if (format === "nsis") expect(payload.files.map(file => file.path)).toEqual(expect.arrayContaining([
       "couch-server.exe", "tools/deno.exe", "tools.json", "build-inputs.json", "notices/NOTICE",
     ]));
     if (format === "nsis") expect(payload.files.some(file => file.path.startsWith("resources/"))).toBe(false);
     const installed = join(directory, "installed");
+    const verify = (candidate = payload) => verifyPayload(installed, candidate, target, format, ["yt-dlp", "deno", "ffprobe"], hostPackages);
     for (const file of payload.files) {
       const source = file.path === paths.sidecar ? sidecar : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
       const path = join(installed, file.path);
       await write(path, new Uint8Array(await Bun.file(source).arrayBuffer()));
       if (file.architecture) await chmod(path, 0o755);
     }
-    await verifyPayload(installed, payload, target, format);
+    await verify();
+    if (format === "deb") await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
     const missingArch = structuredClone(payload);
     delete missingArch.files.find(file => file.path === paths.sidecar)!.architecture;
-    await expect(verifyPayload(installed, missingArch, target, format)).rejects.toThrow("Missing architecture");
+    await expect(verify(missingArch)).rejects.toThrow("Missing architecture");
     await rm(join(installed, paths.sidecar));
-    await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
+    await expect(verify()).rejects.toThrow();
     await write(join(installed, paths.sidecar), executable(target));
     await chmod(join(installed, paths.sidecar), 0o755);
     await rm(join(installed, paths.resources, "tools", `deno${suffix}`));
-    await expect(verifyPayload(installed, payload, target, format)).rejects.toThrow();
+    await expect(verify()).rejects.toThrow();
     await write(join(installed, paths.resources, "tools", `deno${suffix}`), executable(target));
     await chmod(join(installed, paths.resources, "tools", `deno${suffix}`), 0o755);
     const wrong = target.startsWith("aarch64") ? target.replace("aarch64", "x86_64") : target.replace("x86_64", "aarch64");
@@ -82,6 +87,11 @@ for (const [target, format] of [
 test("build target selection includes Windows and rejects unsupported targets", () => {
   expect(desktopTarget("win32", "x64")).toBe("x86_64-pc-windows-msvc");
   expect(() => desktopTarget("win32", "arm64")).toThrow("Unsupported desktop build target");
+});
+
+test("native library paths cover shared objects on each desktop target", () => {
+  for (const path of ["usr/lib/Couch/libmpv.so.2", "Contents/Frameworks/libmpv.dylib", "libmpv.dll"]) expect(isNativeLibrary(path)).toBe(true);
+  expect(isNativeLibrary("usr/bin/couch-server")).toBe(false);
 });
 
 test("Client-only payload records the coordinator without claiming local media helpers", async () => {

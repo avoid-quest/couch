@@ -24,8 +24,12 @@ export function payloadPaths(target: string, format: string) {
 }
 
 export type PayloadFile = { path: string; sha256: string; architecture?: string };
-export type Payload = { target: string; format: string; enabledHelpers: string[]; files: PayloadFile[] };
+export type Payload = { target: string; format: string; enabledHelpers: string[]; native: { bundledLibraries: string[]; declaredHostPackages: string[] }; files: PayloadFile[] };
 const helperNames = ["yt-dlp", "deno", "ffprobe"] as const;
+export const isNativeLibrary = (path: string) => /\.(?:so(?:\.\d+)*|dylib|dll)$/i.test(path);
+export function verifyBundledNativeLibraries(payload: Payload, packagePaths: string[]) {
+  assert.deepEqual(packagePaths.filter(isNativeLibrary).sort(), payload.native.bundledLibraries, "Bundled native libraries differ from payload inventory");
+}
 const hash = async (path: string) => new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
 
 // Read the executable header, including universal Mach-O slices. A helper with
@@ -52,7 +56,7 @@ export async function binaryArchitectures(path: string): Promise<string[]> {
   return [];
 }
 
-export async function createPayload(target: string, format: string, sidecar: string, resources: string, enabledHelpers: string[] = [...helperNames]): Promise<Payload> {
+export async function createPayload(target: string, format: string, sidecar: string, resources: string, enabledHelpers: string[] = [...helperNames], declaredHostPackages: string[] = []): Promise<Payload> {
   const paths = payloadPaths(target, format);
   assert.ok(enabledHelpers.every(name => helperNames.includes(name as typeof helperNames[number])), "Unknown enabled helper");
   const files: PayloadFile[] = [];
@@ -80,13 +84,16 @@ export async function createPayload(target: string, format: string, sidecar: str
     }
   }
   await walk(notices);
-  return { target, format, enabledHelpers, files: files.sort((a, b) => a.path.localeCompare(b.path)) };
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { target, format, enabledHelpers, native: { bundledLibraries: files.filter(file => isNativeLibrary(file.path)).map(file => file.path), declaredHostPackages }, files };
 }
 
-export async function verifyPayload(root: string, payload: Payload, expectedTarget: string, expectedFormat: string, expectedHelpers: string[] = [...helperNames]) {
+export async function verifyPayload(root: string, payload: Payload, expectedTarget: string, expectedFormat: string, expectedHelpers: string[] = [...helperNames], expectedHostPackages: string[] = []) {
   assert.equal(payload.target, expectedTarget);
   assert.equal(payload.format, expectedFormat);
   assert.deepEqual(payload.enabledHelpers, expectedHelpers);
+  assert.deepEqual(payload.native.declaredHostPackages, expectedHostPackages);
+  assert.deepEqual(payload.native.bundledLibraries, payload.files.filter(file => isNativeLibrary(file.path)).map(file => file.path));
   const paths = payloadPaths(expectedTarget, expectedFormat);
   const binaries = [paths.sidecar, ...expectedHelpers.map(name => posix.join(paths.resources, "tools", name + (expectedTarget.includes("windows") ? ".exe" : "")))];
   const required = [...binaries, ...(expectedHelpers.length ? [posix.join(paths.resources, "tools.json")] : []), posix.join(paths.resources, "build-inputs.json"), ...(expectedFormat === "deb" ? [posix.join(paths.resources, "build-packages.tsv")] : [])];
@@ -101,7 +108,7 @@ export async function verifyPayload(root: string, payload: Payload, expectedTarg
     const info = await lstat(source);
     assert.ok(info.isFile(), `Not a regular payload file: ${file.path}`);
     assert.equal(await hash(source), file.sha256, `Missing or changed payload file: ${file.path}`);
-    if (binaries.includes(file.path)) assert.equal(file.architecture, architecture, `Missing architecture: ${file.path}`);
+    if (binaries.includes(file.path) || isNativeLibrary(file.path)) assert.equal(file.architecture, architecture, `Missing architecture: ${file.path}`);
     if (binaries.includes(file.path) && !expectedTarget.includes("windows")) assert.ok(info.mode & 0o111, `Not executable: ${file.path}`);
     if (file.architecture) assert.ok((await binaryArchitectures(source)).includes(file.architecture), `Wrong architecture: ${file.path}`);
   }

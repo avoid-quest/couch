@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import debian from "../packaging/debian.json";
 import { verifyPackageHelpers } from "./package-verify-helpers";
-import { verifyPayload } from "./desktop-payload";
+import { verifyBundledNativeLibraries, verifyPayload } from "./desktop-payload";
 
 function run(command: string[]) {
   const result = Bun.spawnSync(command, { stderr: "inherit" });
@@ -55,7 +55,9 @@ try {
   assert.deepEqual(release.host.packages, debian.depends.map(dependency => dependency.split(" ")[0]));
   const inventory = await Bun.file(join(staging, "usr/lib/Couch/payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
-  await verifyPayload(staging, JSON.parse(inventory), build.target, "deb");
+  const payload = JSON.parse(inventory);
+  await verifyPayload(staging, payload, build.target, "deb", ["yt-dlp", "deno", "ffprobe"], release.host.packages);
+  verifyBundledNativeLibraries(payload, files.map(file => file.path));
   await verifyPackageHelpers(join(staging, "usr/lib/Couch/tools"), build.helpers);
   await Bun.write(".artifacts/deb-inventory.json", JSON.stringify({ build, depends, files: files.sort((a, b) => a.path.localeCompare(b.path)), sha256: new Bun.CryptoHasher("sha256").update(await Bun.file(archive).arrayBuffer()).digest("hex") }, null, 2) + "\n");
 } finally {
