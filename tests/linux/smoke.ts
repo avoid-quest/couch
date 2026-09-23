@@ -61,6 +61,7 @@ try {
   assert.match(revision, /^[a-f0-9]{40}$/, "launcher supplies the immutable source revision");
   await until("Tauri WebDriver starts", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
+  if (process.env.COUCH_TEST_DESKTOP_SMOKE === "1") await request(`/session/${session}/window/rect`, { x: 0, y: 0, width: 1280, height: 800 });
   await until("compiled Tauri app starts its compiled sidecar", sidecar, 30_000);
   await tv.button("Settings");
   await tv.settingsSection("connection");

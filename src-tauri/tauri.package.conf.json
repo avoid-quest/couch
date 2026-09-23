@@ -8,6 +8,7 @@
       "resources/tools.json": "tools.json",
       "resources/build-inputs.json": "build-inputs.json",
       "resources/build-packages.tsv": "build-packages.tsv",
+      "resources/payload.json": "payload.json",
       "resources/release.json": "release.json"
     },
     "linux": {

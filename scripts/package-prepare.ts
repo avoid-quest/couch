@@ -56,6 +56,7 @@ const helpers = {} as Record<string, { version: string; sha256: string; archiveS
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
 helpers.ffprobe = { version: run(["/usr/bin/ffprobe", "-version"]).split(" ")[2]!, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", "ffprobe")).arrayBuffer())), archiveSha256: "" };
 await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));
+await Bun.write(join(resources, "host.json"), JSON.stringify({ target: "x86_64-unknown-linux-gnu", os: "debian", version: "13", architecture: "amd64", session: "x11", packages: debian.depends.map(dependency => dependency.split(" ")[0]) }));
 for (const notice of inputs.notices) await download(notice, join(notices, notice.name));
 await cp("packaging/NOTICE", join(notices, "NOTICE"));
 await cp("vendor/streamingcommunity", join(notices, "streamingcommunity"), { recursive: true });

@@ -1,5 +1,8 @@
 # Debian packaging
 
+The shared coordinator, helper and resource inventory for desktop targets is
+described in [desktop payload inventory](desktop-payload.md).
+
 One signed native Debian 13 amd64 package ships Couch and its application
 dependencies. Hosted Actions builds it in the pinned Debian 13 container
 (`packaging/Dockerfile.builder` — historically named, now the standard builder).
