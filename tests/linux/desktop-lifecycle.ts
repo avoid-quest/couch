@@ -230,10 +230,13 @@ try {
     await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
     const pairingCode = (await Bun.file("/artifacts/lifecycle-selected-host-error.log").text()).match(/Pairing code: (\d{6})/)?.[1];
     assert.ok(pairingCode, "selected host prints a pairing code");
+    await typeByLabel(native.session, "Device name", "Native restart remote");
     await typeByLabel(native.session, "Pairing code", pairingCode);
     await click(native.session, '//button[normalize-space(.)="Connect"]');
     await until("paired desktop client connects to the selected host", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
-    assert.equal(await request(`/session/${native.session}/execute/sync`, { script: "return !!localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }), true, "native pairing is stored for the selected origin");
+    await until("first paired desktop remote is the selected host administrator", () => role(native.session, '//a[@aria-label="Device: Native restart remote" and contains(@title,"Administrator")]'));
+    const paired = await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }) as string;
+    assert.ok(paired, "native pairing is stored for the selected origin");
     remoteHost.kill();
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"selected Couch is offline")]'), 30_000);
@@ -272,6 +275,15 @@ try {
     assert.deepEqual(await processIds("couch-server"), hostPid);
     await quitShortcut(mainWindow);
     await until("client-only Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
+    await closeDriver(native);
+    native = await open("0", selected);
+    await until("full relaunch retains the selected playback address", () => role(native.session, '//button[normalize-space(.)="Play on: http://127.0.0.1:4201"]'), 30_000);
+    await until("full relaunch restores the paired administrator and its name", () => role(native.session, '//a[@aria-label="Device: Native restart remote" and contains(@title,"Administrator")]'), 30_000);
+    assert.equal(await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }), paired, "native pairing data survives full app restart");
+    await click(native.session, '//nav[@aria-label="Main navigation"]//a[@aria-label="Settings"]');
+    await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
+    await until("restarted administrator sees selected-host update target", () => role(native.session, '//label[normalize-space(.)="Release channel for selected host"]'));
+    assert.equal(await role(native.session, '//button[normalize-space(.)="Update this app"]'), true, "local update access stays separate after relaunch");
   } finally { await closeDriver(native); }
 } finally { remoteHost.kill(); await remoteHost.exited; }
 
