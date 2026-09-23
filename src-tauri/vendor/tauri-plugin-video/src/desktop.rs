@@ -83,9 +83,16 @@ impl<T> Pending<T> {
     }
 
     fn wait(self) -> crate::Result<T> {
-        let result = self.receiver.recv_timeout(Duration::from_secs(15)).map_err(|error| {
-            self.call.expire();
-            crate::Error::Pipeline(format!("native mpv operation timed out: {error}"))
+        self.wait_for(Duration::from_secs(15))
+    }
+
+    fn wait_for(self, timeout: Duration) -> crate::Result<T> {
+        let result = self.receiver.recv_timeout(timeout).map_err(|error| {
+            if self.call.expire() {
+                crate::Error::Pipeline(format!("native mpv operation timed out: {error}"))
+            } else {
+                crate::Error::DispatcherInFlight
+            }
         })?;
         if self.session.as_ref().is_some_and(|(epoch, expected)| epoch.load(Ordering::Acquire) != *expected) {
             return Err(crate::Error::InvalidRequest("native player session is stale".into()));
@@ -334,6 +341,16 @@ mod dispatcher_tests {
         assert!(call.expire());
         release.send(()).unwrap();
         assert!(!worker.join().unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn started_mpv_call_timeout_requires_reconciliation() {
+        let (_reply, receiver) = mpsc::sync_channel::<crate::Result<()>>(1);
+        let call = QueuedCall::new();
+        assert!(call.start());
+        let pending = Pending { receiver, call, session: None };
+        assert!(matches!(pending.wait_for(Duration::from_millis(1)), Err(crate::Error::DispatcherInFlight)));
     }
 
     #[cfg(target_os = "linux")]
@@ -1711,10 +1728,26 @@ mod linux_mpv {
             error: render_error,
         };
         let (worker, receiver) = mpsc::channel();
+        let (start_sender, start_receiver) = mpsc::channel();
         let closed = Arc::new(AtomicBool::new(false));
         let worker_closed = Arc::clone(&closed);
-        std::thread::Builder::new().name("couch-mpv-control".into()).spawn(move || run_worker(player, receiver, worker_closed))
-            .map_err(|error| Error::Pipeline(format!("could not start mpv control thread: {error}")))?;
+        let worker_start = match std::thread::Builder::new().name("couch-mpv-control".into()).spawn(move || {
+            if let Ok(player) = start_receiver.recv() {
+                run_worker(player, receiver, worker_closed);
+            }
+        }) {
+            Ok(_) => start_sender.send(player).map_err(|error| (Error::Pipeline("mpv control thread stopped during startup".into()), error.0)),
+            Err(error) => Err((Error::Pipeline(format!("could not start mpv control thread: {error}")), player)),
+        };
+        if let Err((error, player)) = worker_start {
+            update_source.remove();
+            gl_area.disconnect(render_signal);
+            gl_area.make_current();
+            *render_context.borrow_mut() = None;
+            widget.hide();
+            drop(player);
+            return Err(error);
+        }
         widget.hide();
         Ok(GtkPlayer {
             session_key: String::new(), epoch: Arc::new(AtomicU64::new(0)), closed, worker, render_context, gl_area, widget,
