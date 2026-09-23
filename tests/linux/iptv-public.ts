@@ -23,7 +23,7 @@ const until: Wait = async (description, predicate, timeout = 30_000) => {
 const request = async (path: string, body?: unknown, method = body === undefined ? "GET" : "POST") => {
   const response = await fetch(driverOrigin + path, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
   const value = await response.json() as { value: any };
-  assert.ok(response.ok && !value.value?.error, `WebDriver ${path} succeeded`);
+  assert.ok(response.ok && !value.value?.error, `WebDriver ${path} failed (${response.status}, ${value.value?.error ?? "unknown"})`);
   return value.value;
 };
 let session = "", state: SessionState | undefined, controller: WebSocket | undefined;
@@ -39,7 +39,7 @@ const connect = async (token: string) => {
 };
 const start = async () => {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("public IPTV desktop app connects", () => tv.roleHasText("status", "Connected"));
+  await until("public IPTV desktop app connects", async () => (await tv.elements("xpath", '//*[@role="status" and normalize-space(.)="Connected"]')).length > 0);
 };
 
 await Bun.write(`${artifacts}/iptv.json`, JSON.stringify({ externalQualification: "running", revision }, null, 2));
