@@ -29,6 +29,9 @@ helpers, libmpv and redistribution notices. The build checks the pinned Tauri
 AppImage tools and runtime before and after bundling. Its Linux ABI floor is set
 by this Debian 13 builder. Compatibility with older distributions has not been
 proven.
+The optional external AppImage output plugin cannot execute in the arm64-hosted
+amd64 builder. Tauri uses the output plugin bundled inside the pinned
+`linuxdeploy` instead; an inert cache entry prevents a moving plugin download.
 
 ## Qualify
 

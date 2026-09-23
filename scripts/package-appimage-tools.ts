@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { chmod, mkdir, rename, rm } from "node:fs/promises";
+import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import inputs from "../packaging/inputs.json";
 
@@ -31,5 +31,16 @@ for (const [name, input] of Object.entries(tools)) {
     await chmod(temporary, 0o755);
     await rename(temporary, path);
   } finally { await rm(temporary, { force: true }); }
+}
+// Tauri's optional external output plugin cannot execute under the amd64
+// emulator. An inert cache entry keeps Tauri from downloading its moving build;
+// linuxdeploy then uses the output plugin bundled in our pinned linuxdeploy.
+const optional = join(directory, "linuxdeploy-plugin-appimage.AppImage");
+if (mode === "--check") {
+  assert.equal((await stat(optional)).size, 0);
+  assert.equal((await stat(optional)).mode & 0o111, 0);
+} else {
+  await Bun.write(optional, "");
+  await chmod(optional, 0o644);
 }
 console.log(`Verified ${Object.keys(tools).length} pinned AppImage build tools`);
