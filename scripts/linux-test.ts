@@ -9,6 +9,7 @@ const providersArgument = process.argv.indexOf("--providers");
 const providersConfig = providersArgument === -1 ? null : process.argv[providersArgument + 1];
 const providerCatalogs = process.argv.includes("--provider-catalogs");
 const iptvPublicSample = process.argv.includes("--iptv-public-sample");
+const publicProvider = process.argv.includes("--public-provider");
 const builtRemote = process.argv.includes("--built-remote");
 const desktopSmoke = process.argv.includes("--desktop-smoke");
 const connection = process.argv.includes("--connection");
@@ -17,6 +18,7 @@ const mpvThreading = process.argv.includes("--mpv-threading");
 if (providersArgument !== -1 && !providersConfig) throw new Error("Supply a JSON file after --providers");
 if (providersConfig && providerCatalogs) throw new Error("Use either --providers or --provider-catalogs");
 if (iptvPublicSample && (providersConfig || providerCatalogs)) throw new Error("Use --iptv-public-sample without provider qualification options.");
+if (publicProvider && (providersConfig || providerCatalogs || iptvPublicSample || builtRemote || desktopSmoke || connection || diagnostics || mpvThreading)) throw new Error("Use --public-provider alone for the focused native provider journey.");
 const retiredExternalOptions = ["--jellyfin", "--jellyfin-config", "--live-radio"].filter(option => process.argv.includes(option));
 if (retiredExternalOptions.length) throw new Error(`${retiredExternalOptions.join(", ")} no longer runs the retired broad journey; use the focused Jellyfin and radio suites instead.`);
 if (builtRemote && (connection || diagnostics || providersConfig || providerCatalogs || iptvPublicSample)) throw new Error("Use --built-remote alone for the deterministic sidecar/browser journey.");
@@ -64,6 +66,7 @@ try {
     ...(providersConfig ? ["--mount", `type=bind,source=${resolve(providersConfig)},target=/providers.json,readonly`, "--env", "COUCH_TEST_PROVIDERS=/providers.json"] : []),
     ...(providerCatalogs ? ["--env", "COUCH_TEST_PROVIDER_CATALOGS=1"] : []),
     ...(iptvPublicSample ? ["--env", "COUCH_TEST_IPTV_PUBLIC_SAMPLE=1"] : []),
+    ...(publicProvider ? ["--env", "COUCH_TEST_PUBLIC_PROVIDER=1"] : []),
     image, "bash", "-ec", 'git clone --no-checkout /source.bundle /work; git -C /work checkout --detach "$COUCH_SOURCE_REVISION"; exec bash /work/tests/linux/run.sh',
   ]);
 } finally { await rm(snapshot, { recursive: true, force: true }); }
