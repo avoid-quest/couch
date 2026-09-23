@@ -100,6 +100,7 @@ test("provider credentials are write-only and guest or revoked callers cannot ch
   const guest = () => ({ ...administrator, authority: "controller" as const });
   expect((await f.request(`items/${f.id}`, undefined, guest)).status).toBe(403);
   expect((await f.request(`items/${f.id}/edit`, { revision: before.revision, changes: { title: "Attack" } }, guest)).status).toBe(403);
+  expect((await f.request(`items/${f.id}/export`, { revision: before.revision }, guest)).status).toBe(403);
   let calls = 0;
   const revoked = () => ++calls === 1 ? administrator : null;
   const request = new Request(`http://localhost/api/metadata/items/${f.id}/edit`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ revision: before.revision, changes: { title: "Revoked" } }) });

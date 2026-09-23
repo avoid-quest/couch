@@ -1,10 +1,10 @@
 # Video metadata corrections and export
 
 The host API supports administrator corrections for local movies and episodes.
-Open a movie or episode in Library, then choose **Edit metadata**. On the TV,
+Open a local movie or episode's details in Find, then choose **Edit metadata**. On the TV,
 these controls accept local input; paired navigation cannot activate them.
 Administrator browsers use the same editor and download the export directly.
-The TV editor gives the exact browser navigation path for exporting.
+The native desktop editor lets an Owner or authorized Administrator choose a file destination.
 
 Existing libraries need one rescan to retain their import snapshot before the
 first correction. Corrections use each item's current revision; another edit or
@@ -49,10 +49,13 @@ contract tests use generated responses. Live search, matching and artwork
 qualification remain open until an authorized token is available; these tests
 do not claim a live service pass.
 
-## Explicit download export
+## Explicit archive export
 
 An export downloads `couch-metadata-<item-id>.tar` to the requesting browser's
-download destination. It never replaces a file on the TV. Extract into an empty
+download destination. The native desktop file picker suggests a timestamped filename
+and lets the user choose the destination. Cancel
+leaves no file. A failed native write removes its temporary file and leaves any
+existing destination intact. The export never replaces a file on the TV. Extract into an empty
 folder and inspect `placement.json` before manually placing sidecars beside the
 media. Back up existing sidecars before choosing to replace them.
 
