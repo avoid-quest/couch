@@ -3,19 +3,28 @@
 set -euo pipefail
 builder=${1:?Supply the task-owned Debian builder container}
 output=$(realpath "${2:?Supply the qualification evidence directory}")
-fixture="couch-native-deb-${GITHUB_RUN_ID:-local}-$$"
+format=${3:-deb}
+case "$format" in deb|appimage) ;; *) echo 'Choose deb or appimage' >&2; exit 1 ;; esac
+fixture="couch-native-${format}-${GITHUB_RUN_ID:-local}-$$"
 mkdir -p "$output/qualification" "$output/evidence"
 trap 'docker logs "$fixture" > "$output/runtime.log" 2>&1 || true; docker rm -f "$fixture" > /dev/null 2>&1 || true' EXIT
 docker exec -w /work "$builder" cargo install tauri-driver --version 2.0.6 --locked
-docker exec -w /work "$builder" ffmpeg -v error -y -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 15 -c:v libx264 -pix_fmt yuv420p -c:a aac /tmp/couch-sample.mp4
 version=$(docker exec -w /work "$builder" bun -p '(await Bun.file("src-tauri/build-info.json").json()).version')
-docker cp "$builder:/work/.artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$output/qualification/couch.deb"
 docker cp "$builder:/root/.cargo/bin/tauri-driver" "$output/qualification/tauri-driver"
-docker cp "$builder:/tmp/couch-sample.mp4" "$output/qualification/sample.mp4"
-cp tests/package/debian-runtime.sh "$output/qualification/runtime.sh"
+if [ "$format" = deb ]; then
+  docker exec -w /work "$builder" ffmpeg -v error -y -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 15 -c:v libx264 -pix_fmt yuv420p -c:a aac /tmp/couch-sample.mp4
+  docker cp "$builder:/work/.artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$output/qualification/couch.deb"
+  docker cp "$builder:/tmp/couch-sample.mp4" "$output/qualification/sample.mp4"
+  cp tests/package/debian-runtime.sh "$output/qualification/runtime.sh"
+else
+  docker cp "$builder:/work/.artifacts/hosted-release/public/Couch_${version}_amd64.AppImage" "$output/qualification/Couch.AppImage"
+  cp tests/package/appimage-runtime.sh "$output/qualification/runtime.sh"
+fi
+fixture_env=COUCH_DEB_FIXTURE=1
+if [ "$format" = appimage ]; then fixture_env=COUCH_APPIMAGE_FIXTURE=1; fi
 image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')
 docker run -d --name "$fixture" --init --platform linux/amd64 --cpus 2 --memory 4g --shm-size 1g \
-  -v "$output/qualification:/qualification:ro" -v "$output/evidence:/evidence" -e COUCH_DEB_FIXTURE=1 \
+  -v "$output/qualification:/qualification:ro" -v "$output/evidence:/evidence" -e "$fixture_env" \
   "$image" bash /qualification/runtime.sh > /dev/null
 for attempt in $(seq 1 180); do
   if [ -f "$output/evidence/ready" ]; then break; fi
@@ -25,4 +34,4 @@ for attempt in $(seq 1 180); do
 done
 test -f "$output/evidence/ready"
 docker exec "$fixture" chmod 0777 /evidence
-bun tests/package/debian-desktop.ts "$fixture" "$output/evidence"
+if [ "$format" = deb ]; then bun tests/package/debian-desktop.ts "$fixture" "$output/evidence"; else bun tests/package/appimage-desktop.ts "$fixture" "$output/evidence"; fi

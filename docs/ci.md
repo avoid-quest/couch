@@ -119,6 +119,10 @@ budget improvement. Reuse valid same-revision evidence instead of rerunning it
 merely because PR metadata changed.
 
 [Package](../.github/workflows/package.yml) and the [hosted release guide](hosted-releases.md)
-retain ownership of signed Debian builds, qualification, CrabNebula publication
-and unchanged-byte promotion. Publication requires separate authorization. The
-T480 installs/runs Couch; it is never a build worker.
+own signed Debian and AppImage builds, qualification, CrabNebula publication and
+unchanged-byte promotion. For Package workflow edits, run
+`bun tests/package/hosted-workflow.ts "$(command -v act)" .artifacts/act-package`
+with the `catthehacker/ubuntu:full-latest` image. Its inert provider/build steps
+check dispatch control flow; they do not replace the exact signed package and
+fresh runtime fixture. Publication requires separate authorization. The T480
+installs/runs Couch; it is never a build worker.

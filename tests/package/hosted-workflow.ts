@@ -8,7 +8,7 @@ assert.ok(actInput && outputInput, "Supply the act binary and disposable output 
 const act = resolve(actInput), output = resolve(outputInput);
 const dockerHost = process.env.DOCKER_HOST ?? Bun.spawnSync(["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], { stderr: "inherit" }).stdout.toString().trim();
 assert.ok(dockerHost, "Select an available Docker context or set DOCKER_HOST");
-const image = process.env.COUCH_ACT_IMAGE ?? "debian:13-slim";
+const image = process.env.COUCH_ACT_IMAGE ?? "catthehacker/ubuntu:full-latest";
 const architecture = process.env.COUCH_ACT_ARCH ?? `linux/${process.arch === "arm64" ? "arm64" : "amd64"}`;
 const source = await Bun.file(".github/workflows/package.yml").text();
 const workflow = Bun.YAML.parse(source) as any;

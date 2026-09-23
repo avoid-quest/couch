@@ -15,9 +15,11 @@ inspection=$(mktemp -d)
 trap 'rm -rf "$inspection"' EXIT
 if [ "${1:-deb}" = deb ]; then
   dpkg-deb --extract ".artifacts/hosted-release/public/Couch_${version}_amd64.deb" "$inspection"
+  release="$inspection/usr/lib/Couch/release.json"
 else
-  (cd "$inspection" && "$OLDPWD/.artifacts/hosted-release/public/Couch_${version}_amd64.AppImage" --appimage-extract usr/lib/Couch/release.json > /dev/null)
-  mv "$inspection/squashfs-root" "$inspection/app"
+  archive="$(pwd)/.artifacts/hosted-release/public/Couch_${version}_amd64.AppImage"
+  (cd "$inspection" && "$archive" --appimage-extract usr/lib/Couch/release.json > /dev/null)
+  release="$inspection/squashfs-root/usr/lib/Couch/release.json"
 fi
-cmp src-tauri/resources/release.json "${inspection}/$( [ "${1:-deb}" = deb ] && echo usr || echo app/usr )/lib/Couch/release.json"
+cmp src-tauri/resources/release.json "$release"
 # The workflow writes qualified.json only after the separate installer fixture passes.
