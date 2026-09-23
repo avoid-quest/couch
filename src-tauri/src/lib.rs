@@ -243,6 +243,18 @@ fn start_local(app: &tauri::AppHandle) -> Result<(), String> {
     start_coordinator(app, true)
 }
 
+pub(crate) fn local_update_status(
+    app: &tauri::AppHandle,
+    saved_id: Option<&str>,
+    request_id: &str,
+) -> serde_json::Value {
+    if desktop_update::running(app) {
+        desktop_update::status(app, saved_id, request_id)
+    } else {
+        appimage_update::status(app, saved_id, request_id)
+    }
+}
+
 fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), String> {
     let host = app.state::<Host>();
     if host.child.lock().expect("sidecar lock poisoned").is_some() {
@@ -433,10 +445,11 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                     request_id: ref saved_id,
                                 } = action
                                 {
-                                    let status = if desktop_update::running(&handle) {
-                                        desktop_update::status(&handle, saved_id.as_deref(), &request_id)
-                                    } else { appimage_update::status(&handle, saved_id.as_deref(), &request_id) };
-                                    host.report_message(status);
+                                    host.report_message(local_update_status(
+                                        &handle,
+                                        saved_id.as_deref(),
+                                        &request_id,
+                                    ));
                                 } else if host
                                     .update_busy
                                     .swap(true, std::sync::atomic::Ordering::SeqCst)
