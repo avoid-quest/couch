@@ -9,10 +9,20 @@ const COMMANDS: &[&str] = &[
 
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        let prefix = std::env::var("COUCH_MPV_PREFIX").unwrap_or_else(|_| "/opt/homebrew/Cellar/mpv/0.41.0_10".into());
+        let prefix = std::env::var("COUCH_MPV_PREFIX").unwrap_or_else(|_| {
+            let homebrew = if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("aarch64") {
+                "/opt/homebrew"
+            } else {
+                "/usr/local"
+            };
+            format!("{homebrew}/opt/mpv")
+        });
         let header = std::path::Path::new(&prefix).join("include/mpv/render.h");
         let library = std::path::Path::new(&prefix).join("lib/libmpv.dylib");
-        assert!(header.is_file() && library.is_file(), "libmpv headers and dylib required at {prefix}; set COUCH_MPV_PREFIX");
+        assert!(
+            header.is_file() && library.is_file(),
+            "libmpv headers and dylib required at {prefix}; set COUCH_MPV_PREFIX"
+        );
         cc::Build::new()
             .file("src/desktop/macos.m")
             .include(format!("{prefix}/include"))

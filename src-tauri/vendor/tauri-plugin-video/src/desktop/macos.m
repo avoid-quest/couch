@@ -13,6 +13,7 @@
 @property CADisplayLink *displayLink;
 @property (weak) NSView *web;
 @property uint64_t frames;
+@property int renderError;
 @end
 
 static void frame_ready(void *context) {
@@ -53,7 +54,11 @@ static void frame_ready(void *context) {
         {MPV_RENDER_PARAM_INVALID, NULL}
     };
     int result = mpv_render_context_render(self.renderer, params);
-    if (result < 0) NSLog(@"Couch video render failed: %d", result);
+    if (result < 0) {
+        self.renderError = result;
+        NSLog(@"Couch video render failed: %d", result);
+        return;
+    }
     [self.openGLContext flushBuffer];
     mpv_render_context_report_swap(self.renderer);
     self.frames++;
@@ -106,7 +111,11 @@ void couch_video_layout(void *pointer, double x, double y, double width, double 
     view.needsDisplay = YES;
 }
 
-uint64_t couch_video_frames(void *pointer) { return ((__bridge CouchVideoView *)pointer).frames; }
+void couch_video_status(void *pointer, uint64_t *frames, int *error) {
+    CouchVideoView *view = (__bridge CouchVideoView *)pointer;
+    *frames = view.frames;
+    *error = view.renderError;
+}
 
 void couch_video_destroy(void *pointer) {
     CouchVideoView *view = (__bridge_transfer CouchVideoView *)pointer;

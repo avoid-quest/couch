@@ -12,8 +12,9 @@ Full or signed distribution check.
   `/opt/homebrew/Cellar/mpv/0.41.0_10`. The dylib SHA-256 was
   `d7871516767687dd7e5fb454ccd530f28d04238111ad4925c155e2c87ceceb1b`.
   Its linked FFmpeg libraries came from Homebrew FFmpeg 9.0.2. The build script
-  defaults to that versioned keg and accepts an explicit `COUCH_MPV_PREFIX` for
-  another installation. Record the override and dylib hash when using one.
+  uses Homebrew's stable `opt/mpv` prefix for Apple Silicon or Intel and accepts
+  an explicit `COUCH_MPV_PREFIX` for another installation. Record the resolved
+  dylib version and hash when using another installation.
 - The host links AppKit, QuartzCore and OpenGL. The view uses AppKit's
   [display link](https://developer.apple.com/documentation/appkit/nsview/displaylink%28target%3Aselector%3A%29)
   to schedule mpv's OpenGL render API on the main thread. Apple introduced this

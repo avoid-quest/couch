@@ -9,14 +9,15 @@ use libmpv2::{events::Event, mpv_end_file_reason, Mpv};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::{
-    Error, MpvPlaybackState, NativeControlRequest, NativeLayoutRequest, NativeOpenRequest,
-    NativePlaybackSnapshot, NativeSessionRequest, NativeTrackInfo, Result, TrackKind,
+    Error, MpvChapter, MpvPlaybackState, NativeControlRequest, NativeLayoutRequest,
+    NativeOpenRequest, NativePlaybackSnapshot, NativeSessionRequest, NativeSubtitle,
+    NativeTrackInfo, Result, TrackKind,
 };
 
 unsafe extern "C" {
     fn couch_video_create(webview: *mut c_void, mpv: *mut c_void) -> *mut c_void;
     fn couch_video_layout(view: *mut c_void, x: f64, y: f64, width: f64, height: f64);
-    fn couch_video_frames(view: *mut c_void) -> u64;
+    fn couch_video_status(view: *mut c_void, frames: *mut u64, error: *mut i32);
     fn couch_video_destroy(view: *mut c_void);
 }
 
@@ -33,39 +34,86 @@ impl<R: Runtime> MacVideo<R> {
             .name("couch-mac-mpv".into())
             .spawn(move || {
                 let mut worker = Worker { app, player: None };
-                while let Ok(job) = receiver.recv() { job(&mut worker); }
+                while let Ok(job) = receiver.recv() {
+                    job(&mut worker);
+                }
                 worker.player.take();
             })
             .expect("Cannot start the Mac playback worker");
         Self { sender }
     }
 
-    fn call<T: Send + 'static>(&self, operation: impl FnOnce(&mut Worker<R>) -> Result<T> + Send + 'static) -> Result<T> {
+    fn call<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut Worker<R>) -> Result<T> + Send + 'static,
+    ) -> Result<T> {
         let (reply, receiver) = mpsc::sync_channel(1);
         let queued = super::QueuedCall::new();
         let started = queued.clone();
-        self.sender.try_send(Box::new(move |worker| {
-            if started.start() { let _ = reply.send(operation(worker)); }
-        })).map_err(|error| match error {
-            TrySendError::Full(_) => Error::Pipeline("Mac playback queue is full".into()),
-            TrySendError::Disconnected(_) => Error::Pipeline("Mac playback worker stopped".into()),
-        })?;
-        receiver.recv_timeout(Duration::from_secs(15)).map_err(|error| {
-            if queued.expire() { Error::Pipeline(format!("Mac playback command expired: {error}")) }
-            else { Error::DispatcherInFlight }
-        })?
+        self.sender
+            .try_send(Box::new(move |worker| {
+                if started.start() {
+                    let _ = reply.send(operation(worker));
+                }
+            }))
+            .map_err(|error| match error {
+                TrySendError::Full(_) => Error::Pipeline("Mac playback queue is full".into()),
+                TrySendError::Disconnected(_) => {
+                    Error::Pipeline("Mac playback worker stopped".into())
+                }
+            })?;
+        receiver
+            .recv_timeout(Duration::from_secs(15))
+            .map_err(|error| {
+                if queued.expire() {
+                    Error::Pipeline(format!("Mac playback command expired: {error}"))
+                } else {
+                    Error::DispatcherInFlight
+                }
+            })?
     }
 
-    pub fn open(&self, request: NativeOpenRequest) -> Result<NativePlaybackSnapshot> { self.call(move |worker| worker.open(request)) }
-    pub fn control(&self, request: NativeControlRequest) -> Result<NativePlaybackSnapshot> { self.call(move |worker| worker.control(request)) }
-    pub fn layout(&self, request: NativeLayoutRequest) -> Result<()> { self.call(move |worker| worker.layout(request)) }
-    pub fn stats(&self, request: NativeSessionRequest) -> Result<NativePlaybackSnapshot> { self.call(move |worker| worker.stats(request)) }
-    pub fn close(&self, request: NativeSessionRequest) -> Result<()> { self.call(move |worker| worker.close(request)) }
-    pub fn diagnostic_properties(&self, request: NativeSessionRequest) -> Result<std::collections::BTreeMap<String, Option<String>>> {
+    pub fn open(&self, request: NativeOpenRequest) -> Result<NativePlaybackSnapshot> {
+        self.call(move |worker| worker.open(request))
+    }
+    pub fn control(&self, request: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
+        self.call(move |worker| worker.control(request))
+    }
+    pub fn layout(&self, request: NativeLayoutRequest) -> Result<()> {
+        self.call(move |worker| worker.layout(request))
+    }
+    pub fn stats(&self, request: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
+        self.call(move |worker| worker.stats(request))
+    }
+    pub fn close(&self, request: NativeSessionRequest) -> Result<()> {
+        self.call(move |worker| worker.close(request))
+    }
+    pub fn diagnostic_properties(
+        &self,
+        request: NativeSessionRequest,
+    ) -> Result<std::collections::BTreeMap<String, Option<String>>> {
         self.call(move |worker| {
             let player = worker.player(&request.session_key)?;
-            Ok(["mpv-version", "hwdec-current", "current-vo", "current-ao", "audio-device", "video-codec"]
-                .into_iter().map(|name| (name.to_string(), player.mpv.get_property::<String>(name).ok().map(|value| value.chars().take(200).collect()))).collect())
+            Ok([
+                "mpv-version",
+                "hwdec-current",
+                "current-vo",
+                "current-ao",
+                "audio-device",
+                "video-codec",
+            ]
+            .into_iter()
+            .map(|name| {
+                (
+                    name.to_string(),
+                    player
+                        .mpv
+                        .get_property::<String>(name)
+                        .ok()
+                        .map(|value| value.chars().take(200).collect()),
+                )
+            })
+            .collect())
         })
     }
 }
@@ -83,6 +131,9 @@ struct Player<R: Runtime> {
     loaded: bool,
     ended: bool,
     error: Option<String>,
+    replay_gain: crate::mpv_replaygain::ReplayGain,
+    pending_subtitles: Vec<NativeSubtitle>,
+    subtitle_error: Option<String>,
 }
 
 impl<R: Runtime> Drop for Player<R> {
@@ -90,7 +141,9 @@ impl<R: Runtime> Drop for Player<R> {
         // The render context owns GL resources and must be freed before mpv.
         let _ = self.mpv.command("stop", &[]);
         let view = self.view;
-        match on_main(&self.app, move || unsafe { couch_video_destroy(view as *mut c_void) }) {
+        match on_main(&self.app, move || unsafe {
+            couch_video_destroy(view as *mut c_void)
+        }) {
             Ok(()) => unsafe { ManuallyDrop::drop(&mut self.mpv) },
             Err(error) => {
                 // The renderer still refers to mpv. Let process exit reclaim both.
@@ -100,20 +153,41 @@ impl<R: Runtime> Drop for Player<R> {
     }
 }
 
-fn on_main<R: Runtime, T: Send + 'static>(app: &AppHandle<R>, operation: impl FnOnce() -> T + Send + 'static) -> Result<T> {
+fn on_main<R: Runtime, T: Send + 'static>(
+    app: &AppHandle<R>,
+    operation: impl FnOnce() -> T + Send + 'static,
+) -> Result<T> {
     let (sender, receiver) = mpsc::sync_channel(1);
-    app.run_on_main_thread(move || { let _ = sender.send(operation()); })
-        .map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))?;
-    receiver.recv().map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))
+    app.run_on_main_thread(move || {
+        let _ = sender.send(operation());
+    })
+    .map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))?;
+    receiver
+        .recv()
+        .map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))
 }
 
-fn mpv_error(error: libmpv2::Error) -> Error { Error::Pipeline(error.to_string()) }
+fn mpv_error(error: libmpv2::Error) -> Error {
+    Error::Pipeline(error.to_string())
+}
 
 fn validate_open(request: &NativeOpenRequest) -> Result<()> {
-    if request.audio_uri.is_some() || request.max_video_height.is_some() || request.radio || request.go_live || request.event_start || request.end_position.is_some() {
-        return Err(Error::InvalidRequest("This Mac player currently supports ordinary single-source media only".into()));
+    if request.audio_uri.is_some()
+        || request.max_video_height.is_some()
+        || request.radio
+        || request.go_live
+        || request.event_start
+        || request.end_position.is_some()
+    {
+        return Err(Error::InvalidRequest(
+            "This Mac player currently supports ordinary single-source media only".into(),
+        ));
     }
-    if request.backend.as_deref().is_some_and(|backend| backend != "mpv") {
+    if request
+        .backend
+        .as_deref()
+        .is_some_and(|backend| backend != "mpv")
+    {
         return Err(Error::InvalidRequest("Mac playback requires mpv".into()));
     }
     Ok(())
@@ -137,60 +211,178 @@ impl<R: Runtime> Worker<R> {
             init.set_option("osd-level", "0")?;
             init.set_option("input-default-bindings", "no")?;
             Ok(())
-        }).map_err(mpv_error)?;
+        })
+        .map_err(mpv_error)?;
         mpv.disable_deprecated_events().map_err(mpv_error)?;
-        let window = self.app.get_webview_window("main")
+        mpv.hook_add("on_preloaded", 0).map_err(mpv_error)?;
+        let window = self
+            .app
+            .get_webview_window("main")
             .ok_or_else(|| Error::Pipeline("Main window is unavailable".into()))?;
         let handle = mpv.ctx.as_ptr() as usize;
         let (sender, receiver) = mpsc::sync_channel(1);
-        window.with_webview(move |web| {
-            let view = unsafe { couch_video_create(web.inner(), handle as *mut c_void) };
-            let _ = sender.send(view as usize);
-        }).map_err(|error| Error::Pipeline(error.to_string()))?;
-        let view = receiver.recv().map_err(|error| Error::Pipeline(error.to_string()))?;
-        if view == 0 { return Err(Error::Pipeline("Could not create Mac video renderer".into())); }
-        let mut player = Player { app: self.app.clone(), mpv: ManuallyDrop::new(mpv), view, key: request.session_key.clone(), loaded: false, ended: false, error: None };
+        window
+            .with_webview(move |web| {
+                let view = unsafe { couch_video_create(web.inner(), handle as *mut c_void) };
+                let _ = sender.send(view as usize);
+            })
+            .map_err(|error| Error::Pipeline(error.to_string()))?;
+        let view = receiver
+            .recv()
+            .map_err(|error| Error::Pipeline(error.to_string()))?;
+        if view == 0 {
+            return Err(Error::Pipeline(
+                "Could not create Mac video renderer".into(),
+            ));
+        }
+        let mut player = Player {
+            app: self.app.clone(),
+            mpv: ManuallyDrop::new(mpv),
+            view,
+            key: request.session_key.clone(),
+            loaded: false,
+            ended: false,
+            error: None,
+            replay_gain: crate::mpv_replaygain::ReplayGain::default(),
+            pending_subtitles: request.subtitles.clone(),
+            subtitle_error: None,
+        };
         player.layout(request.x, request.y, request.width, request.height)?;
-        player.mpv.set_property("volume", request.volume * 100.0).map_err(mpv_error)?;
-        player.mpv.set_property("mute", request.muted).map_err(mpv_error)?;
-        player.mpv.set_property("pause", !request.autoplay).map_err(mpv_error)?;
-        player.mpv.set_property("start", request.start_position.unwrap_or(0.0).to_string()).map_err(mpv_error)?;
-        let headers = request.headers.iter().map(|(key, value)| format!("{key}: {value}")).collect::<Vec<_>>().join(",");
-        player.mpv.set_property("http-header-fields", headers).map_err(mpv_error)?;
-        player.mpv.command("loadfile", &[&request.uri, "replace"]).map_err(mpv_error)?;
+        crate::mpv_subtitles::reset(&player.mpv, &request.preferences)?;
+        player
+            .replay_gain
+            .reset(&player.mpv, request.preferences.replay_gain)?;
+        player
+            .mpv
+            .set_property("volume", request.volume * 100.0)
+            .map_err(mpv_error)?;
+        player
+            .mpv
+            .set_property("mute", request.muted)
+            .map_err(mpv_error)?;
+        player
+            .mpv
+            .set_property("pause", !request.autoplay)
+            .map_err(mpv_error)?;
+        player
+            .mpv
+            .set_property("start", request.start_position.unwrap_or(0.0).to_string())
+            .map_err(mpv_error)?;
+        let mut headers = request.headers.clone();
+        if let Some(value) = request.cookies.as_ref().filter(|value| !value.is_empty()) {
+            headers.insert("Cookie".into(), value.clone());
+        }
+        if let Some(value) = request.referrer.as_ref().filter(|value| !value.is_empty()) {
+            headers.insert("Referer".into(), value.clone());
+        }
+        player
+            .mpv
+            .command("change-list", &["http-header-fields", "clr", ""])
+            .map_err(mpv_error)?;
+        for (name, value) in headers {
+            player
+                .mpv
+                .command(
+                    "change-list",
+                    &["http-header-fields", "append", &format!("{name}: {value}")],
+                )
+                .map_err(mpv_error)?;
+        }
+        player
+            .mpv
+            .set_property(
+                "user-agent",
+                request
+                    .user_agent
+                    .unwrap_or_else(|| "tauri-plugin-video".into()),
+            )
+            .map_err(mpv_error)?;
+        player
+            .mpv
+            .set_property("tls-ca-file", request.tls_ca_file.unwrap_or_default())
+            .map_err(mpv_error)?;
+        player
+            .mpv
+            .command("loadfile", &[&request.uri, "replace"])
+            .map_err(mpv_error)?;
         let snapshot = player.snapshot()?;
         self.player = Some(player);
         Ok(snapshot)
     }
 
     fn player(&mut self, key: &str) -> Result<&mut Player<R>> {
-        let player = self.player.as_mut().ok_or_else(|| Error::InvalidRequest("No Mac playback session".into()))?;
-        if player.key != key { return Err(Error::InvalidRequest("Stale Mac playback session".into())); }
+        let player = self
+            .player
+            .as_mut()
+            .ok_or_else(|| Error::InvalidRequest("No Mac playback session".into()))?;
+        if player.key != key {
+            return Err(Error::InvalidRequest("Stale Mac playback session".into()));
+        }
         Ok(player)
     }
 
     fn control(&mut self, request: NativeControlRequest) -> Result<NativePlaybackSnapshot> {
         let player = self.player(&request.session_key)?;
-        if request.playback_id.as_deref().is_some_and(|id| id != player.key) {
+        if request
+            .playback_id
+            .as_deref()
+            .is_some_and(|id| id != player.key)
+        {
             return Err(Error::InvalidRequest("Stale Mac playback ID".into()));
         }
-        let mpv = &player.mpv;
         match request.action.as_str() {
-            "play" => mpv.set_property("pause", false),
-            "pause" | "audioPause" => mpv.set_property("pause", true),
-            "seek" => mpv.command("seek", &[&request.value.to_string(), "absolute+exact"]),
-            "volume" => mpv.set_property("volume", request.value * 100.0),
-            "speed" => mpv.set_property("speed", request.value),
-            "audioDelay" => mpv.set_property("audio-delay", request.value),
-            "subtitleDelay" => mpv.set_property("sub-delay", request.value),
-            "subtitlesOff" => mpv.set_property("sid", "no"),
-            _ => return Err(Error::InvalidRequest(format!("Mac player does not support {} yet", request.action))),
-        }.map_err(mpv_error)?;
+            "track" | "deselectTrack" => {
+                player.select_track(request.index, request.action == "track")?
+            }
+            "addSubtitle" => {
+                let subtitle = request.subtitle.as_ref().ok_or_else(|| {
+                    Error::InvalidRequest("Subtitle attachment is missing".into())
+                })?;
+                player.subtitle_error = if player.loaded {
+                    crate::mpv_subtitles::add(&player.mpv, subtitle, true)
+                        .err()
+                        .map(|_| crate::mpv_subtitles::LOAD_ERROR.into())
+                } else {
+                    Some("Wait for playback to load before adding subtitles.".into())
+                };
+            }
+            "replayGain" => player.replay_gain.set_mode(
+                &player.mpv,
+                request
+                    .replay_gain
+                    .ok_or_else(|| Error::InvalidRequest("ReplayGain mode is missing".into()))?,
+            )?,
+            _ => {
+                let mpv = &player.mpv;
+                match request.action.as_str() {
+                    "play" => mpv.set_property("pause", false),
+                    "pause" | "audioPause" => mpv.set_property("pause", true),
+                    "seek" => mpv.command("seek", &[&request.value.to_string(), "absolute+exact"]),
+                    "volume" => mpv.set_property("volume", request.value * 100.0),
+                    "speed" => mpv.set_property("speed", request.value),
+                    "audioDelay" => mpv.set_property("audio-delay", request.value),
+                    "subtitleDelay" => mpv.set_property("sub-delay", request.value),
+                    "subtitlesOff" => mpv.set_property("sid", "no"),
+                    _ => {
+                        return Err(Error::InvalidRequest(format!(
+                            "Mac player does not support {} yet",
+                            request.action
+                        )))
+                    }
+                }
+                .map_err(mpv_error)?;
+            }
+        }
         player.snapshot()
     }
 
     fn layout(&mut self, request: NativeLayoutRequest) -> Result<()> {
-        self.player(&request.session_key)?.layout(request.x, request.y, request.width, request.height)
+        self.player(&request.session_key)?.layout(
+            request.x,
+            request.y,
+            request.width,
+            request.height,
+        )
     }
 
     fn stats(&mut self, request: NativeSessionRequest) -> Result<NativePlaybackSnapshot> {
@@ -198,7 +390,11 @@ impl<R: Runtime> Worker<R> {
     }
 
     fn close(&mut self, request: NativeSessionRequest) -> Result<()> {
-        if self.player.as_ref().is_some_and(|player| player.key == request.session_key) {
+        if self
+            .player
+            .as_ref()
+            .is_some_and(|player| player.key == request.session_key)
+        {
             self.player.take();
         }
         Ok(())
@@ -206,17 +402,70 @@ impl<R: Runtime> Worker<R> {
 }
 
 impl<R: Runtime> Player<R> {
+    fn select_track(&self, index: i32, enabled: bool) -> Result<()> {
+        let mpv = &self.mpv;
+        let count = mpv
+            .get_property::<i64>("track-list/count")
+            .map_err(mpv_error)?;
+        if index < 0 || i64::from(index) >= count {
+            return Err(Error::InvalidRequest(format!(
+                "unknown native track index {index}"
+            )));
+        }
+        let prefix = format!("track-list/{index}");
+        let property = match mpv
+            .get_property::<String>(&format!("{prefix}/type"))
+            .map_err(mpv_error)?
+            .as_str()
+        {
+            "video" => "vid",
+            "audio" => "aid",
+            "sub" => "sid",
+            _ => {
+                return Err(Error::InvalidRequest(format!(
+                    "unknown native track index {index}"
+                )))
+            }
+        };
+        if enabled {
+            mpv.set_property(
+                property,
+                mpv.get_property::<i64>(&format!("{prefix}/id"))
+                    .map_err(mpv_error)?,
+            )
+        } else {
+            mpv.set_property(property, "no")
+        }
+        .map_err(mpv_error)
+    }
+
     fn layout(&mut self, x: f64, y: f64, width: f64, height: f64) -> Result<()> {
         let view = self.view;
-        on_main(&self.app, move || unsafe { couch_video_layout(view as *mut c_void, x, y, width, height) })
+        on_main(&self.app, move || unsafe {
+            couch_video_layout(view as *mut c_void, x, y, width, height)
+        })
     }
 
     fn snapshot(&mut self) -> Result<NativePlaybackSnapshot> {
         while let Some(event) = self.mpv.wait_event(0.0) {
             match event.map_err(mpv_error)? {
                 Event::FileLoaded => self.loaded = true,
+                Event::Hook { id } => {
+                    let selection = self.replay_gain.select(&self.mpv, false);
+                    if selection.is_ok() {
+                        for subtitle in std::mem::take(&mut self.pending_subtitles) {
+                            if crate::mpv_subtitles::add(&self.mpv, &subtitle, false).is_err() {
+                                self.subtitle_error = Some(crate::mpv_subtitles::LOAD_ERROR.into());
+                            }
+                        }
+                    }
+                    unsafe { self.mpv.hook_continue(id) }.map_err(mpv_error)?;
+                    selection?;
+                }
                 Event::EndFile(mpv_end_file_reason::Eof) => self.ended = true,
-                Event::EndFile(mpv_end_file_reason::Error) => self.error = Some("mpv could not play this source".into()),
+                Event::EndFile(mpv_end_file_reason::Error) => {
+                    self.error = Some("mpv could not play this source".into())
+                }
                 _ => {}
             }
         }
@@ -224,25 +473,69 @@ impl<R: Runtime> Player<R> {
         let mut tracks = Vec::new();
         for index in 0..mpv.get_property::<i64>("track-list/count").unwrap_or(0) {
             let prefix = format!("track-list/{index}");
-            let kind = match mpv.get_property::<String>(&format!("{prefix}/type")).unwrap_or_default().as_str() {
-                "video" => TrackKind::Video, "audio" => TrackKind::Audio, "sub" => TrackKind::Subtitle, _ => continue,
+            let kind = match mpv
+                .get_property::<String>(&format!("{prefix}/type"))
+                .unwrap_or_default()
+                .as_str()
+            {
+                "video" => TrackKind::Video,
+                "audio" => TrackKind::Audio,
+                "sub" => TrackKind::Subtitle,
+                _ => continue,
             };
             tracks.push(NativeTrackInfo {
-                id: index.to_string(), index: index as i32, kind,
-                language: mpv.get_property::<String>(&format!("{prefix}/lang")).unwrap_or_default(),
-                label: mpv.get_property::<String>(&format!("{prefix}/title")).unwrap_or_default(),
-                codec: mpv.get_property::<String>(&format!("{prefix}/codec")).unwrap_or_default(),
-                selected: mpv.get_property::<bool>(&format!("{prefix}/selected")).unwrap_or(false),
+                id: index.to_string(),
+                index: index as i32,
+                kind,
+                language: mpv
+                    .get_property::<String>(&format!("{prefix}/lang"))
+                    .unwrap_or_default(),
+                label: mpv
+                    .get_property::<String>(&format!("{prefix}/title"))
+                    .unwrap_or_default(),
+                codec: mpv
+                    .get_property::<String>(&format!("{prefix}/codec"))
+                    .unwrap_or_default(),
+                selected: mpv
+                    .get_property::<bool>(&format!("{prefix}/selected"))
+                    .unwrap_or(false),
             });
         }
         let position = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
         let paused = mpv.get_property::<bool>("pause").unwrap_or(true);
-        let buffering = mpv.get_property::<bool>("paused-for-cache").unwrap_or(false);
+        let buffering = mpv
+            .get_property::<bool>("paused-for-cache")
+            .unwrap_or(false);
+        let chapters = (0..mpv.get_property::<i64>("chapter-list/count").unwrap_or(0))
+            .filter_map(|index| {
+                let position = mpv
+                    .get_property::<f64>(&format!("chapter-list/{index}/time"))
+                    .ok()?;
+                if !position.is_finite() || position < 0.0 {
+                    return None;
+                }
+                let title = mpv
+                    .get_property::<String>(&format!("chapter-list/{index}/title"))
+                    .ok()
+                    .filter(|title| !title.trim().is_empty())
+                    .unwrap_or_else(|| format!("Chapter {}", index + 1));
+                Some(MpvChapter { title, position })
+            })
+            .collect();
         let view = self.view;
-        let frames = on_main(&self.app, move || unsafe { couch_video_frames(view as *mut c_void) })?;
+        let (frames, render_error) = on_main(&self.app, move || {
+            let (mut frames, mut error) = (0, 0);
+            unsafe { couch_video_status(view as *mut c_void, &mut frames, &mut error) };
+            (frames, error)
+        })?;
+        if render_error < 0 {
+            self.error
+                .get_or_insert_with(|| format!("Mac video rendering failed ({render_error})"));
+        }
         Ok(NativePlaybackSnapshot {
             mpv_state: Some(MpvPlaybackState {
-                playback_id: Some(self.key.clone()), error: self.error.clone(),
+                playback_id: Some(self.key.clone()),
+                error: self.error.clone(),
                 volume: mpv.get_property::<f64>("volume").unwrap_or(80.0) / 100.0,
                 seekable: mpv.get_property::<bool>("seekable").unwrap_or(false),
                 ended: self.ended || mpv.get_property::<bool>("eof-reached").unwrap_or(false),
@@ -250,17 +543,38 @@ impl<R: Runtime> Player<R> {
                 speed: mpv.get_property::<f64>("speed").unwrap_or(1.0),
                 audio_delay: mpv.get_property::<f64>("audio-delay").unwrap_or(0.0),
                 subtitle_delay: mpv.get_property::<f64>("sub-delay").unwrap_or(0.0),
-                replay_gain: None, subtitle_error: None, now_playing: None, chapters: vec![],
+                replay_gain: self.replay_gain.observe(mpv)?,
+                subtitle_error: self.subtitle_error.clone(),
+                now_playing: None,
+                chapters,
             }),
             duration_seconds: mpv.get_property::<f64>("duration").unwrap_or(0.0),
-            current_time_seconds: position, buffered_seconds: 0.0, playing: self.loaded && !paused && !buffering && !self.ended,
-            video_width: mpv.get_property::<i64>("video-params/w").unwrap_or(0).max(0) as u32,
-            video_height: mpv.get_property::<i64>("video-params/h").unwrap_or(0).max(0) as u32,
-            tracks, presented_frames: frames,
-            dropped_frames: mpv.get_property::<i64>("frame-drop-count").unwrap_or(0).max(0) as u64,
+            current_time_seconds: position,
+            buffered_seconds: 0.0,
+            playing: self.loaded && !paused && !buffering && !self.ended && self.error.is_none(),
+            video_width: mpv
+                .get_property::<i64>("video-params/w")
+                .unwrap_or(0)
+                .max(0) as u32,
+            video_height: mpv
+                .get_property::<i64>("video-params/h")
+                .unwrap_or(0)
+                .max(0) as u32,
+            tracks,
+            presented_frames: frames,
+            dropped_frames: mpv
+                .get_property::<i64>("frame-drop-count")
+                .unwrap_or(0)
+                .max(0) as u64,
             measured_fps: mpv.get_property::<f64>("container-fps").unwrap_or(0.0),
-            hardware_backend: format!("macos-opengl:{}:{}", mpv.get_property::<String>("hwdec-current").unwrap_or_default(), mpv.get_property::<String>("current-ao").unwrap_or_default()),
-            encoded_bytes_buffered: 0, average_frame_processing_us: 0.0,
+            hardware_backend: format!(
+                "macos-opengl:{}:{}",
+                mpv.get_property::<String>("hwdec-current")
+                    .unwrap_or_default(),
+                mpv.get_property::<String>("current-ao").unwrap_or_default()
+            ),
+            encoded_bytes_buffered: 0,
+            average_frame_processing_us: 0.0,
         })
     }
 }
