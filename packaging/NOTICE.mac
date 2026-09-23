@@ -1,0 +1,10 @@
+Couch is distributed privately by avoid-quest. This package does not grant a
+new license to Couch's application source. Third-party components retain their
+own licenses in this directory. The bundled coordinator embeds Bun 1.4.2;
+its upstream license and component notices are in bun-LICENSE.md. Bun's source
+and build instructions are at https://github.com/oven-sh/bun/tree/bun-v1.4.2 .
+
+native.txt records the Rust dependencies included in this Apple Silicon build.
+javascript.json and javascript/ record the production JavaScript dependencies.
+This Client-only package does not include libmpv, ffprobe, yt-dlp or Deno and
+does not offer local playback.

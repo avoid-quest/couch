@@ -18,6 +18,7 @@
     "package:prepare": "bun scripts/package-prepare.ts",
     "package:build": "bash scripts/package-build.sh",
     "package:windows": "bash scripts/package-windows.sh",
+    "package:mac": "bash scripts/package-mac.sh",
     "typecheck": "tsc --noEmit",
     "test": "bun run --parallel test:clock test:core",
     "test:clock": "bun test --isolate --parallel=4 ./tests/linux/iptv-clock.test.ts",
