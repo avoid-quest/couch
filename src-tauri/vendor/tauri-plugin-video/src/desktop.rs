@@ -182,7 +182,16 @@ impl<R: Runtime> DesktopVideo<R> {
 
     #[cfg(target_os = "linux")]
     pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> {
-        self.run_on_main(move |_| linux::close(payload))?.wait()
+        let session_key = payload.session_key.clone();
+        let pending = self.run_on_main(move |_| linux::close(payload))?;
+        let session = pending.session.clone();
+        pending.wait()?;
+        self.run_on_main(move |_| {
+            if session.as_ref().is_some_and(|(epoch, expected)| epoch.load(Ordering::Acquire) != *expected) {
+                return Err(crate::Error::InvalidRequest("native player session is stale".into()));
+            }
+            linux::finish_close(&session_key)
+        })
     }
 
     #[cfg(target_os = "macos")]
@@ -435,14 +444,23 @@ mod linux {
         if !owns_session {
             return Ok(super::Pending::ready(Ok(())));
         }
-        let result = match backend {
-            Backend::Gstreamer => Ok(super::Pending::ready(super::linux_gstreamer::close(payload))),
+        match backend {
+            Backend::Gstreamer => {
+                super::linux_gstreamer::close(payload)?;
+                ACTIVE_BACKEND.with(|active| *active.borrow_mut() = None);
+                Ok(super::Pending::ready(Ok(())))
+            }
             Backend::Mpv => super::linux_mpv::close(payload),
-        };
-        if result.is_ok() {
+        }
+    }
+
+    pub fn finish_close(session_key: &str) -> Result<()> {
+        if ACTIVE_BACKEND.with(|active| *active.borrow()) == Some(Backend::Mpv)
+            && super::linux_mpv::owns_session(session_key) {
+            super::linux_mpv::finish_close(session_key);
             ACTIVE_BACKEND.with(|active| *active.borrow_mut() = None);
         }
-        result
+        Ok(())
     }
 
     fn active_backend() -> Result<Backend> {
@@ -2162,17 +2180,24 @@ mod linux_mpv {
 
     pub fn close(payload: NativeSessionRequest) -> Result<super::Pending<()>> {
         PLAYER.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            let Some(player) = slot.as_mut() else { return Ok(super::Pending::ready(Ok(()))); };
+            let slot = slot.borrow();
+            let Some(player) = slot.as_ref() else { return Ok(super::Pending::ready(Ok(()))); };
             if player.session_key != payload.session_key { return Ok(super::Pending::ready(Ok(()))); }
-            player.epoch.fetch_add(1, Ordering::Release);
-            let pending = enqueue(player, |call, sender| WorkerCommand::Park(call, sender))?;
+            enqueue(player, |call, sender| WorkerCommand::Park(call, sender))
+        })
+    }
+
+    pub fn finish_close(session_key: &str) {
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let Some(player) = slot.as_mut() else { return; };
+            if player.session_key != session_key { return; }
             // Keep GtkGLArea and its render context alive between sources.
             // Recreating a native GL child can invalidate WebKit composition.
             player.widget.hide();
             player.session_key.clear();
-            Ok(pending)
-        })
+            player.epoch.fetch_add(1, Ordering::Release);
+        });
     }
 
     pub fn owns_session(session_key: &str) -> bool {
@@ -2748,6 +2773,7 @@ mod linux_mpv {
     pub fn close(_: NativeSessionRequest) -> Result<super::Pending<()>> {
         Ok(super::Pending::ready(Ok(())))
     }
+    pub fn finish_close(_: &str) {}
     pub fn owns_session(_: &str) -> bool {
         false
     }
