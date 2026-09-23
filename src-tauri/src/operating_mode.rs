@@ -420,7 +420,11 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
     if let Some(remote) = app.get_webview_window("remote") {
         if remote.url().map_err(error)?.origin() == url.origin() {
             remote.navigate(url).map_err(error)?;
-            return remote.set_focus().map_err(error);
+            return if app.state::<Host>().window_closed.load(Ordering::SeqCst) {
+                remote.hide().map_err(error)
+            } else {
+                remote.set_focus().map_err(error)
+            };
         }
     }
     close_remote(app).await?;
@@ -448,6 +452,7 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
     // The bundled window's 88 px recovery bar stays exposed even if target JavaScript hangs.
     let remote = WebviewWindowBuilder::new(app, "remote", WebviewUrl::External(url))
         .title("Couch remote")
+        .visible(!app.state::<Host>().window_closed.load(Ordering::SeqCst))
         .menu(menu)
         .on_menu_event(|window, event| {
             if event.id().as_ref() == "playback-device" {
@@ -473,6 +478,11 @@ async fn open_remote(app: &tauri::AppHandle, address: &str) -> Result<(), String
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
         .build()
         .map_err(error)?;
+    if app.state::<Host>().window_closed.load(Ordering::SeqCst) {
+        remote.hide().map_err(error)?;
+    } else {
+        remote.show().map_err(error)?;
+    }
     sync_remote_geometry(app)?;
     remote.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

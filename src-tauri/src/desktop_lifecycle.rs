@@ -4,6 +4,7 @@ use tauri::{Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 pub(crate) fn show(app: &tauri::AppHandle) {
+    app.state::<Host>().window_closed.store(false, Ordering::SeqCst);
     let Some(main) = app.get_webview_window("main") else {
         return;
     };
@@ -25,6 +26,7 @@ pub(crate) fn show(app: &tauri::AppHandle) {
 
 pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
     api.prevent_close();
+    app.state::<Host>().window_closed.store(true, Ordering::SeqCst);
     if let Some(remote) = app.get_webview_window("remote") {
         let _ = remote.hide();
     }
@@ -107,7 +109,7 @@ fn visible_area(
 
 pub(crate) fn recover_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let position = window.outer_position()?;
-    let size = window.outer_size()?;
+    let mut size = window.outer_size()?;
     let monitors = window.available_monitors()?;
     let Some(monitor) = window
         .current_monitor()?
@@ -118,10 +120,11 @@ pub(crate) fn recover_window(window: &tauri::WebviewWindow) -> tauri::Result<()>
     if !window.is_maximized()?
         && (size.width > monitor.size().width || size.height > monitor.size().height)
     {
-        window.set_size(PhysicalSize::new(
+        size = PhysicalSize::new(
             size.width.min(monitor.size().width),
             size.height.min(monitor.size().height),
-        ))?;
+        );
+        window.set_size(size)?;
     }
     if monitors.iter().any(|monitor| {
         visible_area(position, size, *monitor.position(), *monitor.size()) >= 160 * 100
