@@ -783,4 +783,15 @@ mod tests {
         );
         std::fs::remove_file(path).unwrap();
     }
+
+    #[cfg(not(feature = "desktop-playback"))]
+    #[test]
+    fn client_only_ignores_remembered_local_mode_without_erasing_it() {
+        let path = std::env::temp_dir().join(format!("couch-mode-{}.json", uuid::Uuid::new_v4()));
+        let saved = r#"{"mode":"local","localSetupComplete":true}"#;
+        std::fs::write(&path, saved).unwrap();
+        assert!(Modes::load(path.clone()).unwrap().current().mode.is_none());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
+        std::fs::remove_file(path).unwrap();
+    }
 }
