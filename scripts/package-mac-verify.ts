@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import tauri from "../src-tauri/tauri.conf.json";
 import { binaryArchitectures, verifyBundledNativeLibraries, verifyPayload } from "./desktop-payload";
 
 function run(command: string[]) {
@@ -20,6 +21,9 @@ assert.equal(build.target, "aarch64-apple-darwin");
 assert.equal(build.packaged, true);
 assert.equal(build.clientOnly, true);
 assert.equal(build.dirty, false, "Package a clean committed revision");
+assert.equal(tauri.app.windows.length, 1, "Expected one bundled Couch window");
+assert.equal(tauri.app.windows[0]?.create, false);
+assert.equal(tauri.app.windows[0]?.decorations, true);
 const dmg = `src-tauri/target/release/bundle/dmg/Couch_${build.version}_aarch64.dmg`;
 const archive = `src-tauri/target/release/bundle/macos/Couch.app.tar.gz`;
 const signature = `${archive}.sig`;

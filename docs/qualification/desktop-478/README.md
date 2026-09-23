@@ -9,6 +9,13 @@ libraries. The preliminary build used a disposable Tauri updater key and was
 made before the final payload-hash and updater-archive build changes. It is not
 the qualified release artifact.
 
+A later clean-commit, headless package build with a disposable updater key
+passed the mounted DMG payload, ad-hoc signature, system-library closure,
+one-window configuration and independently signed updater-archive checks. The
+exact revision and artifact hashes are in the private
+`.artifacts/mac-inventory.json` receipt. This proves the package structure and
+update input, but not installation or macOS trust prompts.
+
 An interactive preflight copied that preliminary `.app` from its mounted DMG to
 an isolated temporary install path. It launched with `COUCH_DATA_DIR` pointing
 to a temporary directory and paired with a temporary Couch host on port 4192.

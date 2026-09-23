@@ -19,6 +19,9 @@ the updater archive and its Tauri signature. Its receipt is
 `.artifacts/mac-inventory.json`. Keep the DMG and updater archive private until
 the installed acceptance and publication work is authorized.
 
+The command disables the default `desktop-playback` Cargo feature for this
+Client-only artifact. The bundled UI offers remote playback only.
+
 The client connects to another Couch through that host's served UI. Its bundled
 coordinator provides private maintenance and recovery; this package carries no
 libmpv, `ffprobe`, `yt-dlp` or Deno and has no local playback claim. The updater
