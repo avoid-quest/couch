@@ -9,8 +9,10 @@ test writes its source revision and passed checks to
 | Journey | Native check |
 | --- | --- |
 | No tray watcher | Close minimizes the desktop window while its owned host stays alive. A second launcher invocation restores that window without a second app or host process. Reopen also recovers an offscreen window. |
+| Watcher without a tray host | A D-Bus watcher reports that no StatusNotifier host is registered. Close minimizes, and launcher reopen restores the window. |
 | Quit | Ctrl+Q shows the sharing interruption prompt. Cancel preserves the host; Confirm stops the app and owned host. |
 | Unavailable selected host | The trusted window shows Retry and Use this computer. Close and launcher reopen restore the recovery controls without starting a local playback host. |
+| Reachable selected host | The host-served remote window shows Connect to Couch. Close minimizes the trusted window and hides the remote view. Launcher reopen restores that view. Client-only Quit stops Couch and its coordinator while the selected host keeps running. |
 | TV presentation | The native window remains fullscreen, keeps labelled navigation, and Close exits as before. |
 | Usable tray | A standalone StatusNotifier watcher exposes Couch's tray item and labelled Show Couch and Quit Couch actions. Close hides the window, Show Couch restores it, and Quit follows the same Cancel and Confirm path. |
 

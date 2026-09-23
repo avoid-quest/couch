@@ -5,6 +5,7 @@ import { seedConfiguredFixture } from "./configured-fixture";
 const origin = "http://127.0.0.1:4100";
 const driverOrigin = "http://127.0.0.1:4444";
 const binary = process.env.COUCH_NATIVE_BINARY ?? "/work/bin/couch";
+const sidecar = process.env.COUCH_NATIVE_SIDECAR ?? "/work/bin/couch-server";
 const checks: string[] = [];
 
 async function until(description: string, check: () => boolean | Promise<boolean>, timeout = 15_000) {
@@ -136,6 +137,26 @@ try {
   await until("confirmed Quit stops the app and owned host", async () => !(await health()) && (await processIds("couch")).length === 0 && (await processIds("couch-server")).length === 0);
 } finally { await closeDriver(native); }
 
+const watcherOnly = Bun.spawn(["/usr/bin/python3", "tests/linux/watcher-without-host.py"], {
+  stdout: Bun.file("/artifacts/lifecycle-watcher-only.log"), stderr: Bun.file("/artifacts/lifecycle-watcher-only-error.log"),
+});
+try {
+  await until("watcher without a tray host starts", async () => (await command("gdbus", "call", "--session", "--dest", "org.kde.StatusNotifierWatcher", "--object-path", "/StatusNotifierWatcher", "--method", "org.freedesktop.DBus.Properties.Get", "org.kde.StatusNotifierWatcher", "IsStatusNotifierHostRegistered").catch(() => "")).includes("false"));
+  const fallback = await mkdtemp("/tmp/couch-lifecycle-watcher-only-");
+  seedConfiguredFixture(fallback);
+  native = await open("0", fallback);
+  try {
+    await until("watcher-only desktop starts its host", health, 30_000);
+    const window = await windowId();
+    await closeWindow(window);
+    await until("Close minimizes when watcher has no tray host", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Iconic"));
+    assert.equal(await health(), true, "watcher-only Close keeps the local host");
+    const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: fallback, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
+    assert.equal(await second.exited, 0);
+    await until("launcher restores watcher-only fallback", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Normal"));
+  } finally { await closeDriver(native); }
+} finally { watcherOnly.kill(); await watcherOnly.exited; }
+
 const unavailable = await mkdtemp("/tmp/couch-lifecycle-remote-");
 seedConfiguredFixture(unavailable);
 await writeFile(`${unavailable}/operating-mode.json`, JSON.stringify({ mode: "remote", address: "http://127.0.0.1:49999", targets: ["http://127.0.0.1:49999"], localSetupComplete: true }));
@@ -152,6 +173,54 @@ try {
   await until("launcher restores remote recovery", async () => (await command("xprop", "-id", window, "WM_STATE")).includes("Normal") && await role(native.session, '//button[normalize-space(.)="Use this computer"]'));
   assert.equal(await health(), false, "remote recovery never creates a local playback host");
 } finally { await closeDriver(native); }
+
+const selectedHost = "http://127.0.0.1:4201";
+const hostData = await mkdtemp("/tmp/couch-lifecycle-selected-host-");
+seedConfiguredFixture(hostData);
+const remoteHost = Bun.spawn([sidecar], {
+  cwd: "/work",
+  env: { ...process.env, COUCH_NATIVE: "0", COUCH_HOST: "127.0.0.1", COUCH_PORT: "4201", COUCH_ADVERTISE_URLS: selectedHost, COUCH_DATA_DIR: hostData },
+  stdout: Bun.file("/artifacts/lifecycle-selected-host.log"), stderr: Bun.file("/artifacts/lifecycle-selected-host-error.log"),
+});
+const hostHealth = async () => { try { return (await fetch(`${selectedHost}/api/health`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; } };
+try {
+  await until("selected remote host starts", hostHealth, 30_000);
+  const selected = await mkdtemp("/tmp/couch-lifecycle-selected-client-");
+  seedConfiguredFixture(selected);
+  await writeFile(`${selected}/operating-mode.json`, JSON.stringify({ mode: "remote", address: selectedHost, targets: [selectedHost], localSetupComplete: true }));
+  native = await open("0", selected);
+  try {
+    await until("selected remote window opens", async () => (await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$").catch(() => "")).length > 0, 30_000);
+    let remoteHandle: string | undefined;
+    for (const handle of await request(`/session/${native.session}/window/handles`) as string[]) {
+      await request(`/session/${native.session}/window`, { handle });
+      if (String(await request(`/session/${native.session}/url`)).startsWith(selectedHost)) remoteHandle = handle;
+    }
+    assert.ok(remoteHandle, "WebDriver exposes the selected host page");
+    await request(`/session/${native.session}/window`, { handle: remoteHandle });
+    await until("selected remote page shows connection heading", () => role(native.session, '//*[self::h1 or self::h2][normalize-space(.)="Connect to Couch"]'));
+    await until("selected remote page offers Connect", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    assert.equal(await health(), false, "selected remote creates no local playback host");
+    const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
+    assert.equal(appPid.length, 1);
+    assert.equal(hostPid.length, 2, "selected host and client-only coordinator each have one process");
+    assert.ok(hostPid.includes(String(remoteHost.pid)));
+    const remoteWindow = await command("xdotool", "search", "--onlyvisible", "--name", "^Couch remote$");
+    const mainWindow = await windowId();
+    await closeWindow(mainWindow);
+    await until("selected remote Close minimizes trusted window", async () => (await command("xprop", "-id", mainWindow, "WM_STATE").catch(() => "")).includes("Iconic"));
+    await until("selected remote Close hides remote window", async () => (await command("xwininfo", "-id", remoteWindow)).includes("IsUnMapped"));
+    assert.equal(await hostHealth(), true, "client-only Close keeps selected host running");
+    const second = Bun.spawn([binary], { env: { ...process.env, COUCH_DATA_DIR: selected, COUCH_TV_PRESENTATION: "0" }, stdout: "pipe", stderr: "pipe" });
+    assert.equal(await second.exited, 0);
+    await until("launcher restores selected remote", async () => (await command("xwininfo", "-id", remoteWindow)).includes("IsViewable"));
+    await until("reopened selected remote retains Connect", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    assert.deepEqual(await processIds("couch"), appPid);
+    assert.deepEqual(await processIds("couch-server"), hostPid);
+    await quitShortcut(remoteWindow);
+    await until("client-only Quit closes app but keeps selected host", async () => (await processIds("couch")).length === 0 && (await processIds("couch-server")).join() === String(remoteHost.pid) && await hostHealth());
+  } finally { await closeDriver(native); }
+} finally { remoteHost.kill(); await remoteHost.exited; }
 
 const television = await mkdtemp("/tmp/couch-lifecycle-tv-");
 seedConfiguredFixture(television);

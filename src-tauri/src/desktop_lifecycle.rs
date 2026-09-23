@@ -49,28 +49,29 @@ pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
 }
 
 #[cfg(target_os = "linux")]
-fn linux_tray_watcher() -> bool {
+fn linux_tray_available() -> bool {
     use dbus::blocking::Connection;
     use std::time::Duration;
 
     let Ok(connection) = Connection::new_session() else { return false };
-    let watcher = connection
-        .with_proxy("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_millis(200))
-        .method_call::<(bool,), _, _, _>(
-            "org.freedesktop.DBus",
-            "NameHasOwner",
-            ("org.kde.StatusNotifierWatcher",),
+    // A watcher can register icons without any tray host to display them.
+    let host = connection
+        .with_proxy("org.kde.StatusNotifierWatcher", "/StatusNotifierWatcher", Duration::from_millis(200))
+        .method_call::<(dbus::arg::Variant<bool>,), _, _, _>(
+            "org.freedesktop.DBus.Properties",
+            "Get",
+            ("org.kde.StatusNotifierWatcher", "IsStatusNotifierHostRegistered"),
         )
-        .is_ok_and(|(available,)| available);
+        .is_ok_and(|(dbus::arg::Variant(registered),)| registered);
     // Tauri's Linux tray loads AppIndicator at runtime and panics if neither library exists.
-    watcher && ["libayatana-appindicator3.so.1", "libappindicator3.so.1", "libayatana-appindicator3.so", "libappindicator3.so"]
+    host && ["libayatana-appindicator3.so.1", "libappindicator3.so.1", "libayatana-appindicator3.so", "libappindicator3.so"]
         .iter()
         .any(|name| unsafe { libloading::Library::new(name) }.is_ok())
 }
 
 #[cfg(target_os = "linux")]
 fn linux_tray_usable(app: &tauri::AppHandle) -> bool {
-    app.tray_by_id("couch-desktop").is_some() && linux_tray_watcher()
+    app.tray_by_id("couch-desktop").is_some() && linux_tray_available()
 }
 
 #[cfg(target_os = "linux")]
@@ -87,7 +88,7 @@ pub(crate) fn install_linux_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         "quit-couch" => request_quit(app),
         _ => {}
     });
-    if linux_tray_watcher() {
+    if linux_tray_available() {
         let tray_show = MenuItem::with_id(app, "show-couch", "Show Couch", true, None::<&str>)?;
         let tray_quit = MenuItem::with_id(app, "quit-couch", "Quit Couch", true, None::<&str>)?;
         let menu = Menu::with_items(app, &[&tray_show, &tray_quit])?;
