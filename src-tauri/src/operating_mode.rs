@@ -12,7 +12,8 @@ const DESKTOP_CLIENT_PROTOCOL: u64 = 1;
 const IDLE_WINDOW: Duration = Duration::from_secs(600);
 
 pub(crate) fn local_playback_unavailable() -> bool {
-    cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true)
+    !cfg!(feature = "desktop-playback")
+        || (cfg!(target_os = "windows") && crate::appimage_update::build()["clientOnly"].as_bool() == Some(true))
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]

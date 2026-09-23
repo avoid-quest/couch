@@ -52,7 +52,7 @@ await download(inputs.cargoAboutMac, join(staging, "cargo-about-mac.tar.gz"));
 run(["tar", "-xzf", join(staging, "cargo-about-mac.tar.gz"), "-C", staging]);
 const about = (await Bun.file("packaging/about.toml").text()).replace('x86_64-unknown-linux-gnu', target);
 await Bun.write(join(staging, "about-mac.toml"), about);
-run([join(staging, "cargo-about-0.9.2-aarch64-apple-darwin/cargo-about"), "generate", "--locked", "--fail", "--manifest-path", "src-tauri/Cargo.toml", "--config", join(staging, "about-mac.toml"), "--output-file", join(notices, "native.txt"), "packaging/about.hbs"]);
+run([join(staging, "cargo-about-0.9.2-aarch64-apple-darwin/cargo-about"), "generate", "--locked", "--no-default-features", "--fail", "--manifest-path", "src-tauri/Cargo.toml", "--config", join(staging, "about-mac.toml"), "--output-file", join(notices, "native.txt"), "packaging/about.hbs"]);
 
 const locks = Object.fromEntries(await Promise.all(["bun.lock", "src-tauri/Cargo.lock", "rust-toolchain.toml"].map(async path => [path, sha256(new Uint8Array(await Bun.file(path).arrayBuffer()))])));
 await Bun.write(join(resources, "build-inputs.json"), JSON.stringify({ cargoAboutMac: inputs.cargoAboutMac, bun: run([process.execPath, "--revision"]), rust: run(["rustc", "--version"]), locks }, null, 2));

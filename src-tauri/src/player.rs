@@ -196,12 +196,12 @@ impl Player {
         if self.state.playback_id.is_some() || std::time::Instant::now() >= deadline {
             return Err("Native readiness requires an idle player and a current request".into());
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", feature = "desktop-playback"))]
         {
             use tauri_plugin_video::VideoExt;
             app.video().desktop().readiness_native(deadline).map_err(|error| error.to_string())
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", feature = "desktop-playback")))]
         {
             let _ = app;
             Err("Native update readiness requires the Ubuntu player".into())
@@ -375,7 +375,7 @@ impl Player {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
 impl Player {
     fn prepare(&mut self, app: &AppHandle, playback_id: String, next: Option<crate::protocol::PreparedAudio>) -> Result<(), String> {
         use tauri_plugin_video::{NativePrepareRequest, VideoExt};
@@ -662,7 +662,7 @@ impl Player {
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback")))]
 impl Player {
     fn prepare(&mut self, _: &AppHandle, _: String, _: Option<crate::protocol::PreparedAudio>) -> Result<(), String> { Ok(()) }
     fn load(
@@ -693,7 +693,7 @@ impl Player {
         Ok(())
     }
     fn add_subtitle(&mut self, _: &AppHandle, _: ExternalSubtitle) -> Result<(), String> {
-        Err("Native playback currently requires Linux".into())
+        Err("Native playback is unavailable in this build".into())
     }
     fn observe(&mut self, _: &AppHandle) -> Result<(), String> {
         Ok(())
@@ -706,7 +706,7 @@ impl Player {
     }
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
 mod tests {
     use super::*;
 

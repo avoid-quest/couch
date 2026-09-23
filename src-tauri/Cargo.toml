@@ -8,6 +8,10 @@ publish = false
 name = "couch"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["desktop-playback"]
+desktop-playback = ["dep:tauri-plugin-video"]
+
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
 
@@ -40,7 +44,7 @@ libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
-tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
 objc2 = "=0.6.4"
 objc2-core-bluetooth = { version = "=0.3.2", default-features = false, features = ["CBManager"] }
 objc2-foundation = { version = "=0.3.2", features = ["NSArray", "NSDate", "NSRunLoop", "NSString"] }
@@ -56,7 +60,7 @@ libloading = "=0.7.4"
 bluer = { version = "=0.17.4", features = ["bluetoothd"] }
 futures-util = "0.3"
 squashfs_reader = { version = "=0.1.1", default-features = false, features = ["only_rust"] }
-tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"] }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 dbus = "0.9"

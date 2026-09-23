@@ -18,6 +18,7 @@ const hash = async (path: string) => new Bun.CryptoHasher("sha256").update(await
 const build = await Bun.file("src-tauri/build-info.json").json();
 assert.equal(build.target, "aarch64-apple-darwin");
 assert.equal(build.packaged, true);
+assert.equal(build.clientOnly, true);
 assert.equal(build.dirty, false, "Package a clean committed revision");
 const dmg = `src-tauri/target/release/bundle/dmg/Couch_${build.version}_aarch64.dmg`;
 const archive = `src-tauri/target/release/bundle/macos/Couch.app.tar.gz`;
@@ -45,8 +46,13 @@ try {
 
   async function inspect(root: string) {
     const release = await Bun.file(join(root, "Contents/Resources/release.json")).json();
+    assert.equal(release.schemaVersion, 1);
     assert.equal(release.revision, build.revision);
     assert.equal(release.version, build.version);
+    assert.equal(release.packaged, true);
+    assert.equal(release.clientOnly, true);
+    assert.equal(release.dataFormat, build.dataFormat);
+    assert.ok(release.readableDataFormats.includes(build.dataFormat));
     assert.equal(release.packageFormat, "dmg");
     assert.equal(release.host.target, build.target);
     const inventory = await Bun.file(join(root, "Contents/Resources/payload.json")).text();
@@ -79,6 +85,7 @@ try {
   const extracted = join(staging, "updater");
   await mkdir(extracted);
   run(["tar", "-xzf", archive, "-C", extracted]);
+  assert.deepEqual(await readdir(extracted), ["Couch.app"], "Updater archive contains unexpected top-level files");
   const update = await inspect(join(extracted, "Couch.app"));
   assert.deepEqual(update.release, mounted.release, "DMG and updater archive carry different builds");
   await Bun.write(".artifacts/mac-inventory.json", JSON.stringify({ build, os: run(["sw_vers", "-productVersion"]), osBuild: run(["sw_vers", "-buildVersion"]), dmg: { path: dmg, sha256: await hash(dmg), bytes: Bun.file(dmg).size }, updater: { path: archive, sha256: await hash(archive), bytes: Bun.file(archive).size, signature: (await Bun.file(signature).text()).trim() }, files: mounted.files }, null, 2) + "\n");
