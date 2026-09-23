@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Check, Eye, EyeOff, PencilLine } from "lucide-react";
 import { HistoryPanel } from "@/components/HistoryPanel";
 import { AddMediaDialog } from "./AddMediaDialog";
+import { OpenFileButton } from "./OpenFileButton";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
 import { moveNowSection, nowSectionLabels, readNowSections, saveNowSections, type NowSectionId } from "@/now-sections";
 import { LiveNow } from "./LiveNow";
@@ -16,7 +17,7 @@ import { SessionBar } from "@/components/SessionBar";
 
 export function NowPage() {
   const shell = useShell();
-  const { tvPresentation, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
+  const { localHost, tvPresentation, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
   const [nowDraft, setNowDraft] = useState("");
   const [layout, setLayout] = useState<ReturnType<typeof readNowSections>>(readNowSections);
   const { order, hidden } = layout;
@@ -45,6 +46,7 @@ export function NowPage() {
         <section data-page="Now" className="space-y-6">
           <div className="flex items-center gap-2">
             <SearchBar id="now-search" className="min-w-0 flex-1" value={nowDraft} onValueChange={setNowDraft} onSubmit={() => { const query = nowDraft.trim(); if (!query) return; setNowDraft(""); gotoSearch({ query, source: "All" }); }} />
+            {localHost && !tvPresentation && <OpenFileButton connected={connected} run={run} />}
             <AddMediaDialog credentials={credentials} connected={connected} defaultQuality={videoQualityPreference.quality} run={run} />
             <Button variant="ghost" size="icon" className="hidden lg:inline-flex" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>
               {editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}
