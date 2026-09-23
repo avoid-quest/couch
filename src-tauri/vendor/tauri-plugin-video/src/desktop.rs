@@ -68,6 +68,39 @@ impl QueuedCall {
 }
 
 #[cfg(target_os = "linux")]
+fn execute_open<P, T>(
+    player: &mut P,
+    call: &QueuedCall,
+    open: impl FnOnce(&mut P) -> crate::Result<T>,
+    rollback: impl FnOnce(&mut P, bool),
+) -> Option<crate::Result<T>> {
+    if !call.start() {
+        rollback(player, false);
+        return None;
+    }
+    let result = open(player);
+    if result.is_err() { rollback(player, true); }
+    Some(result)
+}
+
+#[cfg(target_os = "linux")]
+fn rollback_open_session(
+    current: &mut String,
+    confirmed: &str,
+    failed: &mut Option<String>,
+    epoch: &std::sync::atomic::AtomicU64,
+    requested: &str,
+    expected: u64,
+) -> bool {
+    if current != requested || current == confirmed || epoch.load(Ordering::Acquire) != expected {
+        return false;
+    }
+    *failed = Some(std::mem::replace(current, confirmed.to_owned()));
+    epoch.fetch_add(1, Ordering::Release);
+    true
+}
+
+#[cfg(target_os = "linux")]
 struct Pending<T> {
     receiver: mpsc::Receiver<crate::Result<T>>,
     call: QueuedCall,
@@ -112,7 +145,18 @@ pub struct DesktopVideo<R: Runtime> {
 impl<R: Runtime> DesktopVideo<R> {
     #[cfg(target_os = "linux")]
     pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |app| linux::open(app, payload))?.wait()
+        let session_key = payload.session_key.clone();
+        let pending = self.run_on_main(move |app| linux::open(app, payload))?;
+        let expected = pending.session.as_ref().map(|(_, epoch)| *epoch);
+        let result = pending.wait();
+        if let Some(expected) = expected {
+            match &result {
+                Ok(_) => self.run_on_main(move |_| linux::confirm_open(&session_key, expected))?,
+                Err(crate::Error::DispatcherInFlight) => {}
+                Err(_) => self.run_on_main(move |_| linux::rollback_open(&session_key, expected))?,
+            }
+        }
+        result
     }
 
     #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
@@ -140,7 +184,18 @@ impl<R: Runtime> DesktopVideo<R> {
         &self,
         payload: NativeSessionRequest,
     ) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_main(move |_| linux::stats(payload))?.wait()
+        let session_key = payload.session_key.clone();
+        let pending = self.run_on_main(move |_| linux::stats(payload))?;
+        let expected = pending.session.as_ref().map(|(_, epoch)| *epoch);
+        let result = pending.wait();
+        if let Some(expected) = expected {
+            match &result {
+                Ok(_) => self.run_on_main(move |_| linux::confirm_open(&session_key, expected))?,
+                Err(crate::Error::InvalidRequest(_)) => self.run_on_main(move |_| linux::rollback_open(&session_key, expected))?,
+                Err(_) => {}
+            }
+        }
+        result
     }
 
     // Readiness shares GTK's existing singleton and never opens a media source.
@@ -345,6 +400,55 @@ mod dispatcher_tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn expired_open_preserves_the_old_source_and_failed_open_restores_its_identity() {
+        struct Source { session: &'static str, playing: bool }
+        let mut source = Source { session: "old", playing: true };
+        let expired = QueuedCall::new();
+        assert!(expired.expire());
+        let result = execute_open(&mut source, &expired, |_| -> crate::Result<()> { panic!("expired Open started") }, |source, started| {
+            if started || source.session != "old" { source.session = "old"; source.playing = false; }
+        });
+        assert!(result.is_none());
+        assert_eq!(source.session, "old");
+        assert!(source.playing);
+
+        let started = QueuedCall::new();
+        let result = execute_open(&mut source, &started, |source| -> crate::Result<()> {
+            source.session = "new";
+            Err(crate::Error::Pipeline("load failed".into()))
+        }, |source, started| {
+            if started || source.session != "old" { source.session = "old"; source.playing = false; }
+        });
+        assert!(matches!(result, Some(Err(crate::Error::Pipeline(_)))));
+        assert_eq!(source.session, "old");
+        assert!(!source.playing);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failed_open_restores_only_the_current_provisional_session() {
+        let epoch = std::sync::atomic::AtomicU64::new(4);
+        let mut current = "new".to_owned();
+        let mut failed = None;
+        assert!(rollback_open_session(&mut current, "old", &mut failed, &epoch, "new", 4));
+        assert_eq!(current, "old");
+        assert_eq!(failed.as_deref(), Some("new"));
+        assert_eq!(epoch.load(Ordering::Acquire), 5);
+
+        current = "next".into();
+        epoch.store(6, Ordering::Release);
+        assert!(!rollback_open_session(&mut current, "old", &mut failed, &epoch, "new", 4));
+        assert_eq!(current, "next");
+
+        let mut initial = "first".to_owned();
+        let mut initial_failed = None;
+        assert!(rollback_open_session(&mut initial, "", &mut initial_failed, &epoch, "first", 6));
+        assert!(initial.is_empty());
+        assert_eq!(initial_failed.as_deref(), Some("first"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn started_mpv_call_timeout_requires_reconciliation() {
         let (_reply, receiver) = mpsc::sync_channel::<crate::Result<()>>(1);
         let call = QueuedCall::new();
@@ -453,7 +557,9 @@ mod linux {
     }
 
     pub fn close(payload: NativeSessionRequest) -> Result<super::Pending<()>> {
-        let backend = active_backend()?;
+        let Some(backend) = ACTIVE_BACKEND.with(|active| *active.borrow()) else {
+            return Ok(super::Pending::ready(Ok(())));
+        };
         let owns_session = match backend {
             Backend::Gstreamer => super::linux_gstreamer::owns_session(&payload.session_key),
             Backend::Mpv => super::linux_mpv::owns_session(&payload.session_key),
@@ -476,6 +582,20 @@ mod linux {
             && super::linux_mpv::owns_session(session_key) {
             super::linux_mpv::finish_close(session_key);
             ACTIVE_BACKEND.with(|active| *active.borrow_mut() = None);
+        }
+        Ok(())
+    }
+
+    pub fn confirm_open(session_key: &str, expected: u64) -> Result<()> {
+        if ACTIVE_BACKEND.with(|active| *active.borrow()) == Some(Backend::Mpv) {
+            super::linux_mpv::confirm_open(session_key, expected);
+        }
+        Ok(())
+    }
+
+    pub fn rollback_open(session_key: &str, expected: u64) -> Result<()> {
+        if ACTIVE_BACKEND.with(|active| *active.borrow()) == Some(Backend::Mpv) {
+            super::linux_mpv::rollback_open(session_key, expected);
         }
         Ok(())
     }
@@ -1372,7 +1492,7 @@ mod linux_mpv {
     }
 
     enum WorkerCommand {
-        Open(NativeOpenRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
+        Open(NativeOpenRequest, String, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
         Prepare(crate::NativePrepareRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
         Control(NativeControlRequest, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
         Stats(String, super::QueuedCall, mpsc::SyncSender<Result<NativePlaybackSnapshot>>),
@@ -1383,6 +1503,8 @@ mod linux_mpv {
 
     struct GtkPlayer {
         session_key: String,
+        confirmed_session_key: String,
+        failed_session_key: Option<String>,
         epoch: Arc<AtomicU64>,
         closed: Arc<AtomicBool>,
         worker: mpsc::Sender<WorkerCommand>,
@@ -1498,7 +1620,9 @@ mod linux_mpv {
             super::linux_surface::place_widget(&player.widget, payload.x, payload.y, payload.width, payload.height)?;
             schedule_layout_render(player);
             player.epoch.fetch_add(1, Ordering::Release);
-            let pending = enqueue(player, |call, sender| WorkerCommand::Open(payload.clone(), call, sender))?;
+            let fallback = player.confirmed_session_key.clone();
+            let pending = enqueue(player, |call, sender| WorkerCommand::Open(payload.clone(), fallback, call, sender))?;
+            player.failed_session_key = None;
             player.session_key = payload.session_key;
             Ok(pending)
         })
@@ -1750,7 +1874,8 @@ mod linux_mpv {
         }
         widget.hide();
         Ok(GtkPlayer {
-            session_key: String::new(), epoch: Arc::new(AtomicU64::new(0)), closed, worker, render_context, gl_area, widget,
+            session_key: String::new(), confirmed_session_key: String::new(), failed_session_key: None,
+            epoch: Arc::new(AtomicU64::new(0)), closed, worker, render_context, gl_area, widget,
             render_signal: Some(render_signal), update_source: Some(update_source),
             layout_redraw_pending: Rc::new(Cell::new(false)),
             layout_commits: Cell::new(0), layout_sample_at: Cell::new(Instant::now()),
@@ -1762,7 +1887,7 @@ mod linux_mpv {
             let command = receiver.recv_timeout(Duration::from_millis(10));
             if closed.load(Ordering::Acquire) {
                 match &command {
-                    Ok(WorkerCommand::Open(_, _, sender))
+                    Ok(WorkerCommand::Open(_, _, _, sender))
                     | Ok(WorkerCommand::Prepare(_, _, sender))
                     | Ok(WorkerCommand::Control(_, _, sender))
                     | Ok(WorkerCommand::Stats(_, _, sender)) => { let _ = sender.send(Err(Error::InvalidRequest("native player session is stale".into()))); continue; }
@@ -1773,8 +1898,18 @@ mod linux_mpv {
                 }
             }
             match command {
-                Ok(WorkerCommand::Open(payload, call, sender)) if call.start() => {
-                    let _ = sender.send(load_source(&mut player, &payload).and_then(|()| snapshot(&mut player)));
+                Ok(WorkerCommand::Open(payload, fallback, call, sender)) => {
+                    if let Some(result) = super::execute_open(&mut player, &call,
+                        |player| load_source(player, &payload).and_then(|()| snapshot(player)),
+                        |player, started| {
+                            if started || player.session_key != fallback {
+                                if let Err(error) = park_player(player) { eprintln!("mpv failed-open cleanup error: {error}"); }
+                            }
+                            player.session_key.clone_from(&fallback);
+                            player.playback_id.clone_from(&fallback);
+                        }) {
+                        let _ = sender.send(result);
+                    }
                 }
                 Ok(WorkerCommand::Prepare(payload, call, sender)) if call.start() => {
                     let _ = sender.send(prepare_worker(&mut player, payload));
@@ -2215,7 +2350,9 @@ mod linux_mpv {
         PLAYER.with(|slot| {
             let slot = slot.borrow();
             let Some(player) = slot.as_ref() else { return Ok(super::Pending::ready(Ok(()))); };
-            if player.session_key != payload.session_key { return Ok(super::Pending::ready(Ok(()))); }
+            if player.session_key != payload.session_key && player.failed_session_key.as_deref() != Some(payload.session_key.as_str()) {
+                return Ok(super::Pending::ready(Ok(())));
+            }
             enqueue(player, |call, sender| WorkerCommand::Park(call, sender))
         })
     }
@@ -2224,20 +2361,45 @@ mod linux_mpv {
         PLAYER.with(|slot| {
             let mut slot = slot.borrow_mut();
             let Some(player) = slot.as_mut() else { return; };
-            if player.session_key != session_key { return; }
+            if player.session_key != session_key && player.failed_session_key.as_deref() != Some(session_key) { return; }
             // Keep GtkGLArea and its render context alive between sources.
             // Recreating a native GL child can invalidate WebKit composition.
             player.widget.hide();
             player.session_key.clear();
+            player.confirmed_session_key.clear();
+            player.failed_session_key = None;
             player.epoch.fetch_add(1, Ordering::Release);
         });
+    }
+
+    pub fn confirm_open(session_key: &str, expected: u64) {
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let Some(player) = slot.as_mut() else { return; };
+            if player.session_key == session_key && player.epoch.load(Ordering::Acquire) == expected {
+                player.confirmed_session_key.clone_from(&player.session_key);
+                player.failed_session_key = None;
+            }
+        });
+    }
+
+    pub fn rollback_open(session_key: &str, expected: u64) {
+        PLAYER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let Some(player) = slot.as_mut() else { return; };
+            let confirmed = player.confirmed_session_key.clone();
+            if !super::rollback_open_session(&mut player.session_key, &confirmed, &mut player.failed_session_key, &player.epoch, session_key, expected) {
+                return;
+            }
+            if player.session_key.is_empty() { player.widget.hide(); }
+        })
     }
 
     pub fn owns_session(session_key: &str) -> bool {
         PLAYER.with(|slot| {
             slot.borrow()
                 .as_ref()
-                .is_some_and(|player| player.session_key == session_key)
+                .is_some_and(|player| player.session_key == session_key || player.failed_session_key.as_deref() == Some(session_key))
         })
     }
 
@@ -2807,6 +2969,8 @@ mod linux_mpv {
         Ok(super::Pending::ready(Ok(())))
     }
     pub fn finish_close(_: &str) {}
+    pub fn confirm_open(_: &str, _: u64) {}
+    pub fn rollback_open(_: &str, _: u64) {}
     pub fn owns_session(_: &str) -> bool {
         false
     }

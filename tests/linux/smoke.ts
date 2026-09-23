@@ -105,11 +105,13 @@ try {
       const started = performance.now();
       await command(action);
       latency[name] = Number((performance.now() - started).toFixed(2));
+      return started;
     };
     const firstPlayback = state!.player.playbackId!;
     for (const position of [4, 8, 2]) {
-      await measured(`seek-${position}`, { type: "seek", playbackId: firstPlayback, position });
+      const started = await measured(`seek-${position}`, { type: "seek", playbackId: firstPlayback, position });
       await until(`seek ${position} keeps the native position truthful`, () => state?.player.playbackId === firstPlayback && Math.abs(state.player.position - position) < 1.5);
+      latency[`seek-${position}-observed`] = Number((performance.now() - started).toFixed(2));
     }
     const beforeDiagnostics = state!.player.position;
     const collected = performance.now();
@@ -121,11 +123,13 @@ try {
     await until("diagnostics leave native playback advancing", () => state?.player.playbackId === firstPlayback && state.player.position > beforeDiagnostics);
 
     const replacement = state!.queue[1]!.id;
-    await measured("replacement", { type: "play", entryId: replacement, fromStart: true });
+    const replacementStarted = await measured("replacement", { type: "play", entryId: replacement, fromStart: true });
     await until("replacement owns the observed queue and picture", () => state?.currentEntryId === replacement && state.player.status === "playing" && state.player.playbackId !== firstPlayback && state.player.position > 0);
+    latency["replacement-observed"] = Number((performance.now() - replacementStarted).toFixed(2));
     await assertNativeVideoPixels(tv.execute, artifacts, "native-replacement-video");
-    await measured("stop", { type: "stop" });
+    const stopStarted = await measured("stop", { type: "stop" });
     await until("Stop leaves no active native playback", () => state?.currentEntryId === null && state.player.status === "idle" && state.player.playbackId === null);
+    latency["stop-observed"] = Number((performance.now() - stopStarted).toFixed(2));
     await command({ type: "seek", playbackId: firstPlayback, position: 17 }).catch(() => {});
     await Bun.sleep(500);
     assert.equal(state?.player.status, "idle", "a stale seek cannot revive the stopped source");
