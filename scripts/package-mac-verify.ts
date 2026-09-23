@@ -43,6 +43,7 @@ try {
   attached = true;
   const app = join(mount, "Couch.app");
   run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
+  assert.deepEqual(JSON.parse(run([join(app, "Contents/MacOS/couch"), "--version"])), build, "Bundled native app has a different build identity");
   assert.equal(run(["plutil", "-extract", "CFBundleIdentifier", "raw", "-o", "-", join(app, "Contents/Info.plist")]), "quest.avoid.couch");
   assert.equal(run(["plutil", "-extract", "LSMinimumSystemVersion", "raw", "-o", "-", join(app, "Contents/Info.plist")]), "26.0");
   assert.match(codeSignature(app), /Signature=adhoc/);
