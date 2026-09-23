@@ -116,7 +116,9 @@ Tauri owns the development loop through its
 
 Use one desktop development instance at a time. Vite uses port 1420; the local
 API uses 4100, or `COUCH_PORT` when set. Vite proxies HTTP and WebSocket traffic
-to that API. Do not also run `bun run dev` on the same API port.
+to that API. In Another Couch mode, this installation's private maintenance API
+uses its own ephemeral loopback port; the native app connects to it directly.
+Do not also run `bun run dev` on the same API port.
 
 Development uses the current account's persistent Tauri data at
 `~/Library/Application Support/quest.avoid.couch`, including `couch.sqlite`

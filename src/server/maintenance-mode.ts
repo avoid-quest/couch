@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { loadedBuild } from "../shared/build";
+import { buildInfo, loadedBuild } from "../shared/build";
 import type { HostMessage, SidecarMessage } from "../shared/protocol";
 import { checkpointAppImage } from "./appimage-checkpoint";
 import { createNativeAppImageUpdates } from "./appimage-update-native";
@@ -12,7 +12,7 @@ import { createUpdates } from "./updates";
 
 // The same compiled backend keeps installation maintenance available in remote mode.
 // It opens no media catalog, player, LAN listener or pairing endpoint.
-export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "deb" | null): Promise<never> {
+export async function runMaintenanceMode(directory: string, token: string, format: "appimage" | "deb" | null, devOrigin?: string): Promise<never> {
   const send = (message: SidecarMessage) => { process.stdout.write(`${JSON.stringify(message)}\n`); };
   const native = format === "deb"
     ? createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }))
@@ -29,6 +29,7 @@ export async function runMaintenanceMode(directory: string, token: string, forma
     install: manual.automatic,
   } : undefined);
   const origins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+  if (!installed && !buildInfo.packaged && devOrigin) origins.add(devOrigin);
   const identity = () => ({ authority: "host" as const, controller: null, claimAvailable: false });
   const server = Bun.serve({
     hostname: "127.0.0.1", port: 0,
