@@ -112,6 +112,14 @@ test("bundled remote discovery rejects incompatible hosts before sending a pairi
   expect(new Headers(request.mock.calls[0]![1]?.headers).has("Authorization")).toBe(false);
 });
 
+test("bundled remote discovery rejects a host without a protocol marker", async () => {
+  request.mockImplementation(async () => Response.json(details));
+  await act(async () => root.render(<Remote credentials={credentials} selectedOrigin={credentials.origin} desktopProtocol={1} />));
+  expect(current.status).toBe("protocol-mismatch");
+  expect(Socket.instances).toHaveLength(0);
+  expect(request.mock.calls.map(([url]: [unknown]) => String(url))).toEqual([`${credentials.origin}/api/connection`]);
+});
+
 test("bundled remote sessions accept a different host revision under the same protocol", async () => {
   loadedBuild.revision = "desktop-client";
   request.mockImplementation(async (url: string | URL | Request) => Response.json(String(url).endsWith("/api/connection") ? { ...details, desktopClientProtocol: 1 } : identity));

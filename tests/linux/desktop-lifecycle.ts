@@ -255,6 +255,7 @@ try {
     await until("local to remote stops this computer", async () => !await health(), 30_000);
     await until("local to remote restores the paired shell", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     assert.equal((await request(`/session/${native.session}/window/handles`) as string[]).length, 1, "Switching keeps one OS window");
+    await until("client-only coordinator starts beside selected host", async () => (await processIds("couch-server")).length === 2, 30_000);
     const appPid = await processIds("couch"), hostPid = await processIds("couch-server");
     assert.equal(appPid.length, 1);
     assert.equal(hostPid.length, 2, "selected host and client-only coordinator each have one process");
