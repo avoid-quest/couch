@@ -130,6 +130,8 @@ struct Player<R: Runtime> {
     key: String,
     loaded: bool,
     error: Option<String>,
+    radio: bool,
+    max_video_height: Option<u16>,
     replay_gain: crate::mpv_replaygain::ReplayGain,
     pending_subtitles: Vec<NativeSubtitle>,
     subtitle_error: Option<String>,
@@ -184,15 +186,9 @@ fn playback_status(mpv: &Mpv, loaded: bool, has_error: bool) -> (bool, bool, boo
 }
 
 fn validate_open(request: &NativeOpenRequest) -> Result<()> {
-    if request.audio_uri.is_some()
-        || request.max_video_height.is_some()
-        || request.radio
-        || request.go_live
-        || request.event_start
-        || request.end_position.is_some()
-    {
+    if request.end_position.is_some() {
         return Err(Error::InvalidRequest(
-            "This Mac player currently supports ordinary single-source media only".into(),
+            "Bounded segment playback is not available on Mac yet".into(),
         ));
     }
     if request
@@ -203,6 +199,66 @@ fn validate_open(request: &NativeOpenRequest) -> Result<()> {
         return Err(Error::InvalidRequest("Mac playback requires mpv".into()));
     }
     Ok(())
+}
+
+fn configure_media(mpv: &Mpv, request: &NativeOpenRequest) -> Result<()> {
+    crate::mpv_tracks::reset(mpv, request.max_video_height)?;
+    crate::mpv_radio::NetworkDefaults::read(mpv)?.configure(mpv, request.radio)?;
+    crate::mpv_iptv::LiveStartDefaults::read(mpv)?.configure(
+        mpv,
+        request.go_live,
+        request.event_start,
+    )?;
+    mpv.command("change-list", &["audio-files", "clr", ""])
+        .map_err(mpv_error)?;
+    if let Some(uri) = request.audio_uri.as_deref() {
+        mpv.command("change-list", &["audio-files", "append", uri])
+            .map_err(mpv_error)?;
+    }
+    crate::mpv_startup::StartupBuffer::read(mpv)?.configure(
+        mpv,
+        &request.uri,
+        request.audio_uri.as_deref(),
+        request.radio || request.go_live,
+    )?;
+    let mut headers = request.headers.clone();
+    if let Some(value) = request.cookies.as_ref().filter(|value| !value.is_empty()) {
+        headers.insert("Cookie".into(), value.clone());
+    }
+    if let Some(value) = request.referrer.as_ref().filter(|value| !value.is_empty()) {
+        headers.insert("Referer".into(), value.clone());
+    }
+    mpv.command("change-list", &["http-header-fields", "clr", ""])
+        .map_err(mpv_error)?;
+    for (name, value) in headers {
+        mpv.command(
+            "change-list",
+            &["http-header-fields", "append", &format!("{name}: {value}")],
+        )
+        .map_err(mpv_error)?;
+    }
+    mpv.set_property(
+        "user-agent",
+        request
+            .user_agent
+            .as_deref()
+            .unwrap_or("tauri-plugin-video"),
+    )
+    .map_err(mpv_error)?;
+    mpv.set_property("tls-ca-file", request.tls_ca_file.as_deref().unwrap_or(""))
+        .map_err(mpv_error)
+}
+
+fn configure_start(mpv: &Mpv, position: Option<f64>) -> Result<()> {
+    if position.is_some_and(|value| !value.is_finite() || value < 0.0) {
+        return Err(Error::InvalidRequest(
+            "startPosition must be finite and nonnegative".into(),
+        ));
+    }
+    let start = position
+        .filter(|value| *value > 0.0)
+        .map_or_else(|| "none".to_owned(), |value| value.to_string());
+    mpv.set_property("start", start).map_err(mpv_error)
 }
 
 impl<R: Runtime> Worker<R> {
@@ -254,6 +310,8 @@ impl<R: Runtime> Worker<R> {
             key: request.session_key.clone(),
             loaded: false,
             error: None,
+            radio: request.radio,
+            max_video_height: request.max_video_height,
             replay_gain: crate::mpv_replaygain::ReplayGain::default(),
             pending_subtitles: request.subtitles.clone(),
             subtitle_error: None,
@@ -263,6 +321,7 @@ impl<R: Runtime> Worker<R> {
         player
             .replay_gain
             .reset(&player.mpv, request.preferences.replay_gain)?;
+        configure_media(&player.mpv, &request)?;
         player
             .mpv
             .set_property("volume", request.volume * 100.0)
@@ -275,43 +334,7 @@ impl<R: Runtime> Worker<R> {
             .mpv
             .set_property("pause", !request.autoplay)
             .map_err(mpv_error)?;
-        player
-            .mpv
-            .set_property("start", request.start_position.unwrap_or(0.0).to_string())
-            .map_err(mpv_error)?;
-        let mut headers = request.headers.clone();
-        if let Some(value) = request.cookies.as_ref().filter(|value| !value.is_empty()) {
-            headers.insert("Cookie".into(), value.clone());
-        }
-        if let Some(value) = request.referrer.as_ref().filter(|value| !value.is_empty()) {
-            headers.insert("Referer".into(), value.clone());
-        }
-        player
-            .mpv
-            .command("change-list", &["http-header-fields", "clr", ""])
-            .map_err(mpv_error)?;
-        for (name, value) in headers {
-            player
-                .mpv
-                .command(
-                    "change-list",
-                    &["http-header-fields", "append", &format!("{name}: {value}")],
-                )
-                .map_err(mpv_error)?;
-        }
-        player
-            .mpv
-            .set_property(
-                "user-agent",
-                request
-                    .user_agent
-                    .unwrap_or_else(|| "tauri-plugin-video".into()),
-            )
-            .map_err(mpv_error)?;
-        player
-            .mpv
-            .set_property("tls-ca-file", request.tls_ca_file.unwrap_or_default())
-            .map_err(mpv_error)?;
+        configure_start(&player.mpv, request.start_position)?;
         player
             .mpv
             .command("loadfile", &[&request.uri, "replace"])
@@ -462,7 +485,8 @@ impl<R: Runtime> Player<R> {
             match event.map_err(mpv_error)? {
                 Event::FileLoaded => self.loaded = true,
                 Event::Hook { id } => {
-                    let selection = self.replay_gain.select(&self.mpv, false);
+                    let selection = crate::mpv_tracks::select(&self.mpv, self.max_video_height)
+                        .and_then(|()| self.replay_gain.select(&self.mpv, self.radio));
                     if selection.is_ok() {
                         for subtitle in std::mem::take(&mut self.pending_subtitles) {
                             if crate::mpv_subtitles::add(&self.mpv, &subtitle, false).is_err() {
@@ -511,7 +535,11 @@ impl<R: Runtime> Player<R> {
                     .unwrap_or(false),
             });
         }
-        let position = mpv.get_property::<f64>("time-pos").unwrap_or(0.0);
+        let position = mpv
+            .get_property::<f64>("time-pos")
+            .ok()
+            .filter(|value| value.is_finite())
+            .unwrap_or(0.0);
         let (ended, buffering, playing) = playback_status(mpv, self.loaded, self.error.is_some());
         let chapters = (0..mpv.get_property::<i64>("chapter-list/count").unwrap_or(0))
             .filter_map(|index| {
@@ -544,7 +572,7 @@ impl<R: Runtime> Player<R> {
                 playback_id: Some(self.key.clone()),
                 error: self.error.clone(),
                 volume: mpv.get_property::<f64>("volume").unwrap_or(80.0) / 100.0,
-                seekable: mpv.get_property::<bool>("seekable").unwrap_or(false),
+                seekable: self.loaded && mpv.get_property::<bool>("seekable").unwrap_or(false),
                 ended,
                 loading: (!self.loaded || buffering) && self.error.is_none(),
                 speed: mpv.get_property::<f64>("speed").unwrap_or(1.0),
@@ -552,10 +580,18 @@ impl<R: Runtime> Player<R> {
                 subtitle_delay: mpv.get_property::<f64>("sub-delay").unwrap_or(0.0),
                 replay_gain: self.replay_gain.observe(mpv)?,
                 subtitle_error: self.subtitle_error.clone(),
-                now_playing: None,
+                now_playing: if self.radio && self.loaded && !ended {
+                    crate::mpv_radio::now_playing(mpv)
+                } else {
+                    None
+                },
                 chapters,
             }),
-            duration_seconds: mpv.get_property::<f64>("duration").unwrap_or(0.0),
+            duration_seconds: mpv
+                .get_property::<f64>("duration")
+                .ok()
+                .filter(|value| value.is_finite())
+                .unwrap_or(0.0),
             current_time_seconds: position,
             buffered_seconds: 0.0,
             playing,
@@ -589,7 +625,206 @@ impl<R: Runtime> Player<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{path::Path, time::Instant};
+    use std::{
+        fs,
+        io::{Read, Write},
+        net::TcpListener,
+        path::{Path, PathBuf},
+        process::Command,
+        sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Instant, SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn live_load_has_no_implicit_seek_overriding_the_probed_start() {
+        for (event_start, go_live, expected) in [
+            (true, false, "live_start_index=0"),
+            (false, true, "live_start_index=-1"),
+        ] {
+            let mpv = Mpv::with_initializer(|init| {
+                init.set_option("vo", "null")?;
+                init.set_option("ao", "null")?;
+                Ok(())
+            })
+            .unwrap();
+            let request = NativeOpenRequest {
+                uri: "https://example.test/live.m3u8".into(),
+                event_start,
+                go_live,
+                ..Default::default()
+            };
+            configure_media(&mpv, &request).unwrap();
+            configure_start(&mpv, request.start_position).unwrap();
+            assert_eq!(mpv.get_property::<String>("start").unwrap(), "none");
+            assert!(mpv
+                .get_property::<String>("demuxer-lavf-o")
+                .unwrap()
+                .contains(expected));
+        }
+    }
+
+    #[test]
+    fn split_network_video_loads_both_tracks_with_required_headers() {
+        struct Fixture(PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let fixture = Fixture(std::env::temp_dir().join(format!(
+            "couch-mac-split-{}-{}", std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        )));
+        fs::create_dir(&fixture.0).unwrap();
+        let video = fixture.0.join("video.mp4");
+        let audio = fixture.0.join("audio.m4a");
+        for (source, codec, output) in [
+            ("color=c=blue:s=640x360:r=25", "libx264", &video),
+            ("sine=frequency=440:sample_rate=48000", "aac", &audio),
+        ] {
+            let kind = if codec == "aac" { "a" } else { "v" };
+            let result = Command::new("ffmpeg")
+                .args([
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    source,
+                    "-t",
+                    "4",
+                    &format!("-c:{kind}"),
+                    codec,
+                    "-threads",
+                    "1",
+                    "-y",
+                ])
+                .arg(output)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        let video = fs::read(video).unwrap();
+        let audio = fs::read(audio).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let stop = Arc::new(AtomicBool::new(false));
+        let served = Arc::new(AtomicUsize::new(0));
+        let server_stop = Arc::clone(&stop);
+        let server_served = Arc::clone(&served);
+        let server = std::thread::spawn(move || {
+            while !server_stop.load(Ordering::Relaxed) {
+                let Ok((mut socket, _)) = listener.accept() else {
+                    std::thread::sleep(Duration::from_millis(5));
+                    continue;
+                };
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut request = Vec::new();
+                while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") && request.len() < 8192
+                {
+                    let mut chunk = [0; 1024];
+                    let Ok(count) = socket.read(&mut chunk) else {
+                        break;
+                    };
+                    if count == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&chunk[..count]);
+                }
+                let text = String::from_utf8_lossy(&request);
+                let authorized = text
+                    .to_ascii_lowercase()
+                    .contains("authorization: token,part2");
+                let (body, content_type) = if text.starts_with("GET /video.mp4 ") {
+                    (&video, "video/mp4")
+                } else if text.starts_with("GET /audio.m4a ") {
+                    (&audio, "audio/mp4")
+                } else {
+                    continue;
+                };
+                if authorized {
+                    server_served.fetch_add(1, Ordering::Relaxed);
+                }
+                let status = if authorized {
+                    "200 OK"
+                } else {
+                    "403 Forbidden"
+                };
+                let size = if authorized { body.len() } else { 0 };
+                let _ = write!(socket, "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {size}\r\nConnection: close\r\n\r\n");
+                if authorized {
+                    let _ = socket.write_all(body);
+                }
+            }
+        });
+        let mut mpv = Mpv::with_initializer(|init| {
+            init.set_option("vo", "null")?;
+            init.set_option("ao", "null")?;
+            init.set_option("ytdl", "no")?;
+            Ok(())
+        })
+        .unwrap();
+        mpv.hook_add("on_preloaded", 0).unwrap();
+        let request = NativeOpenRequest {
+            session_key: "split".into(),
+            uri: format!("{origin}/video.mp4"),
+            audio_uri: Some(format!("{origin}/audio.m4a")),
+            headers: [("Authorization".into(), "token,part2".into())].into(),
+            max_video_height: Some(720),
+            width: 640.0,
+            height: 360.0,
+            ..Default::default()
+        };
+        validate_open(&request).unwrap();
+        configure_media(&mpv, &request).unwrap();
+        configure_start(&mpv, request.start_position).unwrap();
+        mpv.command("loadfile", &[&request.uri, "replace"]).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(12);
+        let mut loaded = false;
+        while Instant::now() < deadline {
+            match mpv.wait_event(0.05).transpose().unwrap() {
+                Some(Event::Hook { id }) => {
+                    let result = crate::mpv_tracks::select(&mpv, request.max_video_height);
+                    unsafe { mpv.hook_continue(id) }.unwrap();
+                    result.unwrap();
+                }
+                Some(Event::FileLoaded) => {
+                    loaded = true;
+                    break;
+                }
+                Some(Event::EndFile(mpv_end_file_reason::Error)) => {
+                    panic!("split media failed to load")
+                }
+                _ => {}
+            }
+        }
+        let kinds: Vec<_> = (0..mpv.get_property::<i64>("track-list/count").unwrap_or(0))
+            .filter_map(|index| {
+                mpv.get_property::<String>(&format!("track-list/{index}/type"))
+                    .ok()
+            })
+            .collect();
+        mpv.command("stop", &[]).unwrap();
+        stop.store(true, Ordering::Relaxed);
+        server.join().unwrap();
+        assert!(loaded, "split media did not load before the deadline");
+        assert!(kinds.iter().any(|kind| kind == "video"), "{kinds:?}");
+        assert!(kinds.iter().any(|kind| kind == "audio"), "{kinds:?}");
+        assert!(
+            served.load(Ordering::Relaxed) >= 2,
+            "both URLs must require the header"
+        );
+    }
 
     #[test]
     fn replay_after_eof_reports_playing_again() {
