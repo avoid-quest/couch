@@ -6,6 +6,7 @@ import * as core from "@tauri-apps/api/core";
 import { onlineManager } from "@tanstack/react-query";
 import { screen, fireEvent, within } from "@/testing";
 import { isNativeHost } from "@/session/native-context";
+import { buildInfo } from "../../../shared/build";
 
 let root: Root, window: Window, invoke: Mock<typeof core.invoke>, request: ReturnType<typeof spyOn>;
 let client: import("@tanstack/react-query").QueryClient | null = null;
@@ -41,6 +42,7 @@ beforeEach(async () => {
   root = createRoot(document.body.appendChild(document.createElement("div")));
 });
 afterEach(async () => {
+  buildInfo.clientOnly = false;
   Reflect.deleteProperty(globalThis, "COUCH_DEV_ORIGIN");
   await act(async () => { root.unmount(); await new Promise(resolve => setTimeout(resolve, 0)); });
   invoke.mockRestore(); request.mockRestore(); onlineManager.setOnline(true); await window.happyDOM.abort();
@@ -67,6 +69,27 @@ test("first launch chooses a device before requesting local startup", async () =
   await act(async () => fireEvent.click(button("This computer"))); await flush();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(true);
   expect(screen.getByText("Local installation")).toBeDefined();
+});
+
+test("Client-only Windows offers remote playback and keeps offline recovery remote", async () => {
+  buildInfo.clientOnly = true;
+  await render();
+  expect(screen.getByRole("heading", { name: "Connect to another Couch" })).toBeDefined();
+  expect(screen.getByText(/Local playback is unavailable/)).toBeDefined();
+  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  await act(async () => fireEvent.change(screen.getByRole("textbox", { name: "Couch address" }), { target: { value: "192.168.1.10:4100" } }));
+  await act(async () => fireEvent.click(button("Connect"))); await flush();
+  expect(choice.mode).toBe("remote");
+  connectionError = "Cannot reach that Couch.";
+  await act(async () => root.unmount());
+  const { createRoot } = await import("react-dom/client");
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await render();
+  expect(button("Retry")).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
+  await act(async () => fireEvent.click(button("Play on: 192.168.1.10:4100"))); await flush();
+  expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
+  expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
 });
 
 test("an external Tauri page uses browser UI without accessing local commands", async () => {

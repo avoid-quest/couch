@@ -7,6 +7,7 @@ import type { SessionState } from "../../../shared/protocol";
 import { fireEvent, screen } from "@/testing";
 import type { ShellValue } from "./AppShell";
 import { ShellContext } from "./shell-context";
+import { buildInfo } from "../../../shared/build";
 
 let root: Root, window: Window;
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
@@ -26,6 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  buildInfo.clientOnly = false;
   await act(async () => root.unmount());
   fetchSpy?.mockRestore(); fetchSpy = null;
   await window.happyDOM.abort();
@@ -73,9 +75,10 @@ test("the local host's update page names this app", async () => {
   expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable") {
+async function render(status: "playing" | "unavailable", remoteOffline = false) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
+  if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
   const state: SessionState = {
     installationName: "Desk Couch",
     activeProfile: { id: "household", name: "Household" },
@@ -84,11 +87,11 @@ async function render(status: "playing" | "unavailable") {
     player: { playbackId: status === "playing" ? "movie" : null, status, position: 0, duration: null, volume: 50, seekable: false, error: status === "unavailable" ? "Video backend missing" : null },
   };
   const shell = {
-    nativeHost: true, localHost: true, tvPresentation: false, credentials: { origin: "http://localhost", token: "host" },
-    state, status: "connected", statusLabel: "Connected", details: { tvPresentation: false },
-    connected: true, active: status === "playing", current: state.queue[0] ?? null,
+    nativeHost: true, localHost: !remoteOffline, tvPresentation: false, credentials: { origin: remoteOffline ? "http://192.168.1.10:4100" : "http://localhost", token: "host" },
+    state, status: remoteOffline ? "server-unavailable" : "connected", statusLabel: remoteOffline ? "Server unavailable" : "Connected", details: { tvPresentation: false },
+    connected: !remoteOffline, active: status === "playing", current: state.queue[0] ?? null,
     available: status === "playing", section: "Find", tv: { browsing: true, controlsVisible: false },
-    run: async () => true, host: null, remoteControlEnabled: false, pairingRequired: false,
+    run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
     sectionUrl: () => "/find",
     videoQualityPreference: { quality: "auto" },
@@ -110,4 +113,12 @@ test("a playback backend error remains visible while browsing Find", async () =>
   expect(screen.getByRole("button", { name: "Play on: This computer" })).toBeDefined();
   expect(screen.getByRole("alert").textContent).toContain("Video backend missing");
   expect(screen.getByText("Find view")).toBeDefined();
+});
+
+test("a Client-only app keeps offline recovery on the selected remote", async () => {
+  buildInfo.clientOnly = true;
+  await render("unavailable", true);
+  expect(screen.getByText("The selected Couch is offline. Its address stays selected.")).toBeDefined();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
 });
