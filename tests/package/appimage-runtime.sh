@@ -38,9 +38,31 @@ for attempt in $(seq 1 100); do
 done
 test -s /evidence/host-connection.json
 
-# WebDriver and its GUI packages are qualification instrumentation, added after
-# checking the clean artifact and coordinator on the runtime-only host.
-apt-get install -y --no-install-recommends xvfb xauth openbox xdotool webkit2gtk-driver pulseaudio libgtk-3-bin
+# Prove the AppImage opens its window before WebDriver can supply WebKit.
+apt-get install -y --no-install-recommends xvfb xauth openbox xdotool
+if dpkg-query -W libwebkit2gtk-4.1-0 >/dev/null 2>&1; then echo 'WebKit came from the host' >&2; exit 1; fi
+runuser -u qualifier -- env HOME=/home/qualifier TMPDIR=/home/qualifier/tmp \
+  APPIMAGE_EXTRACT_AND_RUN=1 XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 \
+  COUCH_BASIC_RENDERING=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+  dbus-run-session -- bash -euo pipefail -c '
+    export DISPLAY=:98
+    Xvfb :98 -screen 0 1280x720x24 +extension GLX > /evidence/pre-driver-xvfb.log 2>&1 & xvfb_pid=$!
+    trap '\''kill "${app_pid:-}" "${openbox_pid:-}" "$xvfb_pid" 2>/dev/null || true; pkill -TERM -u qualifier -x couch || true'\'' EXIT
+    for attempt in $(seq 1 50); do [ ! -e /tmp/.X11-unix/X98 ] || break; sleep 0.1; done
+    openbox > /evidence/pre-driver-openbox.log 2>&1 & openbox_pid=$!
+    /qualification/Couch.AppImage > /evidence/pre-driver-app.log 2>&1 & app_pid=$!
+    for attempt in $(seq 1 150); do
+      if xdotool search --onlyvisible --name "^Couch$" > /evidence/pre-driver-window.txt; then break; fi
+      kill -0 "$app_pid"
+      sleep 0.2
+    done
+    test -s /evidence/pre-driver-window.txt
+  '
+for attempt in $(seq 1 50); do [ "$(pgrep -x couch-server | wc -l)" = 1 ] && break; sleep 0.1; done
+test "$(pgrep -x couch-server | wc -l)" = 1
+
+# WebDriver is only needed for the detailed Client journey below.
+apt-get install -y --no-install-recommends webkit2gtk-driver pulseaudio libgtk-3-bin
 exec runuser -u qualifier -- env HOME=/home/qualifier TMPDIR=/home/qualifier/tmp \
   APPIMAGE_EXTRACT_AND_RUN=1 COUCH_DATA_DIR=/home/qualifier/client-data DISPLAY=:99 \
   XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 COUCH_BASIC_RENDERING=1 \

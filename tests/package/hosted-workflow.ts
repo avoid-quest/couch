@@ -51,7 +51,10 @@ assert.equal(receiptStep["continue-on-error"], true);
 assert.ok(!receiptStep.with.path.includes("public") && !receiptStep.with.path.includes("inventory"));
 assert.equal(workflow.jobs.release.environment, "couch-release");
 assert.equal(workflow.on.workflow_dispatch.inputs.notes, undefined);
-assert.match(workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs").run, /release-notes\.ts "\$revision"/);
+const candidate = workflow.jobs.release.steps.find((step: any) => step.name === "Check the candidate inputs");
+assert.match(candidate.run, /release-notes\.ts "\$revision"/);
+const appimageGuard = candidate.run.match(/^\s*if \[ "\$FORMAT" = appimage \]; then[^\n]*$/m)?.[0];
+assert.ok(appimageGuard, "Exercise the real AppImage input guard in act");
 assert.doesNotMatch(release.jobs.trigger.steps.find((step: any) => step.name === "Dispatch the package pipeline when the version is unreleased").run, /release-notes|notes=/);
 await mkdir(`${output}/home`, { recursive: true });
 await mkdir(`${output}/workspace`, { recursive: true });
@@ -65,7 +68,7 @@ for (const test of cases) {
   job.steps = job.steps.map((step: any) => {
     const replacement: any = { name: step.name ?? step.uses, run: `printf '%s\\n' ${JSON.stringify(`STEP:${step.name ?? step.uses}`)}` };
     for (const key of ["if", "id", "env", "continue-on-error"]) if (key in step) replacement[key] = step[key];
-    if (step.name === "Check the candidate inputs") replacement.run += '\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi';
+    if (step.name === "Check the candidate inputs") replacement.run += `\n${appimageGuard}\nif [ "$BUILD_RUN" = 0 ]; then test "$CHANNEL" = preview && test "$READINESS_ONLY" = false; fi`;
     if (step.id === "draft") replacement.run += '\necho "release-id=AAAAAAAAAAAAAAAAAAAAAAAAAA" >> "$GITHUB_OUTPUT"';
     if (scenario.fault && step.name === scenario.fault) replacement.run += "\nexit 17";
     return replacement;
