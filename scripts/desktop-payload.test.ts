@@ -25,6 +25,7 @@ function executable(target: string) {
 
 for (const [target, format] of [
   ["x86_64-unknown-linux-gnu", "deb"],
+  ["x86_64-unknown-linux-gnu", "appimage"],
   ["aarch64-apple-darwin", "dmg"],
   ["x86_64-pc-windows-msvc", "nsis"],
 ] as const) test(`${format} payload checks installed paths, required files and architecture`, async () => {

@@ -6,7 +6,7 @@ import { packageManager, version } from "../package.json";
 import packageConfig from "../src-tauri/tauri.package.conf.json";
 import debian from "../packaging/debian.json";
 import setup from "../packaging/setup/files.json";
-import { publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
+import { packageFormat, publicKey, releaseVersion, updaterEndpoint } from "./hosted-policy";
 
 const resources = "src-tauri/resources";
 const notices = join(resources, "notices");
@@ -32,8 +32,10 @@ const os = await Bun.file("/etc/os-release").text();
 if (!/^ID=debian$/m.test(os) || !/^VERSION_ID="13"$/m.test(os)) throw new Error("Debian 13 is required");
 if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManager}`);
 if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean committed source revision");
+const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });
+if (format === "deb") {
 const tv = join(resources, "tv");
 for (const path of setup.files) {
   await mkdir(join(tv, path, ".."), { recursive: true });
@@ -48,15 +50,18 @@ const broker = join(resources, "package-update");
 await mkdir(broker, { recursive: true });
 for (const file of ["couch-package-update@.service", "50-couch-package-update.rules"]) await cp(join("packaging/native", file), join(broker, file));
 await Bun.write(join(broker, "couch-updater.pub"), Buffer.from(publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), "base64"));
+}
 await mkdir(staging, { recursive: true });
-await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: ["deb"], linux: { ...packageConfig.bundle.linux, deb: debian } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint] } } }));
+await Bun.write(".artifacts/tauri-release.conf.json", JSON.stringify({ ...packageConfig, bundle: { ...packageConfig.bundle, targets: [format], linux: { ...packageConfig.bundle.linux, ...(format === "deb" ? { deb: debian } : {}) } }, version: releaseVersion(version), plugins: { updater: { pubkey: publicKey(process.env.COUCH_UPDATER_PUBLIC_KEY), endpoints: [updaterEndpoint(format)] } } }));
 await installMediaTools(join(resources, "tools"), fetch, inputs.tools);
 await cp("/usr/bin/ffprobe", join(resources, "tools", "ffprobe"));
 const helpers = {} as Record<string, { version: string; sha256: string; archiveSha256: string }>;
 for (const tool of mediaReleases()) helpers[tool.name] = { version: tool.version, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", tool.name)).arrayBuffer())), archiveSha256: inputs.tools[tool.file as keyof typeof inputs.tools] };
 helpers.ffprobe = { version: run(["/usr/bin/ffprobe", "-version"]).split(" ")[2]!, sha256: sha256(new Uint8Array(await Bun.file(join(resources, "tools", "ffprobe")).arrayBuffer())), archiveSha256: "" };
 await Bun.write(join(resources, "tools.json"), JSON.stringify(helpers, null, 2));
-await Bun.write(join(resources, "host.json"), JSON.stringify({ target: "x86_64-unknown-linux-gnu", os: "debian", version: "13", architecture: "amd64", session: "x11", packages: debian.depends.map(dependency => dependency.split(" ")[0]) }));
+await Bun.write(join(resources, "host.json"), JSON.stringify(format === "deb"
+  ? { target: "x86_64-unknown-linux-gnu", os: "debian", version: "13", architecture: "amd64", session: "x11", packages: debian.depends.map(dependency => dependency.split(" ")[0]) }
+  : { target: "x86_64-unknown-linux-gnu", os: "linux", architecture: "amd64", session: "desktop", packages: [] }));
 for (const notice of inputs.notices) await download(notice, join(notices, notice.name));
 await cp("packaging/NOTICE", join(notices, "NOTICE"));
 await cp("vendor/streamingcommunity", join(notices, "streamingcommunity"), { recursive: true });

@@ -2,6 +2,13 @@ name: Package
 "on":
   workflow_dispatch:
     inputs:
+      format:
+        type: choice
+        options:
+          - deb
+          - appimage
+        default: deb
+        description: Package format to build or restore
       channel:
         type: choice
         options:
@@ -78,17 +85,19 @@ jobs:
           BUILD_RUN: "${{ inputs.build-run }}"
           BUILD_ATTEMPT: "${{ inputs.build-attempt }}"
           CHANNEL: "${{ inputs.channel }}"
+          FORMAT: "${{ inputs.format }}"
           READINESS_ONLY: "${{ inputs.readiness-only }}"
           GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p .artifacts/hosted-release
           if [ "$BUILD_RUN" = 0 ]; then
             test "$CHANNEL" = preview && test "$READINESS_ONLY" = false
+            case "$FORMAT" in deb|appimage) ;; *) exit 1 ;; esac
             revision=$(git rev-parse HEAD)
           else
             bun scripts/hosted-release.ts verify-receipt .artifacts/hosted-release
             revision=$(jq -er .revision .artifacts/hosted-release/manifest.json)
-            test "$(jq -r '.format' .artifacts/hosted-release/manifest.json)" = "deb"
+            test "$(jq -r '.format' .artifacts/hosted-release/manifest.json)" = "$FORMAT"
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/attempts/$BUILD_ATTEMPT" > .artifacts/receipt-run.json
             source_run=$(jq -er '.buildRun.id' .artifacts/hosted-release/manifest.json)
             source_attempt=$(jq -er '.buildRun.attempt' .artifacts/hosted-release/manifest.json)
@@ -117,6 +126,7 @@ jobs:
           CN_BIN: "${{ github.workspace }}/.artifacts/cn"
           BUILD_RUN: "${{ inputs.build-run }}"
           CHANNEL: "${{ inputs.channel }}"
+          COUCH_PACKAGE_FORMAT: "${{ inputs.format }}"
           RELEASE_ID: "${{ inputs.release-id }}"
         run: |
           operation=draft-source
@@ -186,13 +196,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
         run: |
-          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh deb
+          docker exec -w /work -e COUCH_UPDATER_PUBLIC_KEY -e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT couch-build bash scripts/hosted-build.sh "${{ inputs.format }}"
       - name: Qualify the exact signed bytes
         if: inputs.build-run == 0
         run: |
-          docker exec -w /work couch-build bash scripts/hosted-qualify.sh deb
+          docker exec -w /work couch-build bash scripts/hosted-qualify.sh "${{ inputs.format }}"
           mkdir -p .artifacts/native-qualification
-          bash scripts/hosted-desktop.sh couch-build .artifacts/native-qualification
+          bash scripts/hosted-desktop.sh couch-build .artifacts/native-qualification "${{ inputs.format }}"
           docker exec -w /work couch-build bun scripts/hosted-release.ts qualify .artifacts/hosted-release
       - name: Sign the qualification receipt
         if: inputs.build-run == 0
