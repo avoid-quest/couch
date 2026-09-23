@@ -739,3 +739,176 @@ fn replay_after_eof_reports_playing_again() {
         }
     }
 }
+
+#[test]
+fn native_tracks_chapters_and_subtitles_follow_current_media() {
+    let fixture = Fixture::new("tracks");
+    let metadata = fixture.0.join("chapters.txt");
+    fs::write(&metadata, "FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=6000\ntitle=Opening\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=6000\nEND=12000\ntitle=Second chapter\n").unwrap();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/fixtures/subtitles");
+    let media = fixture.0.join("tracks.mkv");
+    let generated = Command::new("ffmpeg")
+        .args(["-v", "error", "-i"])
+        .arg(source.join("text.mkv"))
+        .args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=660:sample_rate=48000",
+            "-f",
+            "ffmetadata",
+            "-i",
+        ])
+        .arg(&metadata)
+        .args([
+            "-map",
+            "0:v",
+            "-map",
+            "1:a",
+            "-map",
+            "2:a",
+            "-map",
+            "0:s",
+            "-map_metadata",
+            "3",
+            "-map_chapters",
+            "3",
+            "-metadata:s:a:0",
+            "language=eng",
+            "-metadata:s:a:1",
+            "language=ita",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-c:s",
+            "copy",
+            "-t",
+            "12",
+        ])
+        .arg(&media)
+        .output()
+        .expect("ffmpeg is required for native Mac track verification");
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+
+    let mut mpv = Mpv::with_initializer(|init| {
+        init.set_option("vo", "null")?;
+        init.set_option("ao", "null")?;
+        init.set_option("pause", "yes")?;
+        init.set_option("keep-open", "yes")?;
+        Ok(())
+    })
+    .unwrap();
+    let wait_loaded = |mpv: &mut Mpv| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            assert!(Instant::now() < deadline, "media did not load");
+            match mpv.wait_event(0.05).transpose().unwrap() {
+                Some(Event::FileLoaded) => break,
+                Some(Event::EndFile(mpv_end_file_reason::Error)) => panic!("media load failed"),
+                _ => {}
+            }
+        }
+    };
+    let preferences = crate::NativePlaybackPreferences {
+        audio_language: "ita".into(),
+        subtitles: crate::NativeSubtitlePreference::Off,
+        speed: 1.25,
+        audio_delay: -0.2,
+        ..Default::default()
+    };
+    crate::mpv_subtitles::reset(&mpv, &preferences).unwrap();
+    mpv.command("loadfile", &[media.to_str().unwrap(), "replace"])
+        .unwrap();
+    wait_loaded(&mut mpv);
+    let tracks = observed_tracks(&mpv);
+    assert!(tracks
+        .iter()
+        .any(|track| track.kind == TrackKind::Audio && track.language == "ita" && track.selected));
+    assert!(!tracks
+        .iter()
+        .any(|track| track.kind == TrackKind::Subtitle && track.selected));
+    let chapters = observed_chapters(&mpv);
+    assert_eq!(
+        chapters
+            .iter()
+            .map(|chapter| (chapter.title.as_str(), chapter.position))
+            .collect::<Vec<_>>(),
+        [("Opening", 0.0), ("Second chapter", 6.0)]
+    );
+    assert_eq!(mpv.get_property::<f64>("speed").unwrap(), 1.25);
+    assert!((mpv.get_property::<f64>("audio-delay").unwrap() + 0.2).abs() < 0.001);
+
+    let english_audio = tracks
+        .iter()
+        .find(|track| track.kind == TrackKind::Audio && track.language == "eng")
+        .unwrap();
+    select_track(&mpv, english_audio.index, true).unwrap();
+    assert!(observed_tracks(&mpv)
+        .iter()
+        .any(|track| track.index == english_audio.index && track.selected));
+    let styled = tracks
+        .iter()
+        .find(|track| track.label == "ASS styled and mixed scripts")
+        .unwrap();
+    select_track(&mpv, styled.index, true).unwrap();
+    assert!(observed_tracks(&mpv)
+        .iter()
+        .any(|track| track.index == styled.index && track.selected));
+    mpv.command("seek", &["3", "absolute+exact"]).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !mpv
+        .get_property::<String>("sub-text")
+        .unwrap_or_default()
+        .contains("ASS 1")
+    {
+        assert!(
+            Instant::now() < deadline,
+            "styled subtitle was not observed at its cue time"
+        );
+        let _ = mpv.wait_event(0.05);
+    }
+    mpv.set_property("sub-delay", 2.0_f64).unwrap();
+    mpv.command("seek", &["1", "absolute+exact"]).unwrap();
+    let _ = mpv.wait_event(0.05);
+    assert!(mpv
+        .get_property::<String>("sub-text")
+        .unwrap_or_default()
+        .is_empty());
+    mpv.set_property("sid", "no").unwrap();
+    assert!(!observed_tracks(&mpv)
+        .iter()
+        .any(|track| track.kind == TrackKind::Subtitle && track.selected));
+    assert!(select_track(&mpv, 99, true).is_err());
+    let bad = crate::NativeSubtitle {
+        source: fixture.0.join("missing.srt").to_string_lossy().into(),
+        title: "Missing".into(),
+        language: None,
+    };
+    assert!(crate::mpv_subtitles::add(&mpv, &bad, true).is_err());
+    assert!(observed_tracks(&mpv)
+        .iter()
+        .any(|track| track.kind == TrackKind::Video && track.selected));
+
+    crate::mpv_subtitles::reset(&mpv, &crate::NativePlaybackPreferences::default()).unwrap();
+    mpv.command(
+        "loadfile",
+        &[source.join("replacement.mkv").to_str().unwrap(), "replace"],
+    )
+    .unwrap();
+    wait_loaded(&mut mpv);
+    assert!(!observed_tracks(&mpv)
+        .iter()
+        .any(|track| track.kind == TrackKind::Subtitle));
+    assert_eq!(mpv.get_property::<f64>("speed").unwrap(), 1.0);
+    assert_eq!(mpv.get_property::<f64>("audio-delay").unwrap(), 0.0);
+    assert_eq!(mpv.get_property::<f64>("sub-delay").unwrap(), 0.0);
+}

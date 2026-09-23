@@ -49,6 +49,19 @@ test("uploads reject host paths, unsupported contents, stale sessions and excess
   expect(attached).toHaveLength(0);
 });
 
+test("oversized streaming uploads stop at the limit and leave the player usable", async () => {
+  const { upload, attached } = fixture();
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new Uint8Array(subtitleSizeLimit + 1)); },
+    cancel() { cancelled = true; },
+  });
+  expect((await upload("captions.srt", body)).status).toBe(413);
+  expect(cancelled).toBe(true);
+  expect(attached).toHaveLength(0);
+  expect((await upload()).status).toBe(200);
+});
+
 test("file limit bounds each source and native Stop releases files", async () => {
   const { upload, subtitles, attached, replace } = fixture();
   for (let index = 0; index < 20; index++) expect((await upload()).status).toBe(200);

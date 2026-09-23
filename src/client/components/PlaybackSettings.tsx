@@ -67,7 +67,7 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled }: {
       });
       const result = await response.json();
       if (!response.ok || result.ok !== true) throw new Error(result.error || "Could not add this subtitle file.");
-      if (!controller.signal.aborted) setNotice("Subtitle sent. The Subtitles list shows the TV's current selection.");
+      if (!controller.signal.aborted) setNotice("Subtitle sent. The Subtitles list shows the playback host's current selection.");
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not add this subtitle file.");
     } finally {
@@ -258,10 +258,10 @@ export function PlaybackSettings({ entry, player, ready, connected, credentials,
               <summary tabIndex={0} className="min-h-11 cursor-pointer content-center">Subtitles and timing</summary>
               <div className="grid gap-4 pt-3">
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
-                {audio.length > 0 && <DelayControl id="playback-audio-delay" label="TV audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
+                {audio.length > 0 && <DelayControl id="playback-audio-delay" label="Host audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
                 {subtitles.length > 0 && <DelayControl id="playback-subtitle-delay" label="Subtitle delay" value={player.subtitleDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "subtitleDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
               </div>
-            </details> : audio.length > 0 && <DelayControl key={player.playbackId} id="playback-audio-delay" label="TV audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
+            </details> : audio.length > 0 && <DelayControl key={player.playbackId} id="playback-audio-delay" label="Host audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
             {pending && <p role="status" className="sm:col-span-2">Applying…</p>}
             {defaultError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{defaultError}</AlertDescription></Alert>}
             {player.subtitleError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}
