@@ -36,8 +36,10 @@ their paths in a remote.
 
 The [native Mac source workflow](usage.md#native-mac-development) runs one app
 with **This computer** and **Another Couch** modes. This computer owns a local
-Bun host and trusted Settings access, but local Mac playback is still
-unavailable. Another Couch opens the selected host's UI in a separate window;
+Bun host, trusted Settings access and local playback. The local owner or a
+paired Administrator can select its output and control volume and mute; Couch
+also shows external changes.
+Another Couch opens the selected host's UI in a separate window;
 it uses that host's paired role and does not run a local player or share the
 Mac's files. The trusted local window keeps device selection and **Update this
 app** access even if the selected host is offline. That control checks this
@@ -50,7 +52,7 @@ its address or choose **Use this computer**; Couch does not switch hosts or star
 playback on its own. Close keeps the app running. On Mac, reopen it from the
 Dock or **Show Couch** in the app menu; **Quit Couch** ends the app and its owned
 local host after any interruption confirmation. This source workflow is not a
-published Mac installer or proof of native Mac playback.
+published Mac installer or proof of physical speaker behavior.
 
 ## Keep a shortcut
 

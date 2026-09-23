@@ -14,6 +14,7 @@ desktop-playback = ["dep:tauri-plugin-video"]
 
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
+cc = "1"
 
 [dependencies]
 tauri = { version = "=2.11.5", features = ["macos-private-api"] }

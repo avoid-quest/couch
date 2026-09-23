@@ -611,6 +611,7 @@ version = "0.1.5-preview.11"
 dependencies = [
  "base64 0.22.1",
  "bluer",
+ "cc",
  "dbus",
  "dbus-crossroads",
  "dbus-tokio",

@@ -30,9 +30,9 @@ on your local network. `couch.avoid.quest` is the project identity; the commands
 below run a local app and do not deploy a hosted service.
 
 On Mac or Windows, [connect as a browser controller](docs/desktop-controllers.md)
-or save the TV's address as a Dock or taskbar app. A native Mac app can also run
-from source in local or remote mode, but local Mac playback is not implemented.
-The Debian TV plays the media.
+or save the TV's address as a Dock or taskbar app. The native Mac app can run
+from source with local playback or connect to another Couch. The Debian TV
+remains the published playback package.
 
 ## Try it with Docker
 
@@ -151,10 +151,10 @@ Provider and format limits still apply.
 Software captures do not qualify every physical display, speaker or media source.
 
 Growing timeshift is [deferred #67](https://github.com/avoid-quest/couch/issues/67).
-CEC was closed as not planned. Native Mac/Windows playback, a full Rust port,
-DRM/account-login video, Jellyfin transcoding, crossfade and multiroom are not
-delivered. Live TMDB matching needs authorized access; HDR and refresh switching
-have no completed hardware qualification. The
+CEC was closed as not planned. Installed Mac playback, native Windows playback,
+a full Rust port, DRM/account-login video, Jellyfin transcoding, crossfade and
+multiroom are not delivered. Live TMDB matching needs authorized access; HDR
+and refresh switching have no completed hardware qualification. The
 [appliance map](https://github.com/avoid-quest/couch/issues/1) and
 [media map](https://github.com/avoid-quest/couch/issues/25) retain the broader scope.
 

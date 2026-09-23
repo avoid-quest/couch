@@ -3,6 +3,7 @@ import { createNativeAppImageUpdates } from "./server/appimage-update-native";
 import { createNativeDebUpdates } from "./server/deb-update-native";
 import { createNativeBluetooth } from "./server/bluetooth-native";
 import { createNativeDisplay } from "./server/display-native";
+import { createNativeSound } from "./server/sound-native";
 import { Database } from "bun:sqlite";
 type MaintenanceBuild = { version: string; revision: string; dataFormat: number };
 import { createNativeReadiness } from "./server/readiness-native";
@@ -44,6 +45,7 @@ const previewProxyLan = native && process.env.COUCH_PREVIEW_PROXY_LAN === "1";
 const debUpdates = createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }));
 const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
+const nativeSound = createNativeSound(native && process.platform === "darwin" ? (requestId, action) => send({ type: "sound", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
@@ -62,6 +64,7 @@ hub = createHub({
   ...(tauriUpdates || deb ? { restart: (tauriUpdates ? appimageUpdates : debUpdates).restart } : {}),
   ...(tauriUpdates || deb ? { updateFeed: (tauriUpdates ? appimageUpdates : debUpdates).feed } : {}),
   nativeDisplay: nativeDisplay.request,
+  ...(native && process.platform === "darwin" ? { nativeSound: nativeSound.request } : {}),
   ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
   ...(tauriUpdates || deb ? {
     admitted: () => admission,
@@ -107,6 +110,7 @@ async function close() {
   closing = true;
   nativeDiagnostics.close();
   nativeDisplay.close();
+  nativeSound.close();
   nativeBluetooth.close();
   appimageUpdates.close();
   debUpdates.close();
@@ -169,6 +173,7 @@ if (native) {
         else if (message.type === "debUpdate") debUpdates.receive(message);
         else if (message.type === "bluetooth") nativeBluetooth.receive(message);
         else if (message.type === "display") nativeDisplay.receive(message);
+        else if (message.type === "sound") nativeSound.receive(message);
         else if (message.type === "diagnostics") nativeDiagnostics.receive(message.requestId, message.report);
         else if (message.type === "shutdown") await close();
       }

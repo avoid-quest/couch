@@ -26,7 +26,7 @@ function updateSound(previous: SoundView | null, next: SoundState): SoundView {
   return { ...next, choices };
 }
 
-export function SoundSettings({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
+export function SoundSettings({ credentials, connected, hostName }: { credentials: ApiCredentials; connected: boolean; hostName: string }) {
   const queryClient = useQueryClient();
   const queryKey = ["sound", credentials.origin, credentials.token];
   const sound = useQuery({
@@ -40,7 +40,7 @@ export function SoundSettings({ credentials, connected }: { credentials: ApiCred
   const [state, setState] = useState<SoundView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const readError = sound.error instanceof Error ? sound.error.message : sound.error ? "Cannot read the TV outputs." : null;
+  const readError = sound.error instanceof Error ? sound.error.message : sound.error ? `Cannot read ${hostName}'s outputs.` : null;
 
   useEffect(() => {
     setState(null); setError(null); setPending(false);
@@ -62,7 +62,7 @@ export function SoundSettings({ credentials, connected }: { credentials: ApiCred
       await queryClient.invalidateQueries({ queryKey });
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not change the TV sound.");
+      setError(reason instanceof Error ? reason.message : `Could not change sound on ${hostName}.`);
       return false;
     } finally { setPending(false); }
   }
@@ -72,15 +72,15 @@ export function SoundSettings({ credentials, connected }: { credentials: ApiCred
   const selectedOutput = state?.outputs.find(output => output.id === selected);
   const observedOutput = state?.outputs.find(output => output.id === state.routing?.observedOutput);
   const unavailableSelected = selected && !selectedChoice;
-  return <section className="space-y-4" aria-label="TV sound">
+  return <section className="space-y-4" aria-label={`Sound on ${hostName}`}>
     <div className="space-y-1">
       <h3 className="font-medium">Sound output</h3>
-      <p className="text-sm text-muted-foreground">Choose where the TV plays sound. Volume and mute beside playback control this output.</p>
+      <p className="text-sm text-muted-foreground">Choose where {hostName} plays sound. Volume and mute beside playback control this output.</p>
     </div>
-    {(error || readError) && <div className="space-y-2"><p role="alert">{error || readError}</p><Button variant="outline" disabled={!connected || pending} onClick={() => void queryClient.invalidateQueries({ queryKey })}>Refresh outputs</Button></div>}
+    {(error || readError) && <div className="space-y-2"><p role="alert">{hostName}: {error || readError}</p><Button variant="outline" disabled={!connected || pending} onClick={() => void queryClient.invalidateQueries({ queryKey })}>Refresh outputs</Button></div>}
     {!connected && <p>Reconnect to choose a sound output.</p>}
     {connected && !state && !readError && <p role="status">Loading sound outputs…</p>}
-    {state?.routing?.error && <p role="status">{state.routing.error}</p>}
+    {state?.routing?.error && <p role="status">{hostName}: {state.routing.error}</p>}
     <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state?.routing || !state.choices.length} onValueChange={key => {
       const choice = state?.choices.find(choice => choice.key === key);
       if (choice) void ("output" in choice ? change("output", { output: choice.output.id }) : change("profile", { profile: { card: choice.profile.card, profile: choice.profile.id } }));
@@ -92,14 +92,17 @@ export function SoundSettings({ credentials, connected }: { credentials: ApiCred
     </Select>
     {unavailableSelected && <p className="text-sm text-muted-foreground">Selected output unavailable. Reconnect it or choose another output.</p>}
     {observedOutput && <p className="text-sm text-muted-foreground">Playing on {observedOutput.name}{observedOutput.muted ? " · Muted" : observedOutput.volume !== null ? ` · Volume ${observedOutput.volume}%` : ""}</p>}
+    {selectedOutput?.volumeWritable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} has no writable output volume. Check in System Settings on {hostName}.</p>}
+    {selectedOutput?.muteWritable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} has no writable output mute. Check in System Settings on {hostName}.</p>}
+    {selectedOutput?.configurationAvailable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} exposes no selectable output-only data source to Couch. Check in System Settings on {hostName} for other hardware settings.</p>}
     {state && !state.choices.length && <p>No available sound outputs found.</p>}
     <p className="text-sm text-muted-foreground">Pair a speaker in Bluetooth to add it here.</p>
     <details className="rounded-lg border p-4">
       <summary tabIndex={0} className="min-h-11 cursor-pointer content-center rounded-md font-medium focus-visible:outline-2 focus-visible:outline-ring">Sound test and audio delay</summary>
       <div className="space-y-4 pt-3">
-        {state?.audioDelay !== undefined && <DelayControl id="sound-audio-delay" label="TV audio delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />}
+        {state?.audioDelay !== undefined && <DelayControl id="sound-audio-delay" label="Audio delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />}
         <p className="text-sm text-muted-foreground">Play a three-second left/right tone on an output. This does not select it for playback or change its volume.</p>
-        {state && !state.canTest && !active && <p>Stop playback before testing sound.</p>}
+        {state && !state.canTest && !active && <p>{state.testUnavailableReason || "Stop playback before testing sound."}</p>}
         {state?.test && <div role="status" className="space-y-2"><p>{state.test.status === "starting" ? "Starting test; routing has not been confirmed." : state.test.status === "playing" ? "Playing the test tone. Check that you can hear it." : state.test.message}</p>{active && <Button disabled={!connected || pending} onClick={() => change("stop", { testId: state.test!.id })}>Stop sound test</Button>}</div>}
         <div className="flex flex-wrap gap-2">{state?.outputs.map(output => <Button key={output.id} variant="outline" disabled={!connected || pending || !state.canTest || !!active || !!output.testBlocked || output.availability === "unavailable" || output.muted} onClick={() => change("test", { output: output.id })}>Test {output.name}</Button>)}</div>
       </div>

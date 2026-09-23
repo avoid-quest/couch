@@ -1,4 +1,10 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        cc::Build::new().file("src/sound.m").flag("-fobjc-arc").compile("couch_sound");
+        println!("cargo:rustc-link-lib=framework=CoreAudio");
+        println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rerun-if-changed=src/sound.m");
+    }
     println!("cargo:rerun-if-changed=build-info.json");
     if let Ok(identity) = std::fs::read_to_string("build-info.json") {
         println!("cargo:rustc-env=COUCH_BUILD_INFO={}", identity.trim());
