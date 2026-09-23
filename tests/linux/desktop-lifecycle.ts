@@ -234,9 +234,16 @@ try {
     await typeByLabel(native.session, "Pairing code", pairingCode);
     await click(native.session, '//button[normalize-space(.)="Connect"]');
     await until("paired desktop client connects to the selected host", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
-    await until("first paired desktop remote is the selected host administrator", () => role(native.session, '//a[@aria-label="Device: Native restart remote" and contains(@title,"Administrator")]'));
     const paired = await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }) as string;
     assert.ok(paired, "native pairing is stored for the selected origin");
+    const selectedToken = (JSON.parse(paired) as { token: string }).token;
+    const selectedIdentity = async () => {
+      const response = await fetch(`${selectedHost}/api/controllers/me`, { headers: { Origin: selectedHost, Authorization: `Bearer ${selectedToken}` } });
+      assert.equal(response.status, 200, "the saved pairing belongs to the selected host");
+      return response.json() as Promise<{ authority: string; controller: { name: string } | null }>;
+    };
+    assert.equal((await selectedIdentity()).authority, "administrator", "first paired desktop remote is the selected host administrator");
+    assert.equal((await selectedIdentity()).controller?.name, "Native restart remote", "selected host retains the paired device name");
     remoteHost.kill();
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"selected Couch is offline")]'), 30_000);
@@ -278,8 +285,10 @@ try {
     await closeDriver(native);
     native = await open("0", selected);
     await until("full relaunch retains the selected playback address", () => role(native.session, '//button[normalize-space(.)="Play on: http://127.0.0.1:4201"]'), 30_000);
-    await until("full relaunch restores the paired administrator and its name", () => role(native.session, '//a[@aria-label="Device: Native restart remote" and contains(@title,"Administrator")]'), 30_000);
     assert.equal(await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }), paired, "native pairing data survives full app restart");
+    const restoredIdentity = await selectedIdentity();
+    assert.equal(restoredIdentity.authority, "administrator", "selected host authority survives app restart");
+    assert.equal(restoredIdentity.controller?.name, "Native restart remote", "selected host device name survives app restart");
     await click(native.session, '//nav[@aria-label="Main navigation"]//a[@aria-label="Settings"]');
     await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
     await until("restarted administrator sees selected-host update target", () => role(native.session, '//label[normalize-space(.)="Release channel for selected host"]'));
