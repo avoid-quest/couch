@@ -53,6 +53,7 @@ objc2-io-bluetooth = { version = "=0.3.2", features = ["Bluetooth", "IOBluetooth
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri-plugin-video = { path = "vendor/tauri-plugin-video", default-features = false, features = ["mpv-runtime"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri = { version = "=2.11.5", features = ["tray-icon"] }

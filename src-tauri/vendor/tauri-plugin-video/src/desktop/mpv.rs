@@ -1,11 +1,10 @@
 use std::{
     collections::BTreeMap,
-    ffi::c_void,
     mem::ManuallyDrop,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, SyncSender, TrySendError},
-        Arc, Weak,
+        Arc, Mutex, Weak,
     },
     time::Duration,
 };
@@ -14,7 +13,7 @@ use libmpv2::{
     events::{mpv_event_id, Event},
     mpv_end_file_reason, Mpv,
 };
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 use crate::{
     Error, MpvChapter, MpvPlaybackState, NativeControlRequest, NativeLayoutRequest,
@@ -22,11 +21,19 @@ use crate::{
     NativeSessionRequest, NativeSubtitle, NativeTrackInfo, Result, TrackKind,
 };
 
-unsafe extern "C" {
-    fn couch_video_create(webview: *mut c_void, mpv: *mut c_void) -> *mut c_void;
-    fn couch_video_layout(view: *mut c_void, x: f64, y: f64, width: f64, height: f64);
-    fn couch_video_status(view: *mut c_void, frames: *mut u64, error: *mut i32);
-    fn couch_video_destroy(view: *mut c_void);
+#[cfg(target_os = "macos")]
+#[path = "mpv/macos.rs"]
+mod surface;
+#[cfg(windows)]
+#[path = "mpv/windows.rs"]
+mod surface;
+use surface::Surface;
+
+fn audio_device(output: &str) -> String {
+    #[cfg(windows)]
+    { format!("wasapi/{output}") }
+    #[cfg(target_os = "macos")]
+    { format!("coreaudio/{output}") }
 }
 
 #[cfg(test)]
@@ -39,17 +46,18 @@ fn explicit_core_audio_device_is_a_writable_mpv_property() {
 
 type Job<R> = Box<dyn FnOnce(&mut Worker<R>) + Send>;
 
-pub struct MacVideo<R: Runtime> {
-    sender: Arc<SyncSender<Job<R>>>,
+pub struct MpvVideo<R: Runtime> {
+    sender: Mutex<Option<Arc<SyncSender<Job<R>>>>>,
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
-impl<R: Runtime> MacVideo<R> {
+impl<R: Runtime> MpvVideo<R> {
     pub fn new(app: AppHandle<R>) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<Job<R>>(32);
         let sender = Arc::new(sender);
         let wakeup = Arc::downgrade(&sender);
-        std::thread::Builder::new()
-            .name("couch-mac-mpv".into())
+        let worker = std::thread::Builder::new()
+            .name("couch-desktop-mpv".into())
             .spawn(move || {
                 let mut worker = Worker {
                     app,
@@ -61,8 +69,8 @@ impl<R: Runtime> MacVideo<R> {
                 }
                 worker.player.take();
             })
-            .expect("Cannot start the Mac playback worker");
-        Self { sender }
+            .expect("Cannot start the Desktop playback worker");
+        Self { sender: Mutex::new(Some(sender)), worker: Mutex::new(Some(worker)) }
     }
 
     fn call<T: Send + 'static>(
@@ -72,23 +80,25 @@ impl<R: Runtime> MacVideo<R> {
         let (reply, receiver) = mpsc::sync_channel(1);
         let queued = super::QueuedCall::new();
         let started = queued.clone();
-        self.sender
+        let sender = self.sender.lock().expect("mpv sender lock poisoned").clone()
+            .ok_or_else(|| Error::Pipeline("Desktop playback worker stopped".into()))?;
+        sender
             .try_send(Box::new(move |worker| {
                 if started.start() {
                     let _ = reply.send(operation(worker));
                 }
             }))
             .map_err(|error| match error {
-                TrySendError::Full(_) => Error::Pipeline("Mac playback queue is full".into()),
+                TrySendError::Full(_) => Error::Pipeline("Desktop playback queue is full".into()),
                 TrySendError::Disconnected(_) => {
-                    Error::Pipeline("Mac playback worker stopped".into())
+                    Error::Pipeline("Desktop playback worker stopped".into())
                 }
             })?;
         receiver
             .recv_timeout(Duration::from_secs(15))
             .map_err(|error| {
                 if queued.expire() {
-                    Error::Pipeline(format!("Mac playback command expired: {error}"))
+                    Error::Pipeline(format!("Desktop playback command expired: {error}"))
                 } else {
                     Error::DispatcherInFlight
                 }
@@ -112,6 +122,12 @@ impl<R: Runtime> MacVideo<R> {
     }
     pub fn close(&self, request: NativeSessionRequest) -> Result<()> {
         self.call(move |worker| worker.close(request))
+    }
+    pub fn shutdown(&self) {
+        self.sender.lock().expect("mpv sender lock poisoned").take();
+        if let Some(worker) = self.worker.lock().expect("mpv worker lock poisoned").take() {
+            if worker.join().is_err() { tracing::error!("Desktop mpv worker panicked during shutdown"); }
+        }
     }
     pub fn diagnostic_properties(
         &self,
@@ -150,9 +166,8 @@ struct Worker<R: Runtime> {
 }
 
 struct Player<R: Runtime> {
-    app: AppHandle<R>,
     mpv: ManuallyDrop<Mpv>,
-    view: usize,
+    surface: Surface<R>,
     key: String,
     playback_id: String,
     source_headers: BTreeMap<String, String>,
@@ -170,33 +185,22 @@ struct Player<R: Runtime> {
 
 impl<R: Runtime> Drop for Player<R> {
     fn drop(&mut self) {
-        // The render context owns GL resources and must be freed before mpv.
         let _ = self.mpv.command("stop", &[]);
-        let view = self.view;
-        match on_main(&self.app, move || unsafe {
-            couch_video_destroy(view as *mut c_void)
-        }) {
-            Ok(()) => unsafe { ManuallyDrop::drop(&mut self.mpv) },
-            Err(error) => {
-                // The renderer still refers to mpv. Let process exit reclaim both.
-                tracing::error!("Could not destroy Mac video view before mpv: {error}");
-            }
+        #[cfg(target_os = "macos")]
+        if let Err(error) = self.surface.destroy() {
+            // The render context still refers to mpv, so keep both until process exit.
+            tracing::error!("Could not destroy Mac video view before mpv: {error}");
+            return;
+        }
+        #[cfg(target_os = "macos")]
+        unsafe { ManuallyDrop::drop(&mut self.mpv) };
+        #[cfg(windows)]
+        unsafe { ManuallyDrop::take(&mut self.mpv) }.terminate();
+        #[cfg(windows)]
+        if let Err(error) = self.surface.destroy() {
+            tracing::error!("Could not destroy Windows video HWND after mpv: {error}");
         }
     }
-}
-
-fn on_main<R: Runtime, T: Send + 'static>(
-    app: &AppHandle<R>,
-    operation: impl FnOnce() -> T + Send + 'static,
-) -> Result<T> {
-    let (sender, receiver) = mpsc::sync_channel(1);
-    app.run_on_main_thread(move || {
-        let _ = sender.send(operation());
-    })
-    .map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))?;
-    receiver
-        .recv()
-        .map_err(|error| Error::Pipeline(format!("Mac UI dispatcher stopped: {error}")))
 }
 
 fn mpv_error(error: libmpv2::Error) -> Error {
@@ -222,7 +226,7 @@ fn validate_open(request: &NativeOpenRequest) -> Result<()> {
         .as_deref()
         .is_some_and(|backend| backend != "mpv")
     {
-        return Err(Error::InvalidRequest("Mac playback requires mpv".into()));
+        return Err(Error::InvalidRequest("Desktop playback requires mpv".into()));
     }
     Ok(())
 }
@@ -323,11 +327,13 @@ impl<R: Runtime> Worker<R> {
     fn open(&mut self, request: NativeOpenRequest) -> Result<NativePlaybackSnapshot> {
         validate_open(&request)?;
         self.player.take();
+        #[cfg(target_os = "macos")]
         if unsafe { libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr()) }.is_null() {
             return Err(Error::Pipeline("mpv requires the C numeric locale".into()));
         }
+        let mut surface = Surface::new(&self.app)?;
         let mut mpv = Mpv::with_initializer(|init| {
-            init.set_option("vo", "libmpv")?;
+            surface.configure(&init)?;
             init.set_option("hwdec", "auto-safe")?;
             init.set_option("video-timing-offset", 0.0_f64)?;
             init.set_option("keep-open", "yes")?;
@@ -368,30 +374,10 @@ impl<R: Runtime> Worker<R> {
             }
             pending.store(false, Ordering::Release);
         });
-        let window = self
-            .app
-            .get_webview_window("main")
-            .ok_or_else(|| Error::Pipeline("Main window is unavailable".into()))?;
-        let handle = mpv.ctx.as_ptr() as usize;
-        let (sender, receiver) = mpsc::sync_channel(1);
-        window
-            .with_webview(move |web| {
-                let view = unsafe { couch_video_create(web.inner(), handle as *mut c_void) };
-                let _ = sender.send(view as usize);
-            })
-            .map_err(|error| Error::Pipeline(error.to_string()))?;
-        let view = receiver
-            .recv()
-            .map_err(|error| Error::Pipeline(error.to_string()))?;
-        if view == 0 {
-            return Err(Error::Pipeline(
-                "Could not create Mac video renderer".into(),
-            ));
-        }
+        surface.attach(&mpv)?;
         let mut player = Player {
-            app: self.app.clone(),
             mpv: ManuallyDrop::new(mpv),
-            view,
+            surface,
             key: request.session_key.clone(),
             playback_id: request.session_key.clone(),
             source_headers: request.headers.clone(),
@@ -425,7 +411,7 @@ impl<R: Runtime> Worker<R> {
             .set_property("mute", request.muted)
             .map_err(mpv_error)?;
         if let Some(output) = request.audio_output.as_deref() {
-            player.mpv.set_property("audio-device", format!("coreaudio/{output}")).map_err(mpv_error)?;
+            player.mpv.set_property("audio-device", audio_device(output)).map_err(mpv_error)?;
         }
         player
             .mpv
@@ -447,9 +433,9 @@ impl<R: Runtime> Worker<R> {
         let player = self
             .player
             .as_mut()
-            .ok_or_else(|| Error::InvalidRequest("No Mac playback session".into()))?;
+            .ok_or_else(|| Error::InvalidRequest("No Desktop playback session".into()))?;
         if player.key != key {
-            return Err(Error::InvalidRequest("Stale Mac playback session".into()));
+            return Err(Error::InvalidRequest("Stale Desktop playback session".into()));
         }
         Ok(player)
     }
@@ -532,14 +518,14 @@ impl<R: Runtime> Worker<R> {
                         ],
                     ),
                     "volume" => mpv.set_property("volume", request.value * 100.0),
-                    "audioOutput" => mpv.set_property("audio-device", format!("coreaudio/{}", request.audio_output.as_deref().ok_or_else(|| Error::InvalidRequest("Audio output is missing".into()))?)),
+                    "audioOutput" => mpv.set_property("audio-device", audio_device(request.audio_output.as_deref().ok_or_else(|| Error::InvalidRequest("Audio output is missing".into()))?)),
                     "speed" => mpv.set_property("speed", request.value),
                     "audioDelay" => mpv.set_property("audio-delay", request.value),
                     "subtitleDelay" => mpv.set_property("sub-delay", request.value),
                     "subtitlesOff" => mpv.set_property("sid", "no"),
                     _ => {
                         return Err(Error::InvalidRequest(format!(
-                            "Mac player does not support {} yet",
+                            "Desktop player does not support {} yet",
                             request.action
                         )))
                     }
@@ -581,10 +567,7 @@ impl<R: Runtime> Player<R> {
     }
 
     fn layout(&mut self, x: f64, y: f64, width: f64, height: f64) -> Result<()> {
-        let view = self.view;
-        on_main(&self.app, move || unsafe {
-            couch_video_layout(view as *mut c_void, x, y, width, height)
-        })
+        self.surface.layout(x, y, width, height)
     }
 
     fn drain_events(&mut self) -> Result<()> {
@@ -638,15 +621,10 @@ impl<R: Runtime> Player<R> {
             .unwrap_or(0.0);
         let (ended, buffering, playing) = playback_status(mpv, self.loaded, self.error.is_some());
         let chapters = observed_chapters(mpv);
-        let view = self.view;
-        let (frames, render_error) = on_main(&self.app, move || {
-            let (mut frames, mut error) = (0, 0);
-            unsafe { couch_video_status(view as *mut c_void, &mut frames, &mut error) };
-            (frames, error)
-        })?;
+        let (frames, render_error) = self.surface.status(mpv)?;
         if render_error < 0 {
             self.error
-                .get_or_insert_with(|| format!("Mac video rendering failed ({render_error})"));
+                .get_or_insert_with(|| format!("Desktop video rendering failed ({render_error})"));
         }
         Ok(NativePlaybackSnapshot {
             mpv_state: Some(MpvPlaybackState {
@@ -692,7 +670,8 @@ impl<R: Runtime> Player<R> {
                 .max(0) as u64,
             measured_fps: mpv.get_property::<f64>("container-fps").unwrap_or(0.0),
             hardware_backend: format!(
-                "macos-opengl:{}:{}",
+                "{}:{}:{}",
+                self.surface.backend(),
                 mpv.get_property::<String>("hwdec-current")
                     .unwrap_or_default(),
                 mpv.get_property::<String>("current-ao").unwrap_or_default()
@@ -793,6 +772,6 @@ fn observed_chapters(mpv: &Mpv) -> Vec<MpvChapter> {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 #[path = "macos_tests.rs"]
 mod tests;

@@ -267,6 +267,13 @@ impl Drop for Mpv {
 }
 
 impl Mpv {
+    /// Wait for mpv's threads before releasing the native window it renders into.
+    pub fn terminate(mut self) {
+        if let Some(cleanup) = self.wakeup_callback_cleanup.take() { cleanup(); }
+        let owned = std::mem::ManuallyDrop::new(self);
+        unsafe { libmpv2_sys::mpv_terminate_destroy(owned.ctx.as_ptr()); }
+    }
+
     /// Create and initialize a new `Mpv` instance with default options. Use
     /// [`with_initializer`](Mpv::with_initializer) instead if you want to
     /// set options.
