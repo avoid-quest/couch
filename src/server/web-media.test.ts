@@ -188,7 +188,7 @@ test("rejects unusable extracted sources, DRM, playlists and header injection", 
 });
 
 test("classifies extractor failures without exposing private URLs or raw logs", async () => {
-  for (const [stderr, message] of [["ERROR: DRM protected", "DRM playback"], ["ERROR: Sign in required", "account or browser session"], ["ERROR: not available in your country", "player's region"], ["ERROR: channel is not live", "offline"], ["ERROR: The channel is not currently live", "offline"], ["ERROR: JavaScript challenge failed", "install Deno"], ["ERROR: network failure", "could not open"]]) {
+  for (const [stderr, message] of [["ERROR: DRM protected", "DRM playback"], ["ERROR: Sign in required", "account or browser session"], ["ERROR: not available in your country", "player's region"], ["ERROR: channel is not live", "offline"], ["ERROR: The channel is not currently live", "offline"], ["ERROR: JavaScript challenge failed", "Update Couch"], ["ERROR: network failure", "could not open"]]) {
     const { resolve } = await fixture(`console.error(${JSON.stringify(`${stderr}: https://private.example/?token=never-share`)}); process.exit(1);`);
     try { await resolve(page); throw new Error("Expected rejection"); }
     catch (error) {

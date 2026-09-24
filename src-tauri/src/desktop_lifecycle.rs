@@ -52,16 +52,19 @@ pub(crate) fn show(app: &tauri::AppHandle) {
 
 pub(crate) fn close(app: &tauri::AppHandle, api: &tauri::CloseRequestApi) {
     api.prevent_close();
-    app.state::<Host>().window_closed.store(true, Ordering::SeqCst);
-    if let Some(main) = app.get_webview_window("main") {
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
-        let result = main.hide();
-        #[cfg(target_os = "linux")]
-        let result = if linux_tray_usable(app) { main.hide() } else { main.minimize() };
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        let result = main.minimize();
-        if let Err(error) = result {
-            log::warn!("Cannot close Couch window: {error}");
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        request_quit(app);
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        app.state::<Host>().window_closed.store(true, Ordering::SeqCst);
+        if let Some(main) = app.get_webview_window("main") {
+            let result = if linux_tray_usable(app) { main.hide() } else { main.minimize() };
+            if let Err(error) = result {
+                log::warn!("Cannot close Couch window: {error}");
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import { screen, within } from "../testing";
 import type { Action, SessionState } from "../../shared/protocol";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
@@ -13,7 +14,8 @@ const state: SessionState = {
   preferences: { profile: { audioLanguage: "", subtitleLanguage: "", subtitles: "auto", speed: 1, replayGain: "off" }, device: { audioDelay: 0 } },
   player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 30, seekable: true, error: null },
 };
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(node => node.getAttribute("aria-label") === label || node.textContent?.trim() === label)!;
+const button = (label: string) => screen.queryByRole("button", { name: label }) as HTMLButtonElement;
+const footer = () => screen.queryByLabelText("Current playback");
 async function render(value = state, connected = true, active = true, command?: (action: Action) => Promise<boolean>) {
   const { SessionBar } = await import("./SessionBar");
   await act(async () => root.render(active ? <SessionBar state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected={connected} onOpen={() => browsed.push("Home")} onRemote={() => browsed.push("Remote")} run={command ?? (async action => { actions.push(action); return true; })} /> : null));
@@ -53,16 +55,16 @@ test("loading allows Stop, offline disables commands, and the final entry omits 
   for (const label of ["Pause", "Next in queue", "Stop playback"]) { expect(button(label).disabled).toBe(true); await act(async () => button(label).click()); }
   expect(actions).toEqual([]);
   await render({ ...state, queue: [state.queue[1]!] });
-  expect(button("Next in queue")).toBeUndefined();
+  expect(button("Next in queue")).toBeNull();
 });
 test("live streams expose Stop and Next without false pause or seek controls", async () => {
   await render({ ...state, queue: [{ ...state.queue[1]!, live: true, kind: "radio" }, state.queue[2]!], player: { ...state.player, seekable: false } });
-  expect(button("Pause")).toBeUndefined();
-  expect(button("Resume")).toBeUndefined();
+  expect(button("Pause")).toBeNull();
+  expect(button("Resume")).toBeNull();
   await act(async () => button("Next in queue").click());
   await act(async () => button("Stop playback").click());
   expect(actions).toEqual([{ type: "next", playbackId: "playback" }, { type: "stop" }]);
-  expect(document.querySelector('[aria-label^="Seek"]')).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Seek/ })).toBeNull();
 });
 
 test("seekable live playback preserves observed pause and seek capabilities", async () => {
@@ -70,15 +72,15 @@ test("seekable live playback preserves observed pause and seek capabilities", as
   await act(async () => button("Resume").click());
   await act(async () => button("Seek backward 10 seconds").click());
   expect(actions).toEqual([{ type: "pause", playbackId: "playback", paused: false }, { type: "seek", playbackId: "playback", position: 2 }]);
-  expect(document.querySelector('[role="slider"][aria-label="Playback position"]')).not.toBeNull();
+  expect(screen.getByRole("slider", { name: "Playback position" })).not.toBeNull();
 });
 
 test("idle and ended playback hide the footer", async () => {
   await render({ ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" } });
-  expect(document.querySelector("footer")).toBeNull();
+  expect(footer()).toBeNull();
   for (const status of ["idle", "ended"] as const) {
     await render({ ...state, player: { ...state.player, status } });
-    expect(document.querySelector("footer")).toBeNull();
+    expect(footer()).toBeNull();
   }
 });
 
@@ -87,12 +89,12 @@ test("bar uses current provider programme artwork and identifies its playback co
   await render(radio);
   expect(button("Open Now playing: current").textContent).toContain("Live · Living room");
   expect(button("Open Now playing: current").textContent).toContain("Late afternoon");
-  expect(document.querySelector(".session-bar-art img")?.getAttribute("src")).toBe("https://art.example/programme.jpg");
+  expect(within(button("Open Now playing: current")).getByRole("presentation", { hidden: true }).getAttribute("src")).toBe("https://art.example/programme.jpg");
   await render({ ...radio, radioProgramme: { ...radio.radioProgramme!, playbackId: "previous" } });
-  expect(document.querySelector("footer")?.textContent).not.toContain("Late afternoon");
+  expect(footer()?.textContent).not.toContain("Late afternoon");
   await render(radio, false);
-  expect(document.querySelector("footer")?.textContent).toContain("Reconnecting · Living room");
-  expect(document.querySelector("footer")?.textContent).not.toContain("Late afternoon");
+  expect(footer()?.textContent).toContain("Reconnecting · Living room");
+  expect(footer()?.textContent).not.toContain("Late afternoon");
 });
 
 test("Next disappearing restores an available transport and loading falls back to Stop", async () => {
@@ -109,8 +111,8 @@ test("removing the focused footer returns to the active page without navigating 
   nav.className = "primary-nav";
   nav.innerHTML = '<a href="/search?q=album" aria-current="page">Search</a><a href="/saved">Saved</a>';
   document.body.append(nav);
-  const search = nav.querySelector<HTMLAnchorElement>("a")!;
-  const saved = nav.querySelector<HTMLAnchorElement>('a[href="/saved"]')!;
+  const search = within(nav).getByRole("link", { name: "Search" });
+  const saved = within(nav).getByRole("link", { name: "Saved" });
   const frame = () => act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
   for (const removeComponent of [false, true]) {
     await render();
@@ -140,9 +142,9 @@ test("removing the focused footer returns to the active page without navigating 
 test("footer volume uses the observed output and keeps keyboard edits through live updates", async () => {
   const systemAudio = { selectedOutput: "hdmi", observedOutput: "hdmi", volume: 30, muted: false, error: null };
   await render({ ...state, systemAudio });
-  await act(async () => button("Mute TV").click());
+  await act(async () => button("Mute Playback host").click());
   expect(actions).toEqual([{ type: "mute", muted: true }]);
-  const slider = document.querySelector<HTMLElement>('[role="slider"][aria-label="Volume"]')!;
+  const slider = screen.getByRole("slider", { name: "Volume" });
   slider.focus();
   await act(async () => slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
   expect(actions.at(-1)).toEqual({ type: "volume", volume: 31 });
@@ -152,14 +154,14 @@ test("footer volume uses the observed output and keeps keyboard edits through li
   await act(async () => button("Pause").focus());
   expect(slider.getAttribute("aria-valuenow")).toBe("30");
   await render({ ...state, systemAudio: { ...systemAudio, muted: true } });
-  await act(async () => button("Unmute TV").click());
+  await act(async () => button("Unmute Playback host").click());
   expect(actions.at(-1)).toEqual({ type: "mute", muted: false });
   await render({ ...state, systemAudio: { ...systemAudio, volume: null } });
-  expect(button("Mute TV").disabled).toBe(true);
-  expect(document.querySelector('.session-bar-volume [data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(true);
+  expect(button("Mute Playback host").disabled).toBe(true);
+  expect(screen.getByRole("slider", { name: "Volume" }).hasAttribute("data-disabled")).toBe(true);
   await render(state);
-  expect(button("Mute TV")).toBeUndefined();
-  expect(document.querySelector('.session-bar-volume [data-slot="slider"]')?.hasAttribute("data-disabled")).toBe(false);
+  expect(button("Mute Playback host")).toBeNull();
+  expect(screen.getByRole("slider", { name: "Volume" }).hasAttribute("data-disabled")).toBe(false);
 });
 
 test("footer seek clamps to the item and current quality is available in its gear", async () => {
@@ -171,13 +173,13 @@ test("footer seek clamps to the item and current quality is available in its gea
   await render({ ...state, queue: [{ ...state.queue[1]!, source: "web:https://www.youtube.com/watch?v=abc", quality: "auto" }], player: { ...state.player, tracks: [{ id: "1", index: 0, kind: "video", label: "Video", language: "", selected: true }] } });
   await act(async () => button("Playback settings").click());
   await act(async () => {});
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Quality");
+  expect(screen.getByRole("dialog").textContent).toContain("Quality");
 });
 
 test("footer timeline shows current time and preserves a focused seek through live observations", async () => {
   await render();
-  const position = document.querySelector<HTMLElement>('[role="slider"][aria-label="Playback position"]')!;
-  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:121:40");
+  const position = screen.getByRole("slider", { name: "Playback position" });
+  expect(footer()?.textContent).toContain("0:121:40");
   position.focus();
   await act(async () => position.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
   expect(actions.at(-1)).toEqual({ type: "seek", playbackId: "playback", position: 13 });
@@ -186,12 +188,12 @@ test("footer timeline shows current time and preserves a focused seek through li
   expect(position.getAttribute("aria-valuenow")).toBe("13");
   await act(async () => button("Pause").focus());
   expect(position.getAttribute("aria-valuenow")).toBe("14");
-  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:141:40");
+  expect(footer()?.textContent).toContain("0:141:40");
   await render({ ...state, queue: [{ ...state.queue[1]!, live: true }], player: { ...state.player, seekable: false } });
-  expect(document.querySelector('.playback-timeline')).toBeNull();
+  expect(screen.queryByRole("slider", { name: "Playback position" })).toBeNull();
   await render({ ...state, player: { ...state.player, duration: null } });
-  expect(document.querySelector('.playback-timeline [role="slider"]')).toBeNull();
-  expect(document.querySelector('.playback-timeline .time-labels')?.textContent).toBe("0:12");
+  expect(screen.queryByRole("slider", { name: "Playback position" })).toBeNull();
+  expect(footer()?.textContent).toContain("0:12");
 });
 
 test("footer focus recovery leaves portaled playback settings in control during quality reload", async () => {
@@ -199,10 +201,10 @@ test("footer focus recovery leaves portaled playback settings in control during 
   await render(video);
   await act(async () => button("Playback settings").click());
   await act(async () => {});
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-  const quality = document.querySelector<HTMLButtonElement>("#playback-quality")!;
+  const dialog = screen.getByRole("dialog");
+  const quality = within(dialog).getByRole("combobox", { name: "Quality" }) as HTMLButtonElement;
   await act(async () => quality.focus());
-  expect(document.querySelector("footer")?.contains(quality)).toBe(false);
+  expect(footer()?.contains(quality)).toBe(false);
   await render({ ...video, player: { ...video.player, playbackId: "replacement", status: "loading", seekable: false, tracks: [] } });
   expect(quality.disabled).toBe(true);
   expect(dialog.contains(document.activeElement)).toBe(true);
@@ -213,7 +215,7 @@ test("footer focus recovery leaves portaled playback settings in control during 
   await render(video, true, true, command);
   quality.getClientRects = () => [{ width: 200, height: 44 }] as unknown as DOMRectList;
   await act(async () => quality.click());
-  await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === "Up to 720p")!.click());
+  await act(async () => screen.getByRole("option", { name: "Up to 720p" }).click());
   const loading: SessionState = { ...video, player: { ...video.player, playbackId: "replacement", status: "loading", seekable: false, tracks: [] } };
   await render(loading, true, true, command);
   await act(async () => resolve(true));
@@ -232,7 +234,7 @@ test("footer focus recovery leaves portaled playback settings in control during 
 
 test("failed playback retains a visible route to playback recovery", async () => {
   await render({ ...state, player: { ...state.player, status: "error", error: "The radio could not reconnect." } });
-  expect(document.querySelector("footer")?.textContent).toContain("Playback error");
+  expect(footer()?.textContent).toContain("Playback error");
   await act(async () => button("Open Now playing: current").click());
   expect(browsed).toEqual(["Home"]);
 });

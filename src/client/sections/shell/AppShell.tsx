@@ -216,7 +216,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const player = state?.player;
   const pairingRef = useRef<HTMLButtonElement>(null);
   const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
-  const videoStage = localHost && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
+  const videoStage = localHost && active && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
     subtitle={programme ? `Programme: ${programme.title}` : undefined}
     artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />;
 

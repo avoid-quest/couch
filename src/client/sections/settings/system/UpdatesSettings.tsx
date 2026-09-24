@@ -142,7 +142,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
     {state?.installationUnavailable && <p>{state.installationUnavailable}</p>}
     {state && !state.installationUnavailable && !state.installation?.enabled && <Card className="min-w-0 gap-2 p-4 text-sm">
       <p className="font-medium">In-app installation is not enabled on this installation.</p>
-      <p className="text-muted-foreground">{ownApp ? appRecovery : "From the administrator's SSH account, follow the supported AppImage installation procedure, then reopen this page after Couch reconnects."}</p>
+      <p className="text-muted-foreground">{ownApp ? appRecovery : "Ask the playback host's administrator to install a verified compatible Couch package, then reopen this page after Couch reconnects."}</p>
     </Card>}
     {state?.installation?.enabled && state.installation.repairAvailable && state.installation.current && !retry && !installing && <Card className="min-w-0 gap-3 p-4 text-sm">
       <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>

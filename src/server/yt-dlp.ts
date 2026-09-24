@@ -48,7 +48,7 @@ function extractionError(stderr: string): Error {
   if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This media is unavailable in the player's region.");
   if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
-  if (/JavaScript|JS runtime|challenge|EJS/i.test(stderr)) return new Error("This website needs a supported JavaScript runtime. Update yt-dlp and install Deno on the player.");
+  if (/JavaScript|JS runtime|challenge|EJS/i.test(stderr)) return new Error("This website needs a supported JavaScript runtime. Update Couch on the playback computer.");
   return new Error("yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported.");
 }
 
@@ -74,7 +74,7 @@ async function extract(command: string, args: string[], signal: AbortSignal): Pr
 export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
   const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : Bun.which("yt-dlp"));
-  if (!command) throw new Error("The bundled extractor is unavailable. Reinstall a verified Couch AppImage.");
+  if (!command) throw new Error("The bundled extractor is unavailable. Reinstall a verified Couch package for this computer.");
   if (command.includes("/") && !await Bun.file(command).exists()) throw new Error("yt-dlp could not be started. Check its installation on the player.");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;

@@ -16,9 +16,17 @@ const systemDlls = new Set([
   "advapi32.dll", "api-ms-win-core-synch-l1-2-0.dll", "api-ms-win-crt-convert-l1-1-0.dll",
   "api-ms-win-crt-heap-l1-1-0.dll", "api-ms-win-crt-locale-l1-1-0.dll", "api-ms-win-crt-math-l1-1-0.dll",
   "api-ms-win-crt-runtime-l1-1-0.dll", "api-ms-win-crt-stdio-l1-1-0.dll", "api-ms-win-crt-string-l1-1-0.dll",
-  "bcrypt.dll", "bcryptprimitives.dll", "comctl32.dll", "crypt32.dll", "dbghelp.dll", "dwmapi.dll",
-  "gdi32.dll", "iphlpapi.dll", "kernel32.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll",
-  "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "wsock32.dll",
+  "api-ms-win-core-path-l1-1-0.dll", "api-ms-win-core-winrt-error-l1-1-1.dll", "api-ms-win-core-winrt-l1-1-0.dll",
+  "api-ms-win-crt-environment-l1-1-0.dll", "api-ms-win-crt-filesystem-l1-1-0.dll", "api-ms-win-crt-multibyte-l1-1-0.dll",
+  "api-ms-win-crt-private-l1-1-0.dll", "api-ms-win-crt-time-l1-1-0.dll", "api-ms-win-crt-utility-l1-1-0.dll",
+  "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "combase.dll", "comctl32.dll",
+  "crypt32.dll", "d2d1.dll", "dbghelp.dll", "dwmapi.dll", "dwrite.dll", "gdi32.dll", "imm32.dll",
+  "iphlpapi.dll", "kernel32.dll", "msvcrt.dll", "ncrypt.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
+  "oleaut32.dll", "opengl32.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
+  "shcore.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "uxtheme.dll",
+  "version.dll", "winmm.dll", "wldap32.dll", "ws2_32.dll", "wsock32.dll",
+  // The qualified target's graphics driver supplies this loader; libmpv imports it even with D3D11 selected.
+  "vulkan-1.dll",
 ]);
 
 function run(command: string[], env = process.env) {
@@ -31,7 +39,7 @@ function peImports(path: string) {
   const output = run(["llvm-readobj", "--coff-imports", path]).toString();
   const names = [...output.matchAll(/^  Name: (.+)$/gm)].map(match => match[1]!.toLowerCase());
   assert.ok(names.length, `No PE imports found: ${path}`);
-  for (const name of names) assert.match(name, /^[a-z0-9_.-]+\.dll$/, `Invalid PE import: ${name}`);
+  for (const name of names) assert.match(name, /^[a-z0-9_.+-]+\.dll$/, `Invalid PE import: ${name}`);
   return [...new Set(names)].sort();
 }
 
@@ -57,7 +65,7 @@ assert.deepEqual(await binaryArchitectures(installer), ["i686"], "NSIS uses its 
 const releaseSource = "src-tauri/resources/release.json";
 const release = await Bun.file(releaseSource).json();
 const build = await Bun.file("src-tauri/build-info.json").json();
-assert.equal(build.clientOnly, true);
+assert.equal(build.clientOnly, false);
 assert.equal(release.version, tauri.version);
 assert.equal(release.revision, build.revision);
 assert.equal(release.revision, run(["git", "rev-parse", "HEAD"]).toString().trim());
@@ -69,16 +77,17 @@ assert.equal(release.schemaVersion, 1);
 assert.equal(release.dataFormat, 1);
 assert.deepEqual(release.readableDataFormats, [1]);
 assert.equal(release.packaged, true);
-assert.equal(release.clientOnly, true);
+assert.equal(release.clientOnly, false);
 assert.deepEqual(release.host, { target, os: "windows", architecture: "x64", packages: [] });
-assert.equal(release.helpers, null);
+assert.deepEqual(Object.keys(release.helpers).sort(), ["deno", "ffprobe", "yt-dlp"]);
 
 // Tauri's compatible ZIP carries the installer. Add Couch's signed manifest so
 // the desktop updater can check target and data format before replacement.
 await rm(archive);
 run(["zip", "-q", "-j", archive, installer, releaseSource]);
 const privateKey = process.env.TAURI_SIGNING_PRIVATE_KEY ?? "";
-run([process.execPath, Bun.resolveSync("@tauri-apps/cli/tauri.js", import.meta.dir), "signer", "sign", archive], { ...process.env, TAURI_SIGNING_PRIVATE_KEY: existsSync(privateKey) ? await Bun.file(privateKey).text() : privateKey });
+const signingEnv = { ...process.env, TAURI_SIGNING_PRIVATE_KEY: existsSync(privateKey) ? await Bun.file(privateKey).text() : privateKey };
+for (const file of [installer, archive]) run([process.execPath, Bun.resolveSync("@tauri-apps/cli/tauri.js", import.meta.dir), "signer", "sign", file], signingEnv);
 
 const scratch = await mkdtemp(join(tmpdir(), "couch-nsis-"));
 try {
@@ -110,12 +119,15 @@ try {
   // NSIS extracts its own plugins only while installing; they are not app DLLs.
   const bundledDlls = files.filter(file => file.toLowerCase().endsWith(".dll") && !file.startsWith("$PLUGINSDIR/"));
   for (const file of bundledDlls) assert.ok(!systemDlls.has(basename(file).toLowerCase()), `Bundled DLL shadows Windows: ${file}`);
-  const availableDlls = new Set([...systemDlls, ...bundledDlls.filter(file => !file.includes("/")).map(file => file.toLowerCase())]);
-  const imports = Object.fromEntries<string[]>(["couch.exe", "couch-server.exe", ...bundledDlls].map(file => [file, peImports(join(installed, file))]));
-  for (const [file, names] of Object.entries(imports)) assert.deepEqual(names.filter(name => !availableDlls.has(name)), [], `Unresolved PE imports in ${file}`);
+  const imports = Object.fromEntries<string[]>(["couch.exe", "couch-server.exe", "tools/yt-dlp.exe", "tools/deno.exe", "tools/ffprobe.exe", ...bundledDlls].map(file => [file, peImports(join(installed, file))]));
+  for (const [file, names] of Object.entries(imports)) {
+    const folder = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
+    const available = new Set([...systemDlls, ...bundledDlls.filter(dll => dll.startsWith(folder) && !dll.slice(folder.length).includes("/")).map(dll => basename(dll).toLowerCase())]);
+    assert.deepEqual(names.filter(name => !available.has(name)), [], `Unresolved PE imports in ${file}`);
+  }
   const appBytes = Buffer.from(await Bun.file(join(installed, "couch.exe")).arrayBuffer());
   assert.ok(appBytes.includes(Buffer.from(tauri.identifier)), "Bundled app identifier changed");
-  assert.ok(appBytes.includes(Buffer.from('"clientOnly":true')), "Native app must embed the Client-only build identity");
+  assert.ok(appBytes.includes(Buffer.from('"clientOnly":false')), "Native app must embed the Full build identity");
   for (const file of ["couch.exe", "couch-server.exe"]) assert.ok(Buffer.from(await Bun.file(join(installed, file)).arrayBuffer()).includes(Buffer.from(release.revision)), `Bundled ${file} build revision changed`);
   assert.ok(!files.some(file => /(^|\/)(\.git|\.env(?:\..*)?|Cookies|Login Data|History)$|\.(sqlite3?|db|map)$/.test(file)), "Private runtime material in installer");
   const installedRelease = await Bun.file(join(installed, "release.json")).json();
@@ -123,7 +135,7 @@ try {
   const inventory = await Bun.file(join(installed, "payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
   const payload = JSON.parse(inventory);
-  await verifyPayload(installed, payload, target, "nsis", []);
+  await verifyPayload(installed, payload, target, "nsis");
   verifyBundledNativeLibraries(payload, files.filter(file => !file.startsWith("$PLUGINSDIR/")));
   await Bun.write(".artifacts/windows-inventory.json", JSON.stringify({ revision: release.revision, version: release.version, clientOnly: release.clientOnly, identifier: tauri.identifier, target, installMode: config.bundle.windows.nsis.installMode, webviewInstallMode: config.bundle.windows.webviewInstallMode.type, feed: config.plugins.updater.endpoints[0], installer: { name: basename(installer), bytes: (await stat(installer)).size, sha256: await hash(installer) }, update: { name: basename(archive), bytes: (await stat(archive)).size, sha256: await hash(archive) }, imports, files: files.sort() }, null, 2) + "\n");
   console.log(`Verified ${installer}: ${files.length} files, x64 identity, payload and signed update`);

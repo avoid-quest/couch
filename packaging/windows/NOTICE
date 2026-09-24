@@ -1,7 +1,7 @@
 Couch is distributed privately by avoid-quest. This installer does not grant a
 new license to Couch's application source. Third-party components retain their
-own licenses in this directory. The installer contains the Client-only app and
-its Bun coordinator; it does not contain local playback or media helpers.
+own licenses in this directory. The installer contains the Full app, native
+libmpv playback, its Bun coordinator and media helpers.
 
 Bun's upstream license, component list and relinking instructions are in
 bun-LICENSE.md. The coordinator embeds Bun 1.4.2. Its corresponding source is
@@ -10,3 +10,7 @@ https://github.com/oven-sh/bun/tree/bun-v1.4.2 .
 javascript.json and native.txt list the packaged JavaScript and Rust dependency
 licenses. The installer uses the Windows WebView2 runtime provided or installed
 by Microsoft rather than bundling a fixed runtime.
+
+windows-native.json records the pinned LGPL libmpv build and ffprobe source,
+hashes and runtime DLLs. windows-native/ contains their bundled license and
+source notices. yt-dlp and Deno notices are alongside this file.

@@ -66,7 +66,7 @@ export function PlaybackTransport({ state, credentials, connected, run, compact 
 
 export function PlaybackVolume({ state, connected, run }: Props) {
   const { available, audioReady } = playbackCapabilities(state, connected);
-  const target = state.systemAudio?.platform === "mac" ? state.installationName || "Mac" : "TV";
+  const target = state.installationName || "Playback host";
   return <div className="volume-control" role="group" aria-label={`${target} volume`}>
     {state.systemAudio ? <Button variant="ghost" size="icon" className="icon-button" aria-label={`${state.systemAudio.muted ? "Unmute" : "Mute"} ${target}`} title={`${state.systemAudio.muted ? "Unmute" : "Mute"} ${target}`} disabled={!available || !audioReady || state.systemAudio.muteWritable === false} onClick={() => void run({ type: "mute", muted: !state.systemAudio!.muted })}>{state.systemAudio.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</Button> : <Volume2 aria-hidden="true" />}
     <RangeControl label="Volume" value={state.player.volume} max={100} disabled={!available || !audioReady || state.systemAudio?.volumeWritable === false} onCommit={volume => run({ type: "volume", volume })} />

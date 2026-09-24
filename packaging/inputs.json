@@ -23,6 +23,24 @@
       "sha256": "213a2f304f04d3c9cb5220669afad138f60a5aab1fe80962abdeb8f35807a472"
     }
   },
+  "windowsTools": {
+    "mpv": {
+      "url": "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-09-22-c646756799/mpv-dev-lgpl-x86_64-20260922-git-c646756799.7z",
+      "sha256": "55d86bb42c981e48188b7239b17928ae4b7cebe7f5a571a5c28d7903488f922c"
+    },
+    "yt-dlp": {
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+      "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"
+    },
+    "deno": {
+      "url": "https://github.com/denoland/deno/releases/download/v2.9.6/deno-x86_64-pc-windows-msvc.zip",
+      "sha256": "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11"
+    },
+    "ffprobe": {
+      "url": "https://github.com/serversideup/ffmpeg-lgpl-builds/releases/download/v8.1.2-27/ffmpeg-8.1.2-x86_64-pc-windows-msvc.tar.gz",
+      "sha256": "fb2de01912edb449a5eba1cc487696c7f71ebb7b325e5c5c69434642ec2ba6b0"
+    }
+  },
   "notices": [
     {
       "name": "bun-LICENSE.md",

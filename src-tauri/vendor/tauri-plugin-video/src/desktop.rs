@@ -648,9 +648,13 @@ mod linux_surface {
             let gtk_window = window
                 .gtk_window()
                 .map_err(|error| Error::Pipeline(error.to_string()))?;
+            let (red, green, blue): (u8, u8, u8) = app.config().app.windows[0]
+                .background_color
+                .ok_or_else(|| Error::Pipeline("Couch window has no background color".into()))?
+                .into();
             let background_style = gtk::CssProvider::new();
             background_style
-                .load_from_data(b".tauri-video-window { background-color: #000; }")
+                .load_from_data(format!(".tauri-video-window {{ background-color: #{red:02x}{green:02x}{blue:02x}; }}").as_bytes())
                 .map_err(|error| Error::Pipeline(error.to_string()))?;
             let context = gtk_window.style_context();
             context.add_class("tauri-video-window");
@@ -666,8 +670,8 @@ mod linux_surface {
             let opaque_base = gtk::DrawingArea::new();
             opaque_base.set_hexpand(true);
             opaque_base.set_vexpand(true);
-            opaque_base.connect_draw(|_, context| {
-                context.set_source_rgb(0.0, 0.0, 0.0);
+            opaque_base.connect_draw(move |_, context| {
+                context.set_source_rgb(f64::from(red) / 255.0, f64::from(green) / 255.0, f64::from(blue) / 255.0);
                 let _ = context.paint();
                 // This widget is the compositor-safe opaque floor beneath the
                 // native video and transparent WebView. Letting GTK continue

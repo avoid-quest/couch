@@ -56,20 +56,27 @@ for (const [target, format] of [
       await chmod(join(resources, "tools", "mpv"), 0o755);
       await write(join(resources, "mac-native.json"), JSON.stringify({ mpv: { bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }, libraries: [{ name: "libmpv.2.dylib", bundledSha256: new Bun.CryptoHasher("sha256").update(library).digest("hex") }] }));
     }
+    if (format === "nsis") {
+      const library = executable(target);
+      const sha256 = new Bun.CryptoHasher("sha256").update(library).digest("hex");
+      await write(join(resources, "windows-native", "libmpv-2.dll"), library);
+      await write(join(resources, "tools", "libwinpthread-1.dll"), library);
+      await write(join(resources, "windows-native.json"), JSON.stringify({ mpv: { bundledSha256: sha256 }, runtimeDlls: [{ name: "libwinpthread-1.dll", sha256 }] }));
+    }
     for (const name of ["build-inputs.json", "build-packages.tsv"]) await write(join(resources, name), "{}\n");
     await write(join(resources, "notices", "NOTICE"), "Couch notices\n");
     const hostPackages = format === "deb" ? ["libmpv2"] : [];
     const payload = await createPayload(target, format, sidecar, resources, ["yt-dlp", "deno", "ffprobe"], hostPackages);
-    expect(payload.native).toEqual({ bundledLibraries: format === "dmg" ? ["Contents/Frameworks/libmpv.2.dylib"] : [], declaredHostPackages: hostPackages });
+    expect(payload.native).toEqual({ bundledLibraries: format === "dmg" ? ["Contents/Frameworks/libmpv.2.dylib"] : format === "nsis" ? ["libmpv-2.dll", "tools/libwinpthread-1.dll"] : [], declaredHostPackages: hostPackages });
     if (format === "deb") expect(() => verifyBundledNativeLibraries(payload, payload.files.map(file => file.path).concat("usr/lib/Couch/libmpv.so.2"))).toThrow("Bundled native libraries differ");
     if (format === "nsis") expect(payload.files.map(file => file.path)).toEqual(expect.arrayContaining([
-      "couch-server.exe", "tools/deno.exe", "tools.json", "build-inputs.json", "notices/NOTICE",
+      "couch-server.exe", "tools/deno.exe", "tools.json", "windows-native.json", "libmpv-2.dll", "tools/libwinpthread-1.dll", "build-inputs.json", "notices/NOTICE",
     ]));
     if (format === "nsis") expect(payload.files.some(file => file.path.startsWith("resources/"))).toBe(false);
     const installed = join(directory, "installed");
     const verify = (candidate = payload) => verifyPayload(installed, candidate, target, format, ["yt-dlp", "deno", "ffprobe"], hostPackages);
     for (const file of payload.files) {
-      const source = file.path === paths.sidecar ? sidecar : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.startsWith("Contents/Frameworks/") ? join(resources, "mac-libraries", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
+      const source = file.path === paths.sidecar ? sidecar : file.path === "libmpv-2.dll" ? join(resources, "windows-native", file.path) : file.path.includes("tools/") ? join(resources, "tools", file.path.split("/").at(-1)!) : file.path.startsWith("Contents/Frameworks/") ? join(resources, "mac-libraries", file.path.split("/").at(-1)!) : file.path.endsWith("/NOTICE") ? join(resources, "notices", "NOTICE") : join(resources, file.path.split("/").at(-1)!);
       const path = join(installed, file.path);
       await write(path, new Uint8Array(await Bun.file(source).arrayBuffer()));
       if (file.architecture) await chmod(path, 0o755);
@@ -80,6 +87,11 @@ for (const [target, format] of [
       await expect(verify()).rejects.toThrow();
       await write(join(installed, "Contents/Frameworks/libmpv.2.dylib"), executable(target));
       await chmod(join(installed, "Contents/Frameworks/libmpv.2.dylib"), 0o755);
+    }
+    if (format === "nsis") {
+      await rm(join(installed, "libmpv-2.dll"));
+      await expect(verify()).rejects.toThrow();
+      await write(join(installed, "libmpv-2.dll"), executable(target));
     }
     if (format === "appimage") {
       const patched = executable(target);
