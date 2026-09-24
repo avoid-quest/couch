@@ -9,8 +9,8 @@ test("keeps the signed Preview receipt as the fallback for all four installers",
   const ready = catalog();
   for (const format of formats) {
     expect(ready.preview[format]?.version).toBe("0.2.0-preview.12");
-    expect(ready.preview[format]?.url).toContain("Couch_0.2.0-preview.12_");
-    expect(ready.preview[format]?.url).toEndWith("?channel=preview");
+    expect(ready.preview[format]?.filename).toContain("Couch_0.2.0-preview.12_");
+    expect(ready.preview[format]?.url).toStartWith("https://cdn.crabnebula.app/asset/");
   }
   expect(ready.preview.dmg?.filename).toEndWith("_aarch64.dmg");
   expect(ready.preview.nsis?.filename).toEndWith("_x64-setup.exe");
@@ -30,9 +30,17 @@ test("uses newer verified feeds per format and keeps Stable separate", async () 
   expect(ready.preview.dmg?.version).toBe("0.2.0-preview.13");
   expect(ready.preview.dmg?.url).toEndWith("Couch_0.2.0-preview.13_aarch64.dmg?channel=preview");
   expect(ready.preview.nsis?.version).toBe("0.2.0-preview.12");
+  expect(ready.preview.nsis?.url).toBe("https://cdn.crabnebula.app/asset/01M38BT679GTKK2D80DJGWTE47");
   expect(ready.stable.appimage?.version).toBe("0.1.2");
   expect(ready.stable.appimage?.url).toEndWith("Couch_0.1.2_amd64.AppImage");
   expect(ready.stable.dmg).toBeUndefined();
+});
+
+test("an unavailable feed keeps the old immutable download after latest advances", async () => {
+  const unavailable = async () => new Response(null, { status: 404 });
+  const ready = await currentCatalog(unavailable);
+  expect(ready.preview.dmg?.url).toBe("https://cdn.crabnebula.app/asset/01M38BG4VDR70XYWAB0RV9ZS56");
+  expect(ready.preview.dmg?.filename).toBe("Couch_0.2.0-preview.12_aarch64.dmg");
 });
 
 test("rejects a feed version from the wrong channel", async () => {

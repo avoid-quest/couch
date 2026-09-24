@@ -1,9 +1,9 @@
 {
   "stable": {},
   "preview": {
-    "dmg": "0.2.0-preview.12",
-    "nsis": "0.2.0-preview.12",
-    "appimage": "0.2.0-preview.12",
-    "deb": "0.2.0-preview.12"
+    "dmg": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_aarch64.dmg", "url": "https://cdn.crabnebula.app/asset/01M38BG4VDR70XYWAB0RV9ZS56" },
+    "nsis": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_x64-setup.exe", "url": "https://cdn.crabnebula.app/asset/01M38BT679GTKK2D80DJGWTE47" },
+    "appimage": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_amd64.AppImage", "url": "https://cdn.crabnebula.app/asset/01M38B81A3WYY8BQ6TTJKRQ1JX" },
+    "deb": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_amd64.deb", "url": "https://cdn.crabnebula.app/asset/01M38AMHSP1BYG544PSN4ZFPVA" }
   }
 }

@@ -24,8 +24,9 @@ if (await keyFile.exists()) assert.equal((await keyFile.text()).trim(), manifest
 const releases = await Bun.file("apps/web/src/releases.json").json();
 const format = packageFormat(manifest.format);
 const name = publicFiles(manifest.version, format)[0]!;
-assert.ok(receipt.checks.some(check => check.url === downloadUrl(name, channel)), "Public installer was not checked.");
-releases[channel][format] = manifest.version;
+const installer = receipt.checks.find(check => check.url === downloadUrl(name, channel));
+assert.ok(installer && installer.finalUrl.startsWith("https://cdn.crabnebula.app/asset/"), "Public installer was not checked.");
+releases[channel][format] = { version: manifest.version, filename: name, url: installer.finalUrl };
 await Bun.write(keyFile, manifest.publicKey + "\n");
 await Bun.write("apps/web/src/releases.json", JSON.stringify(releases, null, 2) + "\n");
 console.log(`Prepared ${channel} ${manifest.version}. Review and commit the site files before separately authorized deployment.`);
