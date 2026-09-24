@@ -4,10 +4,9 @@ import { downloadUrl, publicFiles, releasePlatforms, type Channel, type PackageF
 export const formats = ["dmg", "nsis", "appimage", "deb"] as const satisfies readonly PackageFormat[];
 export type Release = { version: string; url: string; filename: string };
 export type Catalog = Record<Channel, Partial<Record<PackageFormat, Release>>>;
-type Versions = Record<Channel, Partial<Record<PackageFormat, string>>>;
-// These versions came from the signed, publicly checked release receipts.
+// These installers came from the signed, publicly checked release receipts.
 // A newer live updater feed wins for its own channel and package format.
-const fallback = snapshot as Versions;
+const fallback = snapshot as Catalog;
 const versionPattern = /^\d+\.\d+\.\d+(?:-preview\.\d+)?$/;
 
 export function release(format: PackageFormat, channel: Channel, version: string): Release | null {
@@ -20,14 +19,8 @@ export function newer(first: string, second: string): boolean {
   return first.localeCompare(second, "en", { numeric: true }) > 0;
 }
 
-export function catalog(versions: Versions = fallback): Catalog {
-  return { stable: Object.fromEntries(formats.flatMap(format => {
-    const found = versions.stable[format] && release(format, "stable", versions.stable[format]);
-    return found ? [[format, found]] : [];
-  })), preview: Object.fromEntries(formats.flatMap(format => {
-    const found = versions.preview[format] && release(format, "preview", versions.preview[format]);
-    return found ? [[format, found]] : [];
-  })) };
+export function catalog(source: Catalog = fallback): Catalog {
+  return { stable: { ...source.stable }, preview: { ...source.preview } };
 }
 
 export async function currentCatalog(fetcher: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> = fetch): Promise<Catalog> {
