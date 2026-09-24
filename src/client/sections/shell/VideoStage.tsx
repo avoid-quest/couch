@@ -49,6 +49,7 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
       window.removeEventListener("resize", measure);
       window.removeEventListener("couch-interface-size-applied", measure);
       window.removeEventListener("scroll", measure, true);
+      void invoke("set_video_rect", { rect: { x: 0, y: 0, width: 0, height: 0 } }).catch(console.warn);
     };
   }, []);
 

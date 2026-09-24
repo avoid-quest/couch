@@ -12,11 +12,16 @@ import { buildInfo } from "../../../shared/build";
 let root: Root, window: Window;
 let fetchSpy: ReturnType<typeof spyOn> | null = null;
 const originals = new Map<string, PropertyDescriptor | undefined>();
+const videoRects: unknown[] = [];
 
 beforeEach(async () => {
+  videoRects.length = 0;
   window = new Window({ url: "tauri://localhost/find" });
   Object.defineProperty(window, "__COUCH_NATIVE_HOST__", { configurable: true, value: true });
-  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "local", address: null, targets: [], localSetupComplete: true } : undefined } });
+  Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string, args?: { rect?: unknown }) => {
+    if (command === "set_video_rect") videoRects.push(args?.rect);
+    return command === "playback_device" ? { mode: "local", address: null, targets: [], localSetupComplete: true } : undefined;
+  } } });
   for (const key of ["CSS", "window", "document", "location", "navigator", "localStorage", "scrollTo", "HTMLElement", "HTMLFormElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
@@ -106,6 +111,15 @@ test("local desktop playback retains a measured video area outside TV presentati
   await render("playing");
   expect(screen.getByLabelText("Video playback")).toBeDefined();
   expect(screen.getByText("Find view")).toBeDefined();
+});
+
+test("completed playback removes the native video rectangle with its stage", async () => {
+  await render("playing");
+  expect(screen.getByLabelText("Video playback")).toBeDefined();
+  const callsBeforeUnmount = videoRects.length;
+  await act(async () => root.render(<></>));
+  expect(videoRects.length).toBeGreaterThan(callsBeforeUnmount);
+  expect(videoRects.at(-1)).toEqual({ x: 0, y: 0, width: 0, height: 0 });
 });
 
 test("a playback backend error remains visible while browsing Find", async () => {
