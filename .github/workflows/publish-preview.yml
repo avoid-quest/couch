@@ -2,6 +2,10 @@ name: Publish assembled Preview
 "on":
   workflow_dispatch:
     inputs:
+      source-revision:
+        type: string
+        required: true
+        description: Exact main commit used by all four signed package builds
       deb-run:
         type: number
         required: true
@@ -55,6 +59,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          ref: "${{ inputs.source-revision }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2

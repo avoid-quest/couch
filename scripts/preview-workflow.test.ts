@@ -26,7 +26,8 @@ test("publication checks all source runs and assembled assets before publish", (
   expect(job.if).toContain("github.ref == 'refs/heads/main'");
   expect(job.if).toContain("COUCH_RELEASES_ENABLED == 'true'");
   expect(publisher.on.push).toBeUndefined();
-  expect(Object.keys(publisher.on.workflow_dispatch.inputs)).toHaveLength(10);
+  expect(Object.keys(publisher.on.workflow_dispatch.inputs)).toHaveLength(11);
+  expect(publisher.jobs.publish.steps[0].with.ref).toContain("inputs.source-revision");
   for (const format of ["deb", "appimage", "dmg", "nsis"]) expect(selected["Restore and check all four signed source runs"].run).toContain(`preview-receipt-source.ts ${format}`);
   const names = job.steps.map((step: any) => step.name);
   expect(names.indexOf("Restore and check all four signed source runs")).toBeLessThan(names.indexOf("Verify the assembled draft or published release"));
