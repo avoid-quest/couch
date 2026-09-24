@@ -9,7 +9,7 @@ use windows::{
         UI::{
             HiDpi::GetDpiForWindow,
             WindowsAndMessaging::{
-                CreateWindowExW, DestroyWindow, SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE,
+                CreateWindowExW, DestroyWindow, SetWindowPos, HWND_TOP, SWP_NOACTIVATE,
                 SWP_NOOWNERZORDER, SWP_SHOWWINDOW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
                 WS_DISABLED, WS_EX_NOACTIVATE,
             },
@@ -101,7 +101,7 @@ impl<R: Runtime> Surface<R> {
             unsafe {
                 SetWindowPos(
                     HWND(child as _),
-                    Some(HWND_BOTTOM),
+                    Some(HWND_TOP),
                     (x * scale).round() as i32,
                     (y * scale).round() as i32,
                     (width.max(1.0) * scale).round() as i32,
