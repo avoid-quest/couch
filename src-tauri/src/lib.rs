@@ -697,6 +697,16 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
+            let dark = include_str!("../../src/client/index.css").split_once(".dark {").expect("Missing dark design tokens").1;
+            let value = dark.lines().find_map(|line| line.trim().strip_prefix("--background: oklch("))
+                .and_then(|value| value.strip_suffix(");")).expect("Missing dark background color");
+            let mut channels = value.split_whitespace();
+            let lightness: f64 = channels.next().expect("Missing background lightness").parse().expect("Invalid background lightness");
+            assert_eq!((channels.next(), channels.next(), channels.next()), (Some("0"), Some("0"), None), "Dark background must be a neutral OKLCH color");
+            let linear = lightness.powi(3);
+            let srgb = if linear <= 0.0031308 { 12.92 * linear } else { 1.055 * linear.powf(1.0 / 2.4) - 0.055 };
+            let gray = (srgb * 255.0).round() as u8;
+            config.background_color = Some(tauri::utils::config::Color(gray, gray, gray, 255));
             #[cfg(any(target_os = "linux", windows))]
             {
                 // Keep the native window opaque beneath the transparent video WebView.

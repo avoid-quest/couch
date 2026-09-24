@@ -18,8 +18,11 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
   }
 })();
-const darkSurface = tauri.app.windows[0]?.backgroundColor;
-if (!darkSurface) throw new Error("Missing dark design-system background color.");
+const background = readFileSync("src/client/index.css", "utf8").split(".dark {")[1]?.match(/--background:\s*oklch\(([\d.]+) 0 0\);/)?.[1];
+if (!background) throw new Error("Missing neutral OKLCH dark background color.");
+const linear = Number(background) ** 3;
+const channel = Math.round(255 * (linear <= 0.0031308 ? 12.92 * linear : 1.055 * linear ** (1 / 2.4) - 0.055)).toString(16).padStart(2, "0");
+const darkSurface = `#${channel.repeat(3)}`;
 
 export default defineConfig(({ command }) => ({
   clearScreen: false,
