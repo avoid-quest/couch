@@ -18,11 +18,11 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
   }
 })();
-const background = readFileSync("src/client/index.css", "utf8").split(".dark {")[1]?.match(/--background:\s*oklch\(([\d.]+) 0 0\);/)?.[1];
-if (!background) throw new Error("Missing neutral OKLCH dark background color.");
-const linear = Number(background) ** 3;
-const channel = Math.round(255 * (linear <= 0.0031308 ? 12.92 * linear : 1.055 * linear ** (1 / 2.4) - 0.055)).toString(16).padStart(2, "0");
-const darkSurface = `#${channel.repeat(3)}`;
+const darkSurface = tauri.app.windows[0]?.backgroundColor;
+if (!darkSurface || !/^#([0-9a-f]{2})\1\1$/i.test(darkSurface)) throw new Error("Configure a neutral dark window color in Tauri.");
+const component = Number.parseInt(darkSurface.slice(1, 3), 16) / 255;
+const linear = component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+const darkLightness = Math.cbrt(linear).toFixed(3);
 
 export default defineConfig(({ command }) => ({
   clearScreen: false,
@@ -32,6 +32,16 @@ export default defineConfig(({ command }) => ({
   base: "/",
   resolve: { alias: { "@": fileURLToPath(new URL("./src/client", import.meta.url)) } },
   plugins: [
+    {
+      name: "couch-design-background",
+      enforce: "pre",
+      transform(source, id) {
+        if (!id.endsWith("/src/client/index.css")) return;
+        if (!source.includes("__COUCH_DARK_LIGHTNESS__")) throw new Error("Missing dark design token.");
+        return source.replace("__COUCH_DARK_LIGHTNESS__", darkLightness);
+      },
+      transformIndexHtml: html => html.replace("__COUCH_DARK_SURFACE__", darkSurface),
+    },
     tanstackRouter({ routesDirectory: "./routes", generatedRouteTree: "./routeTree.gen.ts" }),
     react(),
     tailwindcss(),
