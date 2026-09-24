@@ -18,15 +18,16 @@ supported `--signature` metadata, using public platform `deb-x86_64` and update
 platform `linux-x86_64-deb`. Dependency material is inside the package. Users do
 not download a setup archive or signature file.
 
-Native Preview accumulates prerelease versions such as `0.1.5-preview.1` in
-channel `preview`, the way nightly channels work: each deployment increments the
-numeric suffix and the feed offers the newest one. Tauri's Debian bundler writes
-the version unchanged. Final versions such as `0.1.5` land on Preview only when
-it is time to release; SemVer orders every `0.1.5-preview.N` below `0.1.5`, so
-the final supersedes the accumulated previews. Stable promotion copies the
-tested final-version Preview bytes and signatures unchanged, and requires the
-final version. Stable is CrabNebula's unnamed channel, with no `--channel`
-argument. Each channel rejects a version equal to or below one already published.
+Native Preview accumulates prerelease versions in channel `preview`. A patch
+Changeset increments the numeric suffix within the current base version. A minor
+or major Changeset also raises the base version; Changesets does not reset the
+suffix when that happens. Tauri's Debian bundler writes the computed version
+unchanged. Final versions land on Preview only when it is time to release;
+SemVer orders every prerelease below its matching final version. Stable
+promotion copies the tested final-version Preview bytes and signatures
+unchanged, and requires the final version. Stable is CrabNebula's unnamed
+channel, with no `--channel` argument. Each channel rejects a version equal to
+or below one already published.
 
 `format=appimage` selects `Couch_<V>_amd64.AppImage` and the
 `linux-x86_64-appimage` updater platform. Tauri signs the AppImage as its Linux
@@ -103,12 +104,16 @@ gate; it asks Package for an unpublished Debian draft and takes the matching
 [Preview assembly guide](multiplatform-preview.md). Once `v<version>` exists
 or the Preview feed serves that version, Release skips a repeat dispatch.
 
-The repo lives in changesets prerelease mode with tag `preview`
-(`.changeset/pre.json`), so version PRs produce `0.1.6-preview.N` and the
-feed accumulates previews as before. For a final release run
-`bunx changeset pre exit` and merge the next Version PR; the final
-`0.1.6` can be assembled on Preview. Stable promotion remains a separate
-decision after installed acceptance.
+The repo lives in Changesets prerelease mode with tag `preview`
+(`.changeset/pre.json`). The published `0.2.0-preview.12` came from a minor
+AppImage Changeset applied to `0.1.5-preview.11`; a patch Changeset would have
+produced `0.1.5-preview.12`. The next patch Preview from the published version
+is `0.2.0-preview.13`. Use patch Changesets for further Preview slices unless a
+base version change is intentional, and check the computed version in the Version
+PR before merging it. Published versions and signed installers keep their
+original version. For a final release run `bunx changeset pre exit` and merge
+the next Version PR; Stable promotion remains a separate decision after
+installed acceptance.
 
 Package builds and uploads Preview drafts. The four-manifest
 [assembly guide](multiplatform-preview.md) owns Preview publication. Package
