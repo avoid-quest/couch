@@ -31,6 +31,8 @@ use tokio::sync::watch;
 use protocol::{ConnectionInfo, PlayerState, SidecarMessage, VideoRect};
 
 struct Host {
+    #[cfg(windows)]
+    player_worker: Mutex<Option<std::thread::JoinHandle<()>>>,
     data_dir: std::path::PathBuf,
     local_running: AtomicBool,
     workers: Mutex<
@@ -275,10 +277,14 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                 .spawn(move || display::run(handle, display_path, display_receiver))
                 .map_err(|error| error.to_string())?;
             let handle = app.clone();
-            std::thread::Builder::new()
+            let worker = std::thread::Builder::new()
                 .name("native-player".into())
                 .spawn(move || player::run(handle, player_receiver))
                 .map_err(|error| error.to_string())?;
+            #[cfg(windows)]
+            host.player_worker.lock().expect("player worker lock poisoned").replace(worker);
+            #[cfg(not(windows))]
+            drop(worker);
         }
     }
     let token = format!(
@@ -615,7 +621,7 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         );
-    #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
     let builder = builder.plugin(tauri_plugin_video::init());
 
     builder
@@ -647,6 +653,8 @@ pub fn run() {
             let (connection, _) = watch::channel(None);
             let (child_exited, _) = watch::channel(false);
             app.manage(Host {
+                #[cfg(windows)]
+                player_worker: Mutex::new(None),
                 data_dir: data_dir.clone(),
                 local_running: AtomicBool::new(false),
                 workers: Mutex::new(Some((player_receiver, display_receiver))),
@@ -689,7 +697,7 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             {
                 config.transparent = true;
                 // Match Couch's existing #0a0a0a theme behind the transparent WebView.
@@ -751,9 +759,6 @@ pub fn run() {
                     desktop_lifecycle::request_quit(app);
                     return;
                 }
-                if host.child.lock().expect("sidecar lock poisoned").is_none() {
-                    return;
-                }
                 api.prevent_exit();
                 if host.shutting_down.swap(true, Ordering::Relaxed) {
                     return;
@@ -767,15 +772,28 @@ pub fn run() {
                 }
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ =
-                        tokio::time::timeout(Duration::from_secs(2), exited.wait_for(|done| *done))
-                            .await;
+                    if handle.state::<Host>().child.lock().expect("sidecar lock poisoned").is_some() {
+                        let _ = tokio::time::timeout(Duration::from_secs(2), exited.wait_for(|done| *done)).await;
+                    }
                     let host = handle.state::<Host>();
                     if let Some(child) = host.child.lock().expect("sidecar lock poisoned").take() {
                         log::warn!("Media server did not exit within two seconds; terminating it");
                         let _ = child.kill();
                     }
                     stop_player_before_quit(&host.player, &host.workers).await;
+                    #[cfg(windows)]
+                    {
+                        let _ = host.player.send(player::Request::Shutdown);
+                        let worker = host.player_worker.lock().expect("player worker lock poisoned").take();
+                        if let Some(worker) = worker {
+                            let _ = tauri::async_runtime::spawn_blocking(move || worker.join()).await;
+                        }
+                    }
+                    #[cfg(all(any(target_os = "macos", windows), feature = "desktop-playback"))]
+                    {
+                        use tauri_plugin_video::VideoExt;
+                        handle.video().desktop().shutdown_native();
+                    }
                     handle.exit(code.unwrap_or(0));
                 });
             }

@@ -12,17 +12,17 @@ mod error;
 #[cfg(mobile)]
 mod mobile;
 mod models;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_tracks;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_subtitles;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_radio;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_iptv;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_replaygain;
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_cue;
 
 pub use error::{Error, Result};
@@ -122,5 +122,5 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new().build()
 }
 
-#[cfg(any(target_os = "macos", all(target_os = "linux", feature = "mpv-runtime")))]
+#[cfg(any(target_os = "macos", windows, all(target_os = "linux", feature = "mpv-runtime")))]
 mod mpv_startup;

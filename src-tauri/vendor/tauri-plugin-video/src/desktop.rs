@@ -5,9 +5,9 @@ use std::{
         Arc,
     },
 };
-#[cfg(any(target_os = "linux", windows))]
+#[cfg(target_os = "linux")]
 use std::sync::mpsc;
-#[cfg(any(target_os = "linux", windows))]
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
@@ -35,11 +35,11 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
             main_sender,
         })
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     {
-        Ok(DesktopVideo { _app: app.clone(), mac: macos::MacVideo::new(app.clone()) })
+        Ok(DesktopVideo { _app: app.clone(), mpv: mpv::MpvVideo::new(app.clone()) })
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
         Ok(DesktopVideo { _app: app.clone() })
     }
@@ -144,8 +144,8 @@ pub struct DesktopVideo<R: Runtime> {
     _app: AppHandle<R>,
     #[cfg(target_os = "linux")]
     main_sender: gtk::glib::SyncSender<MainJob<R>>,
-    #[cfg(target_os = "macos")]
-    mac: macos::MacVideo<R>,
+    #[cfg(any(target_os = "macos", windows))]
+    mpv: mpv::MpvVideo<R>,
 }
 
 impl<R: Runtime> DesktopVideo<R> {
@@ -242,9 +242,9 @@ impl<R: Runtime> DesktopVideo<R> {
     pub fn diagnostic_properties(&self, payload: NativeSessionRequest) -> crate::Result<std::collections::BTreeMap<String, Option<String>>> {
         #[cfg(all(target_os = "linux", feature = "mpv-runtime"))]
         { self.run_on_main(move |_| linux_mpv::diagnostic_properties(payload))?.wait() }
-        #[cfg(target_os = "macos")]
-        { self.mac.diagnostic_properties(payload) }
-        #[cfg(not(any(all(target_os = "linux", feature = "mpv-runtime"), target_os = "macos")))]
+        #[cfg(any(target_os = "macos", windows))]
+        { self.mpv.diagnostic_properties(payload) }
+        #[cfg(not(any(all(target_os = "linux", feature = "mpv-runtime"), target_os = "macos", windows)))]
         { let _ = payload; Ok(std::collections::BTreeMap::new()) }
     }
 
@@ -262,71 +262,20 @@ impl<R: Runtime> DesktopVideo<R> {
         })
     }
 
-    #[cfg(target_os = "macos")]
-    pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.open(payload) }
-    #[cfg(target_os = "macos")]
-    pub fn control_native(&self, payload: NativeControlRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.control(payload) }
-    #[cfg(target_os = "macos")]
-    pub fn layout_native(&self, payload: NativeLayoutRequest) -> crate::Result<()> { self.mac.layout(payload) }
-    #[cfg(target_os = "macos")]
-    pub fn stats_native(&self, payload: NativeSessionRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.stats(payload) }
-    #[cfg(target_os = "macos")]
-    pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> { self.mac.close(payload) }
-    #[cfg(target_os = "macos")]
-    pub fn prepare_native(&self, payload: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> { self.mac.prepare(payload) }
-
-    #[cfg(windows)]
-    pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_windows_main(move |app| windows::open(app, payload))
-    }
-
-    #[cfg(windows)]
-    pub fn control_native(
-        &self,
-        payload: NativeControlRequest,
-    ) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_windows_main(move |_| windows::control(payload))
-    }
-
-    #[cfg(windows)]
-    pub fn layout_native(&self, payload: NativeLayoutRequest) -> crate::Result<()> {
-        self.run_on_windows_main(move |_| windows::layout(payload))
-    }
-
-    #[cfg(windows)]
-    pub fn stats_native(
-        &self,
-        payload: NativeSessionRequest,
-    ) -> crate::Result<NativePlaybackSnapshot> {
-        self.run_on_windows_main(move |_| windows::stats(payload))
-    }
-
-    #[cfg(windows)]
-    pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> {
-        self.run_on_windows_main(move |_| windows::close(payload))
-    }
-
-    #[cfg(windows)]
-    fn run_on_windows_main<T, F>(&self, operation: F) -> crate::Result<T>
-    where
-        T: Send + 'static,
-        F: FnOnce(&AppHandle<R>) -> crate::Result<T> + Send + 'static,
-    {
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let context = self._app.clone();
-        self._app
-            .run_on_main_thread(move || {
-                let _ = sender.send(operation(&context));
-            })
-            .map_err(|error| {
-                crate::Error::Pipeline(format!("native UI dispatcher is unavailable: {error}"))
-            })?;
-        receiver
-            .recv_timeout(Duration::from_secs(15))
-            .map_err(|error| {
-                crate::Error::Pipeline(format!("native UI thread timed out: {error}"))
-            })?
-    }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn open_native(&self, payload: NativeOpenRequest) -> crate::Result<NativePlaybackSnapshot> { self.mpv.open(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn control_native(&self, payload: NativeControlRequest) -> crate::Result<NativePlaybackSnapshot> { self.mpv.control(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn layout_native(&self, payload: NativeLayoutRequest) -> crate::Result<()> { self.mpv.layout(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn stats_native(&self, payload: NativeSessionRequest) -> crate::Result<NativePlaybackSnapshot> { self.mpv.stats(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn close_native(&self, payload: NativeSessionRequest) -> crate::Result<()> { self.mpv.close(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn prepare_native(&self, payload: crate::NativePrepareRequest) -> crate::Result<NativePlaybackSnapshot> { self.mpv.prepare(payload) }
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn shutdown_native(&self) { self.mpv.shutdown(); }
 
     #[cfg(target_os = "linux")]
     fn run_on_main<T, F>(&self, operation: F) -> crate::Result<T>
@@ -493,11 +442,8 @@ mod dispatcher_tests {
     }
 }
 
-#[cfg(windows)]
-mod windows;
-
-#[cfg(target_os = "macos")]
-mod macos;
+#[cfg(any(target_os = "macos", windows))]
+mod mpv;
 
 #[cfg(target_os = "linux")]
 mod linux {

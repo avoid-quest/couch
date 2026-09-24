@@ -58,7 +58,7 @@ fn command_error(replacement: bool, rejected_control: bool, error: String) -> Co
     }
 }
 
-#[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
+#[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
 fn observation_error(reconciling: &mut bool, error: tauri_plugin_video::Error) -> Result<(), String> {
     if *reconciling && matches!(error, tauri_plugin_video::Error::DispatcherInFlight) {
         return Ok(());
@@ -168,7 +168,7 @@ mod layout_queue_tests {
         assert!(matches!(command_error(false, false, "close failed".into()), CommandError::Report(error) if error == "close failed"));
     }
 
-    #[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
+    #[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
     #[test]
     fn started_open_keeps_observing_after_repeated_stats_timeouts() {
         let mut reconciling = true;
@@ -375,7 +375,7 @@ impl Player {
     }
 }
 
-#[cfg(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
+#[cfg(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
 impl Player {
     fn prepare(&mut self, app: &AppHandle, playback_id: String, next: Option<crate::protocol::PreparedAudio>) -> Result<(), String> {
         use tauri_plugin_video::{NativePrepareRequest, VideoExt};
@@ -662,7 +662,7 @@ impl Player {
     }
 }
 
-#[cfg(not(all(any(target_os = "linux", target_os = "macos"), feature = "desktop-playback")))]
+#[cfg(not(all(any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback")))]
 impl Player {
     fn prepare(&mut self, _: &AppHandle, _: String, _: Option<crate::protocol::PreparedAudio>) -> Result<(), String> { Ok(()) }
     fn load(
@@ -706,7 +706,7 @@ impl Player {
     }
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos"), feature = "desktop-playback"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", windows), feature = "desktop-playback"))]
 mod tests {
     use super::*;
 
