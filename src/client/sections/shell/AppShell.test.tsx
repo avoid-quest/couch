@@ -124,6 +124,7 @@ test("completed playback removes the native video rectangle with its stage", asy
 
 test("a playback backend error remains visible while browsing Find", async () => {
   await render("unavailable");
+  expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByRole("button", { name: "Play on: This computer" })).toBeDefined();
   expect(screen.getByRole("alert").textContent).toContain("Video backend missing");
   expect(screen.getByText("Find view")).toBeDefined();
