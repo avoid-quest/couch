@@ -290,7 +290,7 @@ impl Default for PlayerState {
     fn default() -> Self {
         Self {
             playback_id: None,
-            status: if cfg!(any(target_os = "linux", target_os = "macos")) { "idle" } else { "unavailable" },
+            status: if cfg!(any(target_os = "linux", target_os = "macos", windows)) { "idle" } else { "unavailable" },
             position: 0.0,
             duration: None,
             volume: 80.0,
@@ -303,8 +303,8 @@ impl Default for PlayerState {
             replay_gain: None,
             subtitle_error: None,
             now_playing: None,
-            error: (!cfg!(any(target_os = "linux", target_os = "macos")))
-                .then(|| "Native playback currently requires Linux. This host can run the UI and LAN server.".into()),
+            error: (!cfg!(any(target_os = "linux", target_os = "macos", windows)))
+                .then(|| "Native playback is unavailable on this host.".into()),
         }
     }
 }
