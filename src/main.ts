@@ -45,7 +45,7 @@ const previewProxyLan = native && process.env.COUCH_PREVIEW_PROXY_LAN === "1";
 const debUpdates = createNativeDebUpdates((requestId, action) => send({ type: "debUpdate", requestId, action }));
 const nativeBluetooth = createNativeBluetooth(native ? (requestId, action) => send({ type: "bluetooth", requestId, action }) : undefined);
 const nativeDisplay = createNativeDisplay(native ? (requestId, action) => send({ type: "display", requestId, action }) : undefined);
-const nativeSound = createNativeSound(native && process.platform === "darwin" ? (requestId, action) => send({ type: "sound", requestId, action }) : undefined);
+const nativeSound = createNativeSound(native && ["darwin", "win32"].includes(process.platform) ? (requestId, action) => send({ type: "sound", requestId, action }) : undefined);
 const nativeDiagnostics = createNativeDiagnostics(native ? requestId => send({ type: "diagnostics", requestId }) : undefined);
 const nativeReadiness = createNativeReadiness(nonce => send({ type: "readiness", nonce }));
 let frontendBuild: MaintenanceBuild | null = null;
@@ -64,7 +64,7 @@ hub = createHub({
   ...(tauriUpdates || deb ? { restart: (tauriUpdates ? appimageUpdates : debUpdates).restart } : {}),
   ...(tauriUpdates || deb ? { updateFeed: (tauriUpdates ? appimageUpdates : debUpdates).feed } : {}),
   nativeDisplay: nativeDisplay.request,
-  ...(native && process.platform === "darwin" ? { nativeSound: nativeSound.request } : {}),
+  ...(native && ["darwin", "win32"].includes(process.platform) ? { nativeSound: nativeSound.request } : {}),
   ...(native ? { nativeBluetooth: nativeBluetooth.request } : {}),
   ...(tauriUpdates || deb ? {
     admitted: () => admission,

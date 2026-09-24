@@ -22,7 +22,7 @@ const systemDlls = new Set([
   "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "combase.dll", "comctl32.dll",
   "crypt32.dll", "d2d1.dll", "dbghelp.dll", "dwmapi.dll", "dwrite.dll", "gdi32.dll", "imm32.dll",
   "iphlpapi.dll", "kernel32.dll", "msvcrt.dll", "ncrypt.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
-  "oleaut32.dll", "opengl32.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
+  "oleaut32.dll", "opengl32.dll", "propsys.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
   "shcore.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "uxtheme.dll",
   "version.dll", "winmm.dll", "wldap32.dll", "ws2_32.dll", "wsock32.dll",
   // The qualified target's graphics driver supplies this loader; libmpv imports it even with D3D11 selected.
