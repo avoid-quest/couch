@@ -18,7 +18,7 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
   }
 })();
-const darkSurface = readFileSync("src/client/index.css", "utf8").split(".dark {")[1]?.match(/--background:\s*(#[0-9a-f]{6});/i)?.[1];
+const darkSurface = tauri.app.windows[0]?.backgroundColor;
 if (!darkSurface) throw new Error("Missing dark design-system background color.");
 
 export default defineConfig(({ command }) => ({
