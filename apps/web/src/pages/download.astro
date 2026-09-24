@@ -8,7 +8,7 @@ const releases = catalog();
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
   dmg: { name: "Mac", target: "Apple Silicon · macOS 14 or later · DMG", note: "Drag Couch to Applications. Ad-hoc signing may require manual approval in macOS Privacy & Security, including after an update." },
-  nsis: { name: "Windows", target: "x86_64 · Windows 11 25H2 · per-user NSIS", note: "Client-only Preview. Connect to another Couch for playback. Windows Full and installed trust checks remain open." },
+  nsis: { name: "Windows", target: "x86_64 · Windows 11 · per-user NSIS", note: "Client-only Preview. Connect to another Couch for playback. Windows Full remains in development." },
   appimage: { name: "Linux", target: "x86_64 · AppImage", note: "Save in a writable location, allow execution, then open it. A compatible glibc and FUSE 2 are needed. Wider Linux installed checks remain open." },
   deb: { name: "Debian TV", target: "Debian 13 · x86_64 · X11 · DEB", note: "The retained package for Debian desktop and dedicated TV setups." },
 };
