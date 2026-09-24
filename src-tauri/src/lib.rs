@@ -697,11 +697,6 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
-            let dark = include_str!("../../src/client/index.css").split_once(".dark {").expect("Missing dark design tokens").1;
-            let hex = dark.lines().find_map(|line| line.trim().strip_prefix("--background: #"))
-                .and_then(|value| value.strip_suffix(';')).expect("Missing dark background color");
-            let rgb = u32::from_str_radix(hex, 16).expect("Invalid dark background color");
-            config.background_color = Some(tauri::utils::config::Color((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255));
             #[cfg(any(target_os = "linux", windows))]
             {
                 // Keep the native window opaque beneath the transparent video WebView.
