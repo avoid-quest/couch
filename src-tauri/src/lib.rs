@@ -697,11 +697,10 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
-            #[cfg(any(target_os = "macos", windows))]
+            #[cfg(target_os = "linux")]
             {
-                config.transparent = true;
-                // Match Couch's existing #0a0a0a theme behind the transparent WebView.
-                config.background_color = Some(tauri::window::Color(10, 10, 10, 255));
+                // GTK composes the transparent WebView over its own video floor.
+                config.transparent = false;
             }
             let tv_presentation = tv_presentation();
             config.fullscreen = tv_presentation;

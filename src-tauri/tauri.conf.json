@@ -22,7 +22,7 @@
         "minHeight": 600,
         "fullscreen": false,
         "decorations": true,
-        "backgroundColor": "#0b1119",
+        "transparent": true,
         "dragDropEnabled": false
       }
     ],
