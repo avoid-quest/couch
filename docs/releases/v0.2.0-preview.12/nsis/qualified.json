@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0-preview.12",
+  "revision": "89c041c4d3c5c4b8ad0d0391aeb9a6a98b839a7a",
+  "files": {
+    "Couch_0.2.0-preview.12_x64-setup.exe": {
+      "bytes": 36609114,
+      "sha256": "42a8d017d5d203aae3d5f434cf3f18ff7eeba0e223c997748aae571f3f018353",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTE5MjFGdk1udHZldFF4R1Y4Z0hLbjBhbCtkSUJxK2c0WkdiMWZkZEE1ZnYyc05RYkRrWkpVNmhGNVlTUjFwcGgrMFJFSFU3dHdwenNHMElEZ1kyNWdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjA4NDQwCWZpbGU6Q291Y2hfMC4yLjAtcHJldmlldy4xMl94NjQtc2V0dXAuZXhlCnFVV3J1bzQ5eXViOHVIT2hYenl1SnJObThRSVBFUytrU1V0a0V4ZDZtcGlzTXJCQ1JvVTNUNlhXeGltTktmZ3F3VlpPbjBIS0JkMDNRUHdHUWxZWUNBPT0K"
+    },
+    "Couch_0.2.0-preview.12_x64-setup.nsis.zip": {
+      "bytes": 36596613,
+      "sha256": "5825269065db42abfb7e8c28327ac933f2ac5eb18553d6eaaadb2d2f1855a35a",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNXp4ZjBKMXM0V2dTTDJKMis0aTUxV0dCL0dlSEpuTG9GTlBVUSt0bm1lbmowODRITXpUSzZ1MVl1Y3ZseVZ5NERFVXA2VDBwNTJNblBhV1VhanpRMFFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjA4NDQxCWZpbGU6Q291Y2hfMC4yLjAtcHJldmlldy4xMl94NjQtc2V0dXAubnNpcy56aXAKaktzdmlYWWt4Qmk2amp2Y3ZGejAreWMvNzZSSi93Z3ZFclQvazBuaGdIZmlSOTVIdStPRlFpWkhBaHZtT3hEVHBncUgzbzJpNkNqTkVZRHdzZElmQUE9PQo="
+    }
+  },
+  "checks": [
+    "signatures",
+    "nsis-package"
+  ]
+}
