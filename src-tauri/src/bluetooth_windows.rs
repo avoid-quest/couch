@@ -10,14 +10,17 @@ use windows::{
     core::{Interface, HSTRING},
     Devices::{
         Bluetooth::{BluetoothAdapter, BluetoothDevice},
-        Enumeration::{DeviceInformation, DeviceInformationKind, DevicePairingResultStatus, DeviceUnpairingResultStatus},
+        Enumeration::{
+            DeviceInformation, DeviceInformationKind, DevicePairingResultStatus,
+            DeviceUnpairingResultStatus,
+        },
         Radios::{RadioAccessStatus, RadioState},
     },
     Foundation::IPropertyValue,
     Win32::Devices::Bluetooth::{
         BluetoothAuthenticateDeviceEx, BluetoothFindDeviceClose, BluetoothFindFirstDevice,
-        BluetoothFindNextDevice, BluetoothRemoveDevice, BLUETOOTH_DEVICE_INFO,
-        BLUETOOTH_DEVICE_SEARCH_PARAMS, MITMProtectionNotRequiredBonding,
+        BluetoothFindNextDevice, BluetoothRemoveDevice, MITMProtectionNotRequiredBonding,
+        BLUETOOTH_DEVICE_INFO, BLUETOOTH_DEVICE_SEARCH_PARAMS,
     },
 };
 use windows_collections::IIterable;
@@ -101,24 +104,39 @@ fn device_details(info: &DeviceInformation) -> Option<(String, Value)> {
 fn classic_address(info: &BLUETOOTH_DEVICE_INFO) -> String {
     let address = unsafe { info.Address.Anonymous.ullLong };
     let hex = format!("{address:012X}");
-    hex.as_bytes().chunks_exact(2).map(|pair| std::str::from_utf8(pair).unwrap()).collect::<Vec<_>>().join(":")
+    hex.as_bytes()
+        .chunks_exact(2)
+        .map(|pair| std::str::from_utf8(pair).unwrap())
+        .collect::<Vec<_>>()
+        .join(":")
 }
 
 fn classic_devices(inquiry: bool) -> Result<BTreeMap<String, BLUETOOTH_DEVICE_INFO>, String> {
     let search = BLUETOOTH_DEVICE_SEARCH_PARAMS {
         dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_SEARCH_PARAMS>() as u32,
-        fReturnAuthenticated: true.into(), fReturnRemembered: true.into(),
-        fReturnUnknown: true.into(), fReturnConnected: true.into(),
-        fIssueInquiry: inquiry.into(), cTimeoutMultiplier: if inquiry { 10 } else { 0 },
+        fReturnAuthenticated: true.into(),
+        fReturnRemembered: true.into(),
+        fReturnUnknown: true.into(),
+        fReturnConnected: true.into(),
+        fIssueInquiry: inquiry.into(),
+        cTimeoutMultiplier: if inquiry { 10 } else { 0 },
         ..Default::default()
     };
-    let mut info = BLUETOOTH_DEVICE_INFO { dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32, ..Default::default() };
+    let mut info = BLUETOOTH_DEVICE_INFO {
+        dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32,
+        ..Default::default()
+    };
     let handle = unsafe { BluetoothFindFirstDevice(&search, &mut info) }.map_err(error)?;
     let mut devices = BTreeMap::new();
     loop {
         devices.insert(classic_address(&info), info);
-        info = BLUETOOTH_DEVICE_INFO { dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32, ..Default::default() };
-        if unsafe { BluetoothFindNextDevice(handle, &mut info) }.is_err() { break; }
+        info = BLUETOOTH_DEVICE_INFO {
+            dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32,
+            ..Default::default()
+        };
+        if unsafe { BluetoothFindNextDevice(handle, &mut info) }.is_err() {
+            break;
+        }
     }
     unsafe { BluetoothFindDeviceClose(handle) }.map_err(error)?;
     Ok(devices)
@@ -126,7 +144,11 @@ fn classic_devices(inquiry: bool) -> Result<BTreeMap<String, BLUETOOTH_DEVICE_IN
 
 fn classic_details(info: &BLUETOOTH_DEVICE_INFO) -> Value {
     let address = classic_address(info);
-    let len = info.szName.iter().position(|&unit| unit == 0).unwrap_or(info.szName.len());
+    let len = info
+        .szName
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(info.szName.len());
     let name = String::from_utf16_lossy(&info.szName[..len]);
     json!({"address":address,"name":if name.is_empty() { address.clone() } else { name },"paired":info.fAuthenticated.as_bool(),"connected":info.fConnected.as_bool()})
 }

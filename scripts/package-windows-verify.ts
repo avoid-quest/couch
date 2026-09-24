@@ -39,7 +39,7 @@ function peImports(path: string) {
   const output = run(["llvm-readobj", "--coff-imports", path]).toString();
   const names = [...output.matchAll(/^  Name: (.+)$/gm)].map(match => match[1]!.toLowerCase());
   assert.ok(names.length, `No PE imports found: ${path}`);
-  for (const name of names) assert.match(name, /^[a-z0-9_.+-]+\.dll$/, `Invalid PE import: ${name}`);
+  for (const name of names) assert.ok(name === "bthprops.cpl" || /^[a-z0-9_.+-]+\.dll$/.test(name), `Invalid PE import: ${name}`);
   return [...new Set(names)].sort();
 }
 
