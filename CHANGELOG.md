@@ -1,5 +1,13 @@
 # couch
 
+## 0.2.0-preview.13
+
+### Patch Changes
+
+- [#528](https://github.com/avoid-quest/couch/pull/528) [`425857c`](https://github.com/avoid-quest/couch/commit/425857c195a836c02307264ddea691bd9ccfc91e) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Build Linux AppImages on Debian 12 so the desktop binary can run on an older glibc base.
+
+- [#529](https://github.com/avoid-quest/couch/pull/529) [`cb239c0`](https://github.com/avoid-quest/couch/commit/cb239c0e4b525e6b9e878ca2a456a3fe5ac3fac0) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Clear the Mac video view when playback ends so it cannot cover the controls and library.
+
 ## 0.2.0-preview.12
 
 ### Minor Changes
