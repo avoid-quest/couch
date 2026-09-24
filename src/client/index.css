@@ -309,7 +309,7 @@ body.tv-presentation [data-slot="tabs-list"] { height: auto; min-height: 54px; }
   max-height: calc(100% - 110px);
   overflow: auto;
   padding: 24px var(--tv-gutter);
-  background: rgb(10 10 10);
+  background: var(--background);
 }
 .tv-shell .tv-playback-controls .player-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 40px; padding: 0; background: transparent; }
 .tv-shell .tv-playback-controls .now-heading { grid-column: 1; margin: 0; justify-content: flex-start; gap: 16px; }
@@ -328,7 +328,7 @@ body.tv-presentation [data-slot="tabs-list"] { height: auto; min-height: 54px; }
 .tv-shell .tv-playback-controls .radio-now-playing { grid-column: 1 / -1; }
 .tv-shell .tv-playback-controls .radio-now-playing { color: var(--primary); font-size: 1em; line-height: 1.4; overflow-wrap: anywhere; }
 .tv-shell .tv-playback-controls .radio-retry { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: var(--muted-foreground); font-size: .85em; line-height: 1.5; }
-.tv-shell .tv-watch-actions { position: fixed; inset: 0 0 auto; z-index: 20; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px var(--tv-gutter); background: rgb(10 10 10); }
+.tv-shell .tv-watch-actions { position: fixed; inset: 0 0 auto; z-index: 20; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px var(--tv-gutter); background: var(--background); }
 .tv-shell .tv-watch-actions button { min-height: 52px; padding-inline: 20px;  }
 .tv-shell:not(.tv-browsing):not(.tv-controls-visible) { cursor: none; }
 .tv-shell:not(.tv-browsing):not(.tv-controls-visible) .tv-watch-actions,
@@ -842,7 +842,7 @@ body { min-width: 0; }
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
+    --background: #0a0a0a;
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
     --card-foreground: oklch(0.985 0 0);

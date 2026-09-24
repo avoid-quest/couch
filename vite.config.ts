@@ -18,6 +18,8 @@ const buildInfo = (() => {
     return JSON.stringify({ version: "0.0.0-dev", revision: null, dataFormat: 1, target: null, packaged: false });
   }
 })();
+const darkSurface = readFileSync("src/client/index.css", "utf8").split(".dark {")[1]?.match(/--background:\s*(#[0-9a-f]{6});/i)?.[1];
+if (!darkSurface) throw new Error("Missing dark design-system background color.");
 
 export default defineConfig(({ command }) => ({
   clearScreen: false,
@@ -42,8 +44,8 @@ export default defineConfig(({ command }) => ({
         name: "Couch",
         short_name: "Couch",
         description: "A media player for your library and online sources",
-        theme_color: "#0a0a0a",
-        background_color: "#0b1119",
+        theme_color: darkSurface,
+        background_color: darkSurface,
         display: "standalone",
         start_url: "/",
         scope: "/",
