@@ -27,12 +27,13 @@ async function download(input: { url: string; sha256: string }, path: string) {
   await Bun.write(path, bytes);
 }
 
-if (process.platform !== "linux" || process.arch !== "x64") throw new Error("Build the production package on Debian 13 x86_64");
+if (process.platform !== "linux" || process.arch !== "x64") throw new Error("Build the production package on Debian x86_64");
 const os = await Bun.file("/etc/os-release").text();
-if (!/^ID=debian$/m.test(os) || !/^VERSION_ID="13"$/m.test(os)) throw new Error("Debian 13 is required");
+const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
+const builderVersion = format === "appimage" ? "12" : "13";
+if (!/^ID=debian$/m.test(os) || !new RegExp(`^VERSION_ID="${builderVersion}"$`, "m").test(os)) throw new Error(`Debian ${builderVersion} is required for ${format}`);
 if (`bun@${Bun.version}` !== packageManager) throw new Error(`Use ${packageManager}`);
 if (run(["git", "status", "--porcelain"])) throw new Error("Package a clean committed source revision");
-const format = packageFormat(process.env.COUCH_PACKAGE_FORMAT);
 if (format !== "deb" && format !== "appimage") throw new Error("The Debian builder supports deb or appimage only");
 await rm(resources, { recursive: true, force: true });
 await mkdir(notices, { recursive: true });

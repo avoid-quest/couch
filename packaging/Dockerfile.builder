@@ -4,17 +4,19 @@ ARG DEBIAN_IMAGE=debian:13-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbf
 ARG COUCH_BUILD_PLATFORM=linux/amd64
 FROM --platform=${COUCH_BUILD_PLATFORM} ${DEBIAN_IMAGE}
 ARG DEBIAN_SNAPSHOT=20260914T000000Z
+ARG DEBIAN_SUITE=trixie
+ARG FUSE2_PACKAGE=libfuse2t64
 ARG BUN_VERSION
 ARG RUST_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 RUN test -n "$DEBIAN_SNAPSHOT" \
     && rm /etc/apt/sources.list.d/debian.sources \
-    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s trixie main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s trixie-security main\n' "$DEBIAN_SNAPSHOT" "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
+    && printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/%s %s main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/%s %s-security main\n' "$DEBIAN_SNAPSHOT" "$DEBIAN_SUITE" "$DEBIAN_SNAPSHOT" "$DEBIAN_SUITE" > /etc/apt/sources.list \
     && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        build-essential ca-certificates curl git pkg-config unzip zip nodejs file \
        libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libmpv-dev libgl-dev \
-       ffmpeg libfuse2t64 fuse3 librsvg2-dev patchelf jq acl procps minisign \
+       ffmpeg "$FUSE2_PACKAGE" fuse3 librsvg2-dev patchelf jq acl procps minisign \
        libgdk-pixbuf2.0-bin libgtk-3-bin gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
        gstreamer1.0-libav libnss3 libasound2-plugins squashfs-tools \
     && rm -rf /var/lib/apt/lists/*

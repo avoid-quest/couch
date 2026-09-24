@@ -143,7 +143,7 @@ try {
   assert.ok(nonzeroSamples > 1_000, `Selected PulseAudio monitor carries decoded audio (${nonzeroSamples} nonzero samples)`);
   checks.push("Selected PulseAudio monitor carries decoded audio");
   await execute("window.__proof.socket.send(JSON.stringify({type:'command',requestId:crypto.randomUUID(),action:{type:'stop'}})); window.__proof.socket.close(); return true");
-  await Bun.write(`${evidence}/result.json`, JSON.stringify({ build, checks, redPixels, nonzeroSamples, limits: ["Disposable Debian 13 X11 desktop with software rendering and a PulseAudio null sink", "AppImage extraction avoids Docker's absent FUSE mount", "Physical speaker, normal FUSE launch, installed upgrade and Wayland behavior require separate acceptance"] }, null, 2) + "\n");
+  await Bun.write(`${evidence}/result.json`, JSON.stringify({ build, checks, redPixels, nonzeroSamples, limits: ["Disposable Debian 12 X11 desktop with software rendering and a PulseAudio null sink", "AppImage extraction avoids Docker's absent FUSE mount", "Physical speaker, normal FUSE launch, installed upgrade and Wayland behavior require separate acceptance"] }, null, 2) + "\n");
 } finally {
   if (audio) { audio.kill(); await audio.exited; }
   await request("", undefined, "DELETE").catch(() => {});
