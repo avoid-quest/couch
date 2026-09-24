@@ -241,7 +241,7 @@ export function createHub(options: HubOptions) {
     return idle.workReason() ?? (library.scanning() ? "Waiting for the library scan to finish." : inspections.size ? "Waiting for source inspection to finish." : null);
   };
   const idleReason = () => idle.reason(updateWork());
-  const idleAdmission = () => manual?.needsRefresh() ? "Check the AppImage installation through SSH before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
+  const idleAdmission = () => manual?.needsRefresh() ? "Check this Couch installation before automatic installation." : updates.state.policy === "idle" ? idleReason() : "Automatic installation is disabled.";
   const updates = createUpdates(updateDirectory, { version: buildInfo.version, revision: buildInfo.revision }, options.updateFeed, undefined, admitted, options.updater ? {
     busy: () => !!manual?.busy(), idle: idleAdmission,
     status: requestId => manual!.status(requestId), install: (candidateId, requestId, guard) => manual!.automatic(candidateId, requestId, guard),

@@ -16,7 +16,7 @@ export function createSound(options: Options) {
     current.process.stop(); clearTimeout(current.timer); clearInterval(current.monitor); current.release();
     if (test) test = { ...test, status, message };
   };
-  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "A Mac sound test needs the mpv runtime on the selected playback host." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
+  const state = async (): Promise<SoundState> => ({ ...await backend.inventory(), test, ...(options.routing ? { routing: options.routing.state } : {}), ...(options.delay ? { audioDelay: options.delay.get() } : {}), ...(options.testAvailable === false ? { testUnavailableReason: "A sound test needs the media runtime on the selected playback host." } : {}), canTest: (options.testAvailable ?? options.available) && !closed && !starting && !active && options.idle() });
   return {
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -28,7 +28,7 @@ export function createSound(options: Options) {
       };
       try {
         authorize();
-        if (!options.available) return json({ error: options.platform === "mac" ? "The selected playback host cannot run a sound test. Check in System Settings on the playback host." : "Sound tests require the native Ubuntu TV audio session." }, 503);
+        if (!options.available) return json({ error: "Sound controls are unavailable on the selected playback host. Check its system sound settings." }, 503);
         const path = new URL(request.url).pathname;
         if (path === "/api/sound/profile" && request.method === "POST" && options.routing) {
           const profile = await settingField(request, "profile"); authorize();
@@ -56,7 +56,7 @@ export function createSound(options: Options) {
           return json(await state());
         }
         if (path !== "/api/sound/test" || request.method !== "POST") return json({ error: "Not found." }, 404);
-        if (options.testAvailable === false) return json({ error: "A Mac sound test needs the mpv runtime on the selected playback host." }, 503);
+        if (options.testAvailable === false) return json({ error: "A sound test needs the media runtime on the selected playback host." }, 503);
         const output = await settingField(request, "output"); authorize();
         if (typeof output !== "string" || !output.length || output.length > 512) throw new ControllerError("Choose an available output.", 400);
         if (starting || active) throw new ControllerError("Stop the current sound test first.", 409);
@@ -93,7 +93,7 @@ export function createSound(options: Options) {
       } catch (error) {
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
         if (options.platform === "mac") return json({ error: error instanceof Error ? error.message : "Could not read or test sound on the Mac playback host." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
-        return json({ error: "Could not read or test the TV audio session. Check the Ubuntu audio service and try again." }, 503);
+        return json({ error: "Could not read or test the playback host's audio session. Check its sound settings and try again." }, 503);
       }
     },
     interrupt() { if (!options.idle()) finish("stopped", "Playback or maintenance started; the sound test stopped."); },

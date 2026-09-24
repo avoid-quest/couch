@@ -98,7 +98,7 @@ export function createSoundRouting(options: Options) {
     if (busy || closed) return;
     busy = true;
     try { await refresh(); }
-    catch { lost(options.platform === "mac" ? "Cannot verify the Mac audio output. Playback stopped. Check sound on the selected playback host, then resume." : "Cannot verify the TV audio output. Playback stopped. Check the Ubuntu audio service, then resume."); }
+    catch { lost("Cannot verify the selected audio output. Playback stopped. Check sound on the playback host, then resume."); }
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {

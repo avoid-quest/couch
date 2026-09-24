@@ -474,7 +474,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                     .update_busy
                                     .swap(true, std::sync::atomic::Ordering::SeqCst)
                                 {
-                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update or restart operation is already running."}));
+                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An update or restart operation is already running."}));
                                 } else if host
                                     .updates
                                     .try_send(appimage_update::Request {
@@ -485,7 +485,7 @@ fn start_coordinator(app: &tauri::AppHandle, playback: bool) -> Result<(), Strin
                                 {
                                     host.update_busy
                                         .store(false, std::sync::atomic::Ordering::SeqCst);
-                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An AppImage update operation is already running."}));
+                                    host.report_message(serde_json::json!({"type":"appimageUpdate","requestId":request_id,"error":"An update operation is already running."}));
                                 }
                             }
                         }
@@ -758,10 +758,10 @@ pub fn run() {
                     desktop_lifecycle::request_quit(app);
                     return;
                 }
-                api.prevent_exit();
                 if host.shutting_down.swap(true, Ordering::Relaxed) {
                     return;
                 }
+                api.prevent_exit();
                 host.bluetooth.close();
                 let mut exited = host.child_exited.subscribe();
                 if let Some(child) = host.child.lock().expect("sidecar lock poisoned").as_mut() {
