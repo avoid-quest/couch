@@ -10,13 +10,15 @@ use windows::{
     core::{Interface, HSTRING},
     Devices::{
         Bluetooth::{BluetoothAdapter, BluetoothDevice},
-        Enumeration::{
-            DeviceInformation, DeviceInformationKind, DevicePairingResultStatus,
-            DeviceUnpairingResultStatus, DeviceWatcher,
-        },
+        Enumeration::{DeviceInformation, DeviceInformationKind, DevicePairingResultStatus, DeviceUnpairingResultStatus},
         Radios::{RadioAccessStatus, RadioState},
     },
-    Foundation::{IPropertyValue, TypedEventHandler},
+    Foundation::IPropertyValue,
+    Win32::Devices::Bluetooth::{
+        BluetoothAuthenticateDeviceEx, BluetoothFindDeviceClose, BluetoothFindFirstDevice,
+        BluetoothFindNextDevice, BluetoothRemoveDevice, BLUETOOTH_DEVICE_INFO,
+        BLUETOOTH_DEVICE_SEARCH_PARAMS, MITMProtectionNotRequiredBonding,
+    },
 };
 use windows_collections::IIterable;
 
@@ -29,8 +31,8 @@ struct Pending {
     owner: String,
     operation: Option<Value>,
     task: Option<JoinHandle<()>>,
-    found: BTreeMap<String, DeviceInformation>,
     devices: BTreeMap<String, DeviceInformation>,
+    classic: BTreeMap<String, BLUETOOTH_DEVICE_INFO>,
 }
 
 #[derive(Default, Clone)]
@@ -96,6 +98,39 @@ fn device_details(info: &DeviceInformation) -> Option<(String, Value)> {
     ))
 }
 
+fn classic_address(info: &BLUETOOTH_DEVICE_INFO) -> String {
+    let address = unsafe { info.Address.Anonymous.ullLong };
+    let hex = format!("{address:012X}");
+    hex.as_bytes().chunks_exact(2).map(|pair| std::str::from_utf8(pair).unwrap()).collect::<Vec<_>>().join(":")
+}
+
+fn classic_devices(inquiry: bool) -> Result<BTreeMap<String, BLUETOOTH_DEVICE_INFO>, String> {
+    let search = BLUETOOTH_DEVICE_SEARCH_PARAMS {
+        dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_SEARCH_PARAMS>() as u32,
+        fReturnAuthenticated: true.into(), fReturnRemembered: true.into(),
+        fReturnUnknown: true.into(), fReturnConnected: true.into(),
+        fIssueInquiry: inquiry.into(), cTimeoutMultiplier: if inquiry { 10 } else { 0 },
+        ..Default::default()
+    };
+    let mut info = BLUETOOTH_DEVICE_INFO { dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32, ..Default::default() };
+    let handle = unsafe { BluetoothFindFirstDevice(&search, &mut info) }.map_err(error)?;
+    let mut devices = BTreeMap::new();
+    loop {
+        devices.insert(classic_address(&info), info);
+        info = BLUETOOTH_DEVICE_INFO { dwSize: std::mem::size_of::<BLUETOOTH_DEVICE_INFO>() as u32, ..Default::default() };
+        if unsafe { BluetoothFindNextDevice(handle, &mut info) }.is_err() { break; }
+    }
+    unsafe { BluetoothFindDeviceClose(handle) }.map_err(error)?;
+    Ok(devices)
+}
+
+fn classic_details(info: &BLUETOOTH_DEVICE_INFO) -> Value {
+    let address = classic_address(info);
+    let len = info.szName.iter().position(|&unit| unit == 0).unwrap_or(info.szName.len());
+    let name = String::from_utf16_lossy(&info.szName[..len]);
+    json!({"address":address,"name":if name.is_empty() { address.clone() } else { name },"paired":info.fAuthenticated.as_bool(),"connected":info.fConnected.as_bool()})
+}
+
 impl Bluetooth {
     fn retire(pending: &mut Pending) {
         if let Some(task) = pending.task.take() {
@@ -124,7 +159,7 @@ impl Bluetooth {
         .map_err(error)?
         .get()
         .map_err(error)?;
-        let mut ids = self.pending.lock().unwrap().found.clone();
+        let mut ids = BTreeMap::new();
         for index in 0..collection.Size().map_err(error)?.min(128) {
             let info = collection.GetAt(index).map_err(error)?;
             ids.insert(info.Id().map_err(error)?.to_string(), info);
@@ -137,7 +172,11 @@ impl Bluetooth {
                 devices.insert(mac, value);
             }
         }
-        self.pending.lock().unwrap().devices = known;
+        let mut pending = self.pending.lock().unwrap();
+        pending.devices = known;
+        for (address, info) in &pending.classic {
+            devices.insert(address.clone(), classic_details(info));
+        }
         Ok(devices.into_values().collect())
     }
 
@@ -173,21 +212,26 @@ impl Bluetooth {
                 if status == RadioAccessStatus::Allowed { Ok(()) } else { Err("Windows denied Bluetooth power control. Check Bluetooth in System Settings on the playback host.".into()) }
             }
             "scan" => {
-                // The unpaired selector requests an active Bluetooth scan on Windows.
-                let selector = BluetoothDevice::GetDeviceSelectorFromPairingState(false).map_err(error)?;
-                let watcher = DeviceInformation::CreateWatcherWithKindAqsFilterAndAdditionalProperties(&selector, &properties(), DeviceInformationKind::AssociationEndpoint).map_err(error)?;
-                let pending = self.pending.clone();
-                let token = watcher.Added(&TypedEventHandler::<DeviceWatcher, DeviceInformation>::new(move |_, info| {
-                    if let Some(info) = info.as_ref() { if let Ok(id) = info.Id() { pending.lock().unwrap().found.insert(id.to_string(), info.clone()); } }
-                    Ok(())
-                })).map_err(error)?;
-                watcher.Start().map_err(error)?;
-                tokio::time::sleep(Duration::from_secs(20)).await;
-                watcher.Stop().map_err(error)?;
-                watcher.RemoveAdded(token).map_err(error)
+                // Headsets use classic Bluetooth; Win32 inquiry finds them even when the WinRT AEP watcher does not.
+                let devices = tokio::task::spawn_blocking(|| classic_devices(true)).await.map_err(|e| e.to_string())??;
+                self.pending.lock().unwrap().classic = devices;
+                Ok(())
             }
             "pair" | "forget" => {
                 let address = action.device.as_deref().ok_or("Choose a device.")?;
+                let classic = { self.pending.lock().unwrap().classic.get(address).copied() };
+                if let Some(mut info) = classic {
+                    let result = if action.op == "pair" {
+                        tokio::task::spawn_blocking(move || unsafe { BluetoothAuthenticateDeviceEx(None, None, &mut info, None, MITMProtectionNotRequiredBonding) }).await.map_err(|e| e.to_string())?
+                    } else {
+                        tokio::task::spawn_blocking(move || unsafe { BluetoothRemoveDevice(&info.Address) }).await.map_err(|e| e.to_string())?
+                    };
+                    if result != 0 { return Err(format!("Windows Bluetooth {} ended with code {result}.", action.op)); }
+                    if let Ok(devices) = tokio::task::spawn_blocking(|| classic_devices(false)).await.map_err(|e| e.to_string())? {
+                        self.pending.lock().unwrap().classic = devices;
+                    }
+                    return Ok(());
+                }
                 let info = self.pending.lock().unwrap().devices.get(address).cloned().ok_or("The device is no longer available. Scan again.")?;
                 let pairing = info.Pairing().map_err(error)?;
                 if action.op == "pair" {
@@ -239,9 +283,6 @@ impl Bluetooth {
                     None => uuid::Uuid::new_v4().to_string(),
                 };
                 pending.owner = action.owner.clone();
-                if action.op == "scan" {
-                    pending.found.clear();
-                }
                 pending.operation = Some(
                     json!({"id":id,"device":action.device,"kind":action.op,"status":"running","endsAt":millis()+LIMIT.as_millis(),"message":if action.op == "pair" { Some("Confirm the pairing prompt on the Windows playback desktop.") } else { None },"prompt":null}),
                 );

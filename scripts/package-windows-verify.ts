@@ -19,7 +19,7 @@ const systemDlls = new Set([
   "api-ms-win-core-path-l1-1-0.dll", "api-ms-win-core-winrt-error-l1-1-1.dll", "api-ms-win-core-winrt-l1-1-0.dll",
   "api-ms-win-crt-environment-l1-1-0.dll", "api-ms-win-crt-filesystem-l1-1-0.dll", "api-ms-win-crt-multibyte-l1-1-0.dll",
   "api-ms-win-crt-private-l1-1-0.dll", "api-ms-win-crt-time-l1-1-0.dll", "api-ms-win-crt-utility-l1-1-0.dll",
-  "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "combase.dll", "comctl32.dll",
+  "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "bluetoothapis.dll", "bthprops.cpl", "combase.dll", "comctl32.dll",
   "crypt32.dll", "d2d1.dll", "dbghelp.dll", "dwmapi.dll", "dwrite.dll", "gdi32.dll", "imm32.dll",
   "iphlpapi.dll", "kernel32.dll", "msvcrt.dll", "ncrypt.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
   "oleaut32.dll", "opengl32.dll", "propsys.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
