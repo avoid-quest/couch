@@ -697,9 +697,9 @@ pub fn run() {
                 data_dir.join("operating-mode.json"),
             )?);
             let mut config = app.config().app.windows[0].clone();
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", windows))]
             {
-                // GTK composes the transparent WebView over its own video floor.
+                // Keep the native window opaque beneath the transparent video WebView.
                 config.transparent = false;
             }
             let tv_presentation = tv_presentation();
