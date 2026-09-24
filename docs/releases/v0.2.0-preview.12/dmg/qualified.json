@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0-preview.12",
+  "revision": "89c041c4d3c5c4b8ad0d0391aeb9a6a98b839a7a",
+  "files": {
+    "Couch_0.2.0-preview.12_aarch64.dmg": {
+      "bytes": 138293245,
+      "sha256": "cbef6c52702bf502ff7a1d0abe184fa5560dedcb593453957bb77fab2ea2b249",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTl0ZnJzdGliNTJaNGF2QUJ0Q296ZkhUcmJZeFIveWx6TGVmZmJzbFVCamFDeVBtTXhXK2JKZ0IzU0lnT2FaTHh2bU9yaXFNUzduUUlnTlRQNktGeHdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjA4MTE0CWZpbGU6Q291Y2hfMC4yLjAtcHJldmlldy4xMl9hYXJjaDY0LmRtZwpqY0pBYnhveGh5YkdlVy9rUFZuOHQ5ckFuTUFONDNQb0JpeXo0MGhDYkh5a2dURmJmenJ5bGV5OU4rN081QXJycFY5dFBEY1NhdUFhdUZtdCtaTWVBQT09Cg=="
+    },
+    "Couch.app.tar.gz": {
+      "bytes": 141232754,
+      "sha256": "eddee2eaa68aa262af091ff219736908d873e1f580e3f8778f155673bee36aa6",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUSTI0ek1IY0RtNTlqS2lCdzJSS3A0VWtaSFlDZ2E3TVBBK2xuNlVvYTJ4S2ZYd2dZdElHT3lrM3FKdzd5TGFqZ2x6SEN0TndNdFNaeUpsUkNXcHl3SnVQMndjbjM1NGdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjA4MTA0CWZpbGU6Q291Y2guYXBwLnRhci5negpjT0lCZzV5UmJTL2NXbHFIejF5RFFpTjVJK0QwYnFwcittaUNDK2hUZTZVdmFXRzIwT1N0QndTVFpmYUdpaEwxaS9KYk9mZ1JsVUlZZkF6RllYTEVCQT09Cg=="
+    }
+  },
+  "checks": [
+    "signatures",
+    "dmg-package"
+  ]
+}
