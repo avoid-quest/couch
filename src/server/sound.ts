@@ -3,7 +3,7 @@ import type { SoundState, SoundTest } from "../shared/sound";
 import { ControllerError, settingField } from "./controllers";
 import { pulseSound, type SoundBackend, type SoundProcess } from "./sound-pulse";
 
-type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend; platform?: "linux" | "mac" };
+type Options = { routing?: ReturnType<typeof import("./sound-routing").createSoundRouting>; delay?: { get: () => number; set: (delay: number) => void }; available: boolean; testAvailable?: boolean; idle: () => boolean; begin: () => () => void; backend?: SoundBackend; platform?: "linux" | "mac" | "windows" };
 export function createSound(options: Options) {
   const backend = options.backend ?? pulseSound();
   let test: SoundTest | null = null;
@@ -92,7 +92,7 @@ export function createSound(options: Options) {
         } finally { starting = false; }
       } catch (error) {
         if (error instanceof ControllerError) return json({ error: error.message }, error.status);
-        if (options.platform === "mac") return json({ error: error instanceof Error ? error.message : "Could not read or test sound on the Mac playback host." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
+        if (options.platform === "mac" || options.platform === "windows") return json({ error: error instanceof Error ? error.message : "Could not read or test sound on the playback host." }, error instanceof Error && /unavailable|Check in System Settings/.test(error.message) ? 409 : 503);
         return json({ error: "Could not read or test the playback host's audio session. Check its sound settings and try again." }, 503);
       }
     },

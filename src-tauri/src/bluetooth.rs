@@ -1,5 +1,5 @@
 use serde::Deserialize;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use serde_json::Value;
 #[cfg(target_os = "linux")]
 use serde_json::json;
@@ -20,11 +20,16 @@ pub struct Action {
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::Bluetooth;
+#[cfg(target_os = "windows")]
+#[path = "bluetooth_windows.rs"]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::Bluetooth;
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 #[derive(Default)]
 pub struct Bluetooth;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 impl Bluetooth {
     pub async fn request(&self, _: Action) -> Result<Value, String> { Err("Bluetooth management is unavailable on this playback host.".into()) }
     pub fn close(&self) {}

@@ -19,10 +19,10 @@ const systemDlls = new Set([
   "api-ms-win-core-path-l1-1-0.dll", "api-ms-win-core-winrt-error-l1-1-1.dll", "api-ms-win-core-winrt-l1-1-0.dll",
   "api-ms-win-crt-environment-l1-1-0.dll", "api-ms-win-crt-filesystem-l1-1-0.dll", "api-ms-win-crt-multibyte-l1-1-0.dll",
   "api-ms-win-crt-private-l1-1-0.dll", "api-ms-win-crt-time-l1-1-0.dll", "api-ms-win-crt-utility-l1-1-0.dll",
-  "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "combase.dll", "comctl32.dll",
+  "avicap32.dll", "avrt.dll", "bcrypt.dll", "bcryptprimitives.dll", "bluetoothapis.dll", "bthprops.cpl", "combase.dll", "comctl32.dll",
   "crypt32.dll", "d2d1.dll", "dbghelp.dll", "dwmapi.dll", "dwrite.dll", "gdi32.dll", "imm32.dll",
   "iphlpapi.dll", "kernel32.dll", "msvcrt.dll", "ncrypt.dll", "normaliz.dll", "ntdll.dll", "ole32.dll",
-  "oleaut32.dll", "opengl32.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
+  "oleaut32.dll", "opengl32.dll", "propsys.dll", "psapi.dll", "rstrtmgr.dll", "secur32.dll", "setupapi.dll",
   "shcore.dll", "shell32.dll", "shlwapi.dll", "user32.dll", "userenv.dll", "uxtheme.dll",
   "version.dll", "winmm.dll", "wldap32.dll", "ws2_32.dll", "wsock32.dll",
   // The qualified target's graphics driver supplies this loader; libmpv imports it even with D3D11 selected.
@@ -39,7 +39,7 @@ function peImports(path: string) {
   const output = run(["llvm-readobj", "--coff-imports", path]).toString();
   const names = [...output.matchAll(/^  Name: (.+)$/gm)].map(match => match[1]!.toLowerCase());
   assert.ok(names.length, `No PE imports found: ${path}`);
-  for (const name of names) assert.match(name, /^[a-z0-9_.+-]+\.dll$/, `Invalid PE import: ${name}`);
+  for (const name of names) assert.ok(name === "bthprops.cpl" || /^[a-z0-9_.+-]+\.dll$/.test(name), `Invalid PE import: ${name}`);
   return [...new Set(names)].sort();
 }
 

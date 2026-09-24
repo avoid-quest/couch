@@ -647,6 +647,8 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+ "windows",
+ "windows-collections",
  "zip",
 ]
 
