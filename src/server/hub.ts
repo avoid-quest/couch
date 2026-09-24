@@ -48,6 +48,7 @@ import { bluetoothSettings } from "./bluetooth";
 import type { BluetoothAction, BluetoothState } from "../shared/bluetooth";
 import { createSound } from "./sound";
 import { macSound } from "./sound-mac";
+import { windowsSound } from "./sound-windows";
 import type { NativeSoundAction } from "./sound-native";
 import { displaySettings } from "./display-settings";
 import type { DisplayAction, DisplayState } from "../shared/display";
@@ -123,7 +124,8 @@ export function createHub(options: HubOptions) {
   });
   let soundRouting: ReturnType<typeof createSoundRouting> | undefined;
   const macAudio = process.platform === "darwin" && options.nativeSound ? macSound(options.nativeSound) : null;
-  const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio);
+  const windowsAudio = process.platform === "win32" && options.nativeSound ? windowsSound(options.nativeSound) : null;
+  const systemAudio = !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio || !!windowsAudio);
   let sound: ReturnType<typeof createSound> | undefined;
   let radioProgramme: ReturnType<typeof createRadioProgramme> | undefined;
   const session = createSession(store, options.sendPlayer, state => {
@@ -231,10 +233,11 @@ export function createHub(options: HubOptions) {
     pin: output => options.sendPlayer({ type: "audioOutput", output }),
     lost: error => session.audioLost(error), changed: value => session.updateSystemAudio(value),
     ...(macAudio ? { backend: macAudio.routing, subscribe: macAudio.subscribe, platform: "mac" as const } : {}),
+    ...(windowsAudio ? { backend: windowsAudio.routing, subscribe: windowsAudio.subscribe, platform: "windows" as const, setSystemDefault: false } : {}),
   });
   const reconnectBluetooth = store.audioProfile()?.bluetoothAddress;
   if (systemAudio && reconnectBluetooth) void options.nativeBluetooth?.({ op: "reconnect", owner: "boot", device: reconnectBluetooth }).catch(() => {});
-  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: !!options.nativeDiagnostics && (process.platform === "linux" || !!macAudio), idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop."), ...(macAudio ? { backend: macAudio.test, testAvailable: macAudio.canTest, platform: "mac" as const } : {}) });
+  sound = createSound({ routing: soundRouting, delay: { get: () => session.state.preferences!.device.audioDelay, set: delay => session.saveAudioDelay(delay) }, available: systemAudio, idle: () => admitted() && session.state.player.status === "idle", begin: () => idle.begin("Waiting for the sound test to stop."), ...(macAudio ? { backend: macAudio.test, testAvailable: macAudio.canTest, platform: "mac" as const } : {}), ...(windowsAudio ? { backend: windowsAudio.test, testAvailable: false, platform: "windows" as const } : {}) });
   const toolHealth = createToolHealth({ packaged: !!(buildInfo.packaged && options.nativeDiagnostics && process.platform === "linux"), helpers: buildInfo.helpers });
   let manual: ReturnType<typeof createManualUpdate> | undefined;
   const updateWork = () => {

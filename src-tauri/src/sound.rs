@@ -16,7 +16,13 @@ pub fn request(value: serde_json::Value) -> Result<serde_json::Value, String> {
     Ok(result)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+#[path = "sound_windows.rs"]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::request;
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn request(_: serde_json::Value) -> Result<serde_json::Value, String> {
     Err("Mac sound requires a Mac playback host.".into())
 }
