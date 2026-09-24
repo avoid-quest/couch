@@ -162,7 +162,8 @@ impl Bluetooth {
                 if status == RadioAccessStatus::Allowed { Ok(()) } else { Err("Windows denied Bluetooth power control. Check Bluetooth in System Settings on the playback host.".into()) }
             }
             "scan" => {
-                let selector = BluetoothDevice::GetDeviceSelector().map_err(error)?;
+                // The unpaired selector requests an active Bluetooth scan on Windows.
+                let selector = BluetoothDevice::GetDeviceSelectorFromPairingState(false).map_err(error)?;
                 let watcher = DeviceInformation::CreateWatcherAqsFilter(&selector).map_err(error)?;
                 let pending = self.pending.clone();
                 let token = watcher.Added(&TypedEventHandler::<DeviceWatcher, DeviceInformation>::new(move |_, info| {
