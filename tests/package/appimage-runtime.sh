@@ -1,10 +1,10 @@
 #!/bin/bash
-# Fresh disposable Debian runtime. The AppImage uses extraction because Docker has no FUSE device.
+# Fresh disposable Debian 12 runtime. The AppImage uses extraction because Docker has no FUSE device.
 set -euo pipefail
 test -f /.dockerenv
 test "${COUCH_APPIMAGE_FIXTURE:-}" = 1
 test "$(dpkg --print-architecture)" = amd64
-grep -qx 'VERSION_ID="13"' /etc/os-release
+grep -qx 'VERSION_ID="12"' /etc/os-release
 trap 'status=$?; if [ "$status" -ne 0 ]; then echo "$status" > /evidence/failed; fi' EXIT
 for command in bun node cargo rustc gcc g++ make jq minisign; do
   if command -v "$command"; then echo "Unexpected development tool: $command" >&2; exit 1; fi
@@ -12,7 +12,7 @@ done
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl dbus-user-session fonts-dejavu-core \
-  libgl1 libegl1 libgles2 libgl1-mesa-dri libnss3 libasound2 libfuse2t64 procps passwd squashfs-tools
+  libgl1 libegl1 libgles2 libgl1-mesa-dri libnss3 libasound2 libfuse2 procps passwd squashfs-tools
 useradd -m -s /bin/bash qualifier
 install -d -o qualifier -g qualifier -m 700 /home/qualifier/client-data /home/qualifier/host-data /home/qualifier/tmp
 chown qualifier:qualifier /evidence
@@ -40,7 +40,7 @@ done
 env LD_LIBRARY_PATH="$library_path" ldd "$appdir/usr/lib/libmpv.so.2" > /evidence/libmpv-linkage.txt
 ! grep -q 'not found' /evidence/libmpv-linkage.txt
 grep -F "$appdir/usr/lib/libmpv.so.2" /evidence/couch-linkage.txt
-grep -F "$appdir/usr/lib/libavformat.so.61" /evidence/ffprobe-linkage.txt
+grep -F "$appdir/usr/lib/libavformat.so." /evidence/ffprobe-linkage.txt
 runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/yt-dlp" --ignore-config --no-plugin-dirs --version > /evidence/yt-dlp-version.txt
 runuser -u qualifier -- env HOME=/home/qualifier LD_LIBRARY_PATH="$library_path" "$appdir/usr/lib/Couch/tools/deno" eval 'console.log(6 * 7)' > /evidence/deno-result.txt
 grep -qx 42 /evidence/deno-result.txt

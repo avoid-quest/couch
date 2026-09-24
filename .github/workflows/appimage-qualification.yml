@@ -22,11 +22,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: 1.4.2
-      - name: Build the pinned Debian image
+      - name: Build the pinned AppImage image
         run: |
           docker build --platform linux/amd64 -f packaging/Dockerfile.builder -t couch-qualification-builder \
-            --build-arg DEBIAN_IMAGE="$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" \
-            --build-arg DEBIAN_SNAPSHOT="$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" \
+            --build-arg DEBIAN_IMAGE="$(bun -p '(await Bun.file("packaging/inputs.json").json()).appimageImage')" \
+            --build-arg DEBIAN_SNAPSHOT="$(bun -p '(await Bun.file("packaging/inputs.json").json()).appimageSnapshot')" \
+            --build-arg DEBIAN_SUITE=bookworm --build-arg FUSE2_PACKAGE=libfuse2 \
             --build-arg BUN_VERSION="$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" \
             --build-arg RUST_VERSION="$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" \
             packaging

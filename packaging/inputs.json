@@ -47,6 +47,8 @@
   ],
   "debianSnapshot": "20260914T000000Z",
   "debianImage": "debian:13-slim@sha256:abc9cb88a5587630d7f915f47b23b0668fe250fbfc6457aa4d52b534c1bbf73f",
+  "appimageSnapshot": "20260924T000000Z",
+  "appimageImage": "debian:12-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
   "appimageTools": {
     "AppRun-x86_64": {
       "release": "https://github.com/tauri-apps/binary-releases/releases/tag/apprun-old",

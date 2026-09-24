@@ -73,6 +73,11 @@ try {
   assert.equal(release.host.target, build.target);
   assert.equal(release.host.os, "linux");
   assert.deepEqual(release.host.packages, []);
+  const abi = Bun.spawnSync(["readelf", "--version-info", join(root, "usr/bin/couch")], { stderr: "inherit" });
+  assert.equal(abi.exitCode, 0, "Inspect the packaged desktop ABI");
+  for (const [, major, minor] of abi.stdout.toString().matchAll(/Name: GLIBC_(\d+)\.(\d+)/g)) {
+    assert.ok(Number(major) < 2 || Number(major) === 2 && Number(minor) <= 36, `Desktop requires glibc newer than Debian 12: ${major}.${minor}`);
+  }
   const inventory = await Bun.file(join(root, "usr/lib/Couch/payload.json")).text();
   assert.equal(new Bun.CryptoHasher("sha256").update(inventory).digest("hex"), release.payloadSha256);
   // linuxdeploy sets fixed RPATHs after the build records source hashes.
@@ -92,13 +97,7 @@ try {
     assert.equal(await hash(copy), await hash(join(root, path)), `linuxdeploy changed executable bytes beyond its RPATH edit: ${path}`);
   }
   await verifyPackageHelpers("src-tauri/resources/tools", build.helpers);
-  const media = {
-    "libmpv.so.2": "libmpv2", "libavcodec.so.61": "libavcodec61", "libavformat.so.61": "libavformat61",
-    "libavutil.so.59": "libavutil59", "libswresample.so.5": "libswresample5", "libswscale.so.8": "libswscale8",
-    "libass.so.9": "libass9", "libplacebo.so.349": "libplacebo349", "libpulse.so.0": "libpulse0",
-    "libasound.so.2": "libasound2t64", "libepoxy.so.0": "libepoxy0", "libva.so.2": "libva2",
-    "libvulkan.so.1": "libvulkan1", "alsa-lib/libasound_module_pcm_pulse.so": "libasound2-plugins",
-  };
+  const mediaNames = ["libmpv", "libavcodec", "libavformat", "libavutil", "libswresample", "libswscale", "libass", "libplacebo", "libpulse", "libasound", "libepoxy", "libva", "libvulkan"];
   const patcher = process.env.PATCHELF ?? "/usr/bin/patchelf";
   function elf(path: string) {
     const file = join(root, path);
@@ -112,14 +111,21 @@ try {
     return { path, rpath, needed: inspect("--print-needed").split("\n").filter(Boolean) };
   }
   const mediaClosure = [elf("usr/bin/couch"), elf("usr/lib/Couch/tools/ffprobe")];
-  assert.ok(mediaClosure[0]!.needed.includes("libmpv.so.2"), "The desktop must link its bundled libmpv player");
-  assert.ok(mediaClosure[1]!.needed.includes("libavformat.so.61"), "Bundled ffprobe must use the packaged media libraries");
-  for (const [name, notice] of Object.entries(media)) {
-    const path = `usr/lib/${name}`;
-    assert.ok(libraries.some(file => file.path === path), `Missing media library: ${path}`);
+  for (const name of [...mediaNames, "alsa-lib/libasound_module_pcm_pulse"]) {
+    const candidates = libraries.filter(file => name.startsWith("alsa-lib/")
+      ? file.path === `usr/lib/${name}.so`
+      : new RegExp(`^usr/lib/${name}\\.so\\.[0-9]+$`).test(file.path));
+    assert.equal(candidates.length, 1, `Expected one packaged ${name} library`);
+    const path = candidates[0]!.path;
+    const source = path.replace(/^usr\/lib\//, "/usr/lib/x86_64-linux-gnu/");
+    const owner = Bun.spawnSync(["dpkg-query", "-S", source], { stderr: "inherit" });
+    assert.equal(owner.exitCode, 0, `Identify the build package for ${path}`);
+    const notice = owner.stdout.toString().split(":")[0]!;
     assert.ok(files.some(file => file.path === `usr/share/doc/couch/debian/${notice}/copyright`), `Missing media library notice: ${notice}`);
     mediaClosure.push(elf(path));
   }
+  assert.ok(mediaClosure[0]!.needed.includes(mediaClosure[2]!.path.split("/").at(-1)!), "The desktop must link its bundled libmpv player");
+  assert.ok(mediaClosure[1]!.needed.includes(mediaClosure[4]!.path.split("/").at(-1)!), "Bundled ffprobe must use the packaged media libraries");
   for (const list of [files, links, libraries]) list.sort((a, b) => a.path.localeCompare(b.path));
   await Bun.write(".artifacts/appimage-inventory.json", JSON.stringify({ build, release, files, links, libraries, mediaClosure, sha256: await hash(archive) }, null, 2) + "\n");
   console.log(`Verified ${archive}: ${files.length} files, ${libraries.length} native library paths and packaged helpers`);

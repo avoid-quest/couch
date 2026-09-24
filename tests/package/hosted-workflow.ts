@@ -41,7 +41,7 @@ const cases = [
   { name: "reject-fresh-readiness", inputs: { "readiness-only": true }, want: [], fail: true },
   { name: "branch-guard", inputs: {}, ref: "refs/heads/feature", want: [] },
   { name: "disabled-guard", inputs: {}, enabled: false, want: [] },
-  { name: "builder-fails", inputs: {}, fault: "Prepare the pinned Debian builder", want: [], fail: true },
+  { name: "builder-fails", inputs: {}, fault: "Prepare the pinned package builder", want: [], fail: true },
   { name: "qualification-fails", inputs: {}, fault: names.qualify, want: ["build", "qualify"], fail: true },
   { name: "signing-fails", inputs: {}, fault: names.sign, want: ["build", "qualify", "sign"], fail: true },
   { name: "upload-fails", inputs: {}, fault: names.upload, want: ["build", "qualify", "sign", "upload"], fail: true },

@@ -137,17 +137,26 @@ jobs:
             if [ "$CHANNEL" = stable ]; then operation=draft; else operation=resume; fi
           fi
           bun scripts/hosted-release.ts "$operation" .artifacts/hosted-release "$CHANNEL" "$RELEASE_ID"
-      - name: Read the pinned Debian builder inputs
+      - name: Read the pinned package builder inputs
         id: builder-inputs
         if: inputs.build-run == 0
         run: |
-          echo "debian-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" >> "$GITHUB_OUTPUT"
-          echo "debian-snapshot=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" >> "$GITHUB_OUTPUT"
+          if [ "${{ inputs.format }}" = appimage ]; then
+            echo "debian-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).appimageImage')" >> "$GITHUB_OUTPUT"
+            echo "debian-snapshot=$(bun -p '(await Bun.file("packaging/inputs.json").json()).appimageSnapshot')" >> "$GITHUB_OUTPUT"
+            echo 'debian-suite=bookworm' >> "$GITHUB_OUTPUT"
+            echo 'fuse2-package=libfuse2' >> "$GITHUB_OUTPUT"
+          else
+            echo "debian-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')" >> "$GITHUB_OUTPUT"
+            echo "debian-snapshot=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianSnapshot')" >> "$GITHUB_OUTPUT"
+            echo 'debian-suite=trixie' >> "$GITHUB_OUTPUT"
+            echo 'fuse2-package=libfuse2t64' >> "$GITHUB_OUTPUT"
+          fi
           echo "bun-version=$(bun -p '(await Bun.file("package.json").json()).packageManager.split("@")[1]')" >> "$GITHUB_OUTPUT"
           echo "rust-version=$(bun -p 'Bun.TOML.parse(await Bun.file("rust-toolchain.toml").text()).toolchain.channel')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
         if: inputs.build-run == 0
-      - name: Prepare the pinned Debian builder
+      - name: Prepare the pinned package builder
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         if: inputs.build-run == 0
         env:
@@ -162,11 +171,13 @@ jobs:
           build-args: |
             DEBIAN_IMAGE=${{ steps.builder-inputs.outputs.debian-image }}
             DEBIAN_SNAPSHOT=${{ steps.builder-inputs.outputs.debian-snapshot }}
+            DEBIAN_SUITE=${{ steps.builder-inputs.outputs.debian-suite }}
+            FUSE2_PACKAGE=${{ steps.builder-inputs.outputs.fuse2-package }}
             BUN_VERSION=${{ steps.builder-inputs.outputs.bun-version }}
             RUST_VERSION=${{ steps.builder-inputs.outputs.rust-version }}
-          cache-from: "type=gha,version=2,scope=couch-debian-builder-amd64"
-          cache-to: "type=gha,version=2,scope=couch-debian-builder-amd64,mode=min,ignore-error=true"
-      - name: Start the pinned Debian builder
+          cache-from: "type=gha,version=2,scope=couch-${{ inputs.format }}-builder-amd64"
+          cache-to: "type=gha,version=2,scope=couch-${{ inputs.format }}-builder-amd64,mode=min,ignore-error=true"
+      - name: Start the pinned package builder
         if: inputs.build-run == 0
         run: |
           docker create --name couch-build --init --cpus 4 --memory 10g couch-release-builder
@@ -183,7 +194,7 @@ jobs:
           workspaces: src-tauri
           cache-bin: false
           cache-on-failure: true
-          key: "debian-13-release-${{ hashFiles('packaging/inputs.json', 'bun.lock') }}"
+          key: "debian-${{ inputs.format }}-release-${{ hashFiles('packaging/inputs.json', 'bun.lock') }}"
           cache-directories: .artifacts/cache/bun
       - name: Restore compiler and dependency caches
         if: inputs.build-run == 0

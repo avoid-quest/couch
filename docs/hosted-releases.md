@@ -1,7 +1,8 @@
 # Hosted releases
 
-The manual [Package workflow](../.github/workflows/package.yml) builds in the
-pinned Debian 13 container on Blacksmith, qualifies the package, and uploads
+The manual [Package workflow](../.github/workflows/package.yml) builds Debian
+packages in the pinned Debian 13 container and AppImages in the pinned Debian 12
+container on Blacksmith, qualifies the package, and uploads
 directly to CrabNebula in one job. GitHub retains small signed receipts, never
 another application payload. The [artifact cleanup and initial workflow checks](evidence/native-debian/2026-09-15/actions-preparation/README.md)
 record removal of 107 obsolete unexpired artifacts. Repository Actions and the
@@ -35,6 +36,10 @@ update artifact. The detached signature stays in signed release receipts and
 provider metadata, as with the Debian package. `package:build` and
 `hosted-build.sh` still default to Debian; select `appimage` explicitly. The
 Package workflow rejects direct AppImage publication and Stable dispatch.
+Debian 12 is the AppImage build base because the Debian 13 Preview 0.2.0-preview.12
+desktop binary requires glibc 2.39 and cannot start on Debian 12 or Ubuntu 22.04.
+The next signed build still needs an actual Debian 12 launch and installed sample
+receipts before claiming that floor. Ubuntu 22.04 remains unqualified.
 Installed upgrades, X11/Wayland behavior and download migration remain separate
 owner acceptance after the coordinated Preview publication.
 

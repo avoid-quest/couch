@@ -28,7 +28,11 @@ fixture_env=COUCH_DEB_FIXTURE=1
 if [ "$format" = appimage ]; then fixture_env=COUCH_APPIMAGE_FIXTURE=1; fi
 launcher_env=COUCH_APPIMAGE_EXTRACTED=0
 if [ "$format" = appimage ] && [ "$(uname -m)" != x86_64 ]; then launcher_env=COUCH_APPIMAGE_EXTRACTED=1; fi
-image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')
+if [ "$format" = appimage ]; then
+  image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).appimageImage')
+else
+  image=$(bun -p '(await Bun.file("packaging/inputs.json").json()).debianImage')
+fi
 docker run -d --name "$fixture" --init --platform linux/amd64 --cpus 2 --memory 4g --shm-size 1g \
   -v "$output/qualification:/qualification:ro" -v "$output/evidence:/evidence" -e "$fixture_env" -e "$launcher_env" \
   "$image" bash /qualification/runtime.sh > /dev/null
