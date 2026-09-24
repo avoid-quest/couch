@@ -1554,7 +1554,7 @@ mod linux_mpv {
         forward_bytes: i64,
         backward_bytes: i64,
         donate_buffer: bool,
-        hysteresis_seconds: f64,
+        hysteresis_seconds: Option<f64>,
     }
 
     impl MpvBufferDefaults {
@@ -1565,7 +1565,7 @@ mod linux_mpv {
                 forward_bytes: property(mpv, "demuxer-max-bytes").unwrap_or(150 * 1024 * 1024),
                 backward_bytes: property(mpv, "demuxer-max-back-bytes").unwrap_or(50 * 1024 * 1024),
                 donate_buffer: property(mpv, "demuxer-donate-buffer").unwrap_or(true),
-                hysteresis_seconds: property(mpv, "demuxer-hysteresis-secs").unwrap_or(0.0),
+                hysteresis_seconds: property(mpv, "demuxer-hysteresis-secs"),
             }
         }
     }
@@ -2172,13 +2172,12 @@ mod linux_mpv {
             .mpv
             .set_property("demuxer-donate-buffer", donate_buffer)
             .map_err(mpv_error)?;
-        player
-            .mpv
-            .set_property(
-                "demuxer-hysteresis-secs",
-                player.default_buffer.hysteresis_seconds,
-            )
-            .map_err(mpv_error)?;
+        if let Some(seconds) = player.default_buffer.hysteresis_seconds {
+            player
+                .mpv
+                .set_property("demuxer-hysteresis-secs", seconds)
+                .map_err(mpv_error)?;
+        }
         Ok(())
     }
 
