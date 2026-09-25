@@ -8,7 +8,7 @@ import { fireEvent, screen } from "../../testing";
 let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>, forLaterOrder: typeof import("./ForLaterSection").forLaterOrder;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
-let missing = false, canceled = false;
+let missing = false, canceled = false, undoResponses = false;
 let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => screen.getByRole("button", { name: label });
@@ -22,7 +22,7 @@ async function render(connected = true, canPlay = true, inspect = false) {
   await flush();
 }
 beforeEach(async () => {
-  calls.length = 0; missing = canceled = false; items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
+  calls.length = 0; missing = canceled = undoResponses = false; items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
@@ -37,8 +37,9 @@ beforeEach(async () => {
     if (method === "GET") return Response.json({ items });
     if (path.endsWith("/load") && missing) return Response.json({ error: "Source unavailable. Retry or remove it from For later." }, { status: 409 });
     if (path.endsWith("/load") && canceled) return Response.json({ ok: true, notice: "Added to Up next. Playback was canceled by a newer control." });
+    if (path === "/api/for-later/restore") { items.unshift({ id: "saved", title: "Evening movie" }); return Response.json({ ok: true }); }
     if (method === "DELETE") items = items.filter(item => path !== `/api/for-later/${item.id}`);
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, ...(method === "DELETE" && undoResponses ? { undoToken: "restore-token" } : {}) });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
@@ -67,6 +68,16 @@ test("failed source keeps its saved item removable and removal returns focus to 
   await click("Remove Evening song from For later");
   expect(document.activeElement?.id).toBe("for-later-title");
   expect(document.body.textContent).toContain("No saved titles");
+});
+
+test("removed For later item offers Undo and restores the original row", async () => {
+  undoResponses = true;
+  await render();
+  await click("Remove Evening movie from For later");
+  expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  await click("Undo");
+  expect(calls.at(-2)).toEqual({ path: "/api/for-later/restore", method: "POST", body: { token: "restore-token" } });
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("unavailable native playback still allows append and remove; disconnected controllers cannot mutate", async () => {

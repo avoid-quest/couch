@@ -62,6 +62,30 @@ test("saves named household playlists, lists summaries, and restores them after 
   expect(second.changed).not.toHaveBeenCalled();
 });
 
+test("keeps only Up next when requested", async () => {
+  const upcoming = { ...track, id: "upcoming", title: "Upcoming" };
+  const { service } = fixture({ upNext: () => [upcoming] });
+  const response = await request(service, "POST", "", { name: "Up next", scope: "upNext" });
+  expect(response.status).toBe(201);
+  const { playlist } = await response.json() as { playlist: SavedPlaylist };
+  expect(playlist.entries).toEqual([{ id: upcoming.id, title: upcoming.title }]);
+});
+
+test("undo restores a deleted list once without replacing a newer list of the same name", async () => {
+  const { service } = fixture();
+  const saved = await create(service, "Film night");
+  const deleted = await request(service, "DELETE", `/${saved.id}`, { revision: saved.revision });
+  const { undoToken } = await deleted.json() as { undoToken: string };
+  expect((await request(service, "POST", "/restore", { token: undoToken })).status).toBe(200);
+  expect(await detail(service, saved.id)).toEqual(saved);
+  expect((await request(service, "POST", "/restore", { token: undoToken })).status).toBe(404);
+
+  const removedAgain = await request(service, "DELETE", `/${saved.id}`, { revision: saved.revision });
+  const secondToken = (await removedAgain.json() as { undoToken: string }).undoToken;
+  await create(service, "Film night");
+  expect((await request(service, "POST", "/restore", { token: secondToken })).status).toBe(409);
+});
+
 test.each(["auto", "best", "720p"] as const)("captures original source references privately with %s quality and strips unsupported queue fields", async quality => {
   const path = databasePath();
   const { service, setQueue, loaded } = fixture({ databasePath: path });

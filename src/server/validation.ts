@@ -8,7 +8,8 @@ const providerIds = new Set(["youtube", "twitch", "raiplay", "bandcamp", "stream
 const mediaShapes = new Set(["atom", "playlist"]);
 const videoQuality = (value: unknown) => value === undefined || ["auto", "best", "1080p", "720p", "480p"].includes(String(value));
 const playOptions = (value: Record<string, unknown>) => (value.playNow === undefined || typeof value.playNow === "boolean")
-  && (value.fromStart === undefined || value.playNow === true && typeof value.fromStart === "boolean");
+  && (value.fromStart === undefined || value.playNow === true && typeof value.fromStart === "boolean")
+  && (value.placement === undefined || value.placement === "next" && value.playNow !== true);
 const httpUrl = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return false;
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
@@ -30,12 +31,12 @@ function validAction(value: unknown, trusted: boolean): value is Action {
   if (!object(value)) return false;
   switch (value.type) {
     case "navigate": return typeof value.key === "string" && ["up", "down", "left", "right", "select", "back", "home", "info"].includes(value.key);
-    case "enqueue": return validEntry(value.entry, trusted) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueue": return validEntry(value.entry, trusted) && playOptions(value);
     case "enqueueLibrary": case "enqueueJellyfin": return id(value.itemId) && id(value.entryId) && playOptions(value);
     case "enqueueRadio": return id(value.stationId) && id(value.entryId) && playOptions(value);
-    case "enqueueAlbum": return id(value.albumId) && (value.playNow === undefined || typeof value.playNow === "boolean");
+    case "enqueueAlbum": return id(value.albumId) && playOptions(value);
     case "enqueueProvider": return providerIds.has(String(value.provider)) && mediaShapes.has(String(value.shape)) && httpUrl(value.url)
-      && (value.playNow === undefined || typeof value.playNow === "boolean") && videoQuality(value.quality)
+      && playOptions(value) && videoQuality(value.quality)
       && (value.title === undefined || typeof value.title === "string" && value.title.length <= 200 && !/[\u0000-\u001f\u007f]/.test(value.title))
       && (value.thumbnail === undefined || httpUrl(value.thumbnail));
     case "enqueueWeb": return id(value.entryId) && httpUrl(value.url) && playOptions(value)
@@ -78,14 +79,14 @@ export function parseCommand(message: string, trusted: boolean): ClientMessage {
   if (value.action.type === "goLive") return { type: "command", requestId: value.requestId, action: { type: "goLive", playbackId: value.action.playbackId } };
   if (value.action.type === "navigate") return { type: "command", requestId: value.requestId, action: { type: "navigate", key: value.action.key } };
   if (value.action.type === "enqueueProvider") {
-    const { provider, url, shape, title, thumbnail, playNow, quality } = value.action;
+    const { provider, url, shape, title, thumbnail, playNow, quality, placement } = value.action;
     return { type: "command", requestId: value.requestId, action: { type: "enqueueProvider", provider: provider as typeof provider, url, shape,
       ...(title === undefined ? {} : { title }), ...(thumbnail === undefined ? {} : { thumbnail }),
-      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }) } };
+      ...(playNow === undefined ? {} : { playNow }), ...(quality === undefined ? {} : { quality }), ...(placement === undefined ? {} : { placement }) } };
   }
   if (value.action.type === "enqueue") {
     const { id, title, source, kind } = value.action.entry;
-    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }) } };
+    return { type: "command", requestId: value.requestId, action: { type: "enqueue", entry: { id, title, source, ...(kind ? { kind, live: true } : {}) }, ...(value.action.playNow === undefined ? {} : { playNow: value.action.playNow }), ...(value.action.placement === undefined ? {} : { placement: value.action.placement }) } };
   }
   if (value.action.type === "preferences") {
     const { audioLanguage, subtitleLanguage, subtitles, speed, replayGain } = value.action.preferences;

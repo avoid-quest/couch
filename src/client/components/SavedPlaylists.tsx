@@ -30,7 +30,9 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   const [playlist, setPlaylist] = useState<SavedPlaylist | null>(null);
   const [name, setName] = useState("");
   const [rename, setRename] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"delete" | "saveQueue" | null>(null);
+  const [confirm, setConfirm] = useState<"saveQueue" | null>(null);
+  const [undo, setUndo] = useState<{ token: string; name: string } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sensors = useDndSensors();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -45,7 +47,8 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
 
   useEffect(() => {
     setPending(false);
-    return () => mutation.current?.abort();
+    setUndo(null);
+    return () => { mutation.current?.abort(); if (undoTimer.current) clearTimeout(undoTimer.current); };
   }, [origin, token, connected, open]);
 
   useEffect(() => {
@@ -101,7 +104,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       if (result.playlist?.id === selectedId) setPlaylist(result.playlist);
       setNotice(message);
       setConfirm(null);
-      return true;
+      return result;
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not update this list.");
       return false;
@@ -139,6 +142,21 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   };
   const load = (mode: PlaylistLoadMode) => playlist && update(`${path}/load`, { revision: playlist.revision, mode },
     mode === "append" ? `Added ${playlist.name} to Up next.` : mode === "play" ? `Starting ${playlist.name} on the TV.` : `Loaded ${playlist.name}. Press Play to start.`);
+  const deleteList = async () => {
+    if (!playlist) return;
+    const name = playlist.name;
+    const result = await update(path, { revision: playlist.revision }, `Deleted ${name}.`, "DELETE");
+    if (!result?.undoToken) return;
+    select(null);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ token: result.undoToken, name });
+    undoTimer.current = setTimeout(() => setUndo(null), 6_000);
+  };
+  const restoreList = async () => {
+    if (!undo) return;
+    const result = await update("/api/playlists/restore", { token: undo.token }, `Restored ${undo.name}.`);
+    if (result) { setUndo(null); if (undoTimer.current) clearTimeout(undoTimer.current); }
+  };
 
   const content = <>
       {inline ? <header className="saved-playlist-heading">
@@ -151,6 +169,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       {!connected && <Alert><AlertDescription>Reconnect to load or edit lists.</AlertDescription></Alert>}
       {error && <Alert variant="destructive" className="gap-2"><AlertDescription>{error}</AlertDescription><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload lists</Button></Alert>}
       {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
+      {undo && <div className="saved-undo-notice" role="status"><span>Deleted {undo.name}.</span><Button variant="ghost" disabled={disabled} onClick={() => void restoreList()}>Undo</Button></div>}
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading lists…</p>}
       {!selectedId ? <>
         <form className="grid gap-2" onSubmit={event => void create(event)}>
@@ -215,12 +234,12 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         <Separator />
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={disabled || !queueCount} onClick={() => setConfirm("saveQueue")}><Bookmark aria-hidden="true" />Update from Up next</Button>
-          <Button variant="destructive" disabled={disabled} onClick={() => setConfirm("delete")}><Trash2 aria-hidden="true" />Delete list</Button>
+          <Button variant="ghost" disabled={disabled} onClick={() => void deleteList()}><Trash2 aria-hidden="true" />Delete list</Button>
         </div>
         {confirm && <div className="grid gap-3 rounded-lg border p-3">
-          <p className="text-sm">{confirm === "delete" ? `Delete ${playlist.name}? Items in Up next will stay.` : `Replace the kept contents of ${playlist.name} with the current ${queueCount} Up next items?`}</p>
+          <p className="text-sm">Replace the kept contents of {playlist.name} with the current {queueCount} Up next items?</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant={confirm === "delete" ? "destructive" : "default"} disabled={disabled || (confirm === "saveQueue" && !queueCount)} onClick={() => void update(path, { revision: playlist.revision, ...(confirm === "saveQueue" ? { operation: "saveQueue" } : {}) }, confirm === "delete" ? "List deleted." : "List updated from Up next.", confirm === "delete" ? "DELETE" : "POST").then(ok => { if (ok && confirm === "delete") select(null); })}>{confirm === "delete" ? "Confirm delete" : "Replace saved items"}</Button>
+            <Button disabled={disabled || !queueCount} onClick={() => void update(path, { revision: playlist.revision, operation: "saveQueue" }, "List updated from Up next.")}>Replace saved items</Button>
             <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button>
           </div>
         </div>}

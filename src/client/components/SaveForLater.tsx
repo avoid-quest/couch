@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { BookmarkPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ForLaterReference } from "../../shared/for-later";
+import { useOptionalShell } from "@/sections/shell/shell-context";
 
 export function SaveForLater({ origin, token, connected, reference, title }: {
   origin: string; token: string; connected: boolean; reference: ForLaterReference; title: string;
 }) {
+  const standardLayout = useOptionalShell()?.standardLayout;
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -24,5 +26,5 @@ export function SaveForLater({ origin, token, connected, reference, title }: {
     } catch (error) { if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "Could not save this item."); }
     finally { if (!request.signal.aborted) setPending(false); }
   };
-  return <div className="grid gap-1"><Button variant="outline" aria-label={`Save ${title} for later`} disabled={!connected || pending} onClick={() => void save()}><BookmarkPlus aria-hidden="true" />For later</Button>{notice && <p className="text-sm" role="status">{notice}</p>}</div>;
+  return <div className="grid gap-1"><Button variant="outline" aria-label={`Save ${title} for later`} disabled={!connected || pending} onClick={() => void save()}><BookmarkPlus aria-hidden="true" />{standardLayout ? "Save" : "For later"}</Button>{notice && <p className="text-sm" role="status">{notice}</p>}</div>;
 }

@@ -10,6 +10,7 @@ type Options = {
   databasePath: string;
   onChange: () => void;
   queue: () => QueueEntry[];
+  upNext?: () => QueueEntry[];
   loadQueue: (entries: QueueEntry[], mode: PlaylistLoadMode, authorize?: () => void, playedBy?: PlaybackActor) => void;
   resolveSource?: (source: PlaylistSource) => Promise<{ name: string; entries: QueueEntry[] }>;
 };
@@ -109,7 +110,7 @@ function view(row: Row): SavedPlaylist {
   return { ...row, source: sourceOf(row.source), entries: entries.map(({ source: _source, automaticTitle: _automaticTitle, ...entry }) => entry) };
 }
 
-export function createPlaylists({ databasePath, onChange, queue, loadQueue, resolveSource }: Options) {
+export function createPlaylists({ databasePath, onChange, queue, upNext, loadQueue, resolveSource }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
@@ -117,6 +118,7 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
     id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE,
     revision INTEGER NOT NULL, updatedAt INTEGER NOT NULL, entries TEXT NOT NULL, source TEXT
   )`);
+  db.run("CREATE TABLE IF NOT EXISTS saved_playlist_undo (token TEXT PRIMARY KEY, playlist TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(saved_playlists)").all().some(column => column.name === "source")) db.run("ALTER TABLE saved_playlists ADD COLUMN source TEXT");
   const get = (id: string) => {
     const row = db.query<Row, [string]>(`SELECT ${columns} FROM saved_playlists WHERE id = ?`).get(id);
@@ -145,10 +147,12 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
           const input = await body(request);
           authorize();
           const source = input.source === undefined ? undefined : playlistSource(input.source);
-          fields(input, source ? ["source"] : ["name"]);
+          fields(input, source ? ["source"] : ["name", "scope"]);
+          if (input.scope !== undefined && input.scope !== "upNext") throw new PlaylistError("Choose a valid queue scope.");
+          if (input.scope === "upNext" && !upNext) throw new PlaylistError("Up next is not available on this TV.", 503);
           // Resolve source lists before opening the write transaction so a vanished
           // playlist or a failed resolver leaves no partial save behind.
-          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: queue() };
+          const resolution = source ? await resolvedSource(resolveSource, source) : { name: input.name, entries: input.scope === "upNext" ? upNext!() : queue() };
           if (source) authorize();
           const name = playlistName(resolution.name);
           const entries = capturePlaylistEntries(resolution.entries);
@@ -161,6 +165,26 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
           })();
           onChange();
           return Response.json({ playlist: view(row) }, { status: 201 });
+        }
+        if (pathname === "/api/playlists/restore") {
+          if (request.method !== "POST") return methods("POST");
+          const input = await body(request);
+          authorize();
+          fields(input, ["token"]);
+          if (typeof input.token !== "string" || !identifier(input.token)) throw new PlaylistError("Choose a list to restore.");
+          const token = input.token;
+          const row = db.transaction(() => {
+            const saved = db.query<{ playlist: string; expiresAt: number }, [string]>("SELECT playlist, expiresAt FROM saved_playlist_undo WHERE token = ?").get(token);
+            if (!saved || saved.expiresAt <= Date.now()) throw new PlaylistError("Undo has expired.", 404);
+            const playlist = JSON.parse(saved.playlist) as Row;
+            if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM saved_playlists").get()!.count >= 100) throw new PlaylistError("You can save up to 100 playlists.");
+            uniqueName(playlist.name);
+            db.query("INSERT INTO saved_playlists VALUES (?, ?, ?, ?, ?, ?, ?)").run(playlist.id, playlist.name, playlist.name.toLowerCase(), playlist.revision, playlist.updatedAt, playlist.entries, playlist.source);
+            db.query("DELETE FROM saved_playlist_undo WHERE token = ?").run(token);
+            return playlist;
+          })();
+          onChange();
+          return Response.json({ playlist: view(row) });
         }
         const match = /^\/api\/playlists\/([\w-]{1,80})(?:\/(load))?$/.exec(pathname);
         if (!match) throw new PlaylistError("Playlist endpoint not found.", 404);
@@ -188,8 +212,11 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
           requireRevision(row, input.revision);
           if (request.method === "DELETE") {
             fields(input, ["revision"]);
+            const token = crypto.randomUUID();
+            db.query("DELETE FROM saved_playlist_undo WHERE expiresAt <= ?").run(Date.now());
             db.query("DELETE FROM saved_playlists WHERE id = ?").run(id);
-            return { changed: true, playlist: null };
+            db.query("INSERT INTO saved_playlist_undo VALUES (?, ?, ?)").run(token, JSON.stringify(row), Date.now() + 15_000);
+            return { changed: true, playlist: null, undoToken: token };
           }
           const entries = JSON.parse(row.entries) as QueueEntry[];
           switch (input.operation) {
@@ -220,14 +247,14 @@ export function createPlaylists({ databasePath, onChange, queue, loadQueue, reso
             default: throw new PlaylistError("Choose a valid playlist operation.");
           }
           const previous = get(id);
-          if (row.name === previous.name && row.entries === previous.entries) return { changed: false, playlist: view(row) };
+          if (row.name === previous.name && row.entries === previous.entries) return { changed: false, playlist: view(row), undoToken: null };
           row.revision++;
           row.updatedAt = Date.now();
           db.query("UPDATE saved_playlists SET name = ?, name_key = ?, revision = ?, updatedAt = ?, entries = ? WHERE id = ?").run(row.name, row.name.toLowerCase(), row.revision, row.updatedAt, row.entries, id);
-          return { changed: true, playlist: view(row) };
+          return { changed: true, playlist: view(row), undoToken: null };
         })();
         if (result.changed) onChange();
-        return Response.json(result.playlist ? { playlist: result.playlist } : { ok: true });
+        return Response.json(result.playlist ? { playlist: result.playlist } : { ok: true, undoToken: result.undoToken });
       } catch (error) {
         return Response.json({ error: error instanceof PlaylistError || error instanceof ControllerError ? error.message : "Could not update playlists or load the queue. Check the TV's storage and current playback." }, { status: error instanceof PlaylistError || error instanceof ControllerError ? error.status : 500 });
       }

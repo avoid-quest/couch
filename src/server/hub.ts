@@ -163,7 +163,13 @@ export function createHub(options: HubOptions) {
     stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
-  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue, loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
+  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue,
+    upNext: () => {
+      const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
+      const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
+      return session.state.queue.slice(cursor + 1);
+    },
+    loadQueue: (entries, mode, authorize, playedBy) => { session.loadQueue(entries, mode, authorize, playedBy); },
     resolveSource: async source => {
       const page = await loadProviderList(source.provider, source.url, shutdown.signal);
       return { name: page.title ?? "Playlist", entries: providerListEntries(page) };
@@ -352,7 +358,7 @@ export function createHub(options: HubOptions) {
       let entries: QueueEntry[], fromStart: boolean | undefined, selectedEntryIds: string[] = [];
       if ("entry" in prepared) {
         const { entry, inspectUrl } = prepared;
-        session.command({ type: "enqueue", entry }, authorize, playedBy);
+        session.command({ type: "enqueue", entry, ...(action.placement ? { placement: action.placement } : {}) }, authorize, playedBy);
         entries = [entry];
         fromStart = prepared.fromStart;
         if (inspectUrl) {
@@ -365,7 +371,7 @@ export function createHub(options: HubOptions) {
           });
         }
       } else {
-        entries = session.loadQueue(prepared.entries, "append", authorize, playedBy);
+        entries = session.loadQueue(prepared.entries, "append", authorize, playedBy, action.placement);
         fromStart = true;
         selectedEntryIds = entries.map(entry => entry.id);
       }
@@ -545,6 +551,7 @@ export function createHub(options: HubOptions) {
           const playedBy = playbackActor(socket.data.controllerId);
           const authorize = socket.data.authorize;
           const action = command.action;
+          const before = session.state;
           const enqueued = enqueueMedia(action, authorize, playedBy);
           if (enqueued) {
             await enqueued;
@@ -560,6 +567,15 @@ export function createHub(options: HubOptions) {
               if (soundRouting && action.type === "pause" && !action.paused) options.sendPlayer({ type: "audioOutput", output: soundRouting.prepare() });
               await session.command(action, authorize, playedBy);
             }
+          }
+          if (playedBy && action.type !== "navigate") {
+            const added = ["enqueue", "enqueueLibrary", "enqueueJellyfin", "enqueueProvider", "enqueueRadio", "enqueueWeb", "enqueueAlbum"].includes(action.type);
+            const label = action.type === "pause" ? action.paused ? "paused" : "resumed"
+              : action.type === "stop" ? "stopped playback"
+              : action.type === "remove" ? `removed ${before.queue.find(entry => entry.id === action.entryId)?.title || "an item"}`
+              : added ? `added ${action.type === "enqueue" ? action.entry.title : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? action.title || "media" : "media"}`
+              : action.type === "play" ? `started ${session.state.queue.find(entry => entry.id === action.entryId)?.title || "media"}` : null;
+            if (label) session.notice(playedBy, `${playedBy.name} ${label}`);
           }
         } catch (error) {
           result = { ...result, ok: false, error: error instanceof Error ? error.message : "The command failed." };

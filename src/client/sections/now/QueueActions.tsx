@@ -6,12 +6,21 @@ import type { Action, QueueEntry } from "../../../shared/protocol";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-export function QueueActions({ entry, index, queue, connected, canPlay, run, credentials }: {
+export function QueueActions({ entry, index, queue, connected, canPlay, run, credentials, presentation = "legacy", firstUpcomingIndex = 0, lastUpcomingIndex = queue.length - 1 }: {
   credentials: Credentials;
   entry: QueueEntry; index: number; queue: QueueEntry[]; connected: boolean; canPlay: boolean;
   run: (action: Action) => Promise<boolean>;
+  presentation?: "legacy" | "standard";
+  firstUpcomingIndex?: number;
+  lastUpcomingIndex?: number;
 }) {
   const [open, setOpen] = useState(false);
+  if (presentation === "standard") return <span className="queue-row-actions">
+    {index > firstUpcomingIndex && <Button variant="ghost" disabled={!connected} onClick={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index - 1]!.id })}>Earlier</Button>}
+    {index < lastUpcomingIndex && <Button variant="ghost" disabled={!connected} onClick={() => void run({ type: "move", entryId: entry.id, beforeEntryId: queue[index + 2]?.id ?? null })}>Later</Button>}
+    <span className="queue-row-save"><SaveForLater origin={credentials.origin} token={credentials.token} connected={connected} reference={{ kind: "queue", id: entry.id }} title={entry.title} /></span>
+    <Button variant="ghost" disabled={!connected} onClick={() => void run({ type: "remove", entryId: entry.id })}>Remove</Button>
+  </span>;
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild><Button variant="ghost" size="icon" aria-label={`Queue options for ${entry.title}`}><MoreHorizontal /></Button></PopoverTrigger>
     <PopoverContent align="end" className="queue-actions grid w-60 gap-1 p-2" aria-label={`Queue options for ${entry.title}`}>

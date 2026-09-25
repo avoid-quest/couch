@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { Action, SessionState } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
 import { Icon } from "./Icon";
+import { formatDuration, formatEndTime } from "@/time-format";
 import { PlaybackSettings } from "./PlaybackSettings";
 import { RangeControl } from "./RangeControl";
 
@@ -25,13 +26,6 @@ export function playbackCapabilities(state: SessionState | null, connected: bool
   };
 }
 
-function playbackTime(seconds: number) {
-  const value = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(value / 3_600);
-  const minutes = Math.floor((value % 3_600) / 60);
-  return `${hours ? `${hours}:${String(minutes).padStart(2, "0")}` : minutes}:${String(value % 60).padStart(2, "0")}`;
-}
-
 export function PlaybackTimeline({ state, connected, run }: Props) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
@@ -40,11 +34,11 @@ export function PlaybackTimeline({ state, connected, run }: Props) {
   return <div className="seek-control playback-timeline">
     {player.duration ? <RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false} disabled={!transportReady}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} /> : null}
-    <div className="time-labels"><span>{playbackTime(player.position || 0)}</span><span>{player.duration || current.duration ? playbackTime(player.duration || current.duration || 0) : ""}</span></div>
+    <div className="time-labels"><span>{formatDuration(player.position || 0)}</span><span>{player.duration || current.duration ? <><span className="timeline-total">{formatDuration(player.duration || current.duration || 0)}</span><span className="timeline-end">−{formatDuration(((player.duration || current.duration || 0) - player.position) / (player.speed || 1))} ends {formatEndTime(((player.duration || current.duration || 0) - player.position) / (player.speed || 1))}</span></> : ""}</span></div>
   </div>;
 }
 
-export function PlaybackTransport({ state, credentials, connected, run, compact = false, onExpand }: Props & { credentials: Credentials; compact?: boolean; onExpand?: () => void }) {
+export function PlaybackTransport({ state, credentials, connected, run, compact = false, onExpand, showSettings = true }: Props & { credentials: Credentials; compact?: boolean; onExpand?: () => void; showSettings?: boolean }) {
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { available, active, transportReady, seekable, pausable, hasNext } = playbackCapabilities(state, connected);
@@ -59,7 +53,7 @@ export function PlaybackTransport({ state, credentials, connected, run, compact 
     {hasNext && <Button variant="ghost" size="icon" className="icon-button transport-next" aria-label="Next in queue" title="Next in queue" disabled={!transportReady}
       onClick={() => { if (player.playbackId) void run({ type: "next", playbackId: player.playbackId }); }}><Icon name="next" /></Button>}
     <Button variant="ghost" size="icon" className="icon-button transport-stop" aria-label="Stop playback" title="Stop playback" disabled={!available || !active} onClick={() => void run({ type: "stop" })}><Icon name="stop" /></Button>
-    {state.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
+    {showSettings && state.preferences && <PlaybackSettings entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}
     {onExpand && <Button variant="ghost" size="icon" className="playback-expand" aria-label="Open remote controls" onClick={onExpand}><ChevronUp aria-hidden="true" /></Button>}
   </div>;
 }

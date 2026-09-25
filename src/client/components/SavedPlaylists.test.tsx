@@ -22,7 +22,7 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true, ...(init.method === "DELETE" ? { undoToken: "restore-token" } : {}) }); }
     return Response.json(path === "/api/playlists" ? { playlists: [{ ...playlist, entryCount: 1 }] } : { playlist });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
@@ -34,7 +34,7 @@ afterEach(async () => {
   originals.clear();
 });
 
-for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} reuses authenticated playlist loading and deletion confirmation`, async () => {
+for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} loads lists and offers Undo after deletion`, async () => {
   const { SavedPlaylists } = await import("./SavedPlaylists");
   await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
   await flush();
@@ -46,11 +46,9 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   await click(button("Up next"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
   await click(button("Delete list"));
-  expect(writes).toHaveLength(1);
-  await click(button("Cancel"));
-  expect(writes).toHaveLength(1);
-  await click(button("Delete list")); await click(button("Confirm delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
+  await click(button("Undo"));
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists/restore", method: "POST", body: { token: "restore-token" } });
 });
 
 const sources = {
@@ -68,7 +66,7 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true, ...(init.method === "DELETE" ? { undoToken: "restore-token" } : {}) }); }
     return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1 }] } : { playlist: saved });
   }) as typeof fetch);
   const { SavedPlaylists } = await import("./SavedPlaylists");
@@ -79,6 +77,6 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
   expect(writes).toEqual([]);
   await click(button("Up next"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list/load", method: "POST", body: { revision: 2, mode: "append" } });
-  await click(button("Delete list")); await click(button("Confirm delete"));
+  await click(button("Delete list"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list", method: "DELETE", body: { revision: 2 } });
 });

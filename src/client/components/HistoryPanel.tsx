@@ -14,7 +14,8 @@ import type { RadioStation } from "../../shared/radio";
 import { mergeRecent } from "../recent";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./MediaArtwork";
-import { historyQuery, removeHistory } from "@/api/library";
+import { historyQuery, removeFromContinue, removeHistory, undoProgressAction } from "@/api/library";
+import { useOptionalSessionGate } from "@/session/session-context";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
@@ -23,7 +24,7 @@ export function progressTime(seconds: number) {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-export function ProgressActions({ origin, token, connected, mediaId, title, progress, onUpdated }: {
+export function ProgressActions({ origin, token, connected, mediaId, title, progress, onUpdated, inContinue = false }: {
   origin: string;
   token: string;
   connected: boolean;
@@ -31,7 +32,9 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   title: string;
   progress?: ViewingProgress | null;
   onUpdated: () => void;
+  inContinue?: boolean;
 }) {
+  const session = useOptionalSessionGate();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +58,12 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
     setPending(true);
     setError(null);
     try {
-      await removeHistory({ origin, token }, mediaId);
+      const { undoToken } = await (await (inContinue ? removeFromContinue({ origin, token }, mediaId) : removeHistory({ origin, token }, mediaId))).json() as { undoToken?: string };
       onUpdated();
+      if (undoToken) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
+        await undoProgressAction({ origin, token }, undoToken);
+        onUpdated();
+      });
       setOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not remove this history item.");
@@ -68,8 +75,8 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
       <p className="break-words font-medium">{title}</p>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ watched: !progress?.watched })}><Check aria-hidden="true" />{progress?.watched ? "Mark unwatched" : "Mark watched"}</Button>
-      {!!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
-      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from history</Button>
+      {!inContinue && !!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
+      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from {inContinue ? "Continue" : "history"}</Button>
       {pending && <p className="text-sm text-muted-foreground" role="status">Saving…</p>}
     </PopoverContent>
   </Popover>;

@@ -13,6 +13,7 @@ import { AddMediaDialog } from "./AddMediaDialog";
 import { OpenFileButton } from "./OpenFileButton";
 import { QueueActions } from "./QueueActions";
 import { SavedPlaylists } from "@/components/SavedPlaylists";
+import { formatEndTime } from "@/time-format";
 import { type Credentials } from "../../session/session";
 
 type Props = {
@@ -23,6 +24,7 @@ type Props = {
   nativeHost: boolean;
   defaultQuality: VideoQuality;
   run: (action: Action) => Promise<boolean>;
+  presentation?: "legacy" | "standard";
 };
 
 function duration(seconds: number) {
@@ -50,8 +52,10 @@ export function queueMoveAction(upNext: QueueEntry[], activeId: string, overId: 
   return { type: "move", entryId: activeId, beforeEntryId: after?.id ?? null };
 }
 
-export function QueuePanel({ state, credentials, connected, available, nativeHost, defaultQuality, editing = false, run }: Props & { editing?: boolean }) {
+export function QueuePanel({ state, credentials, connected, available, nativeHost, defaultQuality, editing = false, run, presentation = "legacy" }: Props & { editing?: boolean }) {
   const [notice, setNotice] = useState("");
+  const [keeping, setKeeping] = useState(false);
+  const [keptQueue, setKeptQueue] = useState("");
   const panelRef = useRef<HTMLElement>(null);
   const focusedEntry = useRef<{ element: HTMLElement; id: string; label: string | null } | null>(null);
   const queue = state?.queue ?? [];
@@ -59,7 +63,23 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
   const cursorIndex = currentIndex >= 0 ? currentIndex : queue.findIndex(entry => entry.id === state?.queueCursorEntryId);
   const previous = queue.map((entry, index) => ({ entry, index })).filter(({ index }) => index <= cursorIndex && index !== currentIndex);
   const upNext = queue.slice(cursorIndex + 1);
+  const upNextKey = upNext.map(entry => entry.id).join(",");
+  const isKept = !!upNext.length && keptQueue === upNextKey;
   const sensors = useDndSensors();
+  const keepUpNext = async () => {
+    if (!connected || keeping || !upNext.length) return;
+    setKeeping(true);
+    setNotice("");
+    try {
+      const name = `Up next, ${new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+      const response = await fetch(`${credentials.origin}/api/playlists`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, scope: "upNext" }), signal: AbortSignal.timeout(20_000) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Could not keep Up next.");
+      setNotice(`Kept ${name} in Saved.`);
+      setKeptQueue(upNextKey);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not keep Up next."); }
+    finally { setKeeping(false); }
+  };
   useLayoutEffect(() => {
     const focused = focusedEntry.current;
     if (!focused || focused.element.isConnected || document.activeElement !== document.body) return;
@@ -73,7 +93,8 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
 
   const renderEntry = (entry: QueueEntry, index: number, drag?: RowDrag) => {
     const current = entry.id === state?.currentEntryId;
-    const label = [sourceLabel(entry.source), entry.live ? "LIVE" : entry.duration ? duration(entry.duration) : "", entry.quality ? videoQualityLabels[entry.quality] : ""].filter(Boolean).join(" · ");
+    const ahead = (state?.currentEntryId ? Math.max(0, (state.player.duration ?? queue[currentIndex]?.duration ?? 0) - state.player.position) / (state.player.speed || 1) : 0) + queue.slice(cursorIndex + 1, index).reduce((seconds, item) => seconds + (item.duration ?? 0), 0);
+    const label = [sourceLabel(entry.source), entry.live ? "Live" : entry.duration ? duration(entry.duration) : "", index > cursorIndex ? `starts ${formatEndTime(ahead)}` : "", entry.addedBy ? `added by ${entry.addedBy.name}` : "", entry.quality ? videoQualityLabels[entry.quality] : ""].filter(Boolean).join(" · ");
     return <li ref={drag?.setNodeRef} style={drag?.style} className={`queue-entry min-h-[72px] flex-nowrap gap-2.5 px-2 py-2.5 ${current ? "bg-[color-mix(in_srgb,var(--primary)_8%,var(--card))] shadow-[inset_3px_0_var(--primary)]" : ""}`} key={entry.id} data-queue-entry-id={entry.id} aria-current={current ? "true" : undefined}>
       <Button variant="ghost" size="icon" className="queue-play min-h-11 min-w-11 shrink-0" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-number">{String(index + 1).padStart(2, "0")}</span><Play aria-hidden="true" /></Button>
       {entry.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={entry.artworkId} className="queue-artwork size-12" /> : entry.thumbnail && <MediaArtwork key={entry.thumbnail} thumbnail={entry.thumbnail} title={entry.title} className="queue-artwork size-12" />}
@@ -82,6 +103,32 @@ export function QueuePanel({ state, credentials, connected, available, nativeHos
       {drag?.handle}
     </li>;
   };
+
+  if (presentation === "standard") {
+    const current = currentIndex >= 0 ? queue[currentIndex] : null;
+    let startsIn = current ? Math.max(0, (state!.player.duration ?? current.duration ?? 0) - state!.player.position) / (state!.player.speed || 1) : 0;
+    const doneIn = startsIn + upNext.reduce((seconds, entry) => seconds + (entry.duration ?? 0), 0);
+    return <section ref={panelRef} className="queue-panel queue-panel-standard" aria-labelledby="queue-title" onFocusCapture={event => {
+      const element = event.target, row = element.closest<HTMLElement>("[data-queue-entry-id]");
+      focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, label: element.getAttribute("aria-label") } : null;
+    }}>
+      <div className="queue-standard-header"><h2 id="queue-title">Up next</h2><Button variant="ghost" disabled={!connected || !upNext.length || keeping || isKept} onClick={() => void keepUpNext()}>{keeping ? "Keeping…" : isKept ? "Kept in Saved" : "Keep as a list"}</Button></div>
+      {state?.queueError && <Alert variant="destructive" className="queue-feedback"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
+      {notice && <p className="queue-feedback" role="status">{notice}</p>}
+      {upNext.length ? <section className="queue-standard-group" aria-labelledby="queue-next-title"><h3 id="queue-next-title">{upNext.length} to play, done by {formatEndTime(doneIn)}</h3>
+        <ol className="queue-standard-list" aria-label="Up next">{upNext.map((entry, index) => {
+          const starts = startsIn;
+          startsIn += entry.duration ?? 0;
+          const meta = [entry.live || entry.duration == null ? "Live" : `${duration(entry.duration)}, starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(", ");
+          return <li className="queue-standard-row" key={entry.id} data-queue-entry-id={entry.id}>
+            <Button variant="ghost" className="queue-play queue-standard-entry" disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-standard-title">{entry.title}</span><span className="queue-standard-meta">{meta}</span></Button>
+            <QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} canPlay={available} run={run} presentation="standard" firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />
+          </li>;
+        })}</ol>
+      </section> : <p className="queue-standard-empty">Nothing queued. Use Queue on any result and it plays after this.</p>}
+      {previous.length > 0 && <section className="queue-standard-group" aria-labelledby="queue-played-title"><h3 id="queue-played-title">Played</h3><ol className="queue-standard-list" aria-label="Played">{[...previous].reverse().map(({ entry }) => <li key={entry.id}><Button variant="ghost" className="queue-standard-played" disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}>{entry.title}</Button></li>)}</ol></section>}
+    </section>;
+  }
 
   return <DndContext sensors={sensors} onDragEnd={({ active, over }: DragEndEvent) => {
     if (!over) return;

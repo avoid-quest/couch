@@ -27,13 +27,13 @@ export function FindPage() {
     if (order) { const next = { ...layout, order }; setLayout(next); saveFindSections(next); }
   };
   useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
-  const onStage = section === "Find" && (!tvPresentation || tv.browsing);
+  const onStage = section === "Find" && (!tvPresentation || shell.standardLayout || tv.browsing);
   return (
     <section data-page="Find">
       <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
-      {!homeQuery.trim() && <div className="flex justify-end"><Button variant="ghost" size="icon" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}</Button></div>}
+      {!shell.standardLayout && !homeQuery.trim() && <div className="flex justify-end"><Button variant="ghost" size="icon" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}</Button></div>}
       <div hidden={!!homeQuery.trim()}>
-        <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} playing={active} active={onStage && !homeQuery.trim()} editing={editing} hiddenSections={layout.hidden} order={layout.order} onToggleSection={toggleSection} onMoveSection={moveSection} onBrowse={browseSection} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} recentRadio={recentRadio} onRadio={station => enqueueRadio(station, true)} />
+        <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} playing={active} active={onStage && !homeQuery.trim()} editing={editing} hiddenSections={shell.standardLayout ? ["recent", "folders", "radio"] : layout.hidden} order={shell.standardLayout ? ["continue", "forlater", "sources"] : layout.order} onToggleSection={toggleSection} onMoveSection={moveSection} onBrowse={browseSection} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} recentRadio={recentRadio} onRadio={station => enqueueRadio(station, true)} />
       </div>
     </section>
   );

@@ -1,0 +1,103 @@
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Captions, ListVideo, Music2, Settings2, SkipForward } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AuthArtwork } from "@/components/AuthArtwork";
+import { MediaArtwork } from "@/components/MediaArtwork";
+import { PlaybackTimeline, PlaybackTransport, PlaybackVolume, playbackCapabilities } from "@/components/PlaybackTransport";
+import { sourceLabel } from "@/components/PlaybackControls";
+import { PlaybackSettingsPanel } from "@/components/PlaybackSettings";
+import { formatDuration } from "@/time-format";
+import { VideoStage } from "@/sections/shell/VideoStage";
+import { QueuePanel } from "./QueuePanel";
+import { useShell } from "@/sections/shell/AppShell";
+
+type Panel = "queue" | "tracks" | "settings";
+
+export function PlayerPage() {
+  const shell = useShell();
+  const { state, credentials, connected, run, available, nativeHost, localHost, active, current, programme, videoQualityPreference } = shell;
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [shown, setShown] = useState(true);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const root = useRef<HTMLElement>(null);
+  const panelTrigger = useRef<HTMLButtonElement>(null);
+  const panelClose = useRef<HTMLButtonElement>(null);
+  const [now, setNow] = useState(Date.now());
+  const player = state?.player;
+  const playing = player?.status === "playing";
+  const { transportReady } = playbackCapabilities(state, connected);
+  const currentIndex = state?.queue.findIndex(entry => entry.id === state.currentEntryId) ?? -1;
+  const following = currentIndex >= 0 ? state?.queue[currentIndex + 1] : undefined;
+  const live = !!(current?.live || current?.kind === "radio" || current?.source.startsWith("radio:"));
+  const retry = state?.radioRetry?.retryAt != null && player?.status === "loading" ? state.radioRetry : null;
+  const retrySeconds = retry ? Math.max(0, Math.ceil((retry.retryAt! - now) / 1000)) : 0;
+  const remaining = current?.duration != null ? Math.max(0, (player?.duration ?? current.duration) - (player?.position ?? 0)) / (player?.speed || 1) : null;
+  const wake = () => {
+    setShown(true);
+    clearTimeout(timer.current);
+    if (playing && !panel) timer.current = setTimeout(() => setShown(false), 4000);
+  };
+  useEffect(() => {
+    clearTimeout(timer.current);
+    if (!playing || panel) setShown(true);
+    else timer.current = setTimeout(() => setShown(false), 4000);
+    return () => clearTimeout(timer.current);
+  }, [playing, panel]);
+  useEffect(() => {
+    if (!retry) return;
+    setNow(Date.now());
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [retry?.retryAt]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "Escape" || event.key === "BrowserBack") {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (panel) setPanel(null); else shell.leavePlayer();
+        return;
+      }
+      if (!panel && (!shown || !root.current?.contains(document.activeElement)) && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " "].includes(event.key)) {
+        event.preventDefault(); event.stopImmediatePropagation(); wake();
+        requestAnimationFrame(() => root.current?.querySelector<HTMLElement>('[role="slider"], .play-button, [data-primary]')?.focus());
+        return;
+      }
+      if (!panel && event.key === " " && !(event.target as HTMLElement).closest("button") && transportReady && player?.playbackId) {
+        event.preventDefault(); void run({ type: "pause", playbackId: player.playbackId, paused: playing });
+      }
+      wake();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [shown, panel, playing, transportReady, player?.playbackId]);
+  const elsewhere = !localHost && active;
+  const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
+  const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
+  const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
+  const openPanel = (value: Panel, trigger: HTMLButtonElement) => { panelTrigger.current = trigger; setPanel(value); setShown(true); };
+  return <section ref={root} className="player-page" data-page="Now" aria-label="Player" onMouseMove={playing ? wake : undefined}>
+    <div className="player-picture" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
+      {elsewhere ? <div className="player-elsewhere">{artwork && <div className="player-elsewhere-art">{artwork}</div>}<div><p>Playing on {state?.installationName || "another Couch"}</p><h1>{current?.title}</h1><p>The picture and sound are there. Everything here controls it.</p></div></div>
+        : <><VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly} artwork={artwork} />{active && audioOnly && current && <div className="player-audio-stage"><div className="player-audio-art" aria-hidden="true">{artwork || <Music2 />}</div><div className="player-audio-copy"><h1>{currentProgramme?.title || current.title}</h1><p>{currentProgramme ? current.title : sourceLabel(current.source)}</p>{player?.nowPlaying && <p className="player-audio-now" role="status">Playing now: {[player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" — ")}</p>}</div></div>}</>}
+    </div>
+    {current && player?.status === "loading" && player.buffering && <div className="absolute top-8 left-10 z-10 bg-black px-4 py-2 text-sm text-white" role="status">Buffering</div>}
+    {current && ((player?.status === "loading" && !player.buffering) || player?.status === "error") && <div className="player-status-card" role="status"><div>
+      <h2>{retry ? `Reconnecting to ${current.title}` : player.status === "loading" ? `Loading ${current.title}` : player.error || `Can't play ${current.title}`}</h2>
+      <p>{retry ? `Next try in ${retrySeconds} s. Attempt ${retry.attempt} of ${retry.maximum}.` : player.status === "loading" ? `Asking ${sourceLabel(current.source)} for the stream.` : `${current.title} can't play.`}</p>
+      {player.status === "loading" && !retry && <div className="player-loading-track" aria-hidden="true"><span /></div>}
+      {(retry || player.status === "error") && <div className="player-status-actions"><Button disabled={!available} onClick={() => void run({ type: "play", entryId: current.id })}>{retry ? "Try now" : "Try again"}</Button>{following && player.playbackId && <Button variant="ghost" onClick={() => void run({ type: "next", playbackId: player.playbackId! })}>Skip</Button>}{player.status === "error" && <Button variant="ghost" onClick={shell.leavePlayer}>Find something else</Button>}</div>}
+    </div></div>}
+    {current && <div className={`player-band ${shown ? "" : "player-band-hidden"}`} inert={!shown}>
+      <div className="player-band-heading"><Button data-back variant="ghost" className="player-back" onClick={shell.leavePlayer}><ArrowLeft aria-hidden="true" />Back</Button><h1 title={current.title}>{current.title}</h1><span>{[sourceLabel(current.source), state?.playedBy && state.playedBy.deviceId !== shell.identity?.controller?.id ? `started from ${state.playedBy.name}` : null].filter(Boolean).join(", ")}</span></div>
+      {live ? <><div className="player-live-line" /><div className="player-live-time"><span>Live</span><span>{player?.nowPlaying ? [player.nowPlaying.artist, player.nowPlaying.title].filter(Boolean).join(" · ") : "No end time"}</span></div></> : state && <PlaybackTimeline state={state} connected={connected} run={run} />}
+      <div className="player-band-actions">
+        {state && <PlaybackTransport state={state} credentials={credentials} connected={connected} run={run} showSettings={false} />}
+        {!following && <Button variant="ghost" size="icon" className="player-next-disabled" aria-label="Next in queue" disabled><SkipForward aria-hidden="true" /></Button>}
+        <Button data-panel="queue" variant="ghost" aria-pressed={panel === "queue"} onClick={event => openPanel("queue", event.currentTarget)}><ListVideo aria-hidden="true" />{following ? <>Next: {following.title}<span>{remaining !== null && ` in ${formatDuration(remaining)}`}{currentIndex + 2 < (state?.queue.length ?? 0) && `, then ${(state?.queue.length ?? 0) - currentIndex - 2} more`}</span></> : <span>Nothing next</span>}</Button>
+        <div className="player-band-right">{state && <PlaybackVolume state={state} connected={connected} run={run} />}{!audioOnly && <Button data-panel="tracks" variant="ghost" aria-pressed={panel === "tracks"} onClick={event => openPanel("tracks", event.currentTarget)}><Captions aria-hidden="true" />Audio & subtitles</Button>}<Button data-panel="settings" variant="ghost" aria-pressed={panel === "settings"} onClick={event => openPanel("settings", event.currentTarget)}><Settings2 aria-hidden="true" />Settings</Button></div>
+      </div>
+    </div>}
+    <Sheet open={panel !== null} onOpenChange={open => { if (!open) setPanel(null); }}><SheetContent side="right" className="player-sheet overflow-y-auto shadow-none" overlayClassName="!bg-transparent !backdrop-blur-none" showCloseButton={false} onOpenAutoFocus={event => { event.preventDefault(); panelClose.current?.focus(); }} onCloseAutoFocus={event => { event.preventDefault(); panelTrigger.current?.focus(); }}><SheetHeader className="flex-row items-center gap-2"><SheetClose asChild><Button ref={panelClose} variant="ghost"><ArrowLeft aria-hidden="true" />Close</Button></SheetClose><SheetTitle>{panel === "queue" ? "Up next" : panel === "tracks" ? "Audio & subtitles" : "Settings"}</SheetTitle></SheetHeader>{panel === "queue" ? <QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} presentation="standard" /> : panel && player && state?.preferences && <PlaybackSettingsPanel panel={panel} entry={current} player={player} ready={transportReady} connected={connected} credentials={credentials} preferences={state.preferences} profile={state.activeProfile} onCommand={run} />}</SheetContent></Sheet>
+  </section>;
+}

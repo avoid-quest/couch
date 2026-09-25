@@ -22,6 +22,12 @@ import { mergeRecent } from "@/recent";
 import type { Credentials } from "../../session/session";
 import { SaveForLater } from "@/components/SaveForLater";
 import { MetadataEditor } from "@/components/MetadataEditor";
+import { useOptionalShell } from "@/sections/shell/shell-context";
+import { DurationBar } from "@/components/DurationBar";
+import { useQuery } from "@tanstack/react-query";
+import { forLaterQuery } from "@/api/for-later";
+import { librarySourcesQuery } from "@/api/library";
+import { jellyfinConnectionQuery } from "@/api/jellyfin";
 
 const asHistory = (item: LibraryItem): HistoryItem => ({
   mediaId: `library:${item.id}`, libraryItemId: item.id, title: item.title,
@@ -50,7 +56,11 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
   onToggleSection?: (id: FindSectionId) => void;
   onMoveSection?: (activeId: string, overId: string) => void;
 }) {
+  const standardLayout = useOptionalShell()?.standardLayout;
   const { origin, token } = credentials;
+  const later = useQuery({ ...forLaterQuery(credentials), enabled: !!standardLayout && connected && active });
+  const sources = useQuery({ ...librarySourcesQuery(credentials), enabled: !!standardLayout && connected && active && canManageMetadata });
+  const jellyfin = useQuery({ ...jellyfinConnectionQuery(credentials), enabled: !!standardLayout && connected && active && canManageMetadata });
   const profileId = state?.activeProfile.id;
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [library, setLibrary] = useState<LibraryItem[]>([]);
@@ -134,7 +144,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
     continue: hero ? <>{hero && <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Continue playing</h2></div>}
       <section className="relative min-h-[280px] overflow-hidden rounded-2xl bg-card p-6" aria-label="Continue watching">
         {artwork(hero, "browse-hero-art")}
-        <div className="relative z-[1] max-w-[36rem]"><p className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">{hero.sourceLabel || (hero.libraryItemId ? "TV folders" : "Recently played")}</p><h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight break-words md:text-4xl">{hero.title}</h2><p className="mt-2 text-sm text-muted-foreground">{progressTime(hero.position)} watched{hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>
+        <div className="relative z-[1] max-w-[36rem]"><p className="text-xs font-semibold uppercase tracking-[.12em] text-muted-foreground">{hero.sourceLabel || (hero.libraryItemId ? "TV folders" : "Recently played")}</p><h2 className="mt-2 text-3xl font-semibold leading-tight tracking-tight break-words md:text-4xl">{hero.title}</h2><p className="mt-2 text-sm text-muted-foreground">Continue from {progressTime(hero.position)}{!standardLayout && hero.duration ? ` of ${progressTime(hero.duration)}` : ""}</p>{standardLayout && <DurationBar duration={hero.duration} position={hero.position} />}
           <div className="mt-3 flex flex-wrap gap-1"><Button disabled={!playable(hero)} aria-label={`Resume ${hero.title}`} onClick={() => void play(hero)}><Play aria-hidden="true" />{pending ? "Starting…" : "Resume"}</Button><Button variant="outline" onClick={event => openDetail(hero, event.currentTarget)}>Details</Button></div>
         </div>
       </section></> : null,
@@ -156,12 +166,19 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
         const entry = asHistory(item);
         return <li key={item.id}><button type="button" className="flex w-full min-w-0 flex-col items-start gap-1 rounded-xl text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(entry, event.currentTarget)}>{artwork(entry)}<strong className="mt-1.5 text-sm font-semibold break-words">{item.title}</strong><small className="text-xs leading-relaxed text-muted-foreground">{[item.video?.year, item.kind === "audio" ? item.artist || "Music" : item.video?.show?.title || "Local video", !item.available ? "File unavailable" : item.progress?.watched ? "Watched" : item.progress?.position ? `Resume at ${progressTime(item.progress.position)}` : null].filter(Boolean).join(" · ")}</small></button>{playbackActions(entry)}</li>;
       })}</ul></> : null,
-    sources: onAddSource ? <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div> : null,
+    sources: onAddSource ? <section className="find-sources"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold tracking-tight">Sources</h2><Button variant="ghost" onClick={onAddSource}><Plus aria-hidden="true" />Add source</Button></div>{standardLayout && <p className="text-muted-foreground">Your folders and connected services appear in search. Add or manage them here.</p>}</section> : null,
     radio: onRadio ? <LiveNow rail heading="Live radio" credentials={credentials} connected={connected} canPlay={canPlay} onEnqueue={onRadio} active={active} /> : null,
     forlater: active ? <ForLaterSection origin={origin} token={token} connected={connected} canPlay={canPlay} onFind={() => onBrowse("Search")} /> : null,
   };
   const sensors = useDndSensors();
   const sectionOrder = order ?? [...findSectionIds];
+
+  if (standardLayout) return <section className="find-home" aria-label="Browse and resume">
+    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
+    {unfinished.length > 0 && <section className="find-home-section" aria-label="Continue"><h2>Continue</h2><ul>{unfinished.map(item => <li key={item.mediaId} className="find-home-row">{artwork(item, "find-home-art")}<Button variant="ghost" className="result-main" aria-label={`Resume ${item.title}`} disabled={!playable(item)} onClick={() => void play(item)}><strong>{item.title}</strong><small>{item.sourceLabel || (item.libraryItemId ? "TV folders" : "Continue")}</small><DurationBar duration={item.duration} position={item.position} /></Button><div className="find-home-actions"><Button variant="ghost" disabled={!playable(item)} onClick={() => void play(item, true)}>From start</Button>{item.libraryItemId && <Button variant="ghost" disabled={!playable(item)} onClick={() => void add(item)}>Queue</Button>}<ProgressActions origin={origin} token={token} connected={connected} mediaId={item.mediaId} title={item.title} progress={item} inContinue onUpdated={() => setRefresh(value => value + 1)} /></div></li>)}</ul></section>}
+    {!!later.data?.items.length && <section className="find-home-section"><ForLaterSection origin={origin} token={token} connected={connected} canPlay={canPlay} inspect onFind={() => onBrowse("Search")} /></section>}
+    {!loading && !unfinished.length && !later.data?.items.length && <div className="find-empty"><h2>Find something to play</h2><p>Search YouTube, Twitch, RaiPlay, radio stations and your TV folders at once, or paste a link from a page with video. What you don’t finish shows up here to continue.</p>{canManageMetadata ? <div className="find-empty-sources"><h3>Sources on this Couch</h3><div><span>TV folders</span><span>{sources.data?.sources.length ? `${sources.data.sources.length} folder${sources.data.sources.length === 1 ? "" : "s"} · ${sources.data.sources.some(source => source.status === "scanning") ? "Scanning" : sources.data.sources.some(source => source.status === "error" || source.status === "unavailable") ? "Needs attention" : "Ready"}` : "Not set up"}</span></div><div><span>Jellyfin</span><span>{jellyfin.data?.configured ? "Connected" : "Not connected"}</span></div><div><span>Radio</span><span>avoid radio, built in</span></div>{onAddSource && <Button variant="outline" onClick={onAddSource}>Add a source</Button>}</div> : <p>An administrator can add TV folders and Jellyfin in Settings.</p>}</div>}
+  </section>;
 
   return <section className="min-w-0" aria-label="Browse and resume">
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}

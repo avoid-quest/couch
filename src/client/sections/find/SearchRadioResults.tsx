@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { createId } from "../../session/session";
 import type { SourceSetupKind } from "@/components/SourceSetupDialog";
-import { readSearch, searchError, type SearchPlaybackProps } from "./SearchOnlineResults";
+import { matchesFacet, readSearch, searchError, type SearchPlaybackProps, type SearchHit } from "./SearchOnlineResults";
+import { useOptionalShell } from "@/sections/shell/shell-context";
 
 type Props = SearchPlaybackProps & { onManageSources?: (source?: SourceSetupKind) => void; query: string; directory?: boolean; source?: "avoid radio" | "Radio playlists" | "Radio directory" };
 export function SearchRadioResults(props: Props) {
@@ -59,7 +60,6 @@ function RadioResults(props: Props) {
   const stationIds = new Set(stations.map(station => station.id));
   const results = directory || avoid ? stations : [...stations, ...(favorites ?? []).filter(station => matches(station) && !stationIds.has(station.id))];
   const detail = results.find(station => station.id === detailId);
-  useEffect(() => { props.onResults?.(title, { count: results.length, loading, error: !!error }); }, [results.length, loading, error, props.onResults, title]);
   useEffect(() => {
     if (!props.active) {
       if (detail) { restoreDetailFocus.current = true; setDetailId(null); }
@@ -73,10 +73,25 @@ function RadioResults(props: Props) {
     });
     return () => cancelAnimationFrame(frame);
   }, [props.active, detail]);
+  const standardLayout = useOptionalShell()?.standardLayout;
   const itemActions = (station: RadioStation) => {
     const saved = !!favorites?.some(item => item.id === station.id);
-    return <div className="flex flex-wrap items-center gap-1"><Button aria-label={`Play: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play</Button><Button variant="secondary" aria-label={`Up next: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>Up next</Button>{props.connected && <Button variant="ghost" aria-label={saved ? `Remove ${station.name}` : `Keep ${station.name}`} aria-pressed={saved} disabled={busy || favorites === null} onClick={() => save(station, saved)}>{saved ? "Kept" : "Keep"}</Button>}</div>;
+    return <div className="flex flex-wrap items-center gap-1">{!standardLayout && <Button aria-label={`Play: ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}>Play</Button>}<Button variant="secondary" aria-label={`Up next: ${station.name}`} disabled={!props.connected || busy || !props.onCommand} onClick={() => play(station, false)}>{standardLayout ? "Queue" : "Up next"}</Button>{props.connected && <Button variant="ghost" aria-label={saved ? `Remove ${station.name}` : `${standardLayout ? "Save" : "Keep"} ${station.name}`} aria-pressed={saved} disabled={busy || favorites === null} onClick={() => save(station, saved)}>{standardLayout ? saved ? "Saved" : "Save" : saved ? "Kept" : "Keep"}</Button>}</div>;
   };
+  useEffect(() => {
+    const hits: SearchHit[] | undefined = standardLayout ? results.map(station => {
+      const saved = !!favorites?.some(item => item.id === station.id);
+      return { id: `${title}:${station.id}`, source: title, title: station.name, meta: [station.groupTitle, title].filter(Boolean).join(", "), kind: "Radio", live: true, thumbnail: station.logoUrl,
+        primary: { label: "Play", disabled: !props.canPlay || busy || !props.onCommand, run: () => play(station, true) },
+        actions: [
+          { label: "Queue", disabled: busy || !props.onCommand, run: () => play(station, false) },
+          { label: saved ? "Saved" : "Save", pressed: saved, disabled: busy || favorites === null, run: () => save(station, saved) },
+        ],
+      };
+    }) : undefined;
+    props.onResults?.(title, { count: results.length, loading, error: !!error, errorMessage: error, retry: () => void retry(), facets: results.map(() => ({ kind: "Radio" })), hits });
+  }, [standardLayout, title, stations, favorites, results.length, loading, error, busy, props.onResults, props.canPlay, props.onCommand]);
+  if (standardLayout) return null;
   return <section aria-label={`${title} search results`} aria-busy={loading} className="grid gap-3.5 border-t py-6 first:border-t-0 first:pt-3"><div className="flex items-baseline justify-between gap-3"><h2 className="text-[13px] font-semibold tracking-[.01em] text-muted-foreground">{title}</h2></div>
     {loading && <p role="status">Searching {title.toLowerCase()}…</p>}
     {error && <p role="alert">{error} <Button variant="outline" disabled={!props.connected || loading} onClick={() => void retry()}>Retry {title}</Button></p>}
@@ -84,7 +99,7 @@ function RadioResults(props: Props) {
     {saveError && <p role="status">Kept status unavailable. {saveError} <Button variant="outline" disabled={!props.connected} onClick={() => void kept.refetch()}>Retry kept status</Button></p>}
     {!loading && !error && !results.length && <p className="text-muted-foreground">{`No matching stations in ${title}.`}</p>}
     {actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{results.slice(0, visible).map(station => <li key={station.id} className="flex min-w-0 flex-col"><MediaArtwork thumbnail={station.logoUrl} title={station.name} /><div className="grid gap-1 px-0.5 pb-0 pt-2.5"><Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong className="text-[15px] font-semibold leading-tight break-words">{station.name}</strong><small className="text-xs text-muted-foreground">{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button></div>{itemActions(station)}</li>)}</ul>
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{results.slice(0, visible).filter(() => matchesFacet({ kind: "Radio" }, props.kinds, props.lengths)).map((station, index) => <li key={station.id} style={standardLayout ? { order: index * 10 + (avoid ? 3 : directory ? 5 : 4) } : undefined} className="flex min-w-0 flex-col"><MediaArtwork thumbnail={station.logoUrl} title={station.name} /><div className="grid gap-1 px-0.5 pb-0 pt-2.5">{standardLayout ? <Button variant="ghost" data-play className="result-main" aria-label={`Play ${station.name}`} disabled={!props.connected || !props.canPlay || busy || !props.onCommand} onClick={() => play(station, true)}><span className="result-head"><strong>{station.name}</strong><small>{[station.groupTitle, title].filter(Boolean).join(", ")}</small></span><span className="duration-bar duration-bar-live">Live</span></Button> : <Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${station.name}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(station.id); }}><strong className="text-[15px] font-semibold leading-tight break-words">{station.name}</strong><small className="text-xs text-muted-foreground">{[station.groupTitle, station.countryCode].filter(Boolean).join(" · ") || "Internet radio"}</small></Button>}</div>{itemActions(station)}</li>)}</ul>
     <Dialog open={props.active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active && detailTrigger.current?.isConnected && !detailTrigger.current?.closest("[hidden]") && !document.querySelector('[role="dialog"][data-state="open"], [role="listbox"], [data-slot="popover-content"][data-state="open"]')) detailTrigger.current.focus({ preventScroll: true }); }}>{detail && <><MediaArtwork thumbnail={detail.logoUrl} title={detail.name} className="h-auto aspect-[1.9] w-full" /><DialogHeader><DialogTitle>{detail.name}</DialogTitle><DialogDescription>{title} · Live</DialogDescription></DialogHeader><p>{[detail.groupTitle, detail.countryCode, detail.codec, detail.bitrate && `${detail.bitrate} kbps`].filter(Boolean).join(" · ")}</p>{itemActions(detail)}{actionError && <p role="alert">{actionError}</p>}{notice && <p role="status">{notice}</p>}</>}</DialogContent></Dialog>
     {results.length > visible && <Button variant="outline" onClick={() => setVisible(value => value + 6)}>Show more {title.toLowerCase()}</Button>}
   </section>;

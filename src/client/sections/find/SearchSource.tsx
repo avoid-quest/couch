@@ -12,16 +12,19 @@ import { Spinner } from "@/components/ui/spinner";
 import { progressTime } from "@/components/HistoryPanel";
 import { SaveForLater } from "@/components/SaveForLater";
 import { MetadataEditor } from "@/components/MetadataEditor";
+import { DurationBar } from "@/components/DurationBar";
+import { useOptionalShell } from "@/sections/shell/shell-context";
 import type { Props } from "./SearchPanel";
-import type { SearchResultSummary } from "./SearchOnlineResults";
+import { matchesFacet, type SearchResultSummary, type SearchFacet, type SearchHit } from "./SearchOnlineResults";
 
 type Source = "Library" | "Jellyfin";
-type Options = { playNow?: boolean; fromStart?: boolean };
+type Options = { playNow?: boolean; fromStart?: boolean; placement?: "next" };
 type Result = { artworkId?: string | null; video?: boolean; id: string; title: string; detail: string; plot?: string | null; available: boolean; position: number; duration: number | null; watched: boolean };
 type Page = { items: Result[]; total: number; warning?: string };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
 export function SearchSource({ source, query, attempt, ...props }: Props & { source: Source; query: string; attempt: number; onResults: (source: string, summary: SearchResultSummary) => void; onChooseSource: (source: string) => void }) {
+  const standardLayout = useOptionalShell()?.standardLayout;
   const [offset, setOffset] = useState(0);
   const pageSize = source === "Library" ? 30 : 50;
   const result = useQuery({
@@ -69,12 +72,12 @@ export function SearchSource({ source, query, attempt, ...props }: Props & { sou
     });
     return () => cancelAnimationFrame(frame);
   }, [props.active]);
-  useEffect(() => { props.onResults(source === "Library" ? "TV folders" : source, { count: page?.total ?? 0, loading, error: !!error }); }, [page?.total, loading, error, props.onResults, source]);
+  const facet = (item: Result): SearchFacet => ({ kind: item.video ? "Video" : "Music", duration: item.duration });
 
   async function enqueue(item: Result, options?: Options) {
     const signal = lifetime.current?.signal;
     setPending(true); setActionError(null); setNotice("");
-    try { if (await props.onEnqueue(source, item.id, options) && !signal?.aborted) setNotice(options?.playNow ? `Starting ${item.title} on the playback computer.` : `Added ${item.title} to the end of Up next. Playback is unchanged.`); }
+    try { if (await props.onEnqueue(source, item.id, options) && !signal?.aborted) setNotice(options?.playNow ? `Starting ${item.title} on the playback computer.` : options?.placement === "next" ? `${item.title} plays next.` : `Added ${item.title} to the end of Up next. Playback is unchanged.`); }
     catch (reason) { if (!signal?.aborted) setActionError(message(reason)); }
     finally { if (!signal?.aborted) setPending(false); }
   }
@@ -82,8 +85,23 @@ export function SearchSource({ source, query, attempt, ...props }: Props & { sou
     <Button aria-label={`${item.position ? "Resume" : "Play"}: ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}>{item.position ? "Resume" : "Play"}</Button>
     {!!item.position && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true, fromStart: true })}>From start</Button>}
     <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} />
-    <Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>Up next</Button>
+    <Button variant="secondary" aria-label={`Play next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item, { placement: "next" })}>Play next</Button>
+    <Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}>{standardLayout ? "Queue" : "Up next"}</Button>
   </div>;
+  useEffect(() => {
+    const label = source === "Library" ? "TV folders" : source;
+    const hits: SearchHit[] | undefined = standardLayout ? page?.items.map(item => ({ id: `${source}:${item.id}`, source: label, title: item.title, meta: [item.detail, label].filter(Boolean).join(", "), description: item.plot ?? undefined, ...facet(item), position: item.position, artworkId: item.artworkId, video: item.video,
+      primary: { label: item.position ? "Resume" : "Play", disabled: !props.canPlay || !item.available || loading || pending, run: () => void enqueue(item, { playNow: true }) },
+      actions: [
+        ...(item.position ? [{ label: "From start", disabled: !props.canPlay || !item.available || loading || pending, run: () => void enqueue(item, { playNow: true, fromStart: true }) }] : []),
+        { label: "Play next", disabled: !item.available || loading || pending, run: () => void enqueue(item, { placement: "next" }) },
+        { label: "Queue", disabled: !item.available || loading || pending, run: () => void enqueue(item) },
+        { label: "Save", node: <SaveForLater origin={props.origin} token={props.token} connected={props.connected} reference={{ kind: source === "Library" ? "library" : "jellyfin", id: item.id }} title={item.title} /> },
+      ],
+    })) : undefined;
+    props.onResults(label, { count: page?.total ?? 0, loading, error: !!error, errorMessage: error ?? undefined, retry: () => void result.refetch(), facets: page?.items.map(facet), hits });
+  }, [standardLayout, source, page?.items, page?.total, loading, error, pending, props.onResults, props.canPlay, props.connected, props.origin, props.token]);
+  if (standardLayout) return null;
   return <section className="space-y-3" aria-label={`${source} search results`} aria-busy={loading}>
     <div className="flex items-baseline justify-between gap-3"><h2 className="text-[13px] font-semibold tracking-[.01em] text-muted-foreground">{source === "Library" ? "TV folders" : source}</h2>{page && !loading && <span className="text-[13px] text-muted-foreground">{page.total} result{page.total === 1 ? "" : "s"}</span>}</div>
     {loading && <p className="text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Searching {source}…</p>}
@@ -93,10 +111,10 @@ export function SearchSource({ source, query, attempt, ...props }: Props & { sou
     {!loading && page?.total === 0 && !page.warning && <p className="text-sm text-muted-foreground">No matches in {source}. Try another title or artist.</p>}
     {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
     {actionError && <p role="alert">{actionError}</p>}
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{page?.items.map(item => <li key={item.id} className="flex min-w-0 flex-col">
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-x-4 gap-y-5">{page?.items.filter(item => matchesFacet(facet(item), props.kinds, props.lengths)).map((item, index) => <li key={item.id} style={standardLayout ? { order: index * 10 + (source === "Library" ? 6 : 7) } : undefined} className="flex min-w-0 flex-col">
       <AuthArtwork origin={props.origin} token={props.token} id={item.artworkId} video={item.video} />
-      <Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(item.id); }}><strong className="text-[15px] font-semibold break-words">{item.title}</strong><small className="text-xs text-muted-foreground break-words">{item.detail}{item.watched && " · Watched"}{!item.available && " · File unavailable"}{item.position > 0 && ` · Continue from ${progressTime(item.position)}`}</small></Button>
-      <div className="flex flex-wrap items-center gap-1"><Button aria-label={`${item.position ? "Resume" : "Play"}: ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}><Play aria-hidden="true" />{item.position ? "Resume" : "Play"}</Button><Button variant="outline" aria-label={`Up next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" /><span>Up next</span></Button></div>
+      {standardLayout ? <div><Button variant="ghost" data-play data-search-item={item.id} className="result-main" aria-label={`${item.position ? "Resume" : "Play"} ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}><span className="result-head"><strong>{item.title}</strong><small>{item.detail}{item.watched && " · Watched"}{!item.available && " · File unavailable"}</small></span><DurationBar duration={item.duration} position={item.position} />{item.plot && <span className="result-description">{item.plot}</span>}</Button></div> : <><Button variant="ghost" className="flex min-h-11 min-w-0 flex-1 flex-col items-start gap-1 p-0 text-left leading-normal whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(item.id); }}><strong className="text-[15px] font-semibold break-words">{item.title}</strong><small className="text-xs text-muted-foreground break-words">{item.detail}{item.watched && " · Watched"}{!item.available && " · File unavailable"}{item.position > 0 && ` · Continue from ${progressTime(item.position)}`}</small></Button><DurationBar duration={item.duration} position={item.position} /></>}
+      {standardLayout ? actions(item) : <div className="flex flex-wrap items-center gap-1"><Button aria-label={`${item.position ? "Resume" : "Play"}: ${item.title}`} disabled={!props.connected || !props.canPlay || !item.available || loading || pending} onClick={() => void enqueue(item, { playNow: true })}><Play aria-hidden="true" />{item.position ? "Resume" : "Play"}</Button><Button variant="outline" aria-label={`Up next: ${item.title}`} disabled={!props.connected || !item.available || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" /><span>Up next</span></Button></div>}
     </li>)}</ul>
     {page && page.total > pageSize && <nav aria-label={`${source} search pages`} className="flex items-center justify-between gap-2"><Button variant="outline" disabled={!props.connected || loading || !offset} onClick={() => setOffset(value => Math.max(0, value - pageSize))}>Previous</Button><span className="text-sm">{offset + 1}–{Math.min(offset + pageSize, page.total)} of {page.total}</span><Button variant="outline" disabled={!props.connected || loading || offset + pageSize >= page.total} onClick={() => setOffset(value => value + pageSize)}>Next</Button></nav>}
     <Dialog open={props.active && detail !== null} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent className="max-h-[85dvh] overflow-y-auto" onCloseAutoFocus={event => { event.preventDefault(); if (props.active && trigger.current?.isConnected) trigger.current.focus({ preventScroll: true }); }}>

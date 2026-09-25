@@ -1,25 +1,27 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { AudioLines, Bluetooth, MonitorSmartphone, Settings2 } from "lucide-react";
+import { AudioLines, Bluetooth, Check, MonitorSmartphone, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SoundState } from "../../../shared/sound";
 import type { BluetoothState } from "../../../shared/bluetooth";
 import type { Credentials } from "@/session/session";
+import type { Action, SessionState } from "../../../shared/protocol";
 
-// Quick check of where playback runs and where its sound comes out.
-// Wi-Fi signal lives in the OS, not here; the LAN address and the audio route are what Couch knows.
-export function PlaybackStatus({ credentials, connected, status, installationName }: {
+export function SoundControls({ credentials, connected, open, installationName, compact = false, state, run, onClose }: {
   credentials: Credentials | null;
   connected: boolean;
-  status: string;
+  open: boolean;
   installationName?: string;
+  compact?: boolean;
+  state?: SessionState | null;
+  run?: (action: Action) => Promise<boolean>;
+  onClose?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [sound, setSound] = useState<SoundState | null>(null);
   const [bluetooth, setBluetooth] = useState<BluetoothState | null>(null);
-  const [soundFailed, setSoundFailed] = useState(false);
+  const [soundFailure, setSoundFailure] = useState("");
   const [bluetoothFailed, setBluetoothFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -30,15 +32,15 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     const controller = new AbortController();
     const headers = { Authorization: `Bearer ${credentials.token}` };
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]);
-    setLoading(true);
+    setSound(null); setBluetooth(null); setSoundFailure(""); setLoading(true);
     void Promise.allSettled([
-      fetch(`${credentials.origin}/api/sound`, { headers, signal }).then(response => response.ok ? response.json() : Promise.reject(new Error("Sound is unavailable."))),
+      fetch(`${credentials.origin}/api/sound`, { headers, signal }).then(response => response.ok ? response.json() : Promise.reject(new Error(response.status === 403 ? "An administrator is required to choose a sound output." : "Sound needs a connected player."))),
       fetch(`${credentials.origin}/api/bluetooth`, { headers, signal }).then(response => response.ok ? response.json() : Promise.reject(new Error("Bluetooth is unavailable."))),
     ]).then(([soundResult, bluetoothResult]) => {
       if (controller.signal.aborted) return;
       setSound(soundResult.status === "fulfilled" ? soundResult.value : null);
       setBluetooth(bluetoothResult.status === "fulfilled" ? bluetoothResult.value : null);
-      setSoundFailed(soundResult.status === "rejected");
+      setSoundFailure(soundResult.status === "rejected" ? soundResult.reason instanceof Error ? soundResult.reason.message : "Sound is unavailable." : "");
       setBluetoothFailed(bluetoothResult.status === "rejected");
       setLoading(false);
     });
@@ -69,12 +71,59 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     finally { setPending(false); }
   };
 
+  const unavailable = !connected ? "Connect to choose an output." : soundFailure || (loading ? "Checking outputs…" : "No outputs reported.");
+  if (compact) {
+    const volume = state?.player.volume ?? sound?.routing?.volume ?? null;
+    const volumeReady = connected && !!run && volume !== null && state?.player.status !== "unavailable" && state?.systemAudio?.volumeWritable !== false && sound?.routing?.volumeWritable !== false;
+    const changeVolume = (step: number) => { if (volumeReady && volume !== null) void run({ type: "volume", volume: Math.max(0, Math.min(100, Math.round(volume + step))) }); };
+    return <div className="device-sound-controls">
+      <p className="device-section-label">Sound on {installationName || "this Couch"}</p>
+      {outputs.length ? <div className="device-output-list">{outputs.map(output => <Button key={output.id} variant="ghost" className="device-row" aria-pressed={selected === output.id} disabled={pending || !connected} onClick={() => void selectOutput(output.id)}><span>{selected === output.id && <Check aria-hidden="true" />} {output.name || output.id}</span></Button>)}</div> : <p className="device-muted">{unavailable}</p>}
+      {observed && observed.id !== selected && <p className="device-muted">Now playing on {observed.name || observed.id}.</p>}
+      <div className="device-volume" role="group" aria-label="Volume"><span>Volume</span><div className="device-volume-steps"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></div></div>
+      {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
+      {credentials && <Button variant="ghost" className="device-settings-link" asChild><Link to="/settings/sound" onClick={onClose}><Settings2 aria-hidden="true" />Sound settings</Link></Button>}
+    </div>;
+  }
+  return <>
+    <div className="grid gap-2">
+      <p className="text-sm font-medium">Sound output</p>
+      {outputs.length
+        ? <Select value={selected ?? undefined} onValueChange={output => void selectOutput(output)} disabled={pending || !connected}>
+          <SelectTrigger className="w-full" aria-label="Sound output"><SelectValue placeholder="Choose output" /></SelectTrigger>
+          <SelectContent>{outputs.map(output => <SelectItem key={output.id} value={output.id}>{output.name || output.id}</SelectItem>)}</SelectContent>
+        </Select>
+        : <p className="text-muted-foreground">{unavailable}</p>}
+      {observed && observed.id !== selected && <p className="text-xs text-muted-foreground">Now playing on {observed.name || observed.id}.</p>}
+    </div>
+    <div className="grid gap-2">
+      <p className="text-sm font-medium">Bluetooth</p>
+      {!adapterReady && <p className="text-muted-foreground">{!connected ? "Connect to see Bluetooth devices." : bluetoothFailed ? "Bluetooth needs a connected player." : bluetooth ? bluetooth.adapter === "off" ? "Bluetooth is off on the playback computer." : "Bluetooth is unavailable." : "Checking Bluetooth…"}</p>}
+      {adapterReady && !!connectedDevices.length && <ul className="grid gap-1">{connectedDevices.map(device => <li key={device.address} className="flex items-center gap-2 text-muted-foreground"><Bluetooth className="size-4" aria-hidden="true" />{device.name}</li>)}</ul>}
+      {adapterReady && !connectedDevices.length && <p className="text-muted-foreground">No devices connected. Pair speakers in settings.</p>}
+    </div>
+    {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
+    {credentials && <Button variant="outline" className="w-full" asChild><Link to="/settings/sound" onClick={onClose}><Settings2 aria-hidden="true" />Sound settings</Link></Button>}
+  </>;
+}
+
+// Quick check of where playback runs and where its sound comes out.
+// Wi-Fi signal lives in the OS, not here; the LAN address and the audio route are what Couch knows.
+export function PlaybackStatus({ credentials, connected, status, installationName, standardLayout = false, localHost = false }: {
+  credentials: Credentials | null;
+  connected: boolean;
+  status: string;
+  installationName?: string;
+  standardLayout?: boolean;
+  localHost?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
   const name = installationName || "Couch";
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
       <Button variant="ghost" className="playback-status" aria-label={`Playback on ${name}: ${status}`}>
         <span className={`connection-dot ${connected ? "online" : ""}`} aria-hidden="true" />
-        <span className="playback-status-name">{name}</span>
+        <span className="playback-status-name">{standardLayout ? localHost ? "Playing here" : `Playing on ${name}` : name}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="w-80 gap-3">
@@ -86,24 +135,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
         <MonitorSmartphone className="size-5 text-muted-foreground" aria-hidden="true" />
       </div>
       {credentials?.origin && <p className="flex items-center gap-2 text-muted-foreground"><span className="sr-only">Connection</span><AudioLines className="size-4" aria-hidden="true" />{new URL(credentials.origin).host}</p>}
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">Sound output</p>
-        {outputs.length
-          ? <Select value={selected ?? undefined} onValueChange={output => void selectOutput(output)} disabled={pending || !connected}>
-            <SelectTrigger className="w-full" aria-label="Sound output"><SelectValue placeholder="Choose output" /></SelectTrigger>
-            <SelectContent>{outputs.map(output => <SelectItem key={output.id} value={output.id}>{output.name || output.id}</SelectItem>)}</SelectContent>
-          </Select>
-        : <p className="text-muted-foreground">{!connected ? "Connect to choose an output." : soundFailed ? "Sound needs a connected player." : loading ? "Checking outputs…" : "No outputs reported."}</p>}
-        {observed && observed.id !== selected && <p className="text-xs text-muted-foreground">Now playing on {observed.name || observed.id}.</p>}
-      </div>
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">Bluetooth</p>
-        {!adapterReady && <p className="text-muted-foreground">{!connected ? "Connect to see Bluetooth devices." : bluetoothFailed ? "Bluetooth needs a connected player." : bluetooth ? bluetooth.adapter === "off" ? "Bluetooth is off on the playback computer." : "Bluetooth is unavailable." : "Checking Bluetooth…"}</p>}
-        {adapterReady && !!connectedDevices.length && <ul className="grid gap-1">{connectedDevices.map(device => <li key={device.address} className="flex items-center gap-2 text-muted-foreground"><Bluetooth className="size-4" aria-hidden="true" />{device.name}</li>)}</ul>}
-        {adapterReady && !connectedDevices.length && <p className="text-muted-foreground">No devices connected. Pair speakers in settings.</p>}
-      </div>
-      {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
-      <Button variant="outline" className="w-full" asChild><Link to="/settings/sound" onClick={() => setOpen(false)}><Settings2 aria-hidden="true" />Sound settings</Link></Button>
+      <SoundControls credentials={credentials} connected={connected} open={open} onClose={() => setOpen(false)} />
     </PopoverContent>
   </Popover>;
 }

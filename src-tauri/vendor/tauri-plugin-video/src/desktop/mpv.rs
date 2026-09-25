@@ -634,6 +634,7 @@ impl<R: Runtime> Player<R> {
                 seekable: self.loaded && mpv.get_property::<bool>("seekable").unwrap_or(false),
                 ended,
                 loading: (!self.loaded || buffering) && self.error.is_none(),
+                buffering: self.loaded && buffering,
                 speed: mpv.get_property::<f64>("speed").unwrap_or(1.0),
                 audio_delay: mpv.get_property::<f64>("audio-delay").unwrap_or(0.0),
                 subtitle_delay: mpv.get_property::<f64>("sub-delay").unwrap_or(0.0),

@@ -17,6 +17,7 @@ import { PlaybackStatus } from "@/sections/shell/PlaybackStatus";
 import { SourceSetupDialog } from "@/components/SourceSetupDialog";
 import { errorText, useSessionGate } from "@/session/session-context";
 import { SessionBar } from "@/components/SessionBar";
+import { MiniPlayer } from "./MiniPlayer";
 import { TvAppearancePreview } from "./TvAppearancePreview";
 import { VideoStage } from "@/sections/shell/VideoStage";
 import { readSearchState, searchLocation, type SearchRouteState } from "@/search";
@@ -54,9 +55,13 @@ function useShellValue() {
   const router = useRouter();
   const location = useLocation();
   const section = sectionForPath(location.pathname) ?? "Now";
+  const standardLayout = nativeHost || window.matchMedia("(min-width: 960px)").matches;
+  const playerTransition = standardLayout && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const settingsSection = settingsPageForPath(location.pathname) ?? (section === "Settings" ? "playback" : null);
   const rememberedSearch = useRef<SearchRouteState>({ query: "", source: "All" });
   if (section === "Find") rememberedSearch.current = readSearchState(location.searchStr);
+  const lastBrowsePath = useRef("/find");
+  if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
@@ -86,11 +91,18 @@ function useShellValue() {
     // layer over the player instead of floating the controls above the page.
     if (tvPresentation && active && !tv.browsing) tv.openHome();
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
-    if (to !== at) router.history.push(to);
+    if (to !== at) {
+      if (playerTransition && (section === "Now" || name === "Now")) void router.navigate({ href: to, viewTransition: true });
+      else router.history.push(to);
+    }
   };
   const changeSection = (name: string) => {
     if (name === "Remote") { setRemoteOpen(true); return; }
     changePage(name);
+  };
+  const leavePlayer = () => {
+    if (playerTransition) void router.navigate({ href: lastBrowsePath.current, viewTransition: true });
+    else router.history.push(lastBrowsePath.current);
   };
   const browseSection = (name: string) => {
     const destination = name === "Home" || name === "Search" || name === "Browse" || name === "Queue" ? "Now" : name === "For later" ? "Saved" : "Find";
@@ -111,7 +123,13 @@ function useShellValue() {
   useEffect(() => {
     registerBackHandler(() => {
       if (remoteOpen) { setRemoteOpen(false); return; }
-      if (section !== "Now") back();
+      if (standardLayout) {
+        if (section === "Now") leavePlayer();
+        else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
+        else if (section === "Find" && state?.currentEntryId) changeSection("Now");
+        else changeSection("Find");
+      }
+      else if (section !== "Now") back();
     });
   });
 
@@ -137,7 +155,7 @@ function useShellValue() {
     setOnlineRequest(previous => ({ item, revision: (previous?.revision ?? 0) + 1 }));
     browseSection("Online");
   };
-  const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean }) =>
+  const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
     run({ type, itemId, entryId: createId(), ...options });
 
   const playHistory: HistoryPlayback = async (item, options) => {
@@ -177,8 +195,8 @@ function useShellValue() {
   return {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
-    ...gate, credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
-    changeSection, browseSection, back, gotoSearch, changeSearch, changeSettingsSection,
+    ...gate, credentials: credentials!, section, standardLayout, settingsSection, statusLabel, available, active, programme, current, recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
+    changeSection, leavePlayer, browseSection, back, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
     remoteOpen, pairingOpen, onlineRequest, setupSource, sourcesOpen,
@@ -208,12 +226,30 @@ export function AppShell() {
 
 export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
+  useEffect(() => { document.body.classList.toggle("standard-mode", shell.standardLayout); return () => document.body.classList.remove("standard-mode"); }, [shell.standardLayout]);
   const device = usePlaybackDevice();
   const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, playerStatus: connectionPlayerStatus, pairingRequired, reachable, connected, run, reconnect, unpair, host, booting, error, setError, tv, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
+  const { undoNotice, undoAction, dismissUndo } = shell;
   const { section, statusLabel, available, active, programme, current } = shell;
   const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
+  useEffect(() => {
+    if (!shell.standardLayout || !tvPresentation) return;
+    const onHome = () => shell.changeSection("Find");
+    const onInfo = () => shell.changeSection("Now");
+    window.addEventListener("couch-home", onHome);
+    window.addEventListener("couch-info", onInfo);
+    return () => { window.removeEventListener("couch-home", onHome); window.removeEventListener("couch-info", onInfo); };
+  }, [shell.standardLayout, tvPresentation, section]);
+  useEffect(() => { if (shell.standardLayout && connected && !current && section === "Now") shell.changeSection("Find"); }, [shell.standardLayout, connected, current, section]);
   const player = state?.player;
+  const [activityNotice, setActivityNotice] = useState("");
+  useEffect(() => {
+    if (!shell.standardLayout || !state?.activity || state.activity.actor.deviceId === identity?.controller?.id) return;
+    setActivityNotice(state.activity.text);
+    const timer = setTimeout(() => setActivityNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [state?.activity?.id, identity?.controller?.id, shell.standardLayout]);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const audioOnly = current?.kind === "radio" || !!player?.tracks?.some(track => track.kind === "audio") && !player.tracks.some(track => track.kind === "video" && track.selected);
   const videoStage = localHost && active && <VideoStage active={active} title={current?.title || "Your media"} audioOnly={audioOnly}
@@ -221,7 +257,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
     artwork={programme?.artworkUrl ? <MediaArtwork key={programme.artworkUrl} thumbnail={programme.artworkUrl} title={programme.title} /> : current?.artworkId && credentials ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined} />;
 
   return (
-    <div className={cn("app-shell couch-shell", tvPresentation
+    <div className={cn("app-shell couch-shell", shell.standardLayout && "standard-shell", tvPresentation
       ? cn("tv-shell", tv.browsing && "tv-browsing", tv.controlsVisible && "tv-controls-visible",
         // Slim strokes and real icon-button targets: the TV zoom magnifies stroke weight.
         "[&_svg]:stroke-[1.5] [&_.icon-button]:min-h-11 [&_.icon-button]:min-w-11 [&_.icon-button_svg]:size-6")
@@ -230,17 +266,18 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <main id="main">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
-        {tvPresentation && videoStage}
-        <div className={tvPresentation ? "tv-browser" : "remote-browser"} hidden={tvPresentation && !tv.browsing} data-tv-navigation-scope={tvPresentation && tv.browsing ? "" : undefined}>
+        {tvPresentation && !shell.standardLayout && videoStage}
+        <div className={tvPresentation ? "tv-browser" : "remote-browser"} hidden={tvPresentation && !tv.browsing && !shell.standardLayout} data-tv-navigation-scope={tvPresentation && (tv.browsing || shell.standardLayout) ? "" : undefined}>
       <header className="app-header">
-        <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (tvPresentation) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>
+        {!shell.standardLayout && <Link className="brand" to="/" aria-label="Couch, go home" onClick={() => { if (tvPresentation) tv.openHome(); }}>couch<span className="brand-dot" aria-hidden="true" /></Link>}
+        {shell.standardLayout && <nav className="section-nav" aria-label="Main navigation">{navItems.filter(item => item.name !== "Now").map(({ name, label }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{label}</Link></Button>)}</nav>}
         <div className="header-status">
-          {!tvPresentation && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} />}
-          {nativeHost && !tvPresentation && <PlaybackDevice />}
+          {(!tvPresentation || shell.standardLayout) && (!nativeHost || tvPresentation) && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} standardLayout={shell.standardLayout} localHost={localHost} />}
+          {nativeHost && !tvPresentation && <PlaybackDevice standardLayout={shell.standardLayout} credentials={credentials} connected={connected} installationName={state?.installationName ?? details?.name} state={state} run={run} />}
           {nativeHost && !localHost && !tvPresentation && <InstallationUpdates />}
           {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
-          {credentials && !pairingRequired && !tvPresentation && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
+          {credentials && !pairingRequired && !tvPresentation && !shell.standardLayout && <Link className="controller-name" to="/settings/connection" aria-label={identity?.controller ? `Device: ${identity.controller.name}` : "Connection"} title={identity?.controller ? `${identity.controller.name} · ${identity.controller.role === "administrator" ? "Administrator" : "Controller"}` : undefined}>{identity?.controller?.name || "Connection"}</Link>}
           {credentials && !pairingRequired && !tvPresentation && details?.tvPresentation && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label="Remote" onClick={() => shell.setRemoteOpen(true)}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
           <DigitalClock />
         </div>
@@ -274,20 +311,20 @@ export function ShellChrome({ children }: PropsWithChildren) {
         ) : (
           <>
             {!connected && <div className="notice" role="status">{status === "server-unavailable" ? "The selected Couch is offline. Its address stays selected." : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="ml-3 inline-flex gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>}</span>}</div>}
-            {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
+            {player?.status === "unavailable" && !shell.standardLayout && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
             <div className="workspace">
-              <nav className="primary-nav" aria-label="Main navigation">
+              {!shell.standardLayout && <nav className="primary-nav" aria-label="Main navigation">
                 {navItems.map(({ name, label, icon: NavIcon }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} data-source={name} aria-current={section === name ? "page" : undefined} aria-label={label}><NavIcon aria-hidden="true" /><span>{label}</span></Link></Button>)}
-              </nav>
+              </nav>}
               <div className="media-browser">
-                {localHost && !tvPresentation && active && !audioOnly && videoStage}
+                {localHost && !tvPresentation && active && !audioOnly && !shell.standardLayout && videoStage}
                 {children}
               </div>
             </div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             {/* On the TV the bar is always available while playing and returns to the
                 playback view; remotes open the inline Now playing page instead. */}
-            {current && (active || player?.status === "error") && (tvPresentation ? tv.browsing && section !== "Now" : section !== "Now") && <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tvPresentation ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={!tvPresentation && details?.tvPresentation ? () => shell.setRemoteOpen(true) : undefined} />}
+            {current && (active || player?.status === "error") && (tvPresentation ? (tv.browsing || shell.standardLayout) && section !== "Now" : section !== "Now") && (shell.standardLayout && state ? <MiniPlayer state={state} connected={connected} run={run} localHost={localHost} onOpen={() => shell.changeSection("Now")} /> : <SessionBar state={state} credentials={credentials} connected={connected} run={run} onOpen={() => tvPresentation ? tv.dismissLayer() : shell.changeSection("Now")} onRemote={!tvPresentation && details?.tvPresentation ? () => shell.setRemoteOpen(true) : undefined} />)}
             {/* Saved provider collections open here: Find stays search-first, and
                 Open gives the collection its own browsable trail. */}
             <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
@@ -300,10 +337,12 @@ export function ShellChrome({ children }: PropsWithChildren) {
           </>
         )}
         </div>
-        {tvPresentation && credentials && <section className="tv-playback-controls" hidden={tv.browsing || !tv.controlsVisible} data-tv-navigation-scope={!tv.browsing && tv.controlsVisible ? "" : undefined} aria-label="Player">
-          <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={() => tv.openHome()}><House aria-hidden="true" />Home</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
+        {tvPresentation && !shell.standardLayout && credentials && <section className="tv-playback-controls" hidden={tv.browsing || !tv.controlsVisible} data-tv-navigation-scope={!tv.browsing && tv.controlsVisible ? "" : undefined} aria-label="Player">
+          <div className="tv-watch-actions"><Button variant="secondary" aria-label="Show TV home" onClick={() => { tv.openHome(); if (shell.standardLayout) shell.changeSection("Find"); }}><House aria-hidden="true" />{shell.standardLayout ? "Find" : "Home"}</Button><Button variant="secondary" aria-label="Hide playback controls" onClick={() => tv.dismissLayer()}>Back to watching</Button></div>
           <PlaybackControls state={state} credentials={credentials} connected={connected} run={run} />
         </section>}
+        {activityNotice && <div className="activity-notice" role="status">{activityNotice}</div>}
+        {undoNotice && <div className="activity-notice undo-notice" role="status"><span>{undoNotice.text}</span><Button variant="outline" size="sm" onClick={() => void undoAction()}>Undo</Button><Button variant="ghost" size="icon-sm" aria-label="Dismiss notice" onClick={dismissUndo}><Icon name="close" /></Button></div>}
         {localHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
         {host && remoteControlEnabled && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} openerRef={pairingRef} />}
 

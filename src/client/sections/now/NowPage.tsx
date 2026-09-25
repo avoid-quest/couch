@@ -14,8 +14,14 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { SearchBar } from "@/components/SearchBar";
 import { SessionBar } from "@/components/SessionBar";
+import { PlayerPage } from "./PlayerPage";
 
 export function NowPage() {
+  const shell = useShell();
+  return shell.standardLayout ? <PlayerPage /> : <LegacyNowPage />;
+}
+
+function LegacyNowPage() {
   const shell = useShell();
   const { localHost, tvPresentation, credentials, state, connected, run, available, tv, browseSection, playHistory, enqueueRadio, gotoSearch, setRemoteOpen, recentRadio, videoQualityPreference } = shell;
   const [nowDraft, setNowDraft] = useState("");

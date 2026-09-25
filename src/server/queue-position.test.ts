@@ -94,6 +94,21 @@ test("moving a stopped cursor preserves its identity while append, replace and p
   expect(f.session.state).toMatchObject({ currentEntryId: played[0]!.id, queueCursorEntryId: played[0]!.id, queue: played });
 });
 
+test("Play next inserts after the shared cursor and persists who added it", () => {
+  const f = fixture();
+  f.session.command({ type: "play", entryId: "two" });
+  f.session.command({ type: "enqueue", entry: { id: "next", title: "next", source: "https://media.example/next" }, placement: "next" }, undefined, { deviceId: "phone", name: "Phone" });
+  expect(f.session.state.queue.map(entry => entry.id)).toEqual(["two", "next", "one", "three", "four"]);
+  expect(f.session.state.queue[1]?.addedBy).toEqual({ deviceId: "phone", name: "Phone" });
+  f.session.command({ type: "stop" });
+  const added = f.session.loadQueue([{ id: "list", title: "list", source: "https://media.example/list" }], "append", undefined, undefined, "next");
+  expect(f.session.state.queue.map(entry => entry.id)).toEqual(["two", added[0]?.id, "next", "one", "three", "four"]);
+  f.close();
+  const restarted = f.start().session.state;
+  expect(restarted.queue.map(entry => entry.id)).toEqual(["two", added[0]?.id, "next", "one", "three", "four"]);
+  expect(restarted.queue[2]?.addedBy).toEqual({ deviceId: "phone", name: "Phone" });
+});
+
 test("a failed explicit cursor write leaves the current item and its progress tracker active", () => {
   const f = fixture();
   f.session.command({ type: "enqueue", entry: { id: "local", title: "Local", source: "library:local" } });

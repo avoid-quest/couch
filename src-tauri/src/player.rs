@@ -612,6 +612,7 @@ impl Player {
         } else {
             "paused"
         };
+        self.state.buffering = observed.buffering && self.state.status == "loading";
         self.state.position = self.segment.map_or(snapshot.current_time_seconds.max(0.0), |bounds| bounds.relative(snapshot.current_time_seconds));
         self.state.duration =
             self.segment.map(|bounds| bounds.duration()).or_else(|| (snapshot.duration_seconds > 0.0).then_some(snapshot.duration_seconds));

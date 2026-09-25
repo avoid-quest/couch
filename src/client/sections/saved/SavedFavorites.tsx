@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import { MediaArtwork } from "@/components/MediaArtwork";
+import { DurationBar } from "@/components/DurationBar";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
@@ -30,8 +31,8 @@ export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], 
   return next && { kind, order: next.map(favorite => favorite.item.id) };
 }
 
-export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider }: Credentials & SavedFavoriteActions & {
-  connected: boolean; canPlay: boolean;
+export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, showHeading = true }: Credentials & SavedFavoriteActions & {
+  connected: boolean; canPlay: boolean; showHeading?: boolean;
 }) {
   // Saved reads go through Query: the session invalidates ["providers"] and
   // ["radio"] on socket revisions, replacing the version props this panel
@@ -104,13 +105,13 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
     finally { if (!controller.signal.aborted) setPending(false); if (mutation.current === controller) mutation.current = null; }
   };
   return <section className="space-y-3" aria-labelledby="saved-favorites-heading">
-    <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className="text-xl font-semibold">Online and radio</h2>
+    <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className={showHeading ? "text-xl font-semibold" : "sr-only"}>{showHeading ? "Online and radio" : "Channels and stations"}</h2>
     {!connected && <p role="status">Reconnect to see saved online items and stations.</p>}
     {loading && <p role="status">Loading saved items…</p>}
     {error && <div role="alert"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={refresh}>Retry saved items</Button></div>}
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
-    {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">No favorites yet.</p>}
+    {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">{showHeading ? "No favorites yet." : "Save a channel, playlist or station to find it here."}</p>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
     <ul ref={list} className="saved-favorites grid list-none gap-2 p-0" aria-label="Saved online items and stations" aria-busy={loading}>
       <SortableContext items={favorites.filter(favorite => favorite.kind === "provider").map(favorite => favorite.item.id)} strategy={verticalListSortingStrategy}>
@@ -126,11 +127,24 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
   function row(favorite: Favorite, drag?: RowDrag) {
     const itemTitle = title(favorite);
     const browse = favorite.kind === "provider" && favorite.item.kind !== "media";
-  const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : favorite.item.provider === "streamingcommunity" ? "Title" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
-      return <li ref={drag?.setNodeRef} style={drag?.style} className="flex flex-wrap items-center gap-3 border-b py-3">
-        <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="h-[54px] w-[46px] rounded-md" />
+    const detail = favorite.kind === "provider" ? [providers[favorite.item.provider], favorite.item.kind === "media" ? favorite.item.live ? "Live" : favorite.item.provider === "bandcamp" ? "Track" : favorite.item.provider === "streamingcommunity" ? "Title" : "Video" : favorite.item.kind === "channel" ? "Channel" : "Collection", favorite.item.subtitle].filter(Boolean).join(" · ") : ["Radio", favorite.item.groupTitle || favorite.item.countryCode].filter(Boolean).join(" · ");
+    if (!showHeading) return <li ref={drag?.setNodeRef} style={drag?.style} className="saved-favorite-row">
+      <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="saved-favorite-art" />
+      <Button variant="ghost" className="saved-favorite-main" disabled={!connected || pending || !browse && !canPlay} aria-label={`${browse ? "Open" : "Play"} ${itemTitle}`} onClick={() => browse ? onOpenProvider(favorite.item as ProviderItem) : void update(favorite, "play")}>
+        <span className="saved-favorite-title-line"><strong>{itemTitle}</strong><small>{favorite.kind === "provider" ? [favorite.item.subtitle, providers[favorite.item.provider]].filter(Boolean).join(", ") : [favorite.item.groupTitle, "Radio"].filter(Boolean).join(", ")}</small></span>
+        {favorite.kind === "provider" ? favorite.item.kind === "media" ? (favorite.item.duration != null || favorite.item.live) && <DurationBar duration={favorite.item.duration} live={favorite.item.live} /> : <small className="saved-favorite-kind">{favorite.item.kind === "channel" ? "Channel" : "Collection"}</small> : <small className="saved-favorite-kind">Live</small>}
+      </Button>
+      <div className="saved-favorite-actions">
+        {browse && <Button variant="ghost" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}>Play</Button>}
+        <Button variant="ghost" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}>Queue</Button>
+        <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${itemTitle} from Saved`} onClick={() => void update(favorite, "remove")}>Remove</Button>
+      </div>
+      <span className="saved-favorite-drag">{drag?.handle}</span>
+    </li>;
+    return <li ref={drag?.setNodeRef} style={drag?.style} className="flex flex-wrap items-center gap-3 border-b py-3">
+        <MediaArtwork key={(favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl) || favorite.item.id} thumbnail={favorite.kind === "provider" ? favorite.item.thumbnail : favorite.item.logoUrl} title={itemTitle} className="saved-media-art h-[54px] w-[46px] rounded-md" />
         <div className="grid min-w-[100px] flex-1 gap-1.5 [overflow-wrap:anywhere]"><strong className="text-sm font-semibold">{itemTitle}</strong><small className="text-xs text-muted-foreground">{detail}</small></div>
-        <div className="flex min-h-11 flex-wrap gap-2">
+        <div className={`${showHeading ? "" : "saved-media-actions "}flex min-h-11 flex-wrap gap-2`}>
           {favorite.kind === "provider" ? <>
             <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${itemTitle}`} onClick={() => void update(favorite, "play")}><Play aria-hidden="true" />Play</Button>
             <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${itemTitle} to Up next`} onClick={() => void update(favorite, "append")}><Plus aria-hidden="true" />Up next</Button>

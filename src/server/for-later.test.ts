@@ -58,7 +58,7 @@ test("shared saved items survive restart and deduplicate source identity without
   const databasePath = join(directory, "state.sqlite");
   const first = fixture({ databasePath, lookup: async () => ({ ...entry, source: "web:https://chosen.example/movie", headers: { Authorization: "secret" }, audioSource: "https://resolved.example/secret" } as QueueEntry) });
   const saved = await save(first.service);
-  expect(saved).toEqual({ id: expect.any(String), title: entry.title, artworkId: "poster" });
+  expect(saved).toEqual({ id: expect.any(String), title: entry.title, artworkId: "poster", url: "https://chosen.example/movie" });
   const duplicate = await request(first.service, "POST", "", { reference: { kind: "queue", id: "another-occurrence" } });
   expect(duplicate.status).toBe(200);
   expect(first.changed).toHaveBeenCalledTimes(1);
@@ -72,6 +72,31 @@ test("shared saved items survive restart and deduplicate source identity without
   expect(db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM sqlite_master WHERE name = 'for_later'").get()!.count).toBe(1);
   db.close();
   expect(second.enqueue).not.toHaveBeenCalled();
+});
+
+test("undo restores a removed item once and refuses to overwrite another controller's save", async () => {
+  const f = fixture();
+  const saved = await save(f.service);
+  const deleted = await request(f.service, "DELETE", `/${saved.id}`);
+  const { undoToken } = await deleted.json() as { undoToken: string };
+  expect(await list(f.service)).toEqual([]);
+  expect((await request(f.service, "POST", "/restore", { token: undoToken })).status).toBe(200);
+  expect(await list(f.service)).toEqual([saved]);
+  expect((await request(f.service, "POST", "/restore", { token: undoToken })).status).toBe(404);
+
+  const another = await request(f.service, "DELETE", `/${saved.id}`);
+  const secondToken = (await another.json() as { undoToken: string }).undoToken;
+  await save(f.service);
+  expect((await request(f.service, "POST", "/restore", { token: secondToken })).status).toBe(409);
+});
+
+test("web saves expose their URL for the Saved toggle without exposing queue source", async () => {
+  const f = fixture();
+  const url = "https://videos.example/watch/abc";
+  const response = await request(f.service, "POST", "", { reference: { kind: "web", url, title: "A video", thumbnail: "https://videos.example/thumb.jpg", duration: 82 } });
+  expect(response.status).toBe(201);
+  expect((await list(f.service))[0]).toMatchObject({ title: "A video", url, thumbnail: "https://videos.example/thumb.jpg", duration: 82 });
+  expect((await list(f.service))[0]).not.toHaveProperty("source");
 });
 
 test("concurrent saves remain one item and removal never changes the queue", async () => {

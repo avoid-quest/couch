@@ -271,6 +271,8 @@ pub struct MpvPlaybackState {
     pub seekable: bool,
     pub ended: bool,
     pub loading: bool,
+    #[serde(default)]
+    pub buffering: bool,
     pub speed: f64,
     pub audio_delay: f64,
     pub subtitle_delay: f64,
