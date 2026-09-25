@@ -480,6 +480,7 @@ body.native-host:has(.player-page .video-stage.has-video) .player-page { backgro
   .app-shell .find-result-row .result-main { min-width: 0; }
   .app-shell .find-result-row .result-head { display: block; }
   .app-shell .find-result-actions { grid-column: 2; flex-wrap: wrap; justify-content: flex-start; opacity: 1; }
+  .app-shell .find-result-row .find-result-actions button { min-height: 2.75rem; }
   .app-shell .saved-page-layout { grid-template-columns: 1fr; }
   .app-shell .saved-page-nav { display: flex; overflow-x: auto; border-bottom: 1px solid var(--border); }
   .app-shell .saved-media-actions { grid-column: 2; opacity: 1; }
