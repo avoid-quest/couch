@@ -3,7 +3,7 @@ import { Component, useEffect, useRef, useState, type ErrorInfo, type PropsWithC
 import { useMutation } from "@tanstack/react-query";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
-import type { HistoryPlayback } from "@/components/HistoryPanel";
+import type { HistoryPlayback } from "@/sections/find/BrowseHome";
 import { DigitalClock } from "@/components/DigitalClock";
 import { Icon } from "@/components/Icon";
 import { RemotePad } from "@/components/RemotePad";

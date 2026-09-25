@@ -78,3 +78,38 @@ for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navi
   await act(async () => { fireEvent.click(screen.getByRole("link", { name: "Find", exact: true })); await Bun.sleep(30); });
   expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("fixture");
 });
+
+test("a list opened from Saved shows its items with Saved as the way back", async () => {
+  window.happyDOM.setURL("http://localhost/find");
+  history = createBrowserHistory();
+  const list = { id: "list", provider: "youtube", kind: "collection", title: "Evening list", url: "https://www.youtube.com/playlist?list=PLevening" } as const;
+  request = spyOn(globalThis, "fetch").mockImplementation((async input => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/providers/favorites") return Response.json({ favorites: [list] });
+    if (path === "/api/for-later") return Response.json({ items: [] });
+    if (path === "/api/providers/youtube/items") return Response.json({ title: "Evening list", items: [{ id: "one", provider: "youtube", kind: "media", title: "First episode", url: "https://www.youtube.com/watch?v=aaaaaaaaaaa", duration: 60 }] });
+    throw new Error(`Unexpected request: ${path}`);
+  }) as typeof fetch);
+  const commands: unknown[] = [], sections: string[] = [];
+  let closed = 0;
+  const shell = {
+    nativeHost: false, credentials: { origin: "http://localhost", token: "paired" }, identity: null, state: null,
+    connected: true, available: true, section: "Find", videoQualityPreference: { quality: "auto" }, changeSearch: () => {},
+    onlineRequest: { item: list, revision: 1 }, closeOnlineRequest: () => { closed++; }, changeSection: (name: string) => sections.push(name),
+    run: async (action: unknown) => { commands.push(action); return true; },
+  } as unknown as ShellValue;
+  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
+  const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
+  const router = createRouter({ routeTree: base.addChildren([find]), history });
+  await act(async () => { await router.load(); root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>); });
+  await act(async () => { await Bun.sleep(50); });
+  expect(screen.getByRole("heading", { name: "Evening list" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Play First episode" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Saved", pressed: true })).toBeDefined();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Play all" })));
+  expect(commands).toEqual([{ type: "enqueueProvider", provider: "youtube", url: list.url, shape: "playlist", playNow: true, quality: "auto" }]);
+  const back = document.querySelector<HTMLButtonElement>("[data-back]")!;
+  expect(back.textContent).toBe("Saved");
+  await act(async () => fireEvent.click(back));
+  expect([closed, sections]).toEqual([1, ["Saved"]]);
+});

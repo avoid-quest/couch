@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { BrowseHome } from "./BrowseHome";
-import { SearchPanel } from "./SearchPanel";
+import { CollectionHeader, HitList, MoreResults, SearchPanel, SourceProblems } from "./SearchPanel";
+import { SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
 import { readSearchState } from "../../search";
 import { apiFetch } from "@/api/client";
 import { useShell } from "@/sections/shell/AppShell";
-import { Button } from "@/components/ui/button";
-import { ProviderPanel } from "@/components/ProviderPanel";
 import { useSessionGate } from "@/session/session-context";
+import type { ProviderItem } from "../../../shared/providers";
 
 export function FindPage() {
   const shell = useShell();
@@ -17,25 +17,42 @@ export function FindPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchState = readSearchState(location.searchStr);
-  const [homeQuery, setHomeQuery] = useState(searchState.query);
-  const collectionBack = useRef<HTMLButtonElement>(null);
-  useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
-  useEffect(() => { if (shell.onlineRequest) requestAnimationFrame(() => collectionBack.current?.focus()); }, [shell.onlineRequest?.revision]);
+  // The typed query follows the route until the next edit.
+  const [draft, setDraft] = useState({ route: searchState.query, query: searchState.query });
+  if (draft.route !== searchState.query) setDraft({ route: searchState.query, query: searchState.query });
+  const homeQuery = draft.query;
   const onStage = section === "Find";
   const openSources = () => void navigate({ to: "/settings/sources" });
+  const opened = shell.onlineRequest;
   return <section data-page="Find">
-    {shell.onlineRequest ? <div className="min-w-0 space-y-6 pb-8">
-      <header className="flex flex-wrap items-center gap-4 border-b border-border pb-4"><Button ref={collectionBack} data-page-first variant="ghost" onClick={() => { shell.closeOnlineRequest(); shell.changeSection("Saved"); }}>‹ Saved</Button><h1 className="min-w-0 text-2xl font-semibold tracking-tight">{shell.onlineRequest.item.title}</h1></header>
-      <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} collectionMode active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} defaultQuality={videoQualityPreference.quality} onPlayHistory={playHistory} onEnqueue={shell.enqueueProvider} />
-    </div> : <>
-    <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
-    <div hidden={!!homeQuery.trim()}>
-      <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} active={onStage && !homeQuery.trim()} onAddSource={openSources} onPlay={playHistory} onAdd={async item => {
-        if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId);
-        if (!state || !item.playable) return false;
-        await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
-        return true;
-      }} />
-    </div></>}
+    {opened ? <OpenedCollection key={opened.revision} item={opened.item} onBack={() => { shell.closeOnlineRequest(); shell.changeSection("Saved"); }} /> : <>
+      <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+      <div hidden={!!homeQuery.trim()} className="mt-8">
+        <BrowseHome credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} active={onStage && !homeQuery.trim()} onAddSource={openSources} onPlay={playHistory} onAdd={async item => {
+          if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId);
+          if (!state || !item.playable) return false;
+          await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
+          return true;
+        }} />
+      </div>
+    </>}
   </section>;
+}
+
+/** A channel, list or show opened from Saved, shown like one opened from results. */
+function OpenedCollection({ item, onBack }: { item: ProviderItem; onBack: () => void }) {
+  const { credentials, available } = useShell();
+  const { connected, run, videoQualityPreference } = useSessionGate();
+  const [summary, setSummary] = useState<SearchResultSummary | null>(null);
+  const report = useCallback((_: string, next: SearchResultSummary) => setSummary(next), []);
+  const page = useRef<HTMLDivElement>(null);
+  useEffect(() => { requestAnimationFrame(() => page.current?.querySelector<HTMLElement>("[data-back]")?.focus()); }, []);
+  const collection = summary?.collection ?? { title: item.title, source: "", back: onBack, root: true };
+  const source = collection.source || item.provider;
+  return <div ref={page} className="min-w-0 space-y-6">
+    <SearchOnlineResults provider={item.provider} query="" opened={item} onClose={onBack} onResults={report} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active onCommand={run} quality={videoQualityPreference.quality} onEnqueued={() => {}} />
+    <CollectionHeader collection={collection} back={collection.root ? "Saved" : "Back"} onBack={collection.back} canPlay={available} />
+    <HitList hits={summary?.hits ?? []} label={`${collection.title} items`} origin={credentials.origin} token={credentials.token} />
+    {summary && <><MoreResults summaries={[[source, summary]]} /><SourceProblems summaries={[[source, summary]]} /></>}
+  </div>;
 }

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
 export { supportsWebVideoQuality, supportsCurrentVideoQuality } from "../shared/video-quality";
 
-export const videoQualityLabels: Record<VideoQuality, string> = { auto: "1080p (recommended)", best: "Unrestricted quality", "1080p": "Up to 1080p", "720p": "Up to 720p", "480p": "Up to 480p" };
+// The only labels for video quality. Settings, the player and Find all use these.
+export const videoQualityLabels: Record<VideoQuality, string> = { auto: "Auto (1080p)", best: "Best", "1080p": "1080p", "720p": "720p", "480p": "480p" };
+export const videoQualityOptions = (Object.entries(videoQualityLabels) as [VideoQuality, string][]).map(([value, label]) => ({ value, label }));
 const storageKey = "couch.online-video-quality";
 
 export function readVideoQuality(storage?: Pick<Storage, "getItem">): VideoQuality {
@@ -28,13 +30,14 @@ export function useVideoQualityPreference() {
   }, []);
   const save = useCallback((value: VideoQuality) => {
     try { saveVideoQuality(value); setQuality(value); setError(null); }
-    catch { setError("Could not save this browser's preference. Allow site storage and try again."); }
+    catch { setError("Couldn't save. Allow site storage."); }
   }, []);
   return useMemo(() => ({ quality, save, error }), [quality, save, error]);
 }
 
+// A one-off choice that lapses when the preference changes underneath it.
 export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {
-  const [override, setOverride] = useState<VideoQuality | null>(null);
-  useEffect(() => setOverride(null), [defaultQuality]);
-  return [override ?? defaultQuality, setOverride, () => setOverride(null)] as const;
+  const [override, setOverride] = useState<{ base: VideoQuality; quality: VideoQuality } | null>(null);
+  const quality = override?.base === defaultQuality ? override.quality : defaultQuality;
+  return [quality, (value: VideoQuality) => setOverride({ base: defaultQuality, quality: value }), () => setOverride(null)] as const;
 }

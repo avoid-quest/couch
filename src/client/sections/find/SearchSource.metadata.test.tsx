@@ -39,7 +39,7 @@ test("current Find details offer metadata actions only to an authorized local-vi
   await act(async () => { await Bun.sleep(10); });
   expect(summary?.hits?.map(hit => hit.title)).toEqual(["Proof movie"]);
   await act(async () => summary?.hits?.[0]?.actions.find(action => action.label === "Details")?.run?.());
-  const edit = () => [...document.querySelectorAll("button")].find(button => button.textContent === "Edit metadata");
+  const edit = () => [...document.querySelectorAll("button")].find(button => button.textContent === "Edit details");
   expect(edit()).toBeUndefined();
   await draw(true);
   await act(async () => { await Bun.sleep(20); });

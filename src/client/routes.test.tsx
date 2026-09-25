@@ -14,4 +14,5 @@ test("every frontend path resolves to a registered route", () => {
 test("malformed search filters use truthful defaults", () => {
   expect(readSearchState("?q=a%26b&source=Unknown")).toEqual({ query: "a&b", source: "All" });
   expect(searchLocation({ query: "", source: "All" })).toBe("/find");
+  expect(readSearchState("?source=TV%20folders").source).toBe("Folders");
 });
