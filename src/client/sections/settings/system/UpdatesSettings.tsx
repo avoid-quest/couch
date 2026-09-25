@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch, type ApiCredentials } from "@/api/client";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError, apiSend, type ApiCredentials } from "@/api/client";
+import { updatesQuery } from "@/api/settings";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,55 +13,44 @@ import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "../../
 import { verificationFailure, type UpdateState } from "../../../../shared/updates";
 
 type Props = { credentials: ApiCredentials; connected: boolean; target?: "this app" | "selected host" };
+type UpdateResult = Partial<UpdateState> & { accepted?: boolean; transaction?: NonNullable<UpdateState["installation"]>["transaction"] };
 const statuses: Record<UpdateState["status"], string> = { unavailable: "Updates unavailable", idle: "No newer release found", checking: "Checking for updates…", available: "Update available", downloading: "Downloading and verifying…", ready: "Verified download ready", failed: "Update operation failed" };
 export function UpdatesSettings({ credentials, connected, target = "selected host" }: Props) {
-  const [state, setState] = useState<UpdateState | null>(null);
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const [retry, setRetry] = useState(() => readUpdateRequest(credentials.origin));
   const [confirming, setConfirming] = useState<false | "install" | "repair">(false);
   const [interrupt, setInterrupt] = useState(false);
-  const queryKey = ["updates", credentials.origin, credentials.token, retry?.requestId];
-  const updates = useQuery({
-    queryKey,
-    enabled: connected || !!retry,
-    queryFn: () => apiFetch(credentials, `/api/updates${retry ? `?requestId=${retry.requestId}` : ""}`).then(response => response.json() as Promise<UpdateState>),
-    refetchInterval: 2_000,
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
-  useEffect(() => { setState(null); setError(null); setPending(false); setRetry(readUpdateRequest(credentials.origin)); }, [credentials.origin, credentials.token]);
+  const query = updatesQuery(credentials, retry?.requestId);
+  const updates = useQuery({ ...query, enabled: connected || !!retry, placeholderData: keepPreviousData });
+  const state = updates.data ?? null;
+  const mutation = useMutation({ mutationFn: ({ path, body }: { path: string; body: unknown }) => apiSend<UpdateResult>(credentials, `/api/updates/${path}`, body) });
+  const pending = mutation.isPending;
   useEffect(() => {
-    if (!updates.data) return;
-    setState(updates.data);
-    const transaction = updates.data.installation?.requestedTransaction ?? updates.data.installation?.transaction;
+    const transaction = updates.data?.installation?.requestedTransaction ?? updates.data?.installation?.transaction;
     if (transaction && retry?.requestId === transaction.requestId && ["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase)) {
       clearUpdateRequest(credentials.origin); setRetry(null);
     }
-  }, [credentials.origin, retry?.requestId, updates.data, updates.dataUpdatedAt]);
+  }, [credentials.origin, retry?.requestId, updates.data]);
   async function update(path: string, body: unknown) {
     const maintenanceRequest = path === "install" || path === "repair";
     if ((!connected && !maintenanceRequest) || pending) return;
-    setPending(true); setError(null);
+    setError(null);
     try {
-      const response = await apiFetch(credentials, `/api/updates/${path}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const result = await response.json() as { accepted?: boolean; error?: string; transaction?: NonNullable<UpdateState["installation"]>["transaction"] };
-      if (!response.ok) {
-        if (maintenanceRequest && result.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
-        setError(result.error || `Could not start the update on ${target}. Refresh its status and retry.`); return;
-      }
+      const result = await mutation.mutateAsync({ path, body });
       if (maintenanceRequest) {
         const transaction = result.transaction;
         const terminalRequest = transaction?.requestId === retry?.requestId && !!transaction && ["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase);
         if (terminalRequest) { clearUpdateRequest(credentials.origin); setRetry(null); }
-        setState(current => current ? { ...current, installation: { enabled: true, transaction: transaction ?? null } } : current);
+        queryClient.setQueryData(query.queryKey, current => current ? { ...current, installation: { enabled: true, transaction: transaction ?? null } } : current);
       }
-      else setState(result as UpdateState);
+      else queryClient.setQueryData(query.queryKey, result as UpdateState);
       await updates.refetch();
-    } catch { setError(`The request for ${target} did not finish. Reconnect to see whether it was accepted.`); }
-    finally { setPending(false); }
+    } catch (reason) {
+      if (!(reason instanceof ApiError)) { setError(`The request for ${target} did not finish. Reconnect to see whether it was accepted.`); return; }
+      if (maintenanceRequest && reason.body.accepted === false) { clearUpdateRequest(credentials.origin); setRetry(null); }
+      setError(reason.message || `Could not start the update on ${target}. Refresh its status and retry.`);
+    }
   }
   const transaction = state?.installation?.transaction;
   const installing = !!transaction && !["succeeded", "failed", "restored", "operator-required"].includes(transaction.phase);

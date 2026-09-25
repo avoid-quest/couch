@@ -4,11 +4,13 @@ import { Check } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { VideoQuality } from "../../../../shared/providers";
 import { PlaybackPreferences } from "./PlaybackPreferences";
+import { useSessionGate } from "@/session/session-context";
 
 // Route composition only; playback changes remain socket commands.
 export function PlaybackPage() {
   const shell = useShell();
-  const { credentials, connected, state, run, videoQualityPreference } = shell;
+  const { credentials } = shell;
+  const { connected, state, run, videoQualityPreference } = useSessionGate();
   const profile = state?.activeProfile;
   const preferences = state?.preferences;
   return (

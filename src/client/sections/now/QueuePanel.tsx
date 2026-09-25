@@ -1,4 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiSend } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -31,8 +33,9 @@ function knownLength(entry: QueueEntry): number | null {
 
 export function QueuePanel({ state, credentials, connected, available, run }: Props) {
   const [notice, setNotice] = useState("");
-  const [keeping, setKeeping] = useState(false);
   const [keptQueue, setKeptQueue] = useState("");
+  const keep = useMutation({ mutationFn: (name: string) => apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000) });
+  const keeping = keep.isPending;
   const panelRef = useRef<HTMLElement>(null);
   const focusedEntry = useRef<{ element: HTMLElement; id: string; label: string | null } | null>(null);
   const queue = state?.queue ?? [];
@@ -52,17 +55,13 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
 
   const keepUpNext = async () => {
     if (!connected || keeping || !upNext.length) return;
-    setKeeping(true);
     setNotice("");
     try {
       const name = `Up next, ${new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
-      const response = await fetch(`${credentials.origin}/api/playlists`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ name, scope: "upNext" }), signal: AbortSignal.timeout(20_000) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Could not keep Up next.");
+      await keep.mutateAsync(name);
       setNotice(`Kept ${name} in Saved.`);
       setKeptQueue(upNextKey);
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not keep Up next."); }
-    finally { setKeeping(false); }
   };
 
   useLayoutEffect(() => {

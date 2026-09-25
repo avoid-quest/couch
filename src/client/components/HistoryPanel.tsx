@@ -1,5 +1,5 @@
 import type { ProviderId } from "../../shared/providers";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, Radio, RotateCcw, X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,7 +12,7 @@ import type { RadioStation } from "../../shared/radio";
 import { mergeRecent } from "../recent";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./MediaArtwork";
-import { historyQuery, removeFromContinue, removeHistory, undoProgressAction } from "@/api/library";
+import { historyQuery, removeFromContinue, removeHistory, undoProgressAction, updateProgress } from "@/api/library";
 import { useOptionalSessionGate } from "@/session/session-context";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
@@ -34,47 +34,31 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
 }) {
   const session = useOptionalSessionGate();
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const update = async (body: { watched?: boolean; clearResume?: true }) => {
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(`${origin}/api/progress/${encodeURIComponent(mediaId)}`, {
-        method: "POST", signal: AbortSignal.timeout(10_000),
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not update watched state.");
+  const mutation = useMutation({
+    mutationFn: (change: { watched?: boolean; clearResume?: true } | "remove") => change === "remove"
+      ? (inContinue ? removeFromContinue : removeHistory)({ origin, token }, mediaId)
+      : updateProgress({ origin, token }, mediaId, change),
+    onSuccess: ({ undoToken, expiresAt }, change) => {
       onUpdated();
       setOpen(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not update watched state.");
-    } finally { setPending(false); }
-  };
-  const remove = async () => {
-    setPending(true);
-    setError(null);
-    try {
-      const { undoToken, expiresAt } = await (await (inContinue ? removeFromContinue({ origin, token }, mediaId) : removeHistory({ origin, token }, mediaId))).json() as { undoToken?: string; expiresAt?: number };
-      onUpdated();
-      if (undoToken && expiresAt && expiresAt > Date.now()) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
+      if (change === "remove" && undoToken && expiresAt && expiresAt > Date.now()) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
         await undoProgressAction({ origin, token }, undoToken);
         onUpdated();
       }, expiresAt - Date.now());
-      setOpen(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not remove this history item.");
-    } finally { setPending(false); }
-  };
+    },
+  });
+  const pending = mutation.isPending;
+  const error = mutation.error ? mutation.error.message || (mutation.variables === "remove" ? "Could not remove this history item." : "Could not update watched state.") : null;
+  const update = (change: { watched?: boolean; clearResume?: true }) => mutation.mutate(change);
+  const remove = () => mutation.mutate("remove");
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={!connected} aria-label={`Watching options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></PopoverTrigger>
     <PopoverContent align="end" className="max-w-[calc(100vw-2rem)] gap-3" aria-label={`Watching options for ${title}`}>
       <p className="break-words font-medium">{title}</p>
       {error && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error}</p>}
-      <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ watched: !progress?.watched })}><Check aria-hidden="true" />{progress?.watched ? "Mark unwatched" : "Mark watched"}</Button>
-      {!inContinue && !!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
-      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from {inContinue ? "Continue" : "history"}</Button>
+      <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => update({ watched: !progress?.watched })}><Check aria-hidden="true" />{progress?.watched ? "Mark unwatched" : "Mark watched"}</Button>
+      {!inContinue && !!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
+      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={remove}><X aria-hidden="true" />Remove from {inContinue ? "Continue" : "history"}</Button>
       {pending && <p className="text-sm text-muted-foreground" role="status">Saving…</p>}
     </PopoverContent>
   </Popover>;
@@ -92,8 +76,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
   stations?: RadioStation[];
   onRadio?: (station: RadioStation) => Promise<boolean>;
 }) {
-  // The history reads through Query: the session invalidates ["library"] on
-  // socket events, so the panel no longer needs a version prop.
+  // The session invalidates ["progress"] whenever viewing progress changes.
   const queryClient = useQueryClient();
   const { data, isPending: loading, error: queryError, refetch } = useQuery({ ...historyQuery({ origin, token }, provider), enabled: connected && active });
   const items = data?.items ?? [];
@@ -106,7 +89,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const detail = items.find(item => item.mediaId === detailId);
   useEffect(() => { setDetailId(null); }, [origin, token, connected, active]);
-  const refreshHistory = () => { void queryClient.invalidateQueries({ queryKey: ["library", "history"] }); };
+  const refreshHistory = () => { void queryClient.invalidateQueries({ queryKey: ["progress", "history"] }); };
   const error = connected && active && queryError ? queryMessage : null;
 
   const play = async (item: HistoryItem, fromStart = false) => {

@@ -34,7 +34,7 @@ test("current Find details offer metadata actions only to an authorized local-vi
   const { SearchSource } = await import("./SearchSource");
   let summary: import("./SearchOnlineResults").SearchResultSummary | undefined;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const draw = (canManageMetadata: boolean) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source="Library" query="Proof" attempt={0} origin="http://localhost" token="paired" connected canPlay active canManageMetadata={canManageMetadata} onBrowse={() => {}} onEnqueue={async () => true} onResults={(_, result) => { summary = result; }} /></QueryClientProvider>));
+  const draw = (canManageMetadata: boolean) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source="Library" query="Proof" origin="http://localhost" token="paired" connected canPlay active canManageMetadata={canManageMetadata} onEnqueue={async () => true} onResults={(_, result) => { summary = result; }} /></QueryClientProvider>));
   await draw(false);
   await act(async () => { await Bun.sleep(10); });
   expect(summary?.hits?.map(hit => hit.title)).toEqual(["Proof movie"]);

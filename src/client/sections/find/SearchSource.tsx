@@ -18,11 +18,11 @@ type Result = { artworkId?: string | null; video?: boolean; id: string; title: s
 type Page = { items: Result[]; total: number; warning?: string };
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
-export function SearchSource({ source, query, attempt, ...props }: Props & { source: Source; query: string; attempt: number; onResults: (source: string, summary: SearchResultSummary) => void }) {
+export function SearchSource({ source, query, ...props }: Props & { source: Source; query: string; onResults: (source: string, summary: SearchResultSummary) => void }) {
   const [offset, setOffset] = useState(0);
   const pageSize = source === "Library" ? 30 : 50;
   const result = useQuery({
-    queryKey: [source === "Library" ? "library" : "jellyfin", "search", query, attempt, offset],
+    queryKey: [source === "Library" ? "library" : "jellyfin", "search", query, offset],
     enabled: props.connected, retry: false,
     queryFn: async ({ signal }): Promise<Page> => {
       const read = <T,>(path: string) => apiFetch(props, path, { signal }, 20_000).then(response => response.json() as Promise<T>);

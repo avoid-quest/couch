@@ -213,7 +213,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
       if (!controller.signal.aborted && sameCredentials(credentials, currentCredentials.current)) setIdentity(caller);
     })().catch(() => {});
     return () => controller.abort();
-  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.controllerVersion]);
+  }, [credentials?.origin, credentials?.token, credentials?.installationId, current, status, state?.versions?.controllers]);
 
   const reconnect = useCallback(() => {
     ready.current = false;

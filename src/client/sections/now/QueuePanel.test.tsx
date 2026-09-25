@@ -2,6 +2,9 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionState } from "../../../shared/protocol";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let QueuePanel: typeof import("./QueuePanel").QueuePanel;
 const window = new Window();
@@ -22,7 +25,7 @@ const queue = ["Played", "Current", "Next", "Last"].map((title, index) => ({ id:
 const state: SessionState = { queue, currentEntryId: "Current", queueCursorEntryId: "Current", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 120, volume: 80, seekable: true, error: null } };
 function render(value: SessionState) {
   const window = new Window();
-  window.document.body.innerHTML = renderToStaticMarkup(<QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} />);
+  window.document.body.innerHTML = renderToStaticMarkup(<QueryClientProvider client={queryClient}><QueuePanel state={value} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async () => true} /></QueryClientProvider>);
   return window.document;
 }
 

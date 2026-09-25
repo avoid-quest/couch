@@ -1,9 +1,9 @@
 import { Link, Outlet, useLocation, useRouter } from "@tanstack/react-router";
 import { Component, useEffect, useRef, useState, type ErrorInfo, type PropsWithChildren } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { providerShape, type ProviderItem } from "../../../shared/providers";
 import type { RadioStation } from "../../../shared/radio";
 import type { HistoryPlayback } from "@/components/HistoryPanel";
-import type { Action } from "../../../shared/protocol";
 import { DigitalClock } from "@/components/DigitalClock";
 import { Icon } from "@/components/Icon";
 import { RemotePad } from "@/components/RemotePad";
@@ -20,18 +20,17 @@ import { pathForSection, sectionForPath } from "../../../shared/page-paths";
 import { settingsPageForPath, settingsPagePath, settingsPages, type SettingsPage } from "../../../shared/settings-pages";
 import { buildInfo } from "../../../shared/build";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { apiSend } from "@/api/client";
+import { useNavigation } from "@/navigation";
 import { cn } from "cn";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
+import { PairForm } from "./PairForm";
 
 const navItems = [{ name: "Find", label: "Find" }, { name: "Saved", label: "Saved" }, { name: "Settings", label: "Settings" }];
 
@@ -40,8 +39,7 @@ export { useShell, useOptionalShell } from "./shell-context";
 import { useShell } from "./shell-context";
 
 function useShellValue() {
-  const gate = useSessionGate();
-  const { credentials, state, status, details, identity, connected, run, booting, setError, registerBackHandler, videoQualityPreference, remoteControlEnabled } = gate;
+  const { credentials, state, status, details, connected, run, booting, setError, videoQualityPreference, remoteControlEnabled } = useSessionGate();
   const router = useRouter();
   const location = useLocation();
   const section = sectionForPath(location.pathname) ?? "Now";
@@ -71,9 +69,6 @@ function useShellValue() {
   useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
   useEffect(() => { if (section !== "Find") setOnlineRequest(null); }, [section]);
-  const playCredentials = useRef(credentials);
-  const playAttempt = useRef(0);
-  playCredentials.current = credentials;
   useEffect(() => { setOnlineRequest(null); setSourcesOpen(false); }, [credentials?.origin, credentials?.token]);
   useEffect(() => { setRecentRadio({ installationId: installationId ?? null, stations: installationId ? readRadioRecents(installationId) : [] }); }, [installationId]);
 
@@ -117,15 +112,13 @@ function useShellValue() {
     const to = searchLocation(state);
     if (to !== at) router.history.replace(to);
   };
-  useEffect(() => {
-    registerBackHandler(() => {
-      if (remoteOpen) { setRemoteOpen(false); return; }
-      if (onlineRequest) { setOnlineRequest(null); changeSection("Saved"); return; }
-      if (section === "Now") leavePlayer();
-      else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
-      else if (section === "Find" && state?.currentEntryId) changeSection("Now");
-      else changeSection("Find");
-    });
+  useNavigation(() => {
+    if (remoteOpen) { setRemoteOpen(false); return; }
+    if (onlineRequest) { setOnlineRequest(null); changeSection("Saved"); return; }
+    if (section === "Now") leavePlayer();
+    else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
+    else if (section === "Find" && state?.currentEntryId) changeSection("Now");
+    else changeSection("Find");
   });
 
   const enqueueProvider = (item: ProviderItem, playNow: boolean, quality = videoQualityPreference.quality) =>
@@ -153,24 +146,14 @@ function useShellValue() {
   const enqueueCatalog = (type: "enqueueLibrary" | "enqueueJellyfin", itemId: string, options?: { playNow?: boolean; fromStart?: boolean; placement?: "next" }) =>
     run({ type, itemId, entryId: createId(), ...options });
 
+  const playProgress = useMutation({
+    mutationFn: ({ mediaId, ...body }: { mediaId: string; fromStart: boolean; profileId: string }) => apiSend(credentials!, `/api/progress/${encodeURIComponent(mediaId)}/play`, body, "POST", 35_000),
+  });
   const playHistory: HistoryPlayback = async (item, options) => {
     if (item.playable && credentials && state) {
-      if (credentials !== playCredentials.current) return false;
-      const attempt = ++playAttempt.current;
       setError(null);
-      try {
-        const response = await fetch(`${credentials.origin}/api/progress/${encodeURIComponent(item.mediaId)}/play`, {
-          method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ fromStart: options.fromStart === true, profileId: state.activeProfile.id }),
-          signal: AbortSignal.timeout(35_000),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Could not play this item.");
-        return credentials === playCredentials.current;
-      } catch (reason) {
-        if (credentials === playCredentials.current && attempt === playAttempt.current) setError(errorText(reason));
-        return false;
-      }
+      try { await playProgress.mutateAsync({ mediaId: item.mediaId, fromStart: options.fromStart === true, profileId: state.activeProfile.id }); return true; }
+      catch (reason) { setError(errorText(reason)); return false; }
     }
     if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId, { playNow: true, ...options });
     if (item.queueEntryId) return run({ type: "play", entryId: item.queueEntryId, ...options });
@@ -190,7 +173,7 @@ function useShellValue() {
   return {
     // The shell only renders routes inside the paired branch; pages can rely
     // on credentials being set.
-    ...gate, credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current) ?? "Find", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
+    credentials: credentials!, section, settingsSection, statusLabel, available, active, programme, current, playerBackLabel: sectionForPath(lastBrowsePath.current) ?? "Find", recentRadio: recentRadio.installationId === installationId ? recentRadio.stations : [],
     changeSection, leavePlayer, browseSection, gotoSearch, changeSearch, changeSettingsSection,
     openSources, openProvider, setRemoteOpen, setPairingOpen, setSourcesOpen,
     enqueueProvider, enqueueRadio, enqueueCatalog, playHistory,
@@ -223,10 +206,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
   const { pathname } = useLocation();
   const device = usePlaybackDevice();
-  const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, pairingRequired, connected, run, reconnect, host, booting, error, setError, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
-  const { undoNotice, undoAction, dismissUndo } = shell;
-  const { section, statusLabel, available, active, current } = shell;
-  const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
+  const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, pairingRequired, connected, run, reconnect, host, booting, error, setError, remoteControlEnabled, retryHost } = useSessionGate();
+  const { section, statusLabel, active, current } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
   useEffect(() => { window.scrollTo(0, 0); }, [section]);
   useEffect(() => {
@@ -248,12 +229,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
       toast(state.activity.text, { id: activityToast.current, duration: 6_000 });
     }
   }, [state?.activity?.id, identity?.controller?.id]);
-  useEffect(() => {
-    if (!undoNotice) return;
-    const id = `undo-${undoNotice.id}`;
-    toast(undoNotice.text, { id, duration: 6_000, action: { label: "Undo", onClick: () => void undoAction() }, onDismiss: dismissUndo });
-    return () => { toast.dismiss(id); };
-  }, [undoNotice?.id]);
   const pairingRef = useRef<HTMLButtonElement>(null);
 
   return (
@@ -281,20 +256,8 @@ export function ShellChrome({ children }: PropsWithChildren) {
           <section className="mx-auto flex min-h-[calc(100dvh-var(--shell-header))] w-full max-w-3xl flex-col justify-center gap-8 px-[var(--shell-gutter)] py-12" aria-labelledby="pair-heading">
             <div className="space-y-3"><h1 id="pair-heading" className="break-words text-[clamp(2.25rem,6vw,3rem)] leading-tight font-semibold tracking-tight">{localHost ? "Starting your player" : `Pair with ${new URL(credentials?.origin ?? device?.address ?? location.origin).host}`}</h1><p className="max-w-[50ch] text-lg text-muted-foreground">{localHost ? "The local player and your remotes connect here." : "Open Pair a remote on that Couch and type the code it shows."}</p></div>
             {!localHost && credentials && <p role="alert" className="max-w-[55ch] text-sm text-destructive">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
-            {localHost ? <Button className="self-start" disabled={booting} onClick={shell.retryHost}>{booting ? "Starting…" : "Try again"}</Button> : status === "protocol-mismatch" ? <p role="alert" className="max-w-[55ch] text-sm text-destructive">This playback computer uses an incompatible desktop protocol. Update this app or the playback computer, or choose another address.</p> : (
-              <form onSubmit={pair} className="pair-form w-full max-w-md space-y-8">
-                <FieldGroup>
-                  <Field><FieldLabel htmlFor="remote-name">Device name</FieldLabel><Input id="remote-name" className="rounded-none border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required /></Field>
-                  <Field><FieldLabel htmlFor="pairing-code">Pairing code</FieldLabel>
-                    <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} containerClassName="w-full justify-start gap-2">
-                      <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={0} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={1} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={2} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
-                      <InputOTPSeparator />
-                      <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={3} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={4} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={5} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
-                    </InputOTP>
-                  </Field>
-                </FieldGroup>
-                <Button disabled={pairing || pairingCode.length !== 6 || !remoteName.trim()}>{pairing ? "Connecting…" : "Connect"}</Button>
-              </form>
+            {localHost ? <Button className="self-start" disabled={booting} onClick={retryHost}>{booting ? "Starting…" : "Try again"}</Button> : status === "protocol-mismatch" ? <p role="alert" className="max-w-[55ch] text-sm text-destructive">This playback computer uses an incompatible desktop protocol. Update this app or the playback computer, or choose another address.</p> : (
+              <PairForm />
             )}
           </section>
         ) : (
@@ -313,7 +276,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
         )}
         </div>
         <Toaster position="bottom-left" closeButton offset={{ left: "var(--shell-gutter)", bottom: current ? section === "Now" ? "16rem" : "calc(var(--shell-footer) + 1rem)" : "1rem" }} />
-        {localHost && credentials && <LocalSharingPrompt onRemoteControlChange={setRemoteControlEnabled} credentials={credentials} />}
+        {localHost && credentials && <LocalSharingPrompt credentials={credentials} />}
         {host && remoteControlEnabled && <PairingDialog credentials={host} urls={host.urls} connected={connected} open={shell.pairingOpen} onOpenChange={shell.setPairingOpen} openerRef={pairingRef} />}
 
       </main>

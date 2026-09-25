@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/api/client";
+import { metadataItemQuery } from "@/api/library";
 import type { MetadataCandidate, MetadataPreview, MetadataValues, MetadataView } from "../../shared/metadata";
 
 const fields = { title: "Title", originalTitle: "Original title", showTitle: "Series title", plot: "Plot", year: "Release year", premiered: "Release date", genres: "Genres, one per line", season: "Season", episode: "Episode" } as const;
@@ -36,15 +37,7 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
   const prefix = useId();
   const device = usePlaybackDevice();
   const native = isNativeHost() && device?.mode !== "remote";
-  const page = useQuery({
-    enabled: open && connected,
-    queryKey: ["metadata", "item", id],
-    queryFn: () => apiFetch({ origin, token }, `/api/metadata/items/${id}`).then(async response => {
-      const value = await response.json() as MetadataView & { error?: string };
-      if (!response.ok) throw new Error(value.error || "Could not load metadata.");
-      return value;
-    }),
-  });
+  const page = useQuery({ ...metadataItemQuery({ origin, token }, id), enabled: open && connected });
   const metadata = page.data ?? null;
   const busy = !connected || pending || page.isFetching;
   const clearSelectedArtwork = () => { setArtwork(null); if (artworkInput.current) artworkInput.current.value = ""; };
@@ -84,7 +77,6 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
         reset(value);
         setNotice("Metadata saved.");
         onSaved();
-        await queryClient.invalidateQueries({ queryKey: ["metadata", "item", id] });
         await queryClient.invalidateQueries({ queryKey: ["library"] });
       }
     } catch (reason) {

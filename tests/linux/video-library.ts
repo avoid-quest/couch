@@ -23,13 +23,13 @@ async function nativeScreenshot(context: Context, name: string) {
 
 async function rescan(context: Context, sourceId: string, status = "ready") {
   const { ui, until, api, clients } = context;
-  const version = clients[0]!.state!.libraryVersion ?? 0;
+  const version = clients[0]!.state!.versions?.library ?? 0;
   await context.httpRemote.minimize();
   await openFolderSources(ui, until);
   await ui.button("Scan again", folderCard(sourceId));
   await until(`video library rescan commits ${status} and invalidates both controllers`, async () =>
     (await api("/api/library/sources")).sources.some((source: LibrarySource) => source.id === sourceId && source.status === status)
-    && clients.every(client => (client.state?.libraryVersion ?? 0) > version));
+    && clients.every(client => (client.state?.versions?.library ?? 0) > version));
   await closeFolderSources(ui, until);
 }
 

@@ -160,13 +160,13 @@ try {
   await movieEditor(ui, "Wrong movie", movie.id);
   await keyboard(ui, '[data-metadata-field="title"]', "Correct movie");
   await ui.execute("document.documentElement.removeAttribute('data-keyboard'); [...document.querySelectorAll('.metadata-editor button')].find(button => button.textContent === 'Save corrections').focus()");
-  const before = await view(), beforeVersion = clients[0]!.state!.libraryVersion;
+  const before = await view(), beforeVersion = clients[0]!.state!.versions?.library ?? 0;
   await clients[1]!.command({ type: "navigate", key: "select" });
   await until("guest selection reaches the real native navigation handler", () => ui.execute("return document.documentElement.hasAttribute('data-keyboard')"));
   await ui.request(`/session/${ui.session()}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
   assert.equal((await view()).revision, before.revision, "guest navigation cannot activate a protected metadata save");
   await ui.button("Save corrections");
-  await until("native title correction commits and both controllers receive invalidation", async () => (await view()).values.title === "Correct movie" && all(state => state.libraryVersion > beforeVersion && state.libraryVersion === clients[0]!.state!.libraryVersion));
+  await until("native title correction commits and both controllers receive invalidation", async () => (await view()).values.title === "Correct movie" && all(state => (state.versions?.library ?? 0) > beforeVersion && state.versions?.library === clients[0]!.state!.versions?.library));
   await capture("native-metadata-editor");
   assert.equal(await ui.execute("return document.querySelector('.metadata-editor').textContent.includes('On your paired administrator phone or browser')"), true);
   await ui.key(keys.escape); await ui.button("Play Correct movie");

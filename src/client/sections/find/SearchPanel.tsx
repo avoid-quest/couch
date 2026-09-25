@@ -14,7 +14,7 @@ import { SearchSource } from "./SearchSource";
 import { SearchRadioResults } from "./SearchRadioResults";
 import { supportsWebVideoQuality, useEnqueueVideoQuality } from "../../video-quality";
 import { createId } from "../../session/session";
-import { useOptionalShell } from "@/sections/shell/shell-context";
+import { useOptionalSessionGate } from "@/session/session-context";
 import type { SourceSetupKind } from "@/components/SourceSetupDialog";
 import { Check } from "lucide-react";
 import { matchesFacet, type SearchKind, type SearchLength } from "./SearchOnlineResults";
@@ -30,7 +30,6 @@ export type Props = {
   defaultQuality?: VideoQuality;
   onCommand?: (action: Action) => Promise<boolean>;
   onEnqueue: (source: Source, id: string, options?: Options) => Promise<boolean>;
-  onBrowse: (section: string) => void;
   onManageSources?: (source?: SourceSetupKind) => void;
   onQueryChange?: (query: string) => void;
   kinds?: SearchKind[]; lengths?: SearchLength[];
@@ -41,7 +40,7 @@ export type Props = {
 const message = (reason: unknown) => reason instanceof Error ? reason.message : "Could not search this source.";
 
 export function SearchPanel(props: Props) {
-  const shell = useOptionalShell();
+  const gate = useOptionalSessionGate();
   const [localDraft, setDraft] = useState(props.searchState?.query ?? "");
   const draft = props.draftQuery ?? localDraft;
   const input = useRef<HTMLInputElement>(null);
@@ -158,7 +157,7 @@ export function SearchPanel(props: Props) {
   }
   return <section ref={panel} className="min-w-0 space-y-3" aria-label="Search media" onFocusCapture={event => { focusedHit.current = (event.target as HTMLElement).closest<HTMLElement>("[data-hit-id]")?.dataset.hitId ?? null; }} onBlurCapture={event => { if (event.relatedTarget instanceof Node && !panel.current?.contains(event.relatedTarget)) focusedHit.current = null; }} onKeyDown={event => { if (collection && event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); backFromCollection(); return; } if (event.target !== input.current) return; if (event.key === "ArrowDown") { const row = panel.current?.querySelector<HTMLElement>("[data-play]"); if (row) { event.preventDefault(); row.focus(); } } else if (event.key === "ArrowUp") { const nav = document.querySelector<HTMLElement>(".app-header a"); if (nav) { event.preventDefault(); nav.focus(); } } }}>
     <div className="find-search-row"><SearchBar id="media-search" pageFirst inputRef={input} className="min-w-0 flex-1 [&_[data-slot=input-group]]:min-h-20" value={draft} placeholder="Search, or paste a link" onValueChange={changeDraft} onSubmit={() => { commit(draft.trim(), true); requestAnimationFrame(() => panel.current?.querySelector<HTMLElement>("[data-play]")?.focus()); }} onClear={draft ? () => { changeDraft(""); commit(""); input.current?.focus(); } : undefined} />
-      {shell?.nativeHost && shell.localHost && !shell.tvPresentation && props.onCommand && <OpenFileButton connected={props.connected} run={props.onCommand} playNow />}
+      {gate?.nativeHost && gate.localHost && !gate.tvPresentation && props.onCommand && <OpenFileButton connected={props.connected} run={props.onCommand} playNow />}
     </div>
     {!props.connected && <p role="status">Reconnect to search and play your media.</p>}
     {search.query && !url && !completed && <p className="find-searching flex items-center gap-2" role="status"><Spinner className="size-3.5" />Still asking {searchable.filter(source => !summaries[source] || summaries[source].loading).join(", ")}…</p>}
@@ -178,7 +177,7 @@ export function SearchPanel(props: Props) {
       {providers.map(provider => <div key={`${provider}:${search.query}:${search.attempt}`} hidden={!showSource(providerNames[provider])}><SearchOnlineResults {...props} kinds={!openedProvider ? kinds : undefined} lengths={!openedProvider ? lengths : undefined} retry={search.attempt} onResults={reportResults} onCollectionChange={open => setOpenedProvider(open ? provider : null)} active={props.active && showSource(providerNames[provider])} provider={provider} query={search.query} url={url} quality={quality} onQualityChange={setQuality} onEnqueued={resetQuality} /></div>)}
       {!url && <>
         {(["avoid radio", "Radio playlists", "Radio directory"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source)}><SearchRadioResults {...props} kinds={kinds} lengths={lengths} onResults={reportResults} active={props.active && showSource(source)} query={search.query} source={source} /></div>)}
-        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source === "Library" ? "TV folders" : source)}><SearchSource {...props} kinds={kinds} lengths={lengths} onResults={reportResults} active={props.active && showSource(source === "Library" ? "TV folders" : source)} source={source} query={search.query} attempt={search.attempt} /></div>)}
+        {(["Library", "Jellyfin"] as const).map(source => <div key={`${source}:${search.query}:${search.attempt}`} hidden={!showSource(source === "Library" ? "TV folders" : source)}><SearchSource {...props} kinds={kinds} lengths={lengths} onResults={reportResults} active={props.active && showSource(source === "Library" ? "TV folders" : source)} source={source} query={search.query} /></div>)}
         {filter === "Bandcamp" && <p className="text-sm text-muted-foreground">Paste a Bandcamp album or track link.</p>}
       </>}
 

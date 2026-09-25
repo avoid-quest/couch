@@ -63,14 +63,12 @@ test("a completed display poll cannot enable a second preview while the first is
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });
   await flush();
   expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
-  await act(async () => { queryClient.setQueryData(["display", "http://localhost", "admin"], poll); });
+  await act(async () => { queryClient.setQueryData(["display"], poll); });
   expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
-  deferRead = true;
+  // The write's returned state lands in the cache, so the pending preview locks further previews.
   await act(async () => { resolvePreview!(preview); });
   await flush();
   expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
-  await act(async () => { resolveRead!(preview); });
-  await flush();
   expect(screen.getByRole("button", { name: "Keep this screen" })).toBeDefined();
 });
 
@@ -79,7 +77,7 @@ test("a display poll does not dismiss a mutation error", async () => {
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });
   await flush();
   expect(screen.getByRole("alert").textContent).toContain("Display unavailable");
-  await act(async () => { queryClient.setQueryData(["display", "http://localhost", "admin"], poll); });
+  await act(async () => { queryClient.setQueryData(["display"], poll); });
   expect(screen.getByRole("alert").textContent).toContain("Display unavailable");
   previewFails = false;
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });

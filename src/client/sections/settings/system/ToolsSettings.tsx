@@ -1,39 +1,23 @@
 import { type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { apiFetch, type ApiCredentials } from "@/api/client";
-import type { ManagedToolHealth, ToolHealth, ToolObservation, AptPackageStatus } from "../../../../shared/tool-health";
+import type { ApiCredentials } from "@/api/client";
+import { toolPackagesQuery, toolsQuery } from "@/api/settings";
+import type { ManagedToolHealth, ToolObservation } from "../../../../shared/tool-health";
 
-type Props = { credentials: ApiCredentials; connected: boolean; children?: ReactNode; revision?: string };
+type Props = { credentials: ApiCredentials; connected: boolean; children?: ReactNode };
 const statuses: Record<ToolObservation["status"], string> = { ready: "Ready", missing: "Missing", corrupt: "Does not match release", error: "Check failed", unknown: "Unknown" };
 const sources: Record<ManagedToolHealth["effective"]["source"], string> = { package: "Shipped package", environment: "Environment override", "search-path": "Search-path fallback", unavailable: "Not found" };
 
-export function ToolsSettings({ credentials, connected, children, revision }: Props) {
-  const queryClient = useQueryClient();
-  const tools = useQuery({
-    queryKey: ["tools", credentials.origin, credentials.token, revision],
-    enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/tools").then(response => response.json() as Promise<ToolHealth>),
-    retry: false,
-  });
-  const packagesQuery = useQuery({
-    queryKey: ["tools", "packages", credentials.origin, credentials.token],
-    enabled: connected,
-    queryFn: async () => {
-      const response = await apiFetch(credentials, "/api/tools/packages");
-      return response.json() as Promise<AptPackageStatus>;
-    },
-    retry: false,
-  });
+export function ToolsSettings({ credentials, connected, children }: Props) {
+  const tools = useQuery({ ...toolsQuery(credentials), enabled: connected });
+  const packagesQuery = useQuery({ ...toolPackagesQuery(credentials), enabled: connected });
   const report = tools.data ?? null;
   const packages = packagesQuery.data ?? null;
   const error = tools.error ? "Could not check media tools. Check the TV connection and try again." : null;
   const loading = tools.isPending || tools.isFetching;
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["tools", credentials.origin, credentials.token, revision] });
-    void queryClient.invalidateQueries({ queryKey: ["tools", "packages", credentials.origin, credentials.token] });
-  };
+  const refresh = () => { void tools.refetch(); void packagesQuery.refetch(); };
 
   return <section aria-labelledby="tools-title" className="min-w-0 space-y-3 border-t pt-4">
     <h3 id="tools-title" className="font-medium">Tools</h3>

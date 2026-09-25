@@ -158,7 +158,7 @@ test("rename publishes after commit during playback, while removal and selection
   }
   const before = structuredClone(session.state), count = commands.length;
   session.renameProfile(viewer.id, "Renamed", viewer.name);
-  expect(session.state).toEqual({ ...before, activeProfile: { ...viewer, name: "Renamed" }, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(session.state).toEqual({ ...before, activeProfile: { ...viewer, name: "Renamed" }, versions: { ...before.versions, library: (before.versions?.library ?? 0) + 1, progress: (before.versions?.progress ?? 0) + 1 } });
   expect(commands).toHaveLength(count);
   session.command({ type: "stop" });
   session.observe(idle);
@@ -259,7 +259,7 @@ test("person naming validates, refuses stale writes and publishes without changi
   session.observe({ ...idle, status: "paused", playbackId: session.state.player.playbackId, position: 24, duration: 120 });
   const before = structuredClone(session.state), count = commands.length;
   const named = session.namePerson("household", "Francesco", "Household");
-  expect(session.state).toEqual({ ...before, activeProfile: named, libraryVersion: (before.libraryVersion ?? 0) + 1 });
+  expect(session.state).toEqual({ ...before, activeProfile: named, versions: { ...before.versions, library: (before.versions?.library ?? 0) + 1, progress: (before.versions?.progress ?? 0) + 1 } });
   expect(commands).toHaveLength(count);
   expect(() => session.namePerson("household", "Stale", "Household")).toThrow("renamed on another remote");
   expect(session.state.activeProfile).toEqual(named);

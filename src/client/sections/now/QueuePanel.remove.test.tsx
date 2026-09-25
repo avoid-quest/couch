@@ -3,6 +3,9 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { Action, SessionState } from "../../../shared/protocol";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let root: Root, window: Window, QueuePanel: typeof import("./QueuePanel").QueuePanel;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -28,10 +31,10 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   ({ QueuePanel } = await import("./QueuePanel"));
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
-  await act(async () => root.render(<QueuePanel state={state} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async action => { actions.push(action); return true; }} />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><QueuePanel state={state} credentials={{ origin: "http://localhost", token: "paired" }} connected available nativeHost={false} defaultQuality="best" run={async action => { actions.push(action); return true; }} /></QueryClientProvider>));
   await flush();
 });
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => root.unmount());
   await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }

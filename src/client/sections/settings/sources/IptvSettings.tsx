@@ -28,7 +28,7 @@ export function IptvSettings({ credentials, connected, canManage }: SourceSettin
           <Button className="ml-2" disabled={!connected || !canManage} onClick={() => void page.refetch()} variant="outline">Retry IPTV sources</Button>
         </p>
       )}
-      {credentials && <GuideSources connected={connected && canManage} controllerVersion={0} host={false} inline origin={credentials.origin} request={request} sources={page.data?.sources ?? []} token={credentials.token} />}
+      {credentials && <GuideSources connected={connected && canManage} host={false} inline request={request} sources={page.data?.sources ?? []} />}
     </>
   );
 }

@@ -156,12 +156,12 @@ try {
           const thumbnail = await execute("return document.querySelector(arguments[0] + ' img')?.src", [selected]);
           assert.ok(thumbnail, "Public provider result includes artwork");
           await until(async () => await execute("return document.querySelector(arguments[0] + ' img')?.naturalWidth > 0", [selected]));
-          const before = remotes[0]!.state!.providerVersion ?? 0;
+          const before = remotes[0]!.state!.versions?.providers ?? 0;
           const collection = await execute("return document.querySelector(arguments[0] + ' [data-play]')?.getAttribute('aria-label')?.startsWith('Open ')", [selected]);
           await execute("document.querySelector(arguments[0] + ' [data-play]').focus()", [selected]);
           if (!await execute("return !!document.querySelector(arguments[0] + ' [aria-label^=\"Saved:\"]')", [selected])) {
             await ui.click(`${selected} [aria-label^="Save:"]`);
-            if (collection) await until(() => remotes.every(remote => (remote.state?.providerVersion ?? 0) > before));
+            if (collection) await until(() => remotes.every(remote => (remote.state?.versions?.providers ?? 0) > before));
           }
           if (collection) {
             const favorite = (await api("/api/providers/favorites", 1)).favorites.find((item: ProviderItem) => item.provider === provider.catalog!.provider && item.title === title) as ProviderItem | undefined;

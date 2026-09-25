@@ -3,6 +3,9 @@ import { Window } from "happy-dom";
 import { act } from "react";
 import { toast } from "sonner";
 import type { Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -37,7 +40,7 @@ beforeEach(async () => {
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
-afterEach(async () => {
+afterEach(async () => { queryClient.clear();
   await act(async () => root.unmount()); toast.dismiss(); request.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
@@ -45,7 +48,7 @@ afterEach(async () => {
 
 for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} loads lists and offers Undo after deletion`, async () => {
   const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SavedPlaylists origin="http://localhost" token="paired" connected canPlay queueCount={1} inline={inline} /></QueryClientProvider>));
   await flush();
   if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
   else { expect(request).not.toHaveBeenCalled(); await click(button("Saved lists")); }
@@ -65,7 +68,7 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
 
 test("Lists shows total length and keeps Up next with its generated name", async () => {
   const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={2} inline />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SavedPlaylists origin="http://localhost" token="paired" connected canPlay queueCount={2} inline /></QueryClientProvider>));
   await flush();
   expect(document.querySelector('[data-playlist-id="friday"]')?.textContent).toContain("1 item, 0:45");
   await click(button("Keep Up next as a list"));
@@ -95,7 +98,7 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
     return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1, totalDuration: 2700 }] } : { playlist: saved });
   }) as typeof fetch);
   const { SavedPlaylists } = await import("./SavedPlaylists");
-  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} />));
+  await act(async () => root.render(<QueryClientProvider client={queryClient}><SavedPlaylists origin="http://localhost" token="paired" connected canPlay queueCount={1} /></QueryClientProvider>));
   await click(button("Saved lists"));
   expect(document.querySelector('[data-slot="badge"]')?.textContent).toBe(providerLabels[provider as keyof typeof sources]);
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="source-list"]')!);

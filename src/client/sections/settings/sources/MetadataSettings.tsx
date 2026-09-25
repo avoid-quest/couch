@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiFetch } from "@/api/client";
+import { apiSend } from "@/api/client";
+import { metadataProviderQuery } from "@/api/library";
 import tmdbLogo from "../../../tmdb-logo.svg";
 import type { SourceCredentials } from "@/components/sourceTypes";
 
@@ -14,39 +15,20 @@ const empty: SourceCredentials = { origin: "", token: "" };
 export function MetadataSettings({ credentials, connected, canManage }: Props) {
   const queryClient = useQueryClient();
   const [token, setToken] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const available = connected && canManage && !!credentials;
-  const page = useQuery({
-    queryKey: ["metadata", "provider"],
-    enabled: available,
-    queryFn: () => apiFetch(credentials ?? empty, "/api/metadata/provider").then(response => response.json() as Promise<{ configured: boolean }>),
+  const page = useQuery({ ...metadataProviderQuery(credentials ?? empty), enabled: available });
+  const saving = useMutation({
+    mutationFn: (clear: boolean) => apiSend<{ configured: boolean; provider: string }>(credentials!, "/api/metadata/provider", { token: clear ? "" : token }),
+    onSuccess: value => { queryClient.setQueryData(metadataProviderQuery(credentials!).queryKey, value); setToken(""); setConfirmClear(false); },
   });
+  const pending = saving.isPending;
+  const error = saving.error ? saving.error.message || "Could not save metadata setup." : null;
+  const notice = saving.isSuccess ? saving.variables ? "TMDB token cleared. Saved metadata remains available." : "TMDB token saved on the TV. Use a video's metadata editor to search and preview a match." : null;
 
-  async function save(event: FormEvent, clear = false) {
+  function save(event: FormEvent, clear = false) {
     event.preventDefault();
-    if (!credentials || !available || pending) return;
-    setPending(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const value = await apiFetch(credentials, "/api/metadata/provider", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: clear ? "" : token }),
-      }).then(response => response.json() as Promise<{ configured: boolean; error?: string }>);
-      if (typeof value.configured !== "boolean") throw new Error(value.error || "Could not save metadata setup.");
-      await queryClient.invalidateQueries({ queryKey: ["metadata", "provider"] });
-      setToken("");
-      setConfirmClear(false);
-      setNotice(clear ? "TMDB token cleared. Saved metadata remains available." : "TMDB token saved on the TV. Use a video's metadata editor to search and preview a match.");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save metadata setup.");
-    } finally {
-      setPending(false);
-    }
+    if (credentials && available && !pending) saving.mutate(clear);
   }
 
   return (
@@ -54,7 +36,7 @@ export function MetadataSettings({ credentials, connected, canManage }: Props) {
       <h3 className="font-semibold">Movie and episode metadata</h3>
       <p className="text-sm text-muted-foreground">Manual corrections and exports work offline. TMDB search requires your authorized API Read Access Token. The saved token stays on the TV and is never returned to remotes.</p>
       {canManage ? (
-        <form className="space-y-3" onSubmit={event => void save(event)}>
+        <form className="space-y-3" onSubmit={save}>
           <p className="text-sm" role="status">{page.isFetching ? "Checking TMDB setup…" : page.data?.configured ? "TMDB token configured" : "TMDB is not configured"}</p>
           <Label htmlFor="metadata-token">TMDB API Read Access Token</Label>
           <Input autoComplete="new-password" className="min-h-11" disabled={!available || pending} id="metadata-token" maxLength={2048} onChange={event => setToken(event.target.value)} spellCheck={false} type="password" value={token} />

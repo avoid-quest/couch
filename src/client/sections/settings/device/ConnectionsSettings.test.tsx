@@ -22,10 +22,11 @@ async function render(identity: ControllerIdentity = { authority: "administrator
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   function SettingsHarness() {
     const [sharing, setSharing] = useState(remoteControlEnabled);
+    const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
     setSharingFromHost = setSharing;
-    return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    return <QueryClientProvider client={client}>
       <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} setRemoteControlEnabled={enabled => { sharingChanges.push(enabled); setSharing(enabled); }} administratorClaimed managedLan />
+        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} administratorClaimed managedLan />
       </QueryClientProvider>;
   }
   await act(async () => root.render(<SettingsHarness />));
@@ -50,7 +51,14 @@ beforeEach(async () => {
     calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : null });
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin");
     if (path === "/api/controllers/pairing-code") return Response.json({ code: "246810" });
-    if (path === "/api/settings/sharing" && method === "POST") return sharingFailure ? Response.json({ error: "Unavailable" }, { status: 503 }) : Response.json({ enabled: JSON.parse(String(init?.body)).enabled });
+    if (path === "/api/settings/sharing" && method === "POST") {
+      if (sharingFailure) return Response.json({ error: "Unavailable" }, { status: 503 });
+      // The host's controllers revision push is what refreshes remoteControlEnabled.
+      const enabled = JSON.parse(String(init?.body)).enabled;
+      sharingChanges.push(enabled);
+      queueMicrotask(() => setSharingFromHost?.(enabled));
+      return Response.json({ enabled });
+    }
     if (path === "/api/settings/origin-domain") {
       if (method === "POST") originDomain = JSON.parse(String(init?.body)).domain;
       return Response.json({ domain: originDomain });

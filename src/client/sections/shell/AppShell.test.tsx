@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { ShellProviders } from "./test-providers";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { Window } from "happy-dom";
 import { act } from "react";
@@ -6,7 +7,6 @@ import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
 import { fireEvent, screen } from "@/testing";
 import type { ShellValue } from "./AppShell";
-import { ShellContext } from "./shell-context";
 import { buildInfo } from "../../../shared/build";
 
 let root: Root, window: Window;
@@ -51,7 +51,7 @@ async function renderUpdates(authority: "host" | "administrator" | "controller",
     expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${localHost ? "local-owner" : "remote-pairing"}`);
     return Response.json({ channel: "stable", policy: "manual", status: "idle", currentCheck: true, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, installation: { enabled: true, repairAvailable: false, transaction: null } }, { status: init?.method === "POST" ? 202 : 200 });
   }) as typeof fetch);
-  const base = createRootRoute({ component: () => <QueryClientProvider client={client}><ShellContext.Provider value={shell}><Outlet /></ShellContext.Provider></QueryClientProvider> });
+  const base = createRootRoute({ component: () => <QueryClientProvider client={client}><ShellProviders value={shell}><Outlet /></ShellProviders></QueryClientProvider> });
   const updates = createRoute({ getParentRoute: () => base, path: "/settings/updates", component: UpdatesPage });
   const router = createRouter({ routeTree: base.addChildren([updates]), history: createMemoryHistory({ initialEntries: ["/settings/updates"] }) });
   await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
@@ -101,7 +101,7 @@ async function render(status: "playing" | "unavailable" | "idle", remoteOffline 
     sectionUrl: () => "/find",
     videoQualityPreference: { quality: "auto" },
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <NativeModeGate><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></NativeModeGate> });
+  const base = createRootRoute({ component: () => <NativeModeGate><ShellProviders value={shell}><ShellChrome><Outlet /></ShellChrome></ShellProviders></NativeModeGate> });
   const now = createRoute({ getParentRoute: () => base, path: "/", component: (await import("../now/PlayerPage")).PlayerPage });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <p>Find view</p> });
   const router = createRouter({ routeTree: base.addChildren([now, find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });

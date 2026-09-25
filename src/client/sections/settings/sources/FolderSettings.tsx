@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/api/client";
+import { libraryFoldersQuery } from "@/api/library";
 import type { ManagedFolder } from "../../../../shared/folders";
 import type { LibrarySource } from "../../../../shared/library";
 import { FolderBrowser } from "./FolderBrowser";
@@ -11,7 +12,6 @@ import type { SourceCredentials } from "@/components/sourceTypes";
 
 type FolderView = LibrarySource & Partial<Pick<ManagedFolder, "verified" | "scannedItems">>;
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
-type FolderPage = { sources: FolderView[] };
 type FolderAction = "add" | "scan" | "test" | "verify" | "remove";
 const labels: Record<LibrarySource["status"], string> = { idle: "Not scanned", scanning: "Scanning", ready: "Up to date", unavailable: "Unavailable", error: "Scan failed" };
 const empty: SourceCredentials = { origin: "", token: "" };
@@ -25,11 +25,7 @@ export function FolderSettings({ credentials, connected, canManage }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const available = connected && !!credentials;
   const canWrite = available && canManage && !pending;
-  const page = useQuery({
-    queryKey: ["library", "settings-folders", canManage],
-    enabled: available,
-    queryFn: () => apiFetch(credentials ?? empty, `/api/library/${canManage ? "folders" : "sources"}`).then(response => response.json() as Promise<FolderPage>),
-  });
+  const page = useQuery({ ...libraryFoldersQuery(credentials ?? empty, canManage), enabled: available });
   const sources = page.data?.sources ?? [];
   const queryError = page.error instanceof Error ? page.error.message : page.error ? "Could not load TV folders." : null;
 

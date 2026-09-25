@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { forLaterQuery } from "@/api/for-later";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
-import { apiFetch } from "@/api/client";
+import { playlistsQuery } from "@/api/playlists";
 
 type SavedTab = "later" | "channels" | "lists";
 let lastSavedTab: SavedTab = "later";
@@ -41,7 +41,7 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   const laterCount = useQuery({ ...forLaterQuery(credentials), enabled: showCounts });
   const providerCount = useQuery({ ...providerFavoritesQuery(credentials), enabled: showCounts });
   const radioCount = useQuery({ ...radioFavoritesListQuery(credentials), enabled: showCounts });
-  const listsCount = useQuery({ queryKey: ["saved", "list-count", credentials.origin, credentials.token, state?.playlistVersion], enabled: showCounts, queryFn: () => apiFetch(credentials, "/api/playlists").then(response => response.json() as Promise<{ playlists: unknown[] }>) });
+  const listsCount = useQuery({ ...playlistsQuery(credentials), enabled: showCounts });
   const tabs = [
     ["later", "For later", laterCount.data?.items.length],
     ["channels", "Channels and stations", (providerCount.data?.favorites.length ?? 0) + (radioCount.data?.favorites.length ?? 0)],
@@ -49,7 +49,7 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   ] as const;
   const later = <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} inspect onFind={() => onBrowse("Search")} showHeading={false} />;
   const channels = <SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} showHeading={false} {...favoriteActions} />;
-  const lists = <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.playlistVersion ?? 0} queueCount={state?.queue.length ?? 0} inline />;
+  const lists = <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} queueCount={state?.queue.length ?? 0} inline />;
 
   return <section ref={page} className="min-w-0 pb-8" aria-label="Saved media">
     {active && <Tabs value={tab} onValueChange={value => { lastSavedTab = value as SavedTab; setTab(lastSavedTab); }} orientation="vertical" className="saved-page-layout -ml-[.8rem] grid grid-cols-[15rem_minmax(0,1fr)] gap-8 max-[700px]:ml-0 max-[700px]:grid-cols-1">

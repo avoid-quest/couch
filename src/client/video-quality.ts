@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { VideoQuality } from "../shared/providers";
 export { supportsWebVideoQuality, supportsCurrentVideoQuality } from "../shared/video-quality";
 
@@ -26,11 +26,11 @@ export function useVideoQualityPreference() {
     window.addEventListener("storage", update);
     return () => window.removeEventListener("storage", update);
   }, []);
-  const save = (value: VideoQuality) => {
+  const save = useCallback((value: VideoQuality) => {
     try { saveVideoQuality(value); setQuality(value); setError(null); }
     catch { setError("Could not save this browser's preference. Allow site storage and try again."); }
-  };
-  return { quality, save, error };
+  }, []);
+  return useMemo(() => ({ quality, save, error }), [quality, save, error]);
 }
 
 export function useEnqueueVideoQuality(defaultQuality: VideoQuality) {

@@ -39,7 +39,7 @@ function row(title: string) {
 }
 async function flush() { await act(async () => { await Bun.sleep(30); }); }
 async function renderHome({ connected = true, active = true, canPlay = true, canManageMetadata = false }: { connected?: boolean; active?: boolean; canPlay?: boolean; canManageMetadata?: boolean } = {}) {
-  await act(async () => root.render(<QueryClientProvider client={client}><BrowseHome state={state} credentials={credentials} connected={connected} active={active} canPlay={canPlay} canManageMetadata={canManageMetadata} playing={false} onBrowse={() => {}} onAddSource={() => openedSources.push(1)} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><BrowseHome state={state} credentials={credentials} connected={connected} active={active} canPlay={canPlay} canManageMetadata={canManageMetadata} onAddSource={() => openedSources.push(1)} onAdd={async item => { queued.push(item); return true; }} onPlay={async (...args) => { played.push(args); return true; }} /></QueryClientProvider>));
   if (connected && active) await flush();
 }
 

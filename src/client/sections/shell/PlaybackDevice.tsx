@@ -1,4 +1,4 @@
-import { Fragment, createContext, useContext, useEffect, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
+import { Fragment, createContext, useContext, useEffect, useEffectEvent, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,11 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { acknowledgeFrontend, apiSend } from "@/api/client";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
-import { buildInfo, loadedBuild } from "../../../shared/build";
+import { buildInfo } from "../../../shared/build";
 import { UpdatesSettings } from "@/sections/settings/system/UpdatesSettings";
 import { useLocalUpdateActivity } from "@/update-activity";
 import { SoundControls } from "./PlaybackStatus";
@@ -111,7 +112,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
 
 export function InstallationUpdates() {
   const device = usePlaybackDevice()!;
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" } } }));
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "always" }, mutations: { networkMode: "always" } } }));
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,8 +125,7 @@ export function InstallationUpdates() {
         const connection = await invoke<Credentials>("connection_info");
         if (stop.signal.aborted) return;
         if (!connection?.origin || !connection.token) throw new Error("This installation's updater is starting.");
-        const response = await fetch(`${connection.origin}/api/maintenance/frontend`, { method: "POST", headers: { Authorization: `Bearer ${connection.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ build: loadedBuild }), signal: AbortSignal.any([stop.signal, AbortSignal.timeout(10_000)]) });
-        if (!response.ok) throw new Error("This installation's running build could not be verified.");
+        await acknowledgeFrontend(connection, stop.signal, 10_000).catch(() => { throw new Error("This installation's running build could not be verified."); });
         setCredentials(connection); setError(null);
       } catch (reason) { if (!stop.signal.aborted) { setError(message(reason)); timer = setTimeout(() => void connect(), 2_000); } }
     };
@@ -178,9 +178,8 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useRef(device?.dismiss);
-  dismiss.current = device?.dismiss;
-  useEffect(() => () => dismiss.current?.(), []);
+  const dismiss = useEffectEvent(() => device?.dismiss());
+  useEffect(() => () => dismiss(), []);
   if (!device) return null;
   const close = () => { setOpen(false); setDialog(null); device.dismiss(); };
   const select = async (mode: "local" | "remote", target?: string, confirmed = false) => {
@@ -222,27 +221,23 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   </>;
 }
 
-export function LocalSharingPrompt({ credentials, onRemoteControlChange }: { credentials: Credentials | null; onRemoteControlChange?: (enabled: boolean) => void }) {
+// The server bumps the controllers revision, which refreshes remoteControlEnabled.
+export function LocalSharingPrompt({ credentials }: { credentials: Credentials | null }) {
   const device = usePlaybackDevice();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const active = useRef(false);
-  const setSharing = async (enabled: boolean) => {
-    if (!credentials || !device || active.current) return;
-    active.current = true; setPending(true); setError(null);
-    try {
-      const response = await fetch(`${credentials.origin}/api/settings/sharing`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ enabled }), signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error((await response.json()).error ?? "Could not save remote control.");
-      onRemoteControlChange?.(enabled);
-      await device.completeLocalSetup();
-    } catch (reason) { setError(message(reason)); }
-    finally { active.current = false; setPending(false); }
-  };
+  const sharing = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await apiSend(credentials!, "/api/settings/sharing", { enabled }, "POST", 10_000);
+      await device!.completeLocalSetup();
+    },
+  });
+  const pending = sharing.isPending;
+  const error = sharing.error ? message(sharing.error) : null;
+  const setSharing = (enabled: boolean) => { if (credentials && device && !pending) sharing.mutate(enabled); };
   if (!device || device.mode !== "local" || device.localSetupComplete || !credentials) return null;
   // The first-run decision fills the screen, so it must override DialogContent's centered modal geometry.
   return <Dialog open><DialogContent showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} className="!inset-0 !m-0 !flex !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !justify-center !gap-0 !rounded-none !bg-black !px-[clamp(2rem,10vw,8rem)] !py-12 !text-white !shadow-none !ring-0" style={{ fontFamily: "'Inter Tight Variable', sans-serif" }}>
     <DialogHeader className="max-w-[48rem]"><DialogTitle className="text-[clamp(2.3rem,4vw,3rem)] font-semibold tracking-[-.03em]">Allow remote control?</DialogTitle><DialogDescription className="mt-3 max-w-[40rem] text-xl text-white/70">Phones and computers on this network can pair and control playback. You can change this in Settings, Connections.</DialogDescription></DialogHeader>
     {error && <Alert variant="destructive" className="mt-6 max-w-[40rem]"><AlertDescription>{error}</AlertDescription></Alert>}
-    <DialogFooter className="mt-8 flex max-w-[40rem] flex-row justify-start gap-2"><Button disabled={pending} className="rounded-sm bg-white text-black hover:bg-white/85" onClick={() => void setSharing(true)}>Allow remote control</Button><Button variant="ghost" className="rounded-sm text-white hover:bg-white/10 hover:text-white focus-visible:bg-white focus-visible:text-black" disabled={pending} onClick={() => void setSharing(false)}>Keep private</Button></DialogFooter>
+    <DialogFooter className="mt-8 flex max-w-[40rem] flex-row justify-start gap-2"><Button disabled={pending} className="rounded-sm bg-white text-black hover:bg-white/85" onClick={() => setSharing(true)}>Allow remote control</Button><Button variant="ghost" className="rounded-sm text-white hover:bg-white/10 hover:text-white focus-visible:bg-white focus-visible:text-black" disabled={pending} onClick={() => setSharing(false)}>Keep private</Button></DialogFooter>
   </DialogContent></Dialog>;
 }

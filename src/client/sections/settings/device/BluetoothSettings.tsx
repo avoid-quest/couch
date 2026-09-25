@@ -1,55 +1,34 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, type ApiCredentials } from "@/api/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch, apiSend, type ApiCredentials } from "@/api/client";
+import { bluetoothQuery, bluetoothView, soundQuery, type ListedBluetoothState } from "@/api/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BluetoothAction, BluetoothState } from "../../../../shared/bluetooth";
-import type { SoundState } from "../../../../shared/sound";
 import { createId } from "../../../session/session";
-
-type ListedBluetoothState = Omit<BluetoothState, "devices"> & { devices: (BluetoothState["devices"][number] & { available: boolean })[] };
-
-function updateDevices(previous: ListedBluetoothState | null, next: BluetoothState, reset = false): ListedBluetoothState {
-  // BlueZ inventory order changes on every read. Keep each result in its first-seen position.
-  const devices = new Map((previous?.devices ?? []).filter(device => !reset || device.paired).map(device => [device.address, { ...device, available: false, connected: false }]));
-  for (const device of next.devices) devices.set(device.address, { ...device, available: true });
-  if (next.operation?.kind === "forget" && next.operation.status === "finished" && next.operation.device && (previous?.operation?.id !== next.operation.id || previous.operation.status !== "finished")) devices.delete(next.operation.device);
-  return { ...next, devices: [...devices.values()] };
-}
 
 export function BluetoothSettings({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
   const queryClient = useQueryClient();
-  const bluetoothKey = ["bluetooth", credentials.origin, credentials.token];
-  const bluetooth = useQuery({
-    queryKey: bluetoothKey,
-    enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/bluetooth").then(response => response.json() as Promise<BluetoothState>),
-    refetchInterval: 1_000,
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
-  const sound = useQuery({
-    queryKey: ["sound", credentials.origin, credentials.token],
-    enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/sound").then(response => response.json() as Promise<SoundState>),
-    refetchInterval: 1_000,
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
-  const [state, setState] = useState<ListedBluetoothState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const bluetooth = useQuery({ ...bluetoothQuery(credentials), enabled: connected });
+  const sound = useQuery({ ...soundQuery(credentials), enabled: connected });
   const [confirm, setConfirm] = useState<{ address: string; op: "disconnect" | "forget" } | null>(null);
   const [answer, setAnswer] = useState("");
   const operation = useRef<string | null>(null);
-
-  useEffect(() => {
-    setState(null); setError(null); setPending(false); setConfirm(null); operation.current = null;
-  }, [credentials.origin, credentials.token, connected]);
-  useEffect(() => {
-    if (!connected || !bluetooth.data) return;
-    setState(previous => updateDevices(previous, bluetooth.data!));
-  }, [connected, bluetooth.data, bluetooth.dataUpdatedAt]);
+  const state = connected ? bluetooth.data ?? null : null;
+  const send = (action: Omit<BluetoothAction, "owner">) => apiSend<BluetoothState>(credentials, "/api/bluetooth", { action });
+  const mutation = useMutation({
+    mutationFn: async (action: Omit<BluetoothAction, "owner">) => {
+      if (action.device && state?.operation?.kind === "scan" && state.operation.status === "running" && state.operation.id === operation.current) await send({ op: "cancel", token: state.operation.id });
+      if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
+      return send(action);
+    },
+    onSuccess: (result, action) => {
+      queryClient.setQueryData<ListedBluetoothState>(bluetoothQuery(credentials).queryKey, previous => bluetoothView(previous, result, action.op === "scan"));
+      setConfirm(null);
+    },
+  });
+  const pending = mutation.isPending;
+  const error = mutation.error ? mutation.error instanceof Error ? mutation.error.message : "Bluetooth request failed." : null;
   useEffect(() => () => {
     if (operation.current) void apiFetch(credentials, "/api/bluetooth", {
       method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
@@ -58,23 +37,8 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
   }, [credentials]);
   useEffect(() => setAnswer(""), [state?.operation?.prompt?.id]);
 
-  async function change(action: Omit<BluetoothAction, "owner">) {
-    if (!connected || pending) return;
-    setPending(true); setError(null);
-    const send = (next: Omit<BluetoothAction, "owner">) => apiFetch(credentials, "/api/bluetooth", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: next }),
-    }).then(response => response.json() as Promise<BluetoothState>);
-    try {
-      if (action.device && state?.operation?.kind === "scan" && state.operation.status === "running" && state.operation.id === operation.current) {
-        await send({ op: "cancel", token: state.operation.id });
-      }
-      if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
-      const result = await send(action);
-      setState(previous => updateDevices(previous, result, action.op === "scan"));
-      setConfirm(null);
-      await queryClient.invalidateQueries({ queryKey: bluetoothKey });
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Bluetooth request failed."); }
-    finally { setPending(false); }
+  function change(action: Omit<BluetoothAction, "owner">) {
+    if (connected && !pending) mutation.mutate(action);
   }
   const active = state?.operation?.status === "running";
   const current = state?.operation;
@@ -104,7 +68,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       return <li key={device.address} className="flex flex-wrap items-center justify-between gap-3 py-3">
         <div className="min-w-0 break-words"><p>{device.name}</p><p className="text-sm text-muted-foreground"><span className="block min-h-10">{!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""}</span><span className="block">{device.address}</span></p></div>
         <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, op: "forget" })}>Forget</Button>}</div>
-        {confirm?.address === device.address && <div role="group" aria-label={`Confirm ${confirm.op} ${device.name}`} className="flex w-full flex-wrap items-center gap-2 border-t pt-3"><p className="mr-auto">{confirm.op === "forget" ? `Forget ${device.name} and remove its pairing?` : `Disconnect ${device.name} from sound?`}</p><Button variant="destructive" disabled={deviceDisabled} onClick={() => void change({ op: confirm.op, device: device.address })}>{confirm.op === "forget" ? "Forget device" : "Disconnect device"}</Button><Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button></div>}
+        {confirm?.address === device.address && <div role="group" aria-label={`Confirm ${confirm.op} ${device.name}`} className="flex w-full flex-wrap items-center gap-2 border-t pt-3"><p className="mr-auto">{confirm.op === "forget" ? `Forget ${device.name} and remove its pairing?` : `Disconnect ${device.name} from sound?`}</p><Button variant="destructive" disabled={deviceDisabled} onClick={() => change({ op: confirm.op, device: device.address })}>{confirm.op === "forget" ? "Forget device" : "Disconnect device"}</Button><Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button></div>}
       </li>;
     })}</ul>
     <p className="text-sm text-muted-foreground">Search again to find unavailable devices. For speakers and headphones, check Sound for the connected output before playback. Connecting does not start playback.</p>

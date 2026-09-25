@@ -108,12 +108,12 @@ export async function verifyMusic(context: MusicContext): Promise<SavedMusic> {
 
   await openPlaylist(httpRemote.ui, until);
   await httpRemote.ui.type("#saved-playlist-name", "Evening album");
-  const initialVersion = first().playlistVersion ?? 0;
+  const initialVersion = first().versions?.playlists ?? 0;
   await httpRemote.ui.button("Keep", playlistDialog);
   let saved!: SavedPlaylist;
   await until("phone saves a durable named queue and invalidates both controllers", async () => {
     const summary = (await api("/api/playlists", undefined, 1)).playlists.find((item: any) => item.name === "Evening album");
-    if (!summary || !all(state => (state.playlistVersion ?? 0) > initialVersion)) return false;
+    if (!summary || !all(state => (state.versions?.playlists ?? 0) > initialVersion)) return false;
     saved = (await api(`/api/playlists/${summary.id}`, undefined, 1)).playlist;
     return saved.entries.length === 3;
   });

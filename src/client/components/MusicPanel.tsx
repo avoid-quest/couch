@@ -34,7 +34,7 @@ export function MusicPanel({ origin, token, connected, canPlay, view, active, on
   const scrollContainer = () => panel.current?.closest(".tv-browser") ?? document.scrollingElement;
   const queryId = useId();
   const { data: result, isPending, isFetching, error, refetch } = useQuery({
-    ...musicBrowseQuery({ origin, token, installationId: "" }, browse),
+    ...musicBrowseQuery({ origin, token }, browse),
     enabled: connected && active,
   });
   const busy = isFetching;

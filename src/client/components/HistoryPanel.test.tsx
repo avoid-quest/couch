@@ -86,7 +86,9 @@ test("a failed removal keeps the row and reports the server error", async () => 
 
 test("Remove from Continue clears resume without deleting history", async () => {
   const { ProgressActions } = await import("./HistoryPanel");
-  await act(async () => root.render(<ProgressActions origin="http://localhost" token="paired" connected mediaId="library:movie" title="Evening movie" progress={items[0]} inContinue onUpdated={() => {}} />));
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  client = new QueryClient();
+  await act(async () => root.render(<QueryClientProvider client={client}><ProgressActions origin="http://localhost" token="paired" connected mediaId="library:movie" title="Evening movie" progress={items[0]} inContinue onUpdated={() => {}} /></QueryClientProvider>));
   await press(button("Watching options for Evening movie"));
   await press(button("Remove from Continue"));
   const request = fetchSpy.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === "POST");

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import { DurationBar } from "@/components/DurationBar";
 import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
+import { apiSend } from "@/api/client";
 
 // The gesture for one drop, as the ordered ids the server persists.
 export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: string): string[] | null {
@@ -33,83 +34,68 @@ function sourceLabel(item: ForLaterItem) {
 export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind, showHeading = true, mediaOnly = false }: {
   origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void; showHeading?: boolean; mediaOnly?: boolean;
 }) {
-  // For later reads through Query; the session invalidates ["for-later"] on
-  // socket revisions, replacing the version prop this section drilled down.
+  // The session invalidates ["for-later"] whenever any remote changes the list.
   const queryClient = useQueryClient();
-  const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery({ origin, token }), enabled: connected });
-  // The optimistic order shows the drop immediately; the server reply and
-  // refetch take over once the reorder sticks, and a failure reverts it.
-  const [orderIds, setOrderIds] = useState<string[] | null>(null);
-  const items = useMemo(() => applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], orderIds ?? undefined, item => item.id), [data, connected, orderIds, mediaOnly]);
+  const credentials = { origin, token };
+  const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery(credentials), enabled: connected });
+  const reorder = useMutation({
+    mutationFn: (order: string[]) => apiSend(credentials, "/api/for-later/reorder", { order }, "POST", 10_000),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey }),
+  });
+  const action = useMutation({
+    mutationFn: ({ path, body, method = "POST", timeout }: { path: string; body?: unknown; method?: string; timeout: number }) => apiSend<{ notice?: string; undoToken?: string }>(credentials, path, body, method, timeout),
+  });
+  // A pending reorder renders its order so the drop shows immediately.
+  const orderIds = reorder.isPending ? reorder.variables : undefined;
+  const items = useMemo(() => applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], orderIds, item => item.id), [data, connected, orderIds, mediaOnly]);
   const loading = connected && isPending;
   const error = connected && loadError ? loadError instanceof Error ? loadError.message : "Could not load For later." : "";
   const [detail, setDetail] = useState<ForLaterItem | null>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
-  const [pending, setPending] = useState(false);
+  const pending = action.isPending;
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const undoToast = useRef<string | number | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const mutation = useRef<AbortController | null>(null);
   const sensors = useDndSensors();
-  useEffect(() => { setPending(false); setDetail(null); setNotice(""); setActionError(""); setOrderIds(null); return () => { mutation.current?.abort(); if (undoToast.current != null) toast.dismiss(undoToast.current); }; }, [origin, token, connected]);
-  const saveOrder = async (order: string[]) => {
-    setOrderIds(order);
-    try {
-      const response = await fetch(`${origin}/api/for-later/reorder`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ order }), signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Could not save the new order.");
-      await queryClient.invalidateQueries({ queryKey: ["for-later"] });
-    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not save the new order."); }
-    finally { setOrderIds(null); }
-  };
+  useEffect(() => () => { if (undoToast.current != null) toast.dismiss(undoToast.current); }, []);
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
     const order = forLaterOrder(items, String(active.id), String(over.id));
-    if (order) void saveOrder(order);
+    if (order) reorder.mutate(order);
   };
   const update = async (item: ForLaterItem, mode: "play" | "append" | "remove", index: number) => {
     if (!connected || pending) return;
-    const controller = new AbortController();
-    mutation.current = controller;
-    setPending(true); setActionError(""); setNotice("");
+    setActionError(""); setNotice("");
     try {
-      const response = await fetch(`${origin}/api/for-later/${encodeURIComponent(item.id)}${mode === "remove" ? "" : "/load"}`, { method: mode === "remove" ? "DELETE" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(mode === "remove" ? {} : { body: JSON.stringify({ mode }) }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Could not use this saved item.");
-      if (controller.signal.aborted) return;
+      const body = await action.mutateAsync(mode === "remove" ? { path: `/api/for-later/${encodeURIComponent(item.id)}`, method: "DELETE", timeout: 30_000 } : { path: `/api/for-later/${encodeURIComponent(item.id)}/load`, body: { mode }, timeout: 30_000 });
       setNotice(body.notice ?? (mode === "remove" ? `Removed ${item.title} from For later.` : mode === "play" ? `Starting ${item.title} on the TV.` : `Added ${item.title} to Up next.`));
       if (mode === "remove") {
-        if (body.undoToken) {
+        const undoToken = body.undoToken;
+        if (undoToken) {
           if (undoToast.current != null) toast.dismiss(undoToast.current);
-          undoToast.current = toast(`Removed ${item.title}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restore(body.undoToken, item.title) } });
+          undoToast.current = toast(`Removed ${item.title}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restore(undoToken, item.title) } });
           setNotice("");
         }
         setDetail(null);
-        await queryClient.invalidateQueries({ queryKey: ["for-later"] });
+        await queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
         requestAnimationFrame(() => {
           const rows = list.current?.children;
           (rows?.[Math.min(index, rows.length - 1)]?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? heading.current)?.focus();
         });
       }
-    } catch (reason) { if (!controller.signal.aborted) setActionError(reason instanceof Error ? reason.message : "Could not use this saved item."); }
-    finally { if (!controller.signal.aborted) setPending(false); }
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not use this saved item."); }
   };
   const restore = async (undoToken: string, title: string) => {
     if (!connected || pending) return;
-    const controller = new AbortController();
-    mutation.current = controller;
-    setPending(true); setActionError("");
+    setActionError("");
     try {
-      const response = await fetch(`${origin}/api/for-later/restore`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ token: undoToken }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Could not restore this item.");
-      if (controller.signal.aborted) return;
+      await action.mutateAsync({ path: "/api/for-later/restore", body: { token: undoToken }, timeout: 10_000 });
       setNotice(`Restored ${title} to For later.`);
       if (undoToast.current != null) { toast.dismiss(undoToast.current); undoToast.current = null; }
-      await queryClient.invalidateQueries({ queryKey: ["for-later"] });
-    } catch (reason) { if (!controller.signal.aborted) setActionError(reason instanceof Error ? reason.message : "Could not restore this item."); }
-    finally { if (!controller.signal.aborted) setPending(false); }
+      await queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not restore this item."); }
   };
   const actions = (item: ForLaterItem, index: number) => <div className={`${showHeading ? "" : "saved-media-actions "}flex flex-wrap gap-2`}>
     <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => void update(item, "play", index)}><Play aria-hidden="true" />Play</Button>
@@ -121,7 +107,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
     {!connected && <p role="status">Reconnect to see your saved items.</p>}
     {loading && <p className="flex items-center gap-2" role="status"><Spinner className="size-3.5" />Loading saved items…</p>}
     {error && <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => void refetch()}>Refresh For later</Button></div>}
-    {actionError && <p role="alert">{actionError}</p>}
+    {(actionError || reorder.error) && <p role="alert">{actionError || reorder.error?.message || "Could not save the new order."}</p>}
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !items.length && <div className="space-y-2"><p>{showHeading ? "No saved titles." : "Nothing saved. Use Save on any result."}</p>{onFind && <Button variant="outline" onClick={onFind}>{showHeading ? "Search" : "Find something"}</Button>}</div>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>

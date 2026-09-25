@@ -56,7 +56,7 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("startup reads through Query and invalidates after the REST write", async () => {
+test("startup reads through Query and applies the state the REST write returns", async () => {
   await render();
   expect(document.querySelector("[data-startup-mode]")!.textContent).toContain("Login screen");
   await act(async () => button("Enable automatic startup").click());
@@ -64,7 +64,6 @@ test("startup reads through Query and invalidates after the REST write", async (
   expect(calls).toEqual([
     { path: "/api/settings/startup", method: "GET" },
     { path: "/api/settings/startup", method: "POST" },
-    { path: "/api/settings/startup", method: "GET" },
   ]);
   expect(document.querySelector("[data-startup-mode]")!.textContent).toContain("Couch starts automatically");
 });

@@ -1,72 +1,24 @@
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, type ApiCredentials } from "@/api/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiSend, type ApiCredentials } from "@/api/client";
+import { soundQuery, soundView, type SoundView } from "@/api/settings";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DelayControl } from "./DelayControl";
-import type { SoundOutput, SoundProfile, SoundState } from "../../../../shared/sound";
-
-type SoundChoice = { key: string; output: SoundOutput } | { key: string; profile: SoundProfile };
-type SoundView = SoundState & { choices: SoundChoice[] };
-function updateSound(previous: SoundView | null, next: SoundState): SoundView {
-  const outputs = next.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked);
-  const current = new Map<string, SoundChoice>([
-    ...outputs.map(output => [`output:${output.id}`, { key: `output:${output.id}`, output }] as const),
-    ...(next.profiles ?? []).filter(profile => profile.selectable && profile.available && !profile.active && !(profile.bluetoothAddress && outputs.some(output => output.card === profile.card))).map(profile => {
-      const key = `profile:${profile.card}/${profile.id}`;
-      return [key, { key, profile }] as const;
-    }),
-  ]);
-  // Keep existing targets in place; inventory polls may return a different order.
-  const choices = (previous?.choices ?? []).flatMap(choice => {
-    const updated = current.get(choice.key);
-    current.delete(choice.key);
-    return updated ? [updated] : [];
-  }).concat([...current.values()]);
-  return { ...next, choices };
-}
+import type { SoundState } from "../../../../shared/sound";
 
 export function SoundSettings({ credentials, connected, hostName }: { credentials: ApiCredentials; connected: boolean; hostName: string }) {
   const queryClient = useQueryClient();
-  const queryKey = ["sound", credentials.origin, credentials.token];
-  const sound = useQuery({
-    queryKey,
-    enabled: connected,
-    queryFn: () => apiFetch(credentials, "/api/sound").then(response => response.json() as Promise<SoundState>),
-    refetchInterval: 750,
-    refetchIntervalInBackground: false,
-    retry: false,
+  const sound = useQuery({ ...soundQuery(credentials), enabled: connected });
+  const mutation = useMutation({
+    mutationFn: ({ path, body }: { path: string; body: unknown }) => apiSend<SoundState>(credentials, `/api/sound/${path}`, body),
+    onSuccess: result => queryClient.setQueryData<SoundView>(soundQuery(credentials).queryKey, previous => soundView(previous, result)),
   });
-  const [state, setState] = useState<SoundView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const state = connected ? sound.data ?? null : null;
+  const pending = mutation.isPending;
+  const error = mutation.error ? mutation.error instanceof Error ? mutation.error.message : `Could not change sound on ${hostName}.` : null;
   const readError = sound.error instanceof Error ? sound.error.message : sound.error ? `Cannot read ${hostName}'s outputs.` : null;
-
-  useEffect(() => {
-    setState(null); setError(null); setPending(false);
-  }, [credentials.origin, credentials.token, connected]);
-
-  useEffect(() => {
-    if (!connected || pending || !sound.data) return;
-    setState(previous => updateSound(previous, sound.data!));
-  }, [connected, pending, sound.data, sound.dataUpdatedAt]);
-
-  async function change(path: string, body: unknown) {
-    if (!connected || pending) return false;
-    setPending(true); setError(null);
-    try {
-      const result = await apiFetch(credentials, `/api/sound/${path}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      }).then(response => response.json() as Promise<SoundState>);
-      setState(previous => updateSound(previous, result));
-      await queryClient.invalidateQueries({ queryKey });
-      return true;
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `Could not change sound on ${hostName}.`);
-      return false;
-    } finally { setPending(false); }
-  }
+  const change = (path: string, body: unknown) => connected && !pending ? mutation.mutateAsync({ path, body }).then(() => true, () => false) : Promise.resolve(false);
   const active = state?.test && ["starting", "playing"].includes(state.test.status);
   const selected = state?.routing?.selectedOutput;
   const selectedChoice = state?.choices.find(choice => "output" in choice && choice.output.id === selected);
@@ -86,7 +38,7 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
         </SelectItem>)}</SelectContent>
       </Select>
     </div>
-    {(error || readError) && <div className="space-y-2"><p role="alert">{hostName}: {error || readError}</p><Button variant="outline" disabled={!connected || pending} onClick={() => void queryClient.invalidateQueries({ queryKey })}>Refresh outputs</Button></div>}
+    {(error || readError) && <div className="space-y-2"><p role="alert">{hostName}: {error || readError}</p><Button variant="outline" disabled={!connected || pending} onClick={() => void sound.refetch()}>Refresh outputs</Button></div>}
     {!connected && <p>Reconnect to choose a sound output.</p>}
     {connected && !state && !readError && <p role="status">Loading sound outputs…</p>}
     {state?.routing?.error && <p role="status">{hostName}: {state.routing.error}</p>}

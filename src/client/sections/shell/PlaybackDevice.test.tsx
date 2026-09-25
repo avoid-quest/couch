@@ -204,7 +204,9 @@ test("closing the device chooser reconnects the same remote and restores trigger
 test("a route change closes Play on and resumes the selected remote connection", async () => {
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   const { NativeModeGate, PlaybackDevice } = await import("./PlaybackDevice");
-  const screenFor = (path: string) => <NativeModeGate><PlaybackDevice key={path} /></NativeModeGate>;
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  client = new QueryClient();
+  const screenFor = (path: string) => <NativeModeGate><QueryClientProvider client={client!}><PlaybackDevice key={path} /></QueryClientProvider></NativeModeGate>;
   await act(async () => root.render(screenFor("/find"))); await flush();
   const attempts = () => invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
   const initial = attempts();

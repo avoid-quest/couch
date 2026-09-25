@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { AudioLines, Bluetooth, MonitorSmartphone, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,10 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SoundState } from "../../../shared/sound";
-import type { BluetoothState } from "../../../shared/bluetooth";
+import { ApiError, apiSend } from "@/api/client";
+import { bluetoothQuery, soundQuery, soundView, type SoundView } from "@/api/settings";
 import type { Credentials } from "@/session/session";
 import type { Action, SessionState } from "../../../shared/protocol";
 import { knownConnection } from "@/session/connection";
@@ -21,6 +23,8 @@ function destinationOrigin(address: string): string | null {
   } catch { return null; }
 }
 
+const noCredentials = { origin: "", token: "" };
+
 export function SoundControls({ credentials, connected, open, installationName, compact = false, state, run, onClose }: {
   credentials: Credentials | null;
   connected: boolean;
@@ -31,57 +35,28 @@ export function SoundControls({ credentials, connected, open, installationName, 
   run?: (action: Action) => Promise<boolean>;
   onClose?: () => void;
 }) {
-  const [sound, setSound] = useState<SoundState | null>(null);
-  const [bluetooth, setBluetooth] = useState<BluetoothState | null>(null);
-  const [soundFailure, setSoundFailure] = useState("");
-  const [bluetoothFailed, setBluetoothFailed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [outputError, setOutputError] = useState("");
-
-  useEffect(() => {
-    if (!open || !credentials || !connected) return;
-    const controller = new AbortController();
-    const headers = { Authorization: `Bearer ${credentials.token}` };
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]);
-    setSound(null); setBluetooth(null); setSoundFailure(""); setLoading(true);
-    void Promise.allSettled([
-      fetch(`${credentials.origin}/api/sound`, { headers, signal }).then(response => response.ok ? response.json() : Promise.reject(new Error(response.status === 403 ? "An administrator is required to choose a sound output." : "Sound needs a connected player."))),
-      fetch(`${credentials.origin}/api/bluetooth`, { headers, signal }).then(response => response.ok ? response.json() : Promise.reject(new Error("Bluetooth is unavailable."))),
-    ]).then(([soundResult, bluetoothResult]) => {
-      if (controller.signal.aborted) return;
-      setSound(soundResult.status === "fulfilled" ? soundResult.value : null);
-      setBluetooth(bluetoothResult.status === "fulfilled" ? bluetoothResult.value : null);
-      setSoundFailure(soundResult.status === "rejected" ? soundResult.reason instanceof Error ? soundResult.reason.message : "Sound is unavailable." : "");
-      setBluetoothFailed(bluetoothResult.status === "rejected");
-      setLoading(false);
-    });
-    return () => controller.abort();
-  }, [open, credentials, connected]);
+  const queryClient = useQueryClient();
+  const enabled = open && !!credentials && connected;
+  const soundRead = useQuery({ ...soundQuery(credentials ?? noCredentials), enabled });
+  const bluetoothRead = useQuery({ ...bluetoothQuery(credentials ?? noCredentials), enabled });
+  const sound = enabled ? soundRead.data ?? null : null;
+  const bluetooth = enabled ? bluetoothRead.data ?? null : null;
+  const soundFailure = !soundRead.error ? "" : soundRead.error instanceof ApiError && soundRead.error.status === 403 ? "An administrator is required to choose a sound output." : "Sound needs a connected player.";
+  const bluetoothFailed = bluetoothRead.isError;
+  const loading = soundRead.isLoading;
+  const output = useMutation({
+    mutationFn: (value: string) => apiSend<SoundState>(credentials!, "/api/sound/output", { output: value }, "POST", 5_000),
+    onSuccess: result => queryClient.setQueryData<SoundView>(soundQuery(credentials!).queryKey, previous => soundView(previous, result)),
+  });
+  const pending = output.isPending;
+  const outputError = output.error ? output.error.message || "Could not change the sound output." : "";
 
   const outputs = sound?.outputs.filter(output => output.availability !== "unavailable" && !output.testBlocked) ?? [];
   const selected = sound?.routing?.selectedOutput ?? sound?.defaultOutput ?? null;
   const observed = sound?.outputs.find(output => output.id === sound.routing?.observedOutput);
   const connectedDevices = bluetooth?.devices.filter(device => device.connected) ?? [];
   const adapterReady = bluetooth?.adapter === "available";
-
-  const selectOutput = async (output: string) => {
-    if (!credentials) return;
-    const controller = new AbortController();
-    setPending(true); setOutputError("");
-    try {
-      const response = await fetch(`${credentials.origin}/api/sound/output`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ output }),
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not change the sound output.");
-      setSound(result as SoundState);
-    } catch (reason) { setOutputError(reason instanceof Error ? reason.message : "Could not change the sound output."); }
-    finally { setPending(false); }
-  };
+  const selectOutput = (value: string) => { if (credentials) output.mutate(value); };
 
   const unavailable = !connected ? "Connect to choose an output." : soundFailure || (loading ? "Checking outputs…" : "No outputs reported.");
   if (compact) {
@@ -90,7 +65,7 @@ export function SoundControls({ credentials, connected, open, installationName, 
     const changeVolume = (step: number) => { if (volumeReady && volume !== null) void run({ type: "volume", volume: Math.max(0, Math.min(100, Math.round(volume + step))) }); };
     return <div className="grid gap-3 border-t border-border pt-3">
       <h3 className="text-sm font-medium">Sound on {installationName || "this Couch"}</h3>
-      {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={pending || !connected} onValueChange={value => void selectOutput(value)} className="gap-1">{outputs.map((output, index) => <Field orientation="horizontal" className="min-h-11 items-center" key={output.id}><RadioGroupItem id={`quick-output-${index}`} value={output.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{output.name || output.id}</FieldLabel></Field>)}</RadioGroup> : <p className="text-sm text-muted-foreground">{unavailable}</p>}
+      {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={pending || !connected} onValueChange={selectOutput} className="gap-1">{outputs.map((output, index) => <Field orientation="horizontal" className="min-h-11 items-center" key={output.id}><RadioGroupItem id={`quick-output-${index}`} value={output.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{output.name || output.id}</FieldLabel></Field>)}</RadioGroup> : <p className="text-sm text-muted-foreground">{unavailable}</p>}
       {observed && observed.id !== selected && <p className="text-sm text-muted-foreground">Now playing on {observed.name || observed.id}.</p>}
       <div className="flex items-center justify-between gap-2" role="group" aria-label="Volume"><span>Volume</span><ButtonGroup aria-label="Volume adjustment"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span className="min-w-8 self-center text-center tabular-nums" aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></ButtonGroup></div>
       {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
@@ -101,7 +76,7 @@ export function SoundControls({ credentials, connected, open, installationName, 
     <div className="grid gap-2">
       <p className="text-sm font-medium">Sound output</p>
       {outputs.length
-        ? <Select value={selected ?? undefined} onValueChange={output => void selectOutput(output)} disabled={pending || !connected}>
+        ? <Select value={selected ?? undefined} onValueChange={selectOutput} disabled={pending || !connected}>
           <SelectTrigger className="w-full" aria-label="Sound output"><SelectValue placeholder="Choose output" /></SelectTrigger>
           <SelectContent>{outputs.map(output => <SelectItem key={output.id} value={output.id}>{output.name || output.id}</SelectItem>)}</SelectContent>
         </Select>

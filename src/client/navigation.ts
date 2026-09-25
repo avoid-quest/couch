@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { NavigationKey } from "../shared/protocol";
 
 const focusable = 'button, a[href], input, select, textarea, [tabindex="0"], [role="option"], [role^="menuitem"]';
@@ -120,8 +120,7 @@ export function applyTvNavigation(key: NavigationKey) {
 
 // Radix owns navigation within its controls; spatial movement connects the rest.
 export function useNavigation(onBack: () => void) {
-  const back = useRef(onBack);
-  back.current = onBack;
+  const back = useEffectEvent(onBack);
   useEffect(() => {
     const keyboard = () => document.documentElement.setAttribute("data-keyboard", "");
     const pointer = () => document.documentElement.removeAttribute("data-keyboard");
@@ -134,7 +133,7 @@ export function useNavigation(onBack: () => void) {
         const localBack = [...navigationScope().querySelectorAll<HTMLButtonElement>("[data-back]")].find(visible);
         // The component restores focus after its own navigation has committed.
         if (localBack) localBack.click();
-        else back.current();
+        else back();
         return;
       }
       if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;

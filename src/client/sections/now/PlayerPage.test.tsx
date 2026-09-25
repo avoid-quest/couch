@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { ShellProviders } from "../shell/test-providers";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import type { SessionState } from "../../../shared/protocol";
 import type { ShellValue } from "../shell/AppShell";
-import { ShellContext } from "../shell/shell-context";
 
 let root: Root;
 let window: Window;
@@ -46,7 +46,7 @@ afterEach(async () => {
 test("player keys leave focused buttons outside the player available", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const outside = document.createElement("button"); outside.textContent = "Undo"; document.body.append(outside);
-  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   outside.focus();
   const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
   outside.dispatchEvent(enter);
@@ -62,7 +62,7 @@ test("player keys leave focused buttons outside the player available", async () 
 
 test("Escape leaves an open overlay to close itself before leaving the player", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); dialog.setAttribute("data-state", "open"); document.body.append(dialog);
   window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   expect(leaves).toBe(0);
@@ -73,7 +73,7 @@ test("Escape leaves an open overlay to close itself before leaving the player", 
 
 test("Escape closes the player sheet before leaving the player", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   await act(async () => document.querySelector<HTMLButtonElement>('[data-panel="settings"]')!.click());
   expect(document.querySelector('[role="dialog"][data-state="open"]')).not.toBeNull();
   await act(async () => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
@@ -83,10 +83,10 @@ test("Escape closes the player sheet before leaving the player", async () => {
 
 test("keyboard commands use the latest session callbacks", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   const latest: unknown[] = [];
   const changed = { ...shell, credentials: { origin: "http://another-host", token: "new" }, run: async (action: unknown) => { latest.push(action); return true; } } as unknown as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={changed}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={changed}><PlayerPage /></ShellProviders>));
   window.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
   expect(actions).toEqual([]);
   expect(latest).toEqual([{ type: "pause", playbackId: "playback", paused: true }]);
@@ -96,7 +96,7 @@ test("chapters mark the timeline and name the current chapter", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const chapters = [{ title: "Opening", position: 0 }, { title: "The meeting", position: 10 }, { title: "Finale", position: 80 }];
   const withChapters = { ...shell, state: { ...state, player: { ...state.player, position: 12, chapters } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={withChapters}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={withChapters}><PlayerPage /></ShellProviders>));
   expect(document.querySelectorAll("[data-chapter-tick]")).toHaveLength(2);
   expect(document.querySelector(".time-labels")?.textContent).toContain("The meeting");
 });
@@ -104,7 +104,7 @@ test("chapters mark the timeline and name the current chapter", async () => {
 test("an error offers Skip even at the end of Up next", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const errored = { ...shell, state: { ...state, player: { ...state.player, status: "error" as const, error: "The video could not be loaded." } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={errored}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={errored}><PlayerPage /></ShellProviders>));
   const skip = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Skip")!;
   expect(skip.disabled).toBe(false);
   await act(async () => skip.click());
@@ -115,17 +115,17 @@ test("an error offers Skip even at the end of Up next", async () => {
 test("loading uses progress and buffering uses a badge", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const loading = { ...shell, state: { ...state, player: { ...state.player, status: "loading" as const } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={loading}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={loading}><PlayerPage /></ShellProviders>));
   expect(document.querySelector('.player-status [data-slot="progress"]')).not.toBeNull();
-  const buffering = { ...loading, state: { ...loading.state!, player: { ...loading.state!.player, buffering: true } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={buffering}><PlayerPage /></ShellContext.Provider>));
+  const buffering = { ...loading, state: { ...(loading as unknown as { state: SessionState }).state, player: { ...(loading as unknown as { state: SessionState }).state.player, buffering: true } } } as unknown as ShellValue;
+  await act(async () => root.render(<ShellProviders value={buffering}><PlayerPage /></ShellProviders>));
   expect(document.querySelector('[data-slot="badge"][role="status"]')?.textContent).toBe("Buffering");
 });
 
 test("Now keeps a stopped queue available and plays its next item", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const idle = { ...shell, active: false, current: undefined, state: { ...state, queue: [state.queue[0]!, { id: "next", title: "Next movie", source: "library:movie", duration: 120 }], currentEntryId: null, queueCursorEntryId: "current", player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={idle}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={idle}><PlayerPage /></ShellProviders>));
   expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
   expect(document.querySelector('[aria-label="Up next"] [aria-label="Play Next movie"]')).not.toBeNull();
   expect(document.querySelector('[aria-label="Played"] [aria-label="Play Evening movie"]')).not.toBeNull();
@@ -135,22 +135,22 @@ test("Now keeps a stopped queue available and plays its next item", async () => 
 
 test("a sheet does not reopen when playback ends and a new item starts", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={shell}><PlayerPage /></ShellProviders>));
   await act(async () => document.querySelector<HTMLButtonElement>('[data-panel="queue"]')!.click());
   expect(document.querySelector('[role="dialog"][data-state="open"]')).not.toBeNull();
   const idle = { ...shell, active: false, current: undefined, state: { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={idle}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={idle}><PlayerPage /></ShellProviders>));
   const next = { ...shell, current: { ...state.queue[0]!, id: "next", title: "Next movie" }, state: { ...state, currentEntryId: "next", queue: [{ ...state.queue[0]!, id: "next", title: "Next movie" }], player: { ...state.player, playbackId: "next-playback" } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={next}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={next}><PlayerPage /></ShellProviders>));
   expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
 });
 
 test("the player heading uses available artist, source, and starter metadata", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const attributed = { ...shell, state: { ...state, playedBy: { deviceId: "phone", name: "Kitchen phone" }, player: { ...state.player, nowPlaying: { title: "Evening movie", artist: "Known artist" } } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={attributed}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={attributed}><PlayerPage /></ShellProviders>));
   expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Known artist, Your library, started from Kitchen phone");
   const unattributed = { ...shell, state: { ...state, playedBy: undefined, player: { ...state.player, nowPlaying: null } } } as ShellValue;
-  await act(async () => root.render(<ShellContext.Provider value={unattributed}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => root.render(<ShellProviders value={unattributed}><PlayerPage /></ShellProviders>));
   expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Your library");
 });

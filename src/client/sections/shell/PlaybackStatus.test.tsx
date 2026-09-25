@@ -38,7 +38,8 @@ async function render() {
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => null });
   const sound = createRoute({ getParentRoute: () => base, path: "/settings/sound", component: () => null });
   const router = createRouter({ routeTree: base.addChildren([find, sound]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
-  await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  await act(async () => { await router.load(); root.render(<QueryClientProvider client={new QueryClient()}><RouterProvider router={router} /></QueryClientProvider>); });
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Playback on Living room: Connected" })));
   await flush();
 }

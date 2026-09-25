@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Bookmark, ListMusic, Play, Plus, Trash2, X } from "lucide-react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
@@ -10,115 +11,77 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
-import type { PlaylistLoadMode, SavedPlaylist, SavedPlaylistSummary } from "../../shared/playlists";
+import { ApiError, apiSend } from "@/api/client";
+import { playlistQuery, playlistsQuery } from "@/api/playlists";
+import type { PlaylistLoadMode, SavedPlaylist } from "../../shared/playlists";
 
 const providerLabels = { youtube: "YouTube", raiplay: "RaiPlay", bandcamp: "Bandcamp", streamingcommunity: "StreamingCommunity" };
 
-export function SavedPlaylists({ origin, token, connected, canPlay, version, queueCount, inline = false }: {
+export function SavedPlaylists({ origin, token, connected, canPlay, queueCount, inline = false }: {
   origin: string;
   token: string;
   connected: boolean;
   canPlay: boolean;
-  version: number;
   queueCount: number;
   inline?: boolean;
 }) {
+  const credentials = { origin, token };
+  const queryClient = useQueryClient();
   const [dialogOpen, setOpen] = useState(false);
   const open = inline || dialogOpen;
-  const [playlists, setPlaylists] = useState<SavedPlaylistSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [playlist, setPlaylist] = useState<SavedPlaylist | null>(null);
   const [rename, setRename] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"saveQueue" | null>(null);
   const undoToast = useRef<string | number | null>(null);
   const sensors = useDndSensors();
-  const [loading, setLoading] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const mutation = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const entriesRef = useRef<HTMLOListElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
+  // The server bumps the playlists revision after every change, from any remote.
+  const list = useQuery({ ...playlistsQuery(credentials), enabled: open && connected });
+  const detail = useQuery({ ...playlistQuery(credentials, selectedId ?? ""), enabled: open && connected && !!selectedId });
+  const playlists = list.data?.playlists ?? [];
+  const playlist = selectedId ? detail.data?.playlist ?? null : null;
+  const loading = list.isLoading || detail.isLoading;
+  const missing = detail.error instanceof ApiError && detail.error.status === 404;
+  const loadError = list.error ?? (missing ? null : detail.error);
+  const mutation = useMutation({
+    mutationFn: ({ path, body, method }: { path: string; body: unknown; method: string }) => apiSend<{ playlist?: SavedPlaylist; undoToken?: string }>(credentials, path, body, method, 30_000),
+    onSuccess: result => { if (result.playlist) queryClient.setQueryData(playlistQuery(credentials, result.playlist.id).queryKey, { playlist: result.playlist }); },
+  });
+  const pending = mutation.isPending;
 
+  useEffect(() => () => { if (undoToast.current != null) toast.dismiss(undoToast.current); }, [open]);
   useEffect(() => {
-    setPending(false);
-    return () => { mutation.current?.abort(); if (undoToast.current != null) toast.dismiss(undoToast.current); };
-  }, [origin, token, connected, open]);
-
-  useEffect(() => {
-    if (!open || !connected) return;
-    const controller = new AbortController();
-    setLoading(true);
-    const read = async (path: string) => {
-      const response = await fetch(`${origin}${path}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        if (response.status === 404 && selectedId && !controller.signal.aborted) {
-          setSelectedId(null);
-          setPlaylist(null);
-          requestAnimationFrame(() => (listRef.current?.querySelector<HTMLButtonElement>("button") ?? keepRef.current)?.focus());
-        }
-        throw new Error(result.error || "Could not load saved lists.");
-      }
-      return result;
-    };
-    void Promise.all([
-      read("/api/playlists"),
-      selectedId ? read(`/api/playlists/${encodeURIComponent(selectedId)}`) : Promise.resolve(null),
-    ]).then(([list, detail]) => {
-      if (!controller.signal.aborted) {
-        setPlaylists(Array.isArray(list.playlists) ? list.playlists : []);
-        setPlaylist(detail?.playlist ?? null);
-      }
-    }).catch(reason => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load saved lists.");
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [origin, token, connected, open, selectedId, version, refresh]);
+    if (!missing) return;
+    setSelectedId(null);
+    requestAnimationFrame(() => (listRef.current?.querySelector<HTMLButtonElement>("button") ?? keepRef.current)?.focus());
+  }, [missing]);
 
   const update = async (path: string, body: unknown, message: string, method = "POST") => {
-    if (!connected || (mutation.current && !mutation.current.signal.aborted)) return false;
+    if (!connected || pending) return false;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const controller = new AbortController();
-    mutation.current = controller;
-    setPending(true);
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch(`${origin}${path}`, {
-        method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]), body: JSON.stringify(body),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not update this list.");
-      if (controller.signal.aborted) return false;
-      if (result.playlist?.id === selectedId) setPlaylist(result.playlist);
+      const result = await mutation.mutateAsync({ path, body, method });
       setNotice(message);
       setConfirm(null);
       return result;
     } catch (reason) {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not update this list.");
+      setError(reason instanceof Error ? reason.message : "Could not update this list.");
       return false;
     } finally {
-      if (!controller.signal.aborted) {
-        setPending(false);
-        setRefresh(value => value + 1);
-        requestAnimationFrame(() => { if (opener?.isConnected && !opener.matches(":disabled")) opener.focus(); });
-      }
-      if (mutation.current === controller) mutation.current = null;
+      requestAnimationFrame(() => { if (opener?.isConnected && !opener.matches(":disabled")) opener.focus(); });
     }
   };
 
   const select = (id: string | null) => {
     const previousId = selectedId;
     setSelectedId(id);
-    setPlaylist(null);
     setRename(null);
     setConfirm(null);
     setError(null);
@@ -143,10 +106,11 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
     if (!playlist) return;
     const name = playlist.name;
     const result = await update(path, { revision: playlist.revision }, `Deleted ${name}.`, "DELETE");
-    if (!result?.undoToken) return;
+    const undoToken = result ? result.undoToken : undefined;
+    if (!undoToken) return;
     select(null);
     if (undoToast.current != null) toast.dismiss(undoToast.current);
-    undoToast.current = toast(`Deleted ${name}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restoreList(result.undoToken, name) } });
+    undoToast.current = toast(`Deleted ${name}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restoreList(undoToken, name) } });
   };
   const restoreList = async (token: string, name: string) => {
     const result = await update("/api/playlists/restore", { token }, `Restored ${name}.`);
@@ -162,7 +126,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       </DialogHeader>}
       {selectedId && <Button ref={backRef} variant="ghost" className="justify-self-start" disabled={pending} onClick={() => select(null)}><ArrowLeft aria-hidden="true" />All lists</Button>}
       {!connected && <p role="status" className="border-l-2 border-primary py-2 pl-3">Reconnect to load or edit lists.</p>}
-      {error && <div role="alert" className="grid gap-2 border-l-2 border-destructive py-2 pl-3 text-destructive"><p>{error}</p><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload lists</Button></div>}
+      {(error || loadError) && <div role="alert" className="grid gap-2 border-l-2 border-destructive py-2 pl-3 text-destructive"><p>{error ?? (loadError?.message || "Could not load saved lists.")}</p><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); void list.refetch(); if (selectedId) void detail.refetch(); }}>Reload lists</Button></div>}
       {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading lists…</p>}
       {!selectedId ? <>

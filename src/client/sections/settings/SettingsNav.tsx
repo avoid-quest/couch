@@ -3,13 +3,13 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { settingsPages, type SettingsPage } from "../../../shared/settings-pages";
-import { useShell } from "@/sections/shell/AppShell";
+import { useSessionGate } from "@/session/session-context";
 
 type Props = { active: SettingsPage };
 
 export function SettingsNav({ active }: Props) {
   const navigate = useNavigate();
-  const { identity, tvPresentation, details, state } = useShell();
+  const { identity, tvPresentation, details, state } = useSessionGate();
   const sourcePage = active.startsWith("source-");
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
   const visible = (id: string) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)

@@ -1,7 +1,7 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowUpRight, Play, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Item } from "@/components/ui/item";
@@ -13,6 +13,7 @@ import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } 
 import type { Credentials } from "../../session/session";
 import { providerFavoritesQuery } from "@/api/providers";
 import { radioFavoritesListQuery } from "@/api/radio";
+import { apiSend } from "@/api/client";
 
 export type SavedFavoriteActions = {
   onEnqueueProvider: (item: ProviderItem, playNow: boolean) => Promise<boolean>;
@@ -35,64 +36,52 @@ export function reorderFavorites(favorites: Favorite[], kind: Favorite["kind"], 
 export function SavedFavorites({ origin, token, connected, canPlay, onEnqueueProvider, onEnqueueRadio, onOpenProvider, showHeading = true }: Credentials & SavedFavoriteActions & {
   connected: boolean; canPlay: boolean; showHeading?: boolean;
 }) {
-  // Saved reads go through Query: the session invalidates ["providers"] and
-  // ["radio"] on socket revisions, replacing the version props this panel
-  // used to receive. Enqueue and play stay on the WebSocket session.
+  // The session invalidates ["providers"] and ["radio"] whenever any remote
+  // changes favorites. Enqueue and play stay on the WebSocket session.
   const queryClient = useQueryClient();
-  const online = useQuery({ ...providerFavoritesQuery({ origin, token }), enabled: connected });
-  const radio = useQuery({ ...radioFavoritesListQuery({ origin, token }), enabled: connected });
+  const credentials = { origin, token };
+  const online = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
+  const radio = useQuery({ ...radioFavoritesListQuery(credentials), enabled: connected });
   const loading = connected && (online.isPending || radio.isPending);
+  const store = (kind: Favorite["kind"]) => kind === "provider" ? "providers" : "radio";
+  const favoritesKey = (kind: Favorite["kind"]) => kind === "provider" ? providerFavoritesQuery(credentials).queryKey : radioFavoritesListQuery(credentials).queryKey;
+  const reorder = useMutation({
+    mutationFn: ({ kind, order }: { kind: Favorite["kind"]; order: string[] }) => apiSend(credentials, `/api/${store(kind)}/favorites/reorder`, { order }, "POST", 10_000),
+    onSettled: (_, __, { kind }) => queryClient.invalidateQueries({ queryKey: favoritesKey(kind) }),
+  });
+  const remove = useMutation({
+    mutationFn: (favorite: Favorite) => apiSend(credentials, `/api/${store(favorite.kind)}/favorites/${encodeURIComponent(favorite.item.id)}`, undefined, "DELETE"),
+    onSuccess: (_, favorite) => queryClient.invalidateQueries({ queryKey: favoritesKey(favorite.kind) }),
+  });
   // Each store keeps its own persisted order; the merged list shows online
-  // favorites first, then stations. A drop updates its store optimistically.
-  const [savedOrder, setSavedOrder] = useState<{ provider?: string[]; radio?: string[] }>({});
+  // favorites first, then stations. A pending drop renders its order.
+  const order = (kind: Favorite["kind"]) => reorder.isPending && reorder.variables.kind === kind ? reorder.variables.order : undefined;
   const favorites = connected ? [
-    ...applyIdOrder(online.data?.favorites ?? [], savedOrder.provider, item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
-    ...applyIdOrder(radio.data?.favorites ?? [], savedOrder.radio, item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
+    ...applyIdOrder(online.data?.favorites ?? [], order("provider"), item => item.id).map((item: ProviderItem): Favorite => ({ kind: "provider", item })),
+    ...applyIdOrder(radio.data?.favorites ?? [], order("radio"), item => item.id).map((item: RadioStation): Favorite => ({ kind: "radio", item })),
   ] : [];
   const error = connected ? [online.error, radio.error].filter(Boolean).map(message).join(" ") : "";
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
-  const mutation = useRef<AbortController | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const sensors = useDndSensors();
-  useEffect(() => { setNotice(""); setActionError(""); setPending(false); setSavedOrder({}); return () => mutation.current?.abort(); }, [origin, token, connected]);
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["providers", "favorites"] });
-    void queryClient.invalidateQueries({ queryKey: ["radio", "favorites"] });
-  };
-  const saveOrder = async (plan: { kind: Favorite["kind"]; order: string[] }) => {
-    setSavedOrder(previous => ({ ...previous, [plan.kind]: plan.order }));
-    try {
-      const response = await fetch(`${origin}/api/${plan.kind === "provider" ? "providers" : "radio"}/favorites/reorder`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ order: plan.order }), signal: AbortSignal.timeout(10_000) });
-      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error || "Could not save the new order.");
-      await queryClient.invalidateQueries({ queryKey: plan.kind === "provider" ? ["providers", "favorites"] : ["radio", "favorites"] });
-    } catch (reason) { setActionError(message(reason)); }
-    finally { setSavedOrder(({ [plan.kind]: _dropped, ...rest }) => rest); }
-  };
+  const refresh = () => { void online.refetch(); void radio.refetch(); };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over) return;
     const favorite = favorites.find(item => item.item.id === active.id);
     const plan = favorite && reorderFavorites(favorites, favorite.kind, String(active.id), String(over.id));
-    if (plan) void saveOrder(plan);
+    if (plan) reorder.mutate(plan);
   };
 
   const update = async (favorite: Favorite, action: "play" | "append" | "remove") => {
-    if (!connected || mutation.current) return;
-    const controller = new AbortController();
-    mutation.current = controller;
+    if (!connected || pending) return;
     setPending(true); setActionError(""); setNotice("");
     try {
       if (action === "remove") {
-        const response = await fetch(`${origin}/api/${favorite.kind === "provider" ? "providers" : "radio"}/favorites/${encodeURIComponent(favorite.item.id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
-        if (!response.ok) { const body = await response.json(); throw new Error(body.error || "Could not remove this saved item."); }
-        if (controller.signal.aborted) return;
         const index = favorites.findIndex(item => key(item) === key(favorite));
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["providers", "favorites"] }),
-          queryClient.invalidateQueries({ queryKey: ["radio", "favorites"] }),
-        ]);
+        await remove.mutateAsync(favorite);
         setNotice(`Removed ${title(favorite)} from Saved.`);
         requestAnimationFrame(() => {
           const rows = list.current?.children;
@@ -100,17 +89,17 @@ export function SavedFavorites({ origin, token, connected, canPlay, onEnqueuePro
         });
       } else {
         const ok = await (favorite.kind === "provider" ? onEnqueueProvider(favorite.item, action === "play") : onEnqueueRadio(favorite.item, action === "play"));
-        if (!controller.signal.aborted && ok) setNotice(action === "play" ? `Starting ${title(favorite)} on the TV.` : `Added ${title(favorite)} to Up next.`);
+        if (ok) setNotice(action === "play" ? `Starting ${title(favorite)} on the TV.` : `Added ${title(favorite)} to Up next.`);
       }
-    } catch (reason) { if (!controller.signal.aborted) setActionError(message(reason)); }
-    finally { if (!controller.signal.aborted) setPending(false); if (mutation.current === controller) mutation.current = null; }
+    } catch (reason) { setActionError(message(reason)); }
+    finally { setPending(false); }
   };
   return <section className="space-y-3" aria-labelledby="saved-favorites-heading">
     <h2 ref={heading} id="saved-favorites-heading" tabIndex={-1} className={showHeading ? "text-xl font-semibold" : "sr-only"}>{showHeading ? "Online and radio" : "Channels and stations"}</h2>
     {!connected && <p role="status">Reconnect to see saved online items and stations.</p>}
     {loading && <p role="status">Loading saved items…</p>}
     {error && <div role="alert"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={refresh}>Retry saved items</Button></div>}
-    {actionError && <p role="alert">{actionError}</p>}
+    {(actionError || reorder.error) && <p role="alert">{actionError || message(reorder.error)}</p>}
     {notice && <p role="status">{notice}</p>}
     {connected && !loading && !error && !favorites.length && <p className="text-sm text-muted-foreground">{showHeading ? "No favorites yet." : "Save a channel, playlist or station to find it here."}</p>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>

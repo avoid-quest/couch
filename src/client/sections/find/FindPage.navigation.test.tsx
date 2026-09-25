@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { ShellProviders } from "../shell/test-providers";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createBrowserHistory, createHashHistory, createRootRoute, createRoute, createRouter, RouterProvider, Outlet, Link } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ShellContext } from "../shell/shell-context";
 import type { ShellValue } from "../shell/AppShell";
 import { FindPage } from "./FindPage";
 import { fireEvent, screen } from "../../testing";
@@ -47,7 +47,7 @@ test("Add a source on empty Find home opens source settings", async () => {
     connected: true, available: false, active: false, tv: { browsing: true }, section: "Find",
     videoQualityPreference: { quality: "auto" }, changeSearch: () => {},
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellContext.Provider value={shell}><Outlet /></ShellContext.Provider> });
+  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Outlet /></ShellProviders> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
   const settings = createRoute({ getParentRoute: () => base, path: "/settings/sources", component: () => <h1>Source settings</h1> });
   const router = createRouter({ routeTree: base.addChildren([find, settings]), history });
@@ -66,7 +66,7 @@ for (const hash of [false, true]) test(`${hash ? "native hash" : "browser"} navi
     videoQualityPreference: { quality: "auto" },
     changeSearch: (state: Parameters<typeof searchLocation>[0]) => history.replace(searchLocation(state)),
   } as unknown as ShellValue;
-  const base = createRootRoute({ component: () => <ShellContext.Provider value={shell}><Link to="/">Now</Link><Link to="/find" search={{ q: "fixture" }}>Find</Link><Outlet /></ShellContext.Provider> });
+  const base = createRootRoute({ component: () => <ShellProviders value={shell}><Link to="/">Now</Link><Link to="/find" search={{ q: "fixture" }}>Find</Link><Outlet /></ShellProviders> });
   const now = createRoute({ getParentRoute: () => base, path: "/", component: () => <h1>Now playing</h1> });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: FindPage });
   const router = createRouter({ routeTree: base.addChildren([now, find]), history });

@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { WatchingProfile } from "../../shared/library";
 import type { Action, PlaybackPreferences as Preferences, PlayerState, QueueEntry, ReplayGainMode } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
+import { apiJson } from "@/api/client";
 import { playbackDefault, type PlaybackDefaultSetting } from "../../shared/playback-default";
 import { QualitySelect } from "@/components/QualitySelect";
 import { supportsCurrentVideoQuality } from "../../shared/video-quality";
@@ -68,12 +69,8 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled, compact 
     setPending(true);
     try {
       const query = new URLSearchParams({ playbackId, name: file.name });
-      const response = await fetch(`${credentials.origin}/api/subtitles?${query}`, {
-        method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/octet-stream" }, body: file,
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
-      });
-      const result = await response.json();
-      if (!response.ok || result.ok !== true) throw new Error(result.error || "Could not add this subtitle file.");
+      const result = await apiJson<{ ok?: boolean }>(credentials, `/api/subtitles?${query}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file, signal: controller.signal });
+      if (result.ok !== true) throw new Error("Could not add this subtitle file.");
       if (!controller.signal.aborted) setNotice("Subtitle sent. The Subtitles list shows the playback host's current selection.");
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not add this subtitle file.");

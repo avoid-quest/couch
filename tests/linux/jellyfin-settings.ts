@@ -82,9 +82,9 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await connect(url, "Settings replacement", "wrong-fixture-password");
     await until("phone failed replacement reports an inline error and clears its password", () => phone.execute("return !!document.querySelector(arguments[0] + ' [role=alert]') && document.querySelector('#jellyfin-password')?.value === ''", [settings]));
     assert.equal((await api("/api/jellyfin")).username, config.username, "A failed replacement leaves the previous shared connection working");
-    const version = clients[0]!.state!.jellyfinVersion ?? 0;
+    const version = clients[0]!.state!.versions?.jellyfin ?? 0;
     await clients[0]!.command({ type: "pause", playbackId: clients[0]!.state!.player.playbackId!, paused: true });
-    await until("normal Jellyfin playback progress refreshes the catalog while replacement has failed", () => all(state => (state.jellyfinVersion ?? 0) > version));
+    await until("normal Jellyfin playback progress refreshes the catalog while replacement has failed", () => all(state => (state.versions?.jellyfin ?? 0) > version));
     assert.equal(await phone.execute("return !!document.querySelector(arguments[0] + ' [role=alert]') && document.querySelector('#jellyfin-password')?.value === ''", [settings]), true, "Background Jellyfin progress refresh keeps the failed replacement's inline error visible");
     await assertResponsive(phone, "Phone Jellyfin replacement failure");
     await httpRemote.screenshot("jellyfin-phone-replacement-failure");

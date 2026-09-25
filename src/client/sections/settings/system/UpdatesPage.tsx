@@ -1,9 +1,11 @@
 import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "../SettingsLayout";
 import { UpdatesSettings } from "./UpdatesSettings";
+import { useSessionGate } from "@/session/session-context";
 
 export function UpdatesPage() {
-  const { credentials, connected, identity, localHost } = useShell();
+  const { credentials } = useShell();
+  const { connected, identity, localHost } = useSessionGate();
   return (
     <SettingsLayout section="updates">
       {(identity?.authority === "administrator" || identity?.authority === "host") && credentials

@@ -10,6 +10,6 @@ export function MediaLibrary({ onBrowse, ...props }: Omit<ComponentProps<typeof 
         {([["Radio", "Radio"], ["Guide", "Live TV"], ["Jellyfin", "Jellyfin"], ["Files", "TV folders"]] as const).map(([section, label]) => <Button key={section} variant="outline" className="min-h-11" onClick={() => onBrowse(section)}>{label}</Button>)}
       </nav>
     </header>
-    <ProviderPanel {...props} version={0} showHeading={false} />
+    <ProviderPanel {...props} showHeading={false} />
   </section>;
 }

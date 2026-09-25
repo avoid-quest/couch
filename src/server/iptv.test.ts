@@ -306,7 +306,7 @@ test("two actual HTTP/WS controllers share opaque queue identity, rapid switch c
   expect((await api(`playlists/${savedQueue.playlist.id}/load`, "POST", { revision: savedQueue.playlist.revision, mode: "replace" }, secondToken)).status).toBe(200);
   expect(hub.session.state.queue.map(item => item.source)).toEqual(queue.map(item => item.source));
   const restoredQueue = hub.session.state.queue;
-  await wait(() => messages.filter(message => message.type === "state" && message.state.iptvVersion === 4).length >= 2);
+  await wait(() => messages.filter(message => message.type === "state" && message.state.versions?.iptv === 4).length >= 2);
   expect(JSON.stringify(messages)).not.toContain("secret=");
   first.close(); second.close(); await hub.close();
   commands.length = 0; hub = start();

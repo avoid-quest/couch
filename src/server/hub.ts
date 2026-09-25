@@ -13,7 +13,7 @@ import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
 import { isIP } from "node:net";
-import type { Action, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
+import type { Action, Domain, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
 import { createAppearance } from "./appearance";
@@ -173,7 +173,7 @@ export function createHub(options: HubOptions) {
     stopped: playbackId => subtitles.stopped(playbackId),
   });
   const subtitles = createSubtitles(() => session.state.player, (playbackId, subtitle) => session.addSubtitle(playbackId, subtitle));
-  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlist"), queue: () => session.state.queue,
+  const playlists = createPlaylists({ databasePath: options.databasePath, onChange: () => session.invalidate("playlists"), queue: () => session.state.queue,
     upNext: () => {
       const current = session.state.queue.findIndex(entry => entry.id === session.state.currentEntryId);
       const cursor = current >= 0 ? current : session.state.queue.findIndex(entry => entry.id === session.state.queueCursorEntryId);
@@ -203,9 +203,9 @@ export function createHub(options: HubOptions) {
       else session.command({ type: "enqueue", entry: { id: crypto.randomUUID(), title: channel.name, source: `iptv:${channel.id}`, live: true }, playNow }, authorize, playedBy);
     },
   });
-  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("provider"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
+  const providers = createProviders({ databasePath: options.databasePath, onChange: () => session.invalidate("providers"), streamingCommunityOrigin: () => store.streamingCommunityOrigin() });
   const forLater = createForLater({
-    databasePath: options.databasePath, onChange: () => session.invalidate("forLater"),
+    databasePath: options.databasePath, onChange: () => session.invalidate("for-later"),
     lookup: async reference => {
       if (reference.kind === "jellyfin") return jellyfin.entry(reference.id, crypto.randomUUID());
       if (reference.kind === "queue") {
@@ -234,7 +234,7 @@ export function createHub(options: HubOptions) {
   });
   const controllers = createControllers({ store, pairingCode, recoveryCode: options.adminRecoveryCode, onChange: controller => {
     if (controller?.role === "controller") void options.nativeBluetooth?.({ op: "cancel", owner: controller.id }).catch(() => {});
-    session.invalidate("controller");
+    session.invalidate("controllers");
   }, onRevoke: id => {
     void options.nativeBluetooth?.({ op: "cancel", owner: id }).catch(() => {});
     for (const socket of sockets) if (socket.data.controllerId === id) {
@@ -389,6 +389,27 @@ export function createHub(options: HubOptions) {
     })();
   };
 
+  // Settings and device writes bump one revision so every remote refetches that view.
+  const writes: [RegExp, Domain[]][] = [
+    [/^\/api\/settings\/streamingcommunity$/, ["settings", "providers"]],
+    [/^\/api\/settings\//, ["settings"]],
+    [/^\/api\/sound(?:\/|$)/, ["sound"]],
+    [/^\/api\/bluetooth(?:\/|$)/, ["bluetooth", "sound"]],
+    [/^\/api\/display(?:\/|$)/, ["display"]],
+    [/^\/api\/updates(?:\/|$)/, ["updates"]],
+    [/^\/api\/tools(?:\/|$)/, ["tools"]],
+  ];
+  type Fetch = (request: Request, server: Bun.Server<SocketData>) => Promise<Response | undefined>;
+  const publishWrites = (handle: Fetch): Fetch => async (request, server) => {
+    const response = await handle(request, server);
+    if (response?.ok && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      const path = new URL(request.url).pathname;
+      const domains = writes.find(([pattern]) => pattern.test(path))?.[1];
+      if (domains) session.invalidate(...domains);
+    }
+    return response;
+  };
+
   const serveOptions: Bun.Serve.Options<SocketData> = {
     hostname,
     port: options.port ?? 3800,
@@ -416,7 +437,7 @@ export function createHub(options: HubOptions) {
           try {
             idle.activity();
             const token = store.pair("name" in body ? body.name : undefined);
-            session.invalidate("controller");
+            session.invalidate("controllers");
             return respond({ token, controller: store.controllerForToken(token), installationId: store.installationId() });
           } catch (error) {
             return respond({ error: error instanceof ControllerError ? error.message : "Could not save this remote. Check the TV's storage." }, error instanceof ControllerError ? error.status : 500);
@@ -424,7 +445,7 @@ export function createHub(options: HubOptions) {
         },
       },
     },
-    async fetch(request, server) {
+    fetch: publishWrites(async (request, server) => {
       const url = new URL(request.url);
       const websocket = url.pathname === "/api/ws";
       if (!allowed(request, websocket)) return json({ error: "Unrecognized host or origin." }, 403);
@@ -456,7 +477,7 @@ export function createHub(options: HubOptions) {
             socket.unsubscribe("session");
             socket.close(4003, "Remote control is off. Your pairing is remembered.");
           }
-          session.invalidate("controller");
+          session.invalidate("controllers");
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
       }
@@ -552,7 +573,7 @@ export function createHub(options: HubOptions) {
         if (!websocket) return cors(request, await (/^\/api\/collections(?:\/|$)/.test(url.pathname) ? collections.handle(request, authorize, playedBy) : url.pathname === "/api/subtitles" ? subtitles.handle(request, authorize) : /^\/api\/playlists(?:\/|$)/.test(url.pathname) ? playlists.handle(request, authorize, playedBy) : url.pathname.startsWith("/api/providers/") ? providers.handle(request, authorize) : catalog.handle(request, trusted, authorize, playedBy)));
         return server.upgrade(request, { data: { trusted, controllerId: caller.controller?.id ?? null, authorize, window: Date.now(), count: 0 } }) ? undefined : json({ error: "WebSocket upgrade required." }, 400);
       } finally { finishWork?.(); }
-    },
+    }),
     websocket: {
       data: {} as SocketData,
       maxPayloadLength: 8192,

@@ -1,11 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Action, ConnectionInfo, NavigationKey, SessionState } from "../../shared/protocol";
-import { loadedBuild } from "../../shared/build";
-import { applyTvNavigation, useNavigation } from "../navigation";
+import { toast } from "sonner";
+import type { Action, ConnectionInfo, Domain, NavigationKey, SessionState } from "../../shared/protocol";
+import { acknowledgeFrontend, ApiError } from "../api/client";
+import { applyTvNavigation } from "../navigation";
 import { isNativeHost, isTvPresentation } from "./native-context";
 import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
@@ -15,11 +16,11 @@ import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
-import { applyUndo, undoPlan, type UndoPlan } from "./undo";
+import { applyUndo, undoPlan } from "./undo";
+import { SessionGateContext } from "./gate-context";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
-const remoteNameKey = "couch.remote-name";
 const nativeHost = isNativeHost();
 const tvPresentation = isTvPresentation();
 let cacheSequence = 0;
@@ -32,17 +33,12 @@ function storedCredentials(selectedOrigin?: string): Credentials | null {
       const value = JSON.parse(localStorage.getItem(pairingKey(selectedOrigin)) ?? "null") as { token?: string; installationId?: string } | null;
       return value?.token && value.installationId ? { origin: selectedOrigin, token: value.token, installationId: value.installationId } : null;
     }
-    const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
-    if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
+    const token = localStorage.getItem(tokenKey);
     const installationId = localStorage.getItem(installationKey);
     return token && installationId ? { origin: location.origin, token, installationId } : null;
   } catch {
     return null;
   }
-}
-
-function storedRemoteName() {
-  try { return localStorage.getItem(remoteNameKey) || "My remote"; } catch { return "My remote"; }
 }
 
 export function dispatchTvRoute(key: "home" | "info") {
@@ -61,7 +57,7 @@ export function errorText(error: unknown) {
 
 type SessionBag = ReturnType<typeof useSession>;
 
-type SessionGateValue = SessionBag & {
+export type SessionGateValue = SessionBag & {
   queryClient: QueryClient;
   nativeHost: boolean;
   localHost: boolean;
@@ -74,24 +70,15 @@ type SessionGateValue = SessionBag & {
   error: string | null;
   setError: (error: string | null) => void;
   run: (action: Action) => Promise<boolean>;
-  undoNotice: { id: number; text: string } | null;
-  undoAction: () => Promise<void>;
-  dismissUndo: () => void;
   offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
-  pair: (event: { preventDefault: () => void }) => Promise<void>;
+  // Pairing origin for a new remote, and the code from a scanned pairing link.
+  pairingOrigin: string;
+  linkedPairingCode: string;
+  savePairing: (credentials: Required<Credentials>) => void;
   unpair: () => void;
-  pairing: boolean;
-  pairingCode: string;
-  setPairingCode: (code: string) => void;
-  remoteName: string;
-  setRemoteName: (name: string) => void;
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
-  setRemoteControlEnabled: (enabled: boolean) => void;
-  registerBackHandler: (handler: () => void) => void;
 };
-
-const SessionGateContext = createContext<SessionGateValue | null>(null);
 
 export function useSessionGate(): SessionGateValue {
   const value = useContext(SessionGateContext);
@@ -107,28 +94,15 @@ export function SessionGate({ children }: PropsWithChildren) {
   const device = usePlaybackDevice();
   const localHost = nativeHost && device?.mode === "local";
   const selectedOrigin = nativeHost && device?.mode === "remote" ? device.address ?? undefined : undefined;
-  const [credentials, saveCredentials] = useState<Credentials | null>(() => storedCredentials(selectedOrigin));
+  const [credentials, setCredentials] = useState<Credentials | null>(() => storedCredentials(selectedOrigin));
   const [host, setHost] = useState<ConnectionInfo | null>(null);
   const [hostAttempt, setHostAttempt] = useState(0);
   const [booting, setBooting] = useState(localHost);
   const [error, setError] = useState<string | null>(null);
-  const [pairingCode, setPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
-  const [remoteName, setRemoteName] = useState(storedRemoteName);
-  const [pairing, setPairing] = useState(false);
-  const [remoteControlEnabled, setRemoteControlEnabled] = useState(false);
-  const backHandler = useRef<() => void>(() => {});
-  const pairingOperation = useRef<AbortController | null>(null);
+  const [linkedPairingCode] = useState(() => nativeHost ? "" : pairingCodeFromHash(location.hash));
   const videoQualityPreference = useVideoQualityPreference();
-  const setCredentials = useCallback((value: Credentials | null) => {
-    pairingOperation.current?.abort();
-    pairingOperation.current = null;
-    setPairing(false);
-    saveCredentials(value);
-  }, []);
-  useEffect(() => () => pairingOperation.current?.abort(), []);
 
-  useEffect(() => { if (!nativeHost && pairingCodeFromHash(location.hash)) history.replaceState(history.state, "", location.pathname + location.search); }, []);
-  useEffect(() => { try { localStorage.setItem(remoteNameKey, remoteName); } catch { /* Pairing still works without remembering the name. */ } }, [remoteName]);
+  useEffect(() => { if (linkedPairingCode) history.replaceState(history.state, "", location.pathname + location.search); }, []);
 
   function handleNavigation(key: NavigationKey) {
     if (!tvPresentation) return;
@@ -154,11 +128,13 @@ export function SessionGate({ children }: PropsWithChildren) {
   const queryClient = cache.client;
   useLayoutEffect(() => () => queryClient.clear(), [queryClient]);
   useUpdateActivity(credentials, connected);
-  useEffect(() => setRemoteControlEnabled(details?.remoteControlEnabled === true), [details?.remoteControlEnabled]);
+  const remoteControlEnabled = details?.remoteControlEnabled === true;
 
-  // Session snapshots invalidate Query directly. The first snapshot after a
-  // reconnect revalidates everything, including counters reset by server restart.
-  const revisions = useRef<{ client: QueryClient; state: SessionState } | null>(null);
+  // Session snapshots invalidate Query directly: each changed domain revision
+  // refetches its query-key root. The first snapshot after a reconnect
+  // revalidates everything, including revisions reset by a server restart.
+  const revisions = useRef<{ client: QueryClient; versions: SessionState["versions"] } | null>(null);
+  const versions = state?.versions;
   useEffect(() => {
     if (!connected || !state) {
       revisions.current = null;
@@ -167,29 +143,22 @@ export function SessionGate({ children }: PropsWithChildren) {
     }
     const previous = revisions.current;
     if (!previous || previous.client !== queryClient) void queryClient.invalidateQueries();
-    else {
-      const domains = { library: "library", radio: "radio", iptv: "iptv", provider: "providers", jellyfin: "jellyfin", playlist: "playlists", forLater: "for-later", controller: "controllers" } as const;
-      for (const [domain, key] of Object.entries(domains)) {
-        const field = `${domain}Version` as `${keyof typeof domains}Version`;
-        if ((state[field] ?? 0) !== (previous.state[field] ?? 0)) void queryClient.invalidateQueries({ queryKey: [key] });
-      }
+    else for (const domain of Object.keys({ ...previous.versions, ...versions }) as Domain[]) {
+      if (versions?.[domain] !== previous.versions?.[domain]) void queryClient.invalidateQueries({ queryKey: [domain] });
     }
-    revisions.current = { client: queryClient, state };
-  }, [state, connected, queryClient]);
+    revisions.current = { client: queryClient, versions };
+  }, [versions, connected, !!state, queryClient]);
 
   useInterfaceSize(tvPresentation, state?.appearance);
   useIdleCursor(tvPresentation);
-  useNavigation(() => backHandler.current());
 
   useEffect(() => {
     if (!localHost || !credentials) return;
     const stop = new AbortController();
     void (async () => {
       for (let attempt = 0; attempt < 5 && !stop.signal.aborted; attempt++) {
-        try {
-          const response = await fetch(`${credentials.origin}/api/maintenance/frontend`, { method: "POST", headers: { Authorization: `Bearer ${credentials.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ build: loadedBuild }), signal: AbortSignal.any([stop.signal, AbortSignal.timeout(2_000)]) });
-          if (response.ok || response.status === 404) return;
-        } catch { /* A trial stays closed until this loaded asset identity is received. */ }
+        try { await acknowledgeFrontend(credentials, stop.signal, 2_000); return; }
+        catch (reason) { if (reason instanceof ApiError && reason.status === 404) return; /* A trial stays closed until this loaded asset identity is received. */ }
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     })();
@@ -246,42 +215,33 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, []);
 
   const currentCredentials = useRef(credentials);
-  const commandAttempt = useRef(0);
-  const noticeSequence = useRef(0);
   const currentState = useRef(state);
-  const undoPlanRef = useRef<{ plan: UndoPlan } | { undo: () => Promise<void> } | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [undoNotice, setUndoNotice] = useState<{ id: number; text: string } | null>(null);
+  const commandAttempt = useRef(0);
+  const undoToast = useRef<string | number | null>(null);
   currentCredentials.current = credentials;
   currentState.current = state;
 
-  const dismissUndo = () => {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    undoTimer.current = null;
-    undoPlanRef.current = null;
-    setUndoNotice(null);
-  };
-  useEffect(() => { dismissUndo(); return () => { if (undoTimer.current) clearTimeout(undoTimer.current); }; }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+  const dismissUndo = useCallback(() => {
+    if (undoToast.current !== null) toast.dismiss(undoToast.current);
+    undoToast.current = null;
+  }, []);
+  useEffect(() => { dismissUndo(); return dismissUndo; }, [credentials?.origin, credentials?.token, credentials?.installationId, dismissUndo]);
 
-  const undoAction = async () => {
-    const pending = undoPlanRef.current;
+  const offerUndo = useCallback((text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
-    if (!pending || !credentials || credentials !== currentCredentials.current) return;
-    setError(null);
-    try { if ("plan" in pending) await applyUndo(pending.plan, command, () => currentState.current); else await pending.undo(); }
-    catch (reason) { if (credentials === currentCredentials.current) setError(errorText(reason)); }
-  };
+    const owner = currentCredentials.current;
+    const id = toast(text, { duration, onDismiss: () => { if (undoToast.current === id) undoToast.current = null; }, action: { label: "Undo", onClick: () => {
+      undoToast.current = null;
+      if (!owner || owner !== currentCredentials.current) return;
+      setError(null);
+      undo().catch(reason => { if (owner === currentCredentials.current) setError(errorText(reason)); });
+    } } });
+    undoToast.current = id;
+  }, [dismissUndo]);
 
-  const offerUndo = (text: string, undo: () => Promise<void>, duration = 6_000) => {
-    dismissUndo();
-    const id = ++noticeSequence.current;
-    undoPlanRef.current = { undo };
-    setUndoNotice({ id, text });
-    undoTimer.current = setTimeout(dismissUndo, duration);
-  };
-
-  const run = async (action: Action) => {
-    if (credentials !== currentCredentials.current) return false;
+  const run = useCallback(async (action: Action) => {
+    const owner = currentCredentials.current;
+    const current = () => owner === currentCredentials.current;
     const started = performance.now();
     const before = currentState.current;
     dismissUndo();
@@ -289,76 +249,49 @@ export function SessionGate({ children }: PropsWithChildren) {
     setError(null);
     try {
       await command(action);
-      if (before && credentials === currentCredentials.current && attempt === commandAttempt.current) {
+      if (before && current() && attempt === commandAttempt.current) {
         const undoable = action.type === "remove" || !!before.currentEntryId && (action.type === "stop" || action.type === "play" && action.entryId !== before.currentEntryId || "playNow" in action && action.playNow);
         let plan = undoable && currentState.current && undoPlan(action, before, currentState.current);
-        for (let tries = 0; undoable && !plan && tries < 20 && credentials === currentCredentials.current && attempt === commandAttempt.current; tries++) {
+        for (let tries = 0; undoable && !plan && tries < 20 && current() && attempt === commandAttempt.current; tries++) {
           await new Promise(resolve => setTimeout(resolve, 25));
           plan = currentState.current && undoPlan(action, before, currentState.current);
         }
-        if (plan && credentials === currentCredentials.current && attempt === commandAttempt.current) {
-          undoPlanRef.current = { plan };
-          const remaining = 6_000 - (performance.now() - started);
-          if (remaining <= 0) dismissUndo();
-          else {
-            setUndoNotice({ id: ++noticeSequence.current, text: plan.text });
-            undoTimer.current = setTimeout(dismissUndo, remaining);
-          }
+        const remaining = 6_000 - (performance.now() - started);
+        if (plan && remaining > 0 && current() && attempt === commandAttempt.current) {
+          const confirmed = plan;
+          offerUndo(confirmed.text, () => applyUndo(confirmed, command, () => currentState.current), remaining);
         }
       }
-      return credentials === currentCredentials.current;
+      return current();
     } catch (reason) {
-      if (credentials === currentCredentials.current && attempt === commandAttempt.current) setError(errorText(reason));
+      if (current() && attempt === commandAttempt.current) setError(errorText(reason));
       return false;
     }
-  };
+  }, [command, dismissUndo, offerUndo]);
 
-  const pair = async (event: { preventDefault: () => void }) => {
-    event.preventDefault();
-    pairingOperation.current?.abort();
-    const operation = new AbortController();
-    pairingOperation.current = operation;
-    const current = () => pairingOperation.current === operation && !operation.signal.aborted && credentials === currentCredentials.current;
-    setPairing(true);
-    setError(null);
+  const savePairing = useCallback((value: Required<Credentials>) => {
     try {
-      const origin = credentials?.origin ?? selectedOrigin ?? location.origin;
-      const response = await fetch(`${origin}/api/pair`, {
-        method: "POST",
-        signal: AbortSignal.any([operation.signal, AbortSignal.timeout(8_000)]),
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: pairingCode.trim(), name: remoteName.trim() }),
-      });
-      const result = await response.json() as { token?: string; installationId?: string; error?: string };
-      if (!current()) return;
-      if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the playback computer." : result.error || "Could not pair with the player.");
-      try {
-        if (selectedOrigin) localStorage.setItem(pairingKey(origin), JSON.stringify({ token: result.token, installationId: result.installationId }));
-        else { localStorage.setItem(tokenKey, result.token); localStorage.setItem(installationKey, result.installationId); }
-      } catch { /* Pairing still works for this tab. */ }
-      setCredentials({ origin, token: result.token, installationId: result.installationId });
-      setPairingCode("");
-    } catch (reason) {
-      if (current()) setError(`${errorText(reason)} Check that your device and playback computer are on the same network, then try Connect again.`);
-    } finally {
-      if (pairingOperation.current === operation) { pairingOperation.current = null; setPairing(false); }
-    }
-  };
+      if (selectedOrigin) localStorage.setItem(pairingKey(value.origin), JSON.stringify({ token: value.token, installationId: value.installationId }));
+      else { localStorage.setItem(tokenKey, value.token); localStorage.setItem(installationKey, value.installationId); }
+    } catch { /* Pairing still works for this tab. */ }
+    setCredentials(value);
+  }, [selectedOrigin]);
 
-  const unpair = () => {
+  const unpair = useCallback(() => {
     try {
       if (selectedOrigin) localStorage.removeItem(pairingKey(selectedOrigin));
-      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); localStorage.removeItem("modern-kodi.remote-token"); }
+      else { localStorage.removeItem(tokenKey); localStorage.removeItem(installationKey); }
     } catch { /* Storage may be disabled. */ }
     setCredentials(null);
     setError(null);
-  };
+  }, [selectedOrigin]);
 
-  const value: SessionGateValue = {
-    queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, undoNotice, undoAction, dismissUndo, offerUndo, reconnect, pair, unpair,
-    pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
-    registerBackHandler: handler => { backHandler.current = handler; },
-  };
+  const retryHost = useCallback(() => setHostAttempt(attempt => attempt + 1), []);
+  const pairingOrigin = credentials?.origin ?? selectedOrigin ?? location.origin;
+  const value = useMemo<SessionGateValue>(() => ({
+    queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost, booting, error, setError, command,
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, offerUndo, reconnect,
+    pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled,
+  }), [queryClient, localHost, credentials, host, retryHost, booting, error, command, state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, offerUndo, reconnect, pairingOrigin, linkedPairingCode, savePairing, unpair, videoQualityPreference, remoteControlEnabled]);
   return <SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider>;
 }

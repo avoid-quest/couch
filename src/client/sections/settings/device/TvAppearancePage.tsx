@@ -1,9 +1,11 @@
 import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "../SettingsLayout";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { useSessionGate } from "@/session/session-context";
 
 export function TvAppearancePage() {
-  const { credentials, connected, identity, state, tvPresentation, details } = useShell();
+  const { credentials } = useShell();
+  const { connected, identity, state, tvPresentation, details } = useSessionGate();
   return (
     <SettingsLayout section="tv-appearance">
       {!tvPresentation && !details?.tvPresentation

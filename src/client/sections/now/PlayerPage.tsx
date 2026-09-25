@@ -13,12 +13,14 @@ import { formatDuration } from "@/time-format";
 import { VideoStage } from "@/sections/shell/VideoStage";
 import { QueuePanel } from "./QueuePanel";
 import { useShell } from "@/sections/shell/AppShell";
+import { useSessionGate } from "@/session/session-context";
 
 type Panel = "queue" | "tracks" | "settings";
 
 export function PlayerPage() {
   const shell = useShell();
-  const { state, credentials, connected, run, available, nativeHost, localHost, active, current, programme, videoQualityPreference } = shell;
+  const { credentials, available, active, current, programme } = shell;
+  const { state, connected, run, nativeHost, localHost, videoQualityPreference } = useSessionGate();
   const [panelState, setPanelState] = useState<{ playbackId: string; panel: Panel } | null>(null);
   const [shown, setShown] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);

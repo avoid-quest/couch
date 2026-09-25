@@ -3,7 +3,7 @@ import type { Ref } from "react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { useOptionalShell } from "@/sections/shell/shell-context";
+import { useOptionalSessionGate } from "@/session/session-context";
 
 // The one search field every page shares: same markup, same look, same
 // clear affordance. Page-specific behavior arrives through the callbacks.
@@ -19,7 +19,7 @@ export function SearchBar({ id, value, onValueChange, onSubmit, onClear, ariaLab
   inputRef?: Ref<HTMLInputElement>;
   pageFirst?: boolean;
 }) {
-  const { tvPresentation } = useOptionalShell() ?? { tvPresentation: false };
+  const tvPresentation = useOptionalSessionGate()?.tvPresentation ?? false;
   return <form role="search" aria-label={ariaLabel} className={className} onSubmit={event => { event.preventDefault(); onSubmit(); }}>
     <InputGroup className={cn("rounded-none border-x-0 border-t-0 border-b border-border bg-transparent shadow-none focus-within:border-primary", tvPresentation ? "h-16 px-5 text-2xl" : "py-1 text-lg")}>
       <InputGroupAddon align="inline-start"><Search aria-hidden="true" className="size-[1.25em] shrink-0 text-muted-foreground" /></InputGroupAddon>

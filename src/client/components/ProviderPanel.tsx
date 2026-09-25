@@ -1,5 +1,8 @@
 import { HistoryPanel, type HistoryPlayback } from "./HistoryPanel";
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiSend } from "@/api/client";
+import { providerBrowseQuery, providerFavoritesQuery } from "@/api/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +26,6 @@ type Props = {
   token: string;
   connected: boolean;
   canPlay: boolean;
-  version: number;
   defaultQuality: VideoQuality;
   onEnqueue: (item: ProviderItem, playNow: boolean, quality?: VideoQuality) => Promise<boolean>;
 };
@@ -46,12 +48,9 @@ function duration(seconds: number) {
 
 export function ProviderPanel(props: Props) {
   const collectionMode = !!props.collectionMode && !!props.initialItem;
+  // Callers key the panel by request, so the initial item seeds local navigation once.
   const [provider, setProvider] = useState<ProviderId>(props.initialItem?.provider ?? props.initialProvider ?? "youtube");
   const [initialItem, setInitialItem] = useState(props.initialItem);
-  useEffect(() => {
-    setProvider(props.initialItem?.provider ?? props.initialProvider ?? "youtube");
-    setInitialItem(props.initialItem);
-  }, [props.initialItem, props.initialProvider]);
   const [quality, setQuality, resetQuality] = useEnqueueVideoQuality(props.defaultQuality);
   const enqueue = async (item: ProviderItem, playNow: boolean) => {
     const ok = await props.onEnqueue(item, playNow, item.provider === "bandcamp" ? undefined : quality);
@@ -68,82 +67,52 @@ export function ProviderPanel(props: Props) {
   </section>;
 }
 
-function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, version, onEnqueue, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
+function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory, initialItem, provider, origin, token, connected, canPlay, onEnqueue, quality, onQualityChange }: Props & { provider: ProviderId; quality: VideoQuality; onQualityChange: (quality: VideoQuality) => void }) {
   const info = providers[provider];
   const qualityId = useId();
+  const queryClient = useQueryClient();
+  const credentials = { origin, token };
   const [input, setInput] = useState("");
   const [trail, setTrail] = useState<Location[]>([
     ...(!collectionMode ? [{ request: {}, title: info.name }] : []),
     ...(initialItem?.provider === provider ? [{ request: { url: initialItem.url }, title: initialItem.title }] : []),
   ]);
-  const [page, setPage] = useState<ProviderPage | null>(null);
   const [view, setView] = useState<"browse" | "saved">("browse");
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [browseError, setBrowseError] = useState<string | null>(null);
-  const [favoriteError, setFavoriteError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [favorites, setFavorites] = useState<ProviderItem[]>([]);
-  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const [favoriteRevision, setFavoriteRevision] = useState(0);
-  const activeRequest = useRef<AbortController | null>(null);
-  const actionRequest = useRef<AbortController | null>(null);
   const lifetime = useRef<AbortController | null>(null);
   const browserRef = useRef<HTMLDivElement | null>(null);
   const restoreFocus = useRef<"input" | { itemId: string } | null>(null);
   const location = trail[trail.length - 1]!;
   const atRecent = !location.request.query && !location.request.url;
 
-  const request = useCallback(async (path: string, init: RequestInit = {}) => {
-    const response = await fetch(`${origin}/api/providers/${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      signal: init.signal ?? AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error || "Could not load online media.");
-    }
-    return response;
-  }, [origin, token]);
-
-  const browse = useCallback(async (target: BrowseRequest, signal: AbortSignal) => {
-    const params = new URLSearchParams();
-    if (target.query) params.set("q", target.query);
-    if (target.url) params.set("url", target.url);
-    if (target.cursor) params.set("cursor", target.cursor);
-    const response = await request(`${provider}/items?${params}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
-    return response.json() as Promise<ProviderPage>;
-  }, [provider, request]);
+  const browseQuery = useInfiniteQuery({ ...providerBrowseQuery(credentials, provider, location.request), enabled: connected && !atRecent });
+  const page = useMemo<ProviderPage | null>(() => {
+    const pages = browseQuery.data?.pages;
+    if (!pages?.length) return null;
+    const items: ProviderItem[] = [], ids = new Set<string>();
+    for (const part of pages) for (const item of part.items) if (!ids.has(item.id)) { ids.add(item.id); items.push(item); }
+    return { ...pages.at(-1)!, title: pages[0]!.title || pages.at(-1)!.title, items };
+  }, [browseQuery.data]);
+  const loading = browseQuery.isLoading;
+  const loadingMore = browseQuery.isFetchingNextPage;
+  const browseError = browseQuery.error ? message(browseQuery.error) : null;
+  const favoritesQuery = useQuery({ ...providerFavoritesQuery(credentials), enabled: connected });
+  const favorites = favoritesQuery.data?.favorites ?? [];
+  const favoritesLoading = favoritesQuery.isLoading;
+  const favoriteError = favoritesQuery.error ? message(favoritesQuery.error) : null;
+  const favoriteMutation = useMutation({
+    mutationFn: ({ item, saved }: { item: ProviderItem; saved: boolean }) => apiSend(credentials, saved ? `/api/providers/favorites/${encodeURIComponent(item.id)}` : "/api/providers/favorites", saved ? undefined : { item }, saved ? "DELETE" : "POST", 8_000),
+    onSuccess: (_, { item, saved }) => queryClient.setQueryData(providerFavoritesQuery(credentials).queryKey, current => current && { favorites: [...current.favorites.filter(entry => entry.id !== item.id), ...(saved ? [] : [item])] }),
+  });
 
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
     setBusy(null);
-    return () => { controller.abort(); activeRequest.current?.abort(); actionRequest.current?.abort(); };
+    return () => controller.abort();
   }, [connected]);
-
-  useEffect(() => {
-    activeRequest.current?.abort();
-    setLoadingMore(false);
-    if (!connected) { setLoading(false); return; }
-    if (atRecent) { setLoading(false); setPage(null); setBrowseError(null); return; }
-    const controller = new AbortController();
-    activeRequest.current = controller;
-    setLoading(true);
-    setPage(null);
-    setBrowseError(null);
-    void browse(location.request, controller.signal).then(result => {
-      if (!controller.signal.aborted) setPage(result);
-    }).catch(reason => {
-      if (!controller.signal.aborted) setBrowseError(message(reason));
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false);
-    });
-    return () => { controller.abort(); };
-  }, [browse, connected, location, atRecent]);
 
   useEffect(() => {
     if (loading || (!page && !atRecent) || !restoreFocus.current) return;
@@ -153,19 +122,6 @@ function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory,
     }
     restoreFocus.current = null;
   }, [page, loading, atRecent]);
-
-  useEffect(() => {
-    if (!connected) { setFavoritesLoading(false); return; }
-    const controller = new AbortController();
-    setFavoritesLoading(true);
-    setFavoriteError(null);
-    void request("favorites", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) })
-      .then(response => response.json() as Promise<{ favorites: ProviderItem[] }>)
-      .then(body => { if (!controller.signal.aborted) setFavorites(body.favorites); })
-      .catch(reason => { if (!controller.signal.aborted) setFavoriteError(message(reason)); })
-      .finally(() => { if (!controller.signal.aborted) setFavoritesLoading(false); });
-    return () => { controller.abort(); };
-  }, [request, connected, version, favoriteRevision]);
 
   function search(event: FormEvent) {
     event.preventDefault();
@@ -193,41 +149,22 @@ function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory,
     setTrail(current => current.length > 1 ? current.slice(0, -1) : current);
   }
 
-  async function more() {
-    if (!page?.nextCursor || loadingMore || !connected) return;
-    activeRequest.current?.abort();
-    const controller = new AbortController();
-    activeRequest.current = controller;
-    setLoadingMore(true);
-    setBrowseError(null);
-    try {
-      const result = await browse({ ...location.request, cursor: page.nextCursor }, controller.signal);
-      if (!controller.signal.aborted) setPage(previous => previous ? { ...result, title: previous.title || result.title, items: [...previous.items, ...result.items.filter(item => !previous.items.some(existing => existing.id === item.id))] } : result);
-    } catch (reason) {
-      if (!controller.signal.aborted) setBrowseError(message(reason));
-    } finally {
-      if (!controller.signal.aborted) setLoadingMore(false);
-    }
+  function more() {
+    if (page?.nextCursor && !loadingMore && connected) void browseQuery.fetchNextPage();
   }
 
   async function favorite(item: ProviderItem, saved: boolean) {
-    if (actionRequest.current || !connected) return;
-    const controller = new AbortController();
-    actionRequest.current = controller;
+    if (favoriteMutation.isPending || !connected) return;
     setBusy(item.id);
     setActionError(null);
     setNotice("");
     try {
-      await request(saved ? `favorites/${encodeURIComponent(item.id)}` : "favorites", { method: saved ? "DELETE" : "POST", body: saved ? undefined : JSON.stringify({ item }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) });
-      if (!controller.signal.aborted) {
-        setFavorites(current => saved ? current.filter(entry => entry.id !== item.id) : [...current.filter(entry => entry.id !== item.id), item]);
-        setFavoriteRevision(revision => revision + 1);
-        setNotice(`${item.title} ${saved ? "removed." : "kept."}`);
-      }
+      await favoriteMutation.mutateAsync({ item, saved });
+      setNotice(`${item.title} ${saved ? "removed." : "kept."}`);
     } catch (reason) {
-      if (!controller.signal.aborted) setActionError(message(reason));
+      setActionError(message(reason));
     } finally {
-      if (actionRequest.current === controller) { actionRequest.current = null; if (!controller.signal.aborted) setBusy(null); }
+      setBusy(null);
     }
   }
 
@@ -280,13 +217,13 @@ function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory,
       <TabsContent value={view} className="space-y-4">
         {actionError && <p className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">{actionError}</p>}
         {notice && <p className="border-l-2 border-primary py-2 pl-3 text-sm" role="status">{notice}</p>}
-        {favoriteError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">Kept items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => setFavoriteRevision(value => value + 1)}>Try again</Button></div>}
+        {favoriteError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">Kept items unavailable. {favoriteError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => void favoritesQuery.refetch()}>Try again</Button></div>}
         {view === "browse" && atRecent && <HistoryPanel origin={origin} token={token} connected={connected} canPlay={canPlay} onPlay={onPlayHistory} provider={provider} active={active} />}
         {view === "browse" && !atRecent && (!collectionMode || trail.length > 1) && <div className="provider-location flex min-w-0 items-center gap-3">
           {trail.length > 1 && <Button data-back variant="outline" className="min-h-11 shrink-0" disabled={!connected} onClick={back}>Back</Button>}
           <h3 className="min-w-0 text-base font-medium wrap-anywhere">{page?.title || location.title}</h3>
         </div>}
-        {view === "browse" && browseError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => page?.nextCursor ? void more() : setTrail(current => [...current.slice(0, -1), { ...location }])}>Try again</Button></div>}
+        {view === "browse" && browseError && <div className="border-l-2 border-destructive py-2 pl-3 text-sm text-destructive" role="alert">{browseError} <Button variant="ghost" className="min-h-11" disabled={!connected} onClick={() => browseQuery.isFetchNextPageError ? more() : void browseQuery.refetch()}>Try again</Button></div>}
         {pending && <p className="provider-empty text-muted-foreground py-6 text-sm" role="status">{view === "saved" ? "Loading kept items…" : `Loading ${info.name}…`}</p>}
         {!(view === "browse" && atRecent) && !pending && !items.length && !(view === "browse" ? browseError : favoriteError) && <p className="provider-empty text-muted-foreground py-6 text-sm leading-relaxed">{!connected ? "Browsing will return when the TV reconnects." : provider === "bandcamp" ? view === "saved" ? "Keep albums and tracks to find them from every remote." : "No public tracks found. Try another album or track link." : view === "saved" ? "Keep videos, channels, and collections here to find them from every remote." : "Nothing found. Try another search or paste a channel, list, or program link."}</p>}
         {listRef && !pending && !browseError && <div className="flex flex-wrap items-center gap-2" data-nav-row>
@@ -339,7 +276,7 @@ function ProviderBrowser({ active = true, collectionMode = false, onPlayHistory,
               </div>
           </li>;
         })}</ul>}
-        {view === "browse" && page?.nextCursor && <Button variant="outline" className="provider-more min-h-11 w-full" disabled={!connected || loadingMore} onClick={() => void more()}>{loadingMore ? "Loading more…" : "Load more"}</Button>}
+        {view === "browse" && page?.nextCursor && <Button variant="outline" className="provider-more min-h-11 w-full" disabled={!connected || loadingMore} onClick={more}>{loadingMore ? "Loading more…" : "Load more"}</Button>}
       </TabsContent>
     </Tabs>
   </div>;

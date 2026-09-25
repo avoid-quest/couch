@@ -175,7 +175,7 @@ test("opening a saved collection keeps its own trail and returns to Saved", asyn
     const [selected, setSelected] = useState<ProviderItem | null>(null);
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
-      ? wrap(<><button onClick={() => setSelected(null)}>‹ Saved</button><h1>{selected.title}</h1><ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} collectionMode showHeading={false} version={1} defaultQuality="auto" onEnqueue={async () => true} /></>)
+      ? wrap(<><button onClick={() => setSelected(null)}>‹ Saved</button><h1>{selected.title}</h1><ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} collectionMode showHeading={false} defaultQuality="auto" onEnqueue={async () => true} /></>)
       : wrap(<SavedFavorites {...connection} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />);
   }
   await act(async () => root.render(<SavedCollection />));
@@ -189,8 +189,9 @@ test("opening a saved collection keeps its own trail and returns to Saved", asyn
   await click("Open Disc two");
   expect(browsed.at(-1)?.searchParams.get("url")).toBe(disc.url);
   await click("Back");
-  expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
-  expect(browsed.at(-1)?.searchParams.get("url")).toBe(album.url);
+  // Returning reuses the album page Query already holds.
+  expect(button("Open Disc two")).toBeDefined();
+  expect(browsed.filter(url => url.searchParams.get("url") === album.url)).toHaveLength(1);
   expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   await click("‹ Saved");
   expect(button("Open Evening album")).toBeDefined();

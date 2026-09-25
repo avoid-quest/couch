@@ -1,9 +1,11 @@
 import { useShell } from "@/sections/shell/AppShell";
 import { SettingsLayout } from "../SettingsLayout";
 import { BluetoothSettings } from "./BluetoothSettings";
+import { useSessionGate } from "@/session/session-context";
 
 export function BluetoothPage() {
-  const { credentials, connected, identity } = useShell();
+  const { credentials } = useShell();
+  const { connected, identity } = useSessionGate();
   return (
     <SettingsLayout section="bluetooth">
       {(identity?.authority === "administrator" || identity?.authority === "host") && credentials

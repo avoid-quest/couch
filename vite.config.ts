@@ -36,7 +36,7 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: null,
-      includeAssets: ["favicon.svg", "icons/apple-touch-icon.png", "icons/pwa-192.png", "icons/pwa-512.png"],
+      includeAssets: ["icons/pwa-192.png", "icons/pwa-512.png"],
       manifest: {
         name: "Couch",
         short_name: "Couch",

@@ -1,27 +1,16 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, type ApiCredentials } from "@/api/client";
+import { apiSend, type ApiCredentials } from "@/api/client";
+import { displayQuery } from "@/api/settings";
 import { Button } from "@/components/ui/button";
 import type { DisplayState } from "../../../../shared/display";
 
 export function DisplaySettings({ credentials, connected }: { credentials: ApiCredentials; connected: boolean }) {
   const queryClient = useQueryClient();
-  const queryKey = ["display", credentials.origin, credentials.token];
-  const display = useQuery({
-    queryKey,
-    enabled: connected,
-    queryFn: ({ signal }) => apiFetch(credentials, "/api/display", { signal }).then(response => response.json() as Promise<DisplayState>),
-    refetchInterval: 1_000,
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
+  const display = useQuery({ ...displayQuery(credentials), enabled: connected });
   const changeMutation = useMutation({
-    mutationFn: async ({ op, body }: { op: string; body: unknown }) => {
-      await apiFetch(credentials, `/api/display/${op}`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      }).then(response => response.json() as Promise<DisplayState>);
-      await queryClient.invalidateQueries({ queryKey });
-    },
+    mutationFn: ({ op, body }: { op: string; body: unknown }) => apiSend<DisplayState>(credentials, `/api/display/${op}`, body),
+    onSuccess: result => queryClient.setQueryData(displayQuery(credentials).queryKey, result),
   });
   const state = connected ? display.data : undefined;
   const pending = changeMutation.isPending;

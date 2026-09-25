@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -11,7 +11,7 @@ import { ForLaterSection } from "../saved/ForLaterSection";
 import { historyQuery, removeFromContinue, undoProgressAction } from "@/api/library";
 import { forLaterQuery } from "@/api/for-later";
 import { librarySourcesQuery } from "@/api/library";
-import { jellyfinConnectionQuery } from "@/api/jellyfin";
+import { jellyfinQuery } from "@/api/jellyfin";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { useOptionalSessionGate } from "@/session/session-context";
 import { progressTime, type HistoryPlayback } from "@/components/HistoryPanel";
@@ -25,21 +25,16 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
   connected: boolean;
   canPlay: boolean;
   canManageMetadata?: boolean;
-  playing: boolean;
   active: boolean;
-  onBrowse: (section: string) => void;
   onAddSource?: () => void;
   onPlay: HistoryPlayback;
   onAdd: (item: HistoryItem) => Promise<boolean>;
-  recentRadio?: unknown[];
-  onRadio?: unknown;
 }) {
-  const client = useQueryClient();
   const session = useOptionalSessionGate();
   const history = useQuery({ ...historyQuery(credentials), enabled: connected && active });
   const later = useQuery({ ...forLaterQuery(credentials), enabled: connected && active });
   const sources = useQuery({ ...librarySourcesQuery(credentials), enabled: connected && active && canManageMetadata });
-  const jellyfin = useQuery({ ...jellyfinConnectionQuery(credentials), enabled: connected && active && canManageMetadata });
+  const jellyfin = useQuery({ ...jellyfinQuery(credentials, true), enabled: connected && active && canManageMetadata });
   const iptv = useQuery({ ...iptvSourcesQuery(credentials), enabled: connected && active && canManageMetadata });
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
@@ -53,13 +48,11 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
     setPending(true); setError(""); setNotice("");
     try {
       if (action === "remove") {
-        const response = await removeFromContinue(credentials, item.mediaId);
-        const result = await response.json() as { error?: string; undoToken?: string; expiresAt?: number };
-        if (!response.ok) throw new Error(result.error || "Could not remove this title from Continue.");
-        await client.invalidateQueries({ queryKey: ["library", "history"] });
+        const result = await removeFromContinue(credentials, item.mediaId);
+        await history.refetch();
         if (result.undoToken && result.expiresAt && result.expiresAt > Date.now()) session?.offerUndo(`Removed ${item.title} from Continue`, async () => {
           await undoProgressAction(credentials, result.undoToken!);
-          await client.invalidateQueries({ queryKey: ["library", "history"] });
+          await history.refetch();
         }, result.expiresAt - Date.now());
         return;
       }
@@ -80,7 +73,7 @@ export function BrowseHome({ state, credentials, connected, canPlay, canManageMe
     </li></Item>)}</ul></section>}
     {!!savedMedia.length && <section className="find-home-section"><ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} inspect mediaOnly /></section>}
     {!history.isPending && !later.isPending && !unfinished.length && !savedMedia.length && <Empty className="find-empty items-start text-left"><EmptyHeader className="items-start"><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Search YouTube, Twitch, RaiPlay, radio stations and your TV folders at once, or paste a link from any page with video. What you don't finish shows up here to continue.</EmptyDescription></EmptyHeader><EmptyContent className="max-w-none items-start">
-      {canManageMetadata ? <div className="find-empty-sources"><h3>Sources on {host}</h3><div><span>TV folders</span><span>{sources.data?.sources.length ? `${sources.data.sources.length} folder${sources.data.sources.length === 1 ? "" : "s"} · ${sources.data.sources.some(source => source.status === "scanning") ? "Scanning" : sources.data.sources.some(source => source.status === "error" || source.status === "unavailable") ? "Needs attention" : "Ready"}` : "Not set up"}</span></div><div><span>Jellyfin</span><span>{jellyfin.data?.configured ? "Connected" : "Not connected"}</span></div><div><span>Live TV</span><span>{iptv.data?.sources.length ? `${iptv.data.sources.length} source${iptv.data.sources.length === 1 ? "" : "s"} · ${iptv.data.sources.some(source => source.error) ? "Needs attention" : "Ready"}` : "Not set up"}</span></div><div><span>Radio</span><span>avoid radio, built in</span></div>{onAddSource && <Button variant="outline" onClick={onAddSource}>Add a source</Button>}</div> : <p>An administrator can add TV folders, Jellyfin or Live TV in Settings.</p>}
+      {canManageMetadata ? <div className="find-empty-sources"><h3>Sources on {host}</h3><div><span>TV folders</span><span>{sources.data?.sources.length ? `${sources.data.sources.length} folder${sources.data.sources.length === 1 ? "" : "s"} · ${sources.data.sources.some(source => source.status === "scanning") ? "Scanning" : sources.data.sources.some(source => source.status === "error" || source.status === "unavailable") ? "Needs attention" : "Ready"}` : "Not set up"}</span></div><div><span>Jellyfin</span><span>{jellyfin.data?.connected ? "Connected" : "Not connected"}</span></div><div><span>Live TV</span><span>{iptv.data?.sources.length ? `${iptv.data.sources.length} source${iptv.data.sources.length === 1 ? "" : "s"} · ${iptv.data.sources.some(source => source.error) ? "Needs attention" : "Ready"}` : "Not set up"}</span></div><div><span>Radio</span><span>avoid radio, built in</span></div>{onAddSource && <Button variant="outline" onClick={onAddSource}>Add a source</Button>}</div> : <p>An administrator can add TV folders, Jellyfin or Live TV in Settings.</p>}
     </EmptyContent></Empty>}
   </section>;
 }

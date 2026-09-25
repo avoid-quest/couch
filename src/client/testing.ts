@@ -8,3 +8,4 @@ export const screen = new Proxy({} as ReturnType<typeof getQueriesForElement>, {
   get: (_target, property) => Reflect.get(getQueriesForElement(document.body), property),
 });
 export { fireEvent, getByLabelText, getByRole, getByText, queryByRole, queryByText, within } from "@testing-library/dom";
+

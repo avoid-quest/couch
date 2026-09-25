@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api/client";
+import { radioSourcesQuery } from "@/api/radio";
 import type { SourceCredentials } from "@/components/sourceTypes";
 
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
@@ -22,11 +23,7 @@ export function RadioSettings({ credentials, connected, canManage }: Props) {
   const [removing, setRemoving] = useState<string | null>(null);
   const available = connected && canManage && !!credentials;
   const canWrite = available && !busy;
-  const page = useQuery({
-    queryKey: ["radio", "settings-sources"],
-    enabled: available,
-    queryFn: () => apiFetch(credentials ?? empty, "/api/radio/sources").then(response => response.json() as Promise<{ sources: RadioPlaylist[] }>),
-  });
+  const page = useQuery({ ...radioSourcesQuery(credentials ?? empty), enabled: available });
   const sources = page.data?.sources ?? [];
   const builtIn = sources.find(source => source.id === avoidRadioPlaylistId);
 

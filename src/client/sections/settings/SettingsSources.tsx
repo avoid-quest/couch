@@ -1,8 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { librarySourcesQuery } from "@/api/library";
+import { librarySourcesQuery, metadataProviderQuery } from "@/api/library";
+import { jellyfinQuery } from "@/api/jellyfin";
+import { radioSourcesQuery } from "@/api/radio";
+import { streamingCommunityQuery } from "@/api/settings";
 import { iptvSourcesQuery } from "@/api/iptv";
 import { settingsPagePath, type SettingsPage } from "../../../shared/settings-pages";
 import { FolderSettings } from "./sources/FolderSettings";
@@ -40,10 +42,10 @@ function SourcesOverview({ credentials, connected, canManage }: SourceSettingsPr
   const empty = { origin: "", token: "" };
   const folders = useQuery({ ...librarySourcesQuery(credentials ?? empty), enabled: available });
   const iptv = useQuery({ ...iptvSourcesQuery(credentials ?? empty), enabled: available });
-  const jellyfin = useQuery({ queryKey: ["jellyfin", "settings-connection", canManage], enabled: available, queryFn: () => apiFetch(credentials ?? empty, `/api/jellyfin${canManage ? "/connection" : ""}`).then(response => response.json() as Promise<{ connected?: boolean; serverName?: string }>) });
-  const radio = useQuery({ queryKey: ["radio", "settings-sources"], enabled: available && canManage, queryFn: () => apiFetch(credentials ?? empty, "/api/radio/sources").then(response => response.json() as Promise<{ sources: { name: string; stationCount: number }[] }>) });
-  const metadata = useQuery({ queryKey: ["metadata", "provider"], enabled: available && canManage, queryFn: () => apiFetch(credentials ?? empty, "/api/metadata/provider").then(response => response.json() as Promise<{ configured: boolean }>) });
-  const streaming = useQuery({ queryKey: ["settings", "streaming-community"], enabled: available && canManage, queryFn: () => apiFetch(credentials ?? empty, "/api/settings/streamingcommunity").then(response => response.json() as Promise<{ origin?: string }>) });
+  const jellyfin = useQuery({ ...jellyfinQuery(credentials ?? empty, canManage), enabled: available });
+  const radio = useQuery({ ...radioSourcesQuery(credentials ?? empty), enabled: available && canManage });
+  const metadata = useQuery({ ...metadataProviderQuery(credentials ?? empty), enabled: available && canManage });
+  const streaming = useQuery({ ...streamingCommunityQuery(credentials ?? empty), enabled: available && canManage });
   const folderSources = folders.data?.sources ?? [];
   const details: Partial<Record<SourceKind, string>> = {
     folders: folderSources.length ? `${folderSources.length} ${folderSources.length === 1 ? "folder" : "folders"}, ${folderSources.reduce((total, item) => total + item.itemCount, 0).toLocaleString()} items` : "No folders added",

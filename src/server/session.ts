@@ -1,4 +1,4 @@
-import type { Action, PlaybackActor, ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
+import type { Action, Domain, PlaybackActor,ExternalSubtitle, PlaybackCommand, PlayerState, QueueEntry, RadioProgramme, SessionState } from "../shared/protocol";
 import type { Store } from "./store";
 import { createProgress, playbackMediaId, ViewingError } from "./progress";
 import { createRadioRetry } from "./radio-retry";
@@ -61,18 +61,21 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const cancelRadioRetry = () => { radioRetry.cancel(); state.radioRetry = null; };
   const isRadio = (entry: QueueEntry | undefined) => entry?.kind === "radio" || entry?.source.startsWith("radio:") === true;
-  const invalidate = (kind: "library" | "radio" | "iptv" | "provider" | "jellyfin" | "playlist" | "forLater" | "controller") => {
+  const invalidate = (...domains: Domain[]) => {
     if (!admitted()) return;
-    if (kind === "controller") {
+    if (domains.includes("controllers")) {
       state.installationName = store.installationName();
       state.setupStep = store.setupStep();
       state.administratorClaimed = store.administratorExists();
     }
-    const field = `${kind}Version` as const;
-    state[field] = (state[field] ?? 0) + 1;
+    const versions = { ...state.versions };
+    for (const domain of domains) versions[domain] = (versions[domain] ?? 0) + 1;
+    state.versions = versions;
     broadcast();
   };
-  const progress = createProgress(store, () => { state.progressError = null; invalidate("library"); }, options.now);
+  // Periodic checkpoints change only history and Continue; a finished viewing
+  // also refreshes the resume and watched marks shown in library listings.
+  const progress = createProgress(store, final => { state.progressError = null; if (final) invalidate("progress", "library"); else invalidate("progress"); }, options.now);
   const persistProgress = (save: () => void, required = false) => {
     try { save(); }
     catch {
@@ -423,7 +426,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     updateSystemAudio(audio: import("../shared/sound").SoundRouteState) {
       state.systemAudio = audio;
       if (audio.volume !== null) state.player.volume = audio.volume;
-      broadcast();
+      if (admitted()) invalidate("sound"); else broadcast();
     },
     saveAudioDelay(delay: number) {
       store.saveAudioDelay(delay);
@@ -521,14 +524,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     createProfile(name: unknown) {
       assertAdmitted();
       const profile = store.createProfile(name);
-      invalidate("library");
+      invalidate("library", "progress");
       return profile;
     },
     renameProfile(id: string, name: unknown, expectedName: string) {
       assertAdmitted();
       const profile = store.renameProfile(id, name, expectedName);
       if (state.activeProfile.id === id) state.activeProfile = profile;
-      invalidate("library");
+      invalidate("library", "progress");
       return profile;
     },
     namePerson(id: string, name: unknown, expectedName: string) {
@@ -536,7 +539,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (id !== state.activeProfile.id) throw new ViewingError("The active history changed on another remote. Reopen Your name before saving.", 409);
       const profile = store.namePerson(id, name, expectedName);
       state.activeProfile = profile;
-      invalidate("library");
+      invalidate("library", "progress");
       return profile;
     },
     removeProfile(id: string, expectedName: string) {
@@ -552,7 +555,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.progressError = null;
         cancelRadioRetry();
       }
-      invalidate("library");
+      invalidate("library", "progress");
       return profile;
     },
     selectProfile(id: string) {
@@ -565,7 +568,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       state.activeProfile = profile;
       state.preferences = preferences;
       cancelRadioRetry();
-      invalidate("library");
+      invalidate("library", "progress");
       return profile;
     },
     editProgress(mediaId: string, changes: { watched?: boolean; clearResume?: boolean }, item: { title: string; libraryItemId: string | null }) {
@@ -573,7 +576,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (changes.clearResume && progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before clearing its resume position.", 409);
       store.editSharedProgress(state.activeProfile.id, mediaId, changes, item);
       progress.discard(mediaId);
-      invalidate("library");
+      invalidate("library", "progress");
     },
     removeHistory(mediaId: string) {
       assertAdmitted();
@@ -581,14 +584,14 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       const removed = store.takeSharedProgress(mediaId);
       if (!removed.length) throw new ViewingError("History item not found.", 404);
       progress.discard(mediaId);
-      invalidate("library");
+      invalidate("library", "progress");
       return removed;
     },
     restoreProgress(removed: import("./store").ProgressSnapshot, expected: import("./store").ProgressSnapshot = []) {
       assertAdmitted();
       if (progress.mediaId === removed[0]?.mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before restoring its history.", 409);
       store.restoreSharedProgress(removed, expected);
-      invalidate("library");
+      invalidate("library", "progress");
     },
     command(action: Action, authorize = () => {}, playedBy?: PlaybackActor) {
       assertAdmitted();

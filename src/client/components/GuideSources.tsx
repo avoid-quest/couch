@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus, RefreshCw, Settings2, Trash2 } from "lucide-react";
-import type { ControllerIdentity } from "../../shared/controllers";
+import { useSessionGate } from "@/session/session-context";
 import type { GuideSource } from "../../shared/iptv";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -8,11 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export type GuideRequest = (path: string, init?: RequestInit) => Promise<Response>;
-type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean; controllerVersion: number; origin: string; token: string };
+type Props = { inline?: boolean; request: GuideRequest; sources: GuideSource[]; host: boolean; connected: boolean };
 
-export function GuideSources({ inline = false, request, sources, host, connected, controllerVersion, origin, token }: Props) {
+export function GuideSources({ inline = false, request, sources, host, connected }: Props) {
   const [open, setOpen] = useState(false);
-  const [identity, setIdentity] = useState<ControllerIdentity | null>(null);
+  const { identity } = useSessionGate();
   const [editing, setEditing] = useState<GuideSource | null>(null);
   const [name, setName] = useState("");
   const [playlistUrl, setPlaylistUrl] = useState("");
@@ -21,14 +21,6 @@ export function GuideSources({ inline = false, request, sources, host, connected
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
-  useEffect(() => {
-    setIdentity(null);
-    if (!connected) return;
-    const controller = new AbortController();
-    void fetch(`${origin}/api/controllers/me`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]) })
-      .then(async response => { const value = await response.json() as ControllerIdentity; if (response.ok && !controller.signal.aborted) setIdentity(value); }).catch(() => {});
-    return () => controller.abort();
-  }, [origin, token, connected, controllerVersion]);
   useEffect(() => { if (!open && !inline || !administrator) { setPlaylistUrl(""); setGuideUrl(""); } }, [open, inline, administrator]);
 
   async function mutate(path: string, method: string, value?: unknown) {
