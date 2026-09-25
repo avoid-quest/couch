@@ -60,33 +60,32 @@ afterEach(async () => {
 });
 
 test("a completed display poll cannot enable a second preview while the first is pending", async () => {
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try Living room TV" })); });
   await flush();
-  expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
+  expect(screen.getByRole("button", { name: "Try Living room TV" }).disabled).toBe(true);
   await act(async () => { queryClient.setQueryData(["display"], poll); });
-  expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
+  expect(screen.getByRole("button", { name: "Try Living room TV" }).disabled).toBe(true);
   // The write's returned state lands in the cache, so the pending preview locks further previews.
   await act(async () => { resolvePreview!(preview); });
   await flush();
-  expect(screen.getByRole("button", { name: "Preview on Living room TV" }).disabled).toBe(true);
-  expect(screen.getByRole("button", { name: "Keep this screen" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Try Living room TV" }).disabled).toBe(true);
+  expect(screen.getByRole("button", { name: "Keep" })).toBeDefined();
 });
 
 test("a display poll does not dismiss a mutation error", async () => {
   previewFails = true;
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try Living room TV" })); });
   await flush();
   expect(screen.getByRole("alert").textContent).toContain("Display unavailable");
   await act(async () => { queryClient.setQueryData(["display"], poll); });
   expect(screen.getByRole("alert").textContent).toContain("Display unavailable");
   previewFails = false;
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Preview on Living room TV" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try Living room TV" })); });
   await flush();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("a disconnect hides cached display state", async () => {
   await act(async () => { setConnected!(false); });
-  expect(screen.getByText("Reconnect to read the TV's displays.")).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Preview on Living room TV" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Try Living room TV" })).toBeNull();
 });

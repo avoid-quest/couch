@@ -9,7 +9,7 @@ let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof 
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string }> = [];
 let startup: StartupState;
-const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.textContent === label)!;
+const control = (label: string) => document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
 const flush = () => act(async () => { await Bun.sleep(20); });
 
 async function render() {
@@ -59,7 +59,7 @@ afterEach(async () => {
 test("startup reads through Query and applies the state the REST write returns", async () => {
   await render();
   expect(document.querySelector("[data-startup-mode]")!.textContent).toContain("Login screen");
-  await act(async () => button("Enable automatic startup").click());
+  await act(async () => control("Start on boot").click());
   await flush();
   expect(calls).toEqual([
     { path: "/api/settings/startup", method: "GET" },

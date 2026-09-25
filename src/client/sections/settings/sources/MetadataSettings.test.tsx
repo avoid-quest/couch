@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import { fireEvent, screen } from "../../../testing";
+import { toast } from "sonner";
+import { fireEvent, screen, within } from "../../../testing";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -18,7 +19,7 @@ const render = async () => {
 
 beforeEach(async () => {
   window = new Window({ url: "http://localhost" });
-  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "Event", "MouseEvent", "IS_REACT_ACT_ENVIRONMENT"]) {
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "Element", "Node", "DocumentFragment", "MutationObserver", "CustomEvent", "Event", "MouseEvent", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : (window as unknown as Record<string, unknown>)[key] });
   }
@@ -50,18 +51,18 @@ test("metadata provider reads through Query and invalidates by saving without a 
   });
   await act(async () => { document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(calls[1]).toEqual({ path: "/api/metadata/provider", method: "POST", body: { token: "tmdb-token" } });
-  expect(document.body.textContent).toContain("TMDB token saved on the TV");
+  expect(toast.getToasts().some(item => "title" in item && String(item.title).startsWith("Token saved."))).toBe(true);
 });
 
-test("clearing the TMDB token requires inline confirmation", async () => {
+test("clearing the TMDB token asks for confirmation", async () => {
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ path: new URL(String(input)).pathname, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
     return Response.json({ configured: !init?.method });
   }) as unknown as typeof fetch);
   await render();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Clear TMDB token" })));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Clear" })));
   expect(calls.filter(call => call.method === "POST")).toHaveLength(0);
-  expect(screen.getByRole("group", { name: "Confirm clearing TMDB token" })).toBeDefined();
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Clear token" })); await new Promise(resolve => setTimeout(resolve, 0)); });
+  const dialog = screen.getByRole("alertdialog", { name: "Clear the token?" });
+  await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Clear" })); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(calls.find(call => call.method === "POST")?.body).toEqual({ token: "" });
 });

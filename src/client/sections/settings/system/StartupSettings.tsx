@@ -1,7 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
+import { SettingsRow } from "@/components/SettingsRow";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Switch } from "@/components/ui/switch";
+import { TRY_AGAIN } from "@/copy";
 import { apiSend } from "@/api/client";
 import { startupQuery } from "@/api/settings";
 import type { StartupState } from "../../../../shared/startup";
@@ -15,29 +19,21 @@ export function StartupSettings({ credentials, connected }: Props) {
   const state = startup.data;
   const saving = useMutation({
     mutationFn: (enabled: boolean) => apiSend<StartupState>(credentials, "/api/settings/startup", { enabled }),
-    onSuccess: result => queryClient.setQueryData(startupQuery(credentials).queryKey, result),
+    onSuccess: result => { queryClient.setQueryData(startupQuery(credentials).queryKey, result); toast("Saved. Applies at the next startup."); },
   });
-  const pending = saving.isPending;
-  const error = saving.error ? saving.error instanceof Error ? saving.error.message : "Could not save TV startup. Refresh to check the effective setting." : null;
-  const notice = saving.isSuccess ? "Saved. Applies at the next startup." : null;
-  const save = () => { if (state && connected && !pending) saving.mutate(!state.enabled); };
+  const error = saving.error ? saving.error.message || "Couldn't save. Try again." : startup.error ? "Couldn't read startup." : null;
+  const fullscreen = state && (state.fullscreenAtLaunch ? "Opens fullscreen." : "Opens in a window.");
 
-  return (
-    <div className="space-y-3">
-      <h3>Automatic startup</h3>
-      <p className="text-muted-foreground">Start Couch when the TV computer turns on, without a login prompt.</p>
-      {state && (
-        <>
-          <p data-startup-mode>Effective startup: {state.enabled ? "Couch starts automatically" : "Login screen; Couch does not start automatically"}.</p>
-          <p data-startup-fullscreen>{state.enabled && state.fullscreenAtLaunch ? "Couch starts fullscreen at boot." : state.fullscreenAtLaunch ? "Couch opens fullscreen when its TV session is launched." : "Couch opens in a window."} Current TV window: {state.fullscreenNow === null ? "unavailable" : state.fullscreenNow ? "fullscreen" : "windowed"}.</p>
-          <Button variant="outline" className="min-h-11" disabled={!connected || pending} onClick={save}>{pending ? "Saving startup…" : state.enabled ? "Disable automatic startup" : "Enable automatic startup"}</Button>
-        </>
-      )}
-      {!state && !startup.error && <p className="text-muted-foreground">{connected ? "Reading TV startup…" : "Reconnect to read TV startup."}</p>}
-      <Collapsible><CollapsibleTrigger asChild><Button variant="ghost" className="min-h-11 px-0">Startup recovery</Button></CollapsibleTrigger><CollapsibleContent><p className="text-muted-foreground">After disabling, launch Couch again from SSH with your administrator account: run <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. The second command ends the current graphical session. For app recovery, use <code>sudo couch-session logs</code> and <code>sudo couch-session restart</code> from SSH.</p></CollapsibleContent></Collapsible>
-      {notice && <p role="status">{notice}</p>}
-      {(startup.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not read TV startup."}</AlertDescription></Alert>}
-      <Button variant="outline" className="min-h-11" disabled={!connected} onClick={() => void startup.refetch()}>Refresh startup</Button>
-    </div>
-  );
+  return <>
+    <SettingsRow label="Start on boot" description={<><span data-startup-mode>{state?.enabled ? "Couch starts automatically." : "Login screen at boot."}</span> {fullscreen}</>}>
+      <Switch aria-label="Start on boot" checked={saving.isPending ? saving.variables : !!state?.enabled} disabled={!connected || !state || saving.isPending} onCheckedChange={enabled => saving.mutate(enabled)} />
+    </SettingsRow>
+    <Collapsible>
+      <CollapsibleTrigger asChild><Button variant="ghost" className="-ml-2.5 text-muted-foreground">Startup recovery</Button></CollapsibleTrigger>
+      <CollapsibleContent className="pt-2 text-sm text-muted-foreground">
+        Over SSH: <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. For logs and restarts: <code>sudo couch-session logs</code>, <code>sudo couch-session restart</code>.
+      </CollapsibleContent>
+    </Collapsible>
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription><AlertAction><Button variant="outline" size="sm" disabled={!connected} onClick={() => { saving.reset(); void startup.refetch(); }}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+  </>;
 }

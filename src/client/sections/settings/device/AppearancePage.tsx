@@ -4,14 +4,12 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { useSessionGate } from "@/session/session-context";
 
 export function AppearancePage() {
-  const shell = useShell();
-  const { credentials } = shell;
+  const { credentials } = useShell();
   const { connected, identity, state, tvPresentation } = useSessionGate();
   return (
     <SettingsLayout section="appearance">
       <AppearanceSettings scope="device" tvPresentation={tvPresentation} credentials={credentials} connected={connected}
-        administrator={identity?.authority === "administrator" || identity?.authority === "host"}
-        appearance={state?.appearance} hostName={state?.installationName} />
+        administrator={identity?.authority === "administrator" || identity?.authority === "host"} appearance={state?.appearance} />
     </SettingsLayout>
   );
 }

@@ -4,7 +4,10 @@ import * as core from "@tauri-apps/api/core";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import { toast } from "sonner";
 import { fireEvent, screen } from "@/testing";
+
+const lastToast = () => { const item = toast.getToasts().at(-1); return item && "title" in item ? item.title : undefined; };
 import type { Diagnostics } from "../../../../shared/diagnostics";
 
 const report: Diagnostics = {
@@ -50,7 +53,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await act(async () => root.unmount());
-  request.mockRestore(); invoke.mockRestore();
+  toast.dismiss(); request.mockRestore(); invoke.mockRestore();
   await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
@@ -61,10 +64,10 @@ async function render(origin = "http://local-installation") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => root.render(<QueryClientProvider client={client}><AdvancedSettings credentials={{ origin, token: "selected-token" }} connected /></QueryClientProvider>));
   await flush();
-  await screen.findByRole("button", { name: /diagnostics/i });
+  await screen.findByRole("button", { name: "Export" });
 }
 
-async function save(label = "Save diagnostics") {
+async function save(label = "Export") {
   await act(async () => fireEvent.click(screen.getByRole("button", { name: label })));
   await flush();
 }
@@ -74,7 +77,7 @@ test("local owner saves the selected installation's sanitized JSON", async () =>
   expect((request.mock.calls as Array<[RequestInfo | URL]>).some(call => String(call[0]) === "http://local-installation/api/diagnostics/export")).toBe(true);
   expect(invoke).toHaveBeenCalledWith("save_diagnostics_export", bytes);
   expect(JSON.parse(new TextDecoder().decode(invoke.mock.calls[0]?.[1] as Uint8Array))).toEqual(report);
-  expect(screen.getByText("Diagnostics report saved.")).toBeDefined();
+  expect(lastToast()).toBe("Exported.");
 });
 
 test("bundled remote Administrator saves the selected remote installation", async () => {
@@ -86,7 +89,7 @@ test("bundled remote Administrator saves the selected remote installation", asyn
 test("cancel and denied destination give distinct feedback", async () => {
   saveResult = false;
   await render(); await save();
-  expect(screen.getByText("Save canceled. No file was saved.")).toBeDefined();
+  expect(lastToast()).toBe("Canceled.");
   saveResult = "Could not save the diagnostics report: Permission denied. No complete file was saved.";
   await save();
   expect(screen.getByText(/Permission denied/)).toBeDefined();
@@ -99,7 +102,7 @@ test("revoked Administrator access and interrupted transfers never open the save
   expect(invoke).not.toHaveBeenCalled();
   denied = false; interrupted = true;
   await save();
-  expect(screen.getByText("Diagnostic transfer stopped before the report was complete. No file was saved.")).toBeDefined();
+  expect(screen.getByText("Export interrupted. Nothing saved.")).toBeDefined();
   expect(invoke).not.toHaveBeenCalled();
 });
 
@@ -108,11 +111,11 @@ test("browser retains a JSON download", async () => {
   const create = spyOn(URL, "createObjectURL").mockReturnValue("blob:diagnostics");
   const click = spyOn(window.HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   try {
-    await render(); await save("Export diagnostics");
+    await render(); await save();
     expect(create).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
     expect(invoke).not.toHaveBeenCalled();
-    expect(screen.getByText("Diagnostic download started.")).toBeDefined();
+    expect(lastToast()).toBe("Downloaded.");
   } finally {
     create.mockRestore(); click.mockRestore();
   }

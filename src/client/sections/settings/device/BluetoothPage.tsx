@@ -5,12 +5,10 @@ import { useSessionGate } from "@/session/session-context";
 
 export function BluetoothPage() {
   const { credentials } = useShell();
-  const { connected, identity } = useSessionGate();
+  const { connected } = useSessionGate();
   return (
     <SettingsLayout section="bluetooth">
-      {(identity?.authority === "administrator" || identity?.authority === "host") && credentials
-        ? <BluetoothSettings credentials={credentials} connected={connected} />
-        : <p className="text-muted-foreground">An administrator can manage Bluetooth.</p>}
+      {credentials && <BluetoothSettings credentials={credentials} connected={connected} />}
     </SettingsLayout>
   );
 }

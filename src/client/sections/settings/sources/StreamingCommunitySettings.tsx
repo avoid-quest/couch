@@ -1,47 +1,46 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ADMIN_ONLY } from "@/copy";
 import { apiSend } from "@/api/client";
 import { streamingCommunityQuery } from "@/api/settings";
 import { streamingCommunityOrigin, validStreamingCommunityOrigin } from "../../../../shared/streamingcommunity";
-import type { SourceCredentials } from "@/components/sourceTypes";
+import type { SourceCredentials, SourceSettingsProps } from "@/components/sourceTypes";
 
-type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
 const empty: SourceCredentials = { origin: "", token: "" };
 
-export function StreamingCommunitySettings({ credentials, connected, canManage }: Props) {
+export function StreamingCommunitySettings({ credentials, connected, canManage }: SourceSettingsProps) {
   const queryClient = useQueryClient();
-  const [site, setSite] = useState("");
+  const [draft, setDraft] = useState<string | null>(null);
   const available = connected && canManage && !!credentials;
   const page = useQuery({ ...streamingCommunityQuery(credentials ?? empty), enabled: available });
+  const site = draft ?? page.data?.origin ?? "";
   const saving = useMutation({
     mutationFn: (origin: string) => apiSend<{ origin: string }>(credentials!, "/api/settings/streamingcommunity", { origin }),
-    onSuccess: value => queryClient.setQueryData(streamingCommunityQuery(credentials!).queryKey, value),
+    onSuccess: value => { queryClient.setQueryData(streamingCommunityQuery(credentials!).queryKey, value); setDraft(null); toast("Address saved."); },
   });
   const pending = saving.isPending;
-  const error = saving.error ? saving.error.message || "Could not save the website origin." : null;
-  const notice = saving.isSuccess ? "Website origin saved. Paste links from this website; saved links keep their original address." : null;
+  const value = site.trim().replace(/\/$/, "");
+  const error = saving.error ? saving.error.message || "Couldn't save the site address." : page.error ? "Couldn't read the site address." : null;
 
   function save(event: FormEvent) {
     event.preventDefault();
-    if (credentials && available && page.data && !pending) saving.mutate(site.trim().replace(/\/$/, ""));
+    if (credentials && available && page.data && !pending) saving.mutate(value);
   }
 
   return (
-    <section aria-label="StreamingCommunity settings" className="space-y-3 border-t pt-4" data-tv-local-only>
-      <h3 className="font-semibold">StreamingCommunity</h3>
-      <p className="text-sm text-muted-foreground">Browse and search StreamingCommunity in Find, or paste a film or episode link to play it on the TV. If the website moves, an administrator can update its address here. Saved links keep their original address.</p>
-      {canManage ? (
-        <form className="space-y-3" onSubmit={save}>
-          <Label htmlFor="streamingcommunity-origin">Current website origin</Label>
-          <Input autoComplete="off" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setSite(event.target.value)} placeholder={streamingCommunityOrigin} spellCheck={false} type="url" value={site || page.data?.origin || ""} />
-          <Button disabled={!available || page.isFetching || pending || !validStreamingCommunityOrigin(site.trim().replace(/\/$/, ""))}>{pending ? "Saving…" : "Save website origin"}</Button>
+    <SettingsSection aria-label="StreamingCommunity settings" description="If the site moves, update its address here." data-tv-local-only>
+      {canManage ? <SettingsRow label="Site address" htmlFor="streamingcommunity-origin">
+        <form className="flex w-full flex-wrap items-center gap-2" onSubmit={save}>
+          <Input autoComplete="off" className="min-w-0 flex-1" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setDraft(event.target.value)} placeholder={streamingCommunityOrigin} spellCheck={false} type="url" value={site} />
+          <Button type="submit" variant="outline" disabled={!available || page.isFetching || pending || value === page.data?.origin || !validStreamingCommunityOrigin(value)}>{pending ? "Saving…" : "Save"}</Button>
         </form>
-      ) : <p className="text-sm text-muted-foreground">Use an administrator remote to update the website origin.</p>}
-      {(page.error || error) && <p className="text-sm" role="alert">{error ?? "Could not read the website origin."}</p>}
-      {notice && <p className="text-sm" role="status">{notice}</p>}
-    </section>
+      </SettingsRow> : <p className="text-sm text-muted-foreground">{ADMIN_ONLY}</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    </SettingsSection>
   );
 }

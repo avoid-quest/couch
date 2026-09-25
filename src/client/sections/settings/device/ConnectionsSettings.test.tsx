@@ -99,30 +99,30 @@ test("an administrator opens the pairing dialog, then sees every device with its
   expect(screen.getByRole("img", { name: "Pair another device with code 246810" })).toBeDefined();
   await act(async () => { fireEvent.click(button("Close")); });
   expect(screen.getByText("Browser")).toBeDefined();
-  expect(screen.getByText("(this device)")).toBeDefined();
+  expect(screen.getByText("(this remote)")).toBeDefined();
   expect(screen.getByText("Phone")).toBeDefined();
   expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
-  expect(within(screen.getByText("(this device)").closest("li")!).queryAllByRole("button")).toHaveLength(0);
+  expect(within(screen.getByText("(this remote)").closest("[data-remote]")!).queryAllByRole("button")).toHaveLength(0);
 });
 
 test("the host can change whether this computer accepts remotes", async () => {
   await render({ authority: "host", controller: null, claimAvailable: false }, false);
   expect(button("Pair a remote").disabled).toBe(true);
-  expect(screen.getByText("Turn on remote control before pairing a device.")).toBeDefined();
-  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remote control" })); });
+  expect(screen.getByText("Turn on Allow remotes first.")).toBeDefined();
+  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remotes" })); });
   await flush();
   const write = calls.find(call => call.path === "/api/settings/sharing")!;
   expect(write.method).toBe("POST");
   expect(write.body).toEqual({ enabled: true });
   expect(sharingChanges).toEqual([true]);
-  expect(screen.getByRole("switch", { name: "Allow remote control" }).getAttribute("aria-checked")).toBe("true");
+  expect(screen.getByRole("switch", { name: "Allow remotes" }).getAttribute("aria-checked")).toBe("true");
   expect(button("Pair a remote").disabled).toBe(false);
 });
 
 test("an administrator can save a network address", async () => {
   await render();
   await act(async () => { fireEvent.change(screen.getByRole("textbox", { name: "Network address" }), { target: { value: "http://couch.home:4100" } }); });
-  await act(async () => { fireEvent.click(button("Save address")); });
+  await act(async () => { fireEvent.click(button("Save")); });
   await flush();
   expect(calls.some(call => call.path === "/api/settings/origin-domain" && call.method === "POST" && JSON.stringify(call.body) === JSON.stringify({ domain: "http://couch.home:4100" }))).toBe(true);
   expect((screen.getByRole("textbox", { name: "Network address" }) as HTMLInputElement).value).toBe("http://couch.home:4100");
@@ -131,7 +131,7 @@ test("an administrator can save a network address", async () => {
 test("a failed sharing save keeps pairing disabled and reports the error", async () => {
   sharingFailure = true;
   await render({ authority: "host", controller: null, claimAvailable: false }, false);
-  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remote control" })); });
+  await act(async () => { fireEvent.click(screen.getByRole("switch", { name: "Allow remotes" })); });
   await flush();
   expect(sharingChanges).toEqual([]);
   expect(screen.getByRole("alert").textContent).toContain("Unavailable");
@@ -160,7 +160,7 @@ test("turning off remote control closes an open pairing dialog", async () => {
 
 test("promoting a controller writes the role and reloads the list", async () => {
   await render();
-  await act(async () => { fireEvent.click(button("Make administrator")); });
+  await act(async () => { fireEvent.click(button("Make admin")); });
   await flush();
   const write = calls.find(call => call.method === "POST")!;
   expect(write.path).toBe("/api/controllers/other/role");
@@ -172,7 +172,7 @@ test("removing a device deletes it and drops the row", async () => {
   await render();
   await act(async () => { fireEvent.click(button("Remove")); });
   expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(false);
-  await act(async () => { fireEvent.click(button("Remove")); });
+  await act(async () => { fireEvent.click(within(screen.getByRole("alertdialog", { name: "Remove Phone?" })).getByRole("button", { name: "Remove" })); });
   await flush();
   expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(true);
   expect(document.body.textContent).not.toContain("Phone");

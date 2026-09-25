@@ -1,8 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, RefreshCw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
+import { SettingsRow, SettingsSection } from "@/components/SettingsRow";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { diagnosticsQuery } from "@/api/settings";
 import { isNativeHost } from "@/session/native-context";
@@ -16,16 +18,17 @@ function useExportDiagnostics(credentials: ApiCredentials, native: boolean) {
     mutationFn: async () => {
       const response = await apiFetch(credentials, "/api/diagnostics/export", {}, 10_000);
       if (native) {
-        const bytes = await response.arrayBuffer().catch(() => { throw new Error("Diagnostic transfer stopped before the report was complete. No file was saved."); });
-        return await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes)) ? "Diagnostics report saved." : "Save canceled. No file was saved.";
+        const bytes = await response.arrayBuffer().catch(() => { throw new Error("Export interrupted. Nothing saved."); });
+        return await invoke<boolean>("save_diagnostics_export", new Uint8Array(bytes)) ? "Exported." : "Canceled.";
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url; link.download = "couch-diagnostics.json";
       document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1_000);
-      return "Diagnostic download started.";
+      return "Downloaded.";
     },
+    onSuccess: notice => toast(notice),
   });
 }
 
@@ -35,53 +38,44 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
   const native = isNativeHost();
   const exportDiagnostics = useExportDiagnostics(credentials, native);
   const exporting = exportDiagnostics.isPending;
-  const loading = diagnostics.isPending || diagnostics.isFetching;
+  const loading = diagnostics.isFetching;
   const reason: unknown = exportDiagnostics.error;
-  const exportError = !reason ? null : reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Could not save diagnostics. Check the connection and administrator access, then try again.";
-  const error = diagnostics.error ? "Could not load diagnostics. Check the connection and administrator access, then refresh." : exportError;
-  const notice = exportDiagnostics.data ?? null;
-  const refresh = () => void diagnostics.refetch();
+  const exportError = !reason ? null : reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "Couldn't export diagnostics.";
+  const error = diagnostics.error ? "Couldn't load diagnostics." : exportError;
 
-  return <div className="min-w-0 space-y-4" data-advanced-settings>
-    <p className="text-muted-foreground">System details and diagnostics.</p>
-    <div className="flex flex-wrap gap-2">
-      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exporting} onClick={refresh}><RefreshCw aria-hidden="true" />Refresh</Button>
-      <Button variant="outline" className="min-h-11" disabled={!connected || loading || exporting || !report} onClick={() => exportDiagnostics.mutate()}><Download aria-hidden="true" />{exporting ? "Exporting…" : native ? "Save diagnostics" : "Export diagnostics"}</Button>
-    </div>
-    <p className="text-xs text-muted-foreground">{native ? "Choose where to save the sanitized JSON report." : "Downloads a sanitized JSON report."} URLs and credentials are removed.</p>
-    {!connected && <p role="status">Connect to the TV to load diagnostics.</p>}
-    {loading && <p role="status">Loading diagnostics…</p>}
-    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-    {notice && <p role="status">{notice}</p>}
-    {report && <>
-      <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for up to {report.limits.helperSeconds / 60} minutes.</p>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Build and system</h3><DiagnosticFacts facts={[
-        { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged coordinator" : "Development coordinator" },
-        { name: "Commit", value: report.build.revision, source: "Coordinator build" },
-        { name: "Build target", value: report.build.target, source: "Coordinator build" },
-        ...report.system,
-      ]} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Native player, display and audio</h3>{report.native ? <DiagnosticFacts facts={[
-        { name: "Native version", value: report.native.build.version, source: "Native host build" },
-        { name: "Native commit", value: report.native.build.revision, source: "Native host build" },
-        ...report.native.facts,
-      ]} /> : <p className="text-muted-foreground">{report.nativeError ?? "Native details are unavailable."}</p>}</section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Media helpers</h3><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Effective configuration</h3><DiagnosticFacts facts={report.configuration} /></section>
-      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Sources</h3>{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
-      <section className="space-y-2 border-t border-border py-4">
-        <h3 className="font-medium">Recent errors</h3>
-        <p className="text-xs text-muted-foreground">Up to {report.limits.retentionDays} days, {report.limits.recentEntries} entries or {report.limits.historyBytes / 1024} KiB. Dates and times are UTC.</p>
-        <p className="text-xs text-muted-foreground">Current session started {diagnosticTime(report.sessionStartedAt)}.</p>
-        {report.historyError && <p role="status">{report.historyError}</p>}
-        {report.recent.length ? <ol className="max-h-72 divide-y divide-border overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 space-y-1 break-words py-3">
-          <p className="text-xs text-muted-foreground">{diagnosticTime(entry.at)} · {entry.source} · {entry.sessionId === report.sessionId ? "Current session" : "Earlier session"}</p>
-          <p>{entry.message}</p>
-          <p className="text-xs text-muted-foreground">Build {entry.build.version ?? "unknown"} · Commit {entry.build.revision ?? "unknown"}</p>
-          {entry.count > 1 && <p className="text-xs text-muted-foreground">{entry.count} occurrences. Last: {diagnosticTime(entry.lastAt)}</p>}
-        </li>)}</ol> : <p className="text-muted-foreground">No recent errors recorded.</p>}
-      </section>
-    </>}
+  return <div className="flex min-w-0 flex-col gap-8" data-advanced-settings>
+    <SettingsSection>
+      <SettingsRow label="Diagnostics" description="JSON report without URLs or credentials.">
+        <Button variant="outline" disabled={!connected || loading || exporting || !report} onClick={() => exportDiagnostics.mutate()}>{exporting ? "Exporting…" : "Export"}</Button>
+        <Button variant="ghost" disabled={!connected || loading || exporting} onClick={() => void diagnostics.refetch()}>Refresh</Button>
+      </SettingsRow>
+      {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />Collecting…</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {report && <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for {report.limits.helperSeconds / 60} minutes.</p>}
+    </SettingsSection>
     <ToolsSettings credentials={credentials} connected={connected} />
+    {report && <>
+      <SettingsSection title="Build and system"><DiagnosticFacts facts={[
+        { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged server" : "Dev server" },
+        { name: "Commit", value: report.build.revision, source: "Server build" },
+        { name: "Build target", value: report.build.target, source: "Server build" },
+        ...report.system,
+      ]} /></SettingsSection>
+      <SettingsSection title="Player, display and audio">{report.native ? <DiagnosticFacts facts={[
+        { name: "App version", value: report.native.build.version, source: "App build" },
+        { name: "App commit", value: report.native.build.revision, source: "App build" },
+        ...report.native.facts,
+      ]} /> : <p className="text-sm text-muted-foreground">{report.nativeError ?? "Not available."}</p>}</SettingsSection>
+      <SettingsSection title="Media helpers"><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></SettingsSection>
+      <SettingsSection title="Configuration"><DiagnosticFacts facts={report.configuration} /></SettingsSection>
+      <SettingsSection title="Sources">{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No errors" }))} /> : <p className="text-sm text-muted-foreground">No sources.</p>}</SettingsSection>
+      <SettingsSection title="Recent errors" description={`Up to ${report.limits.retentionDays} days or ${report.limits.recentEntries} entries, in UTC. This session started ${diagnosticTime(report.sessionStartedAt)}.`}>
+        {report.historyError && <Alert><AlertDescription>{report.historyError}</AlertDescription></Alert>}
+        {report.recent.length ? <ol className="flex max-h-96 min-w-0 flex-col overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 border-b py-2 text-sm break-words">
+          <p>{entry.message}</p>
+          <p className="text-xs text-muted-foreground">{[diagnosticTime(entry.at), entry.source, entry.sessionId === report.sessionId ? "This session" : "Earlier session", `Build ${entry.build.version ?? "unknown"}`, entry.count > 1 && `${entry.count}×, last ${diagnosticTime(entry.lastAt)}`].filter(Boolean).join(" · ")}</p>
+        </li>)}</ol> : <p className="text-sm text-muted-foreground">No recent errors.</p>}
+      </SettingsSection>
+    </>}
   </div>;
 }
