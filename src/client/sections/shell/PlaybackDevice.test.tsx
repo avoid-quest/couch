@@ -159,6 +159,7 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
   await act(async () => fireEvent.click(button("Playing here"))); await flush();
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "http://192.168.1.10:4100" }))); await flush();
   expect(screen.getByText(/turns off this computer's remote control/)).toBeDefined();
+  expect(screen.getByRole("dialog").hasAttribute("data-tv-local-only")).toBe(true);
   expect(screen.queryByText(/stops playback on this computer/)).toBeNull();
   expect(choice.mode).toBe("local");
   await act(async () => fireEvent.click(button("Stop and switch"))); await flush();
@@ -198,6 +199,28 @@ test("closing the device chooser reconnects the same remote and restores trigger
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial + 1);
   expect(choice.mode).toBe("remote");
   expect(document.activeElement).toBe(button(`Playing on ${choice.address}`));
+});
+
+test("a route change closes Play on and resumes the selected remote connection", async () => {
+  choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
+  const { NativeModeGate, PlaybackDevice } = await import("./PlaybackDevice");
+  const screenFor = (path: string) => <NativeModeGate><PlaybackDevice key={path} /></NativeModeGate>;
+  await act(async () => root.render(screenFor("/find"))); await flush();
+  const attempts = () => invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
+  const initial = attempts();
+  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
+  expect(attempts()).toBe(initial);
+  await act(async () => root.render(screenFor("/now"))); await flush();
+  expect(attempts()).toBe(initial + 1);
+});
+
+test("the native Play on control and its portal stay local to this computer", async () => {
+  choice.mode = "local";
+  await render();
+  const trigger = button("Playing here");
+  expect(trigger.hasAttribute("data-tv-local-only")).toBe(true);
+  await act(async () => fireEvent.click(trigger)); await flush();
+  expect(document.querySelector('[data-slot="popover-content"]')?.hasAttribute("data-tv-local-only")).toBe(true);
 });
 
 test("Play on marks the current computer and switches directly to a remembered Couch", async () => {

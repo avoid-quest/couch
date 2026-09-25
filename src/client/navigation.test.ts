@@ -18,8 +18,16 @@ test("D-pad enters the visible page control and Right stops at a result row edge
   const host = window.document.body.appendChild(window.document.createElement("div"));
   const root = createRoot(host as unknown as HTMLElement);
   try {
-    window.document.body.insertAdjacentHTML("beforeend", '<main data-tv-navigation-scope><header class="app-header"><button id="header" data-x="0" data-y="0">Find</button></header><section><button data-page-first style="display:none">Hidden select</button><button id="first" data-page-first data-x="0" data-y="50">First page control</button><div data-nav-row><button id="play" data-x="0" data-y="100">Play</button><button id="save" data-x="100" data-y="100">Save</button></div><div data-nav-row><button id="next" data-x="220" data-y="150">Next row</button></div></section></main>');
+    window.document.body.insertAdjacentHTML("beforeend", '<main data-tv-navigation-scope><header class="app-header"><button id="local" data-tv-local-only data-x="0" data-y="0">Play on</button><button id="header" data-x="100" data-y="0">Find</button></header><section><button data-page-first style="display:none">Hidden select</button><button id="first" data-page-first data-x="0" data-y="50">First page control</button><div data-nav-row><button id="play" data-x="0" data-y="100">Play</button><button id="save" data-x="100" data-y="100">Save</button></div><div data-nav-row><button id="next" data-x="220" data-y="150">Next row</button></div></section></main>');
     await act(async () => root.render(createElement(NavigationHarness)));
+    const local = window.document.getElementById("local") as unknown as HTMLElement;
+    let localClicks = 0;
+    local.addEventListener("click", () => localClicks++);
+    local.focus();
+    applyTvNavigation("select");
+    expect(localClicks).toBe(0);
+    applyTvNavigation("down");
+    expect(window.document.activeElement?.id).toBe("header");
     (window.document.getElementById("header") as unknown as HTMLElement).focus();
     applyTvNavigation("down");
     expect(window.document.activeElement?.id).toBe("first");

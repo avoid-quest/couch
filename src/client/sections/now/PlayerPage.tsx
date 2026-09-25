@@ -82,7 +82,11 @@ export function PlayerPage() {
   const currentProgramme = programme?.playbackId === player?.playbackId ? programme : null;
   const artwork = currentProgramme?.artworkUrl ? <MediaArtwork thumbnail={currentProgramme.artworkUrl} title={currentProgramme.title} /> : current?.artworkId ? <AuthArtwork origin={credentials.origin} token={credentials.token} id={current.artworkId} /> : current?.thumbnail ? <MediaArtwork thumbnail={current.thumbnail} title={current.title} /> : undefined;
   const openPanel = (value: Panel, trigger: HTMLButtonElement) => { if (!player?.playbackId) return; panelTrigger.current = trigger; setPanelState({ playbackId: player.playbackId, panel: value }); setShown(true); };
-  if (!current) return null;
+  if (!current) return <section className="player-page player-idle mx-auto max-w-5xl pt-10" data-page="Now" aria-label="Now">
+    <h1 className="text-[clamp(2.25rem,5vw,3.5rem)] font-semibold leading-tight">Nothing playing</h1>
+    <p className="mt-2 text-lg text-muted-foreground">Choose something from Find, or play an item from your queue.</p>
+    <div className="mt-12 border-t border-border pt-5"><QueuePanel state={state} credentials={credentials} connected={connected} available={available} nativeHost={nativeHost} defaultQuality={videoQualityPreference.quality} run={run} /></div>
+  </section>;
   return <section ref={root} className="player-page" data-page="Now" aria-label="Player" onMouseMove={playing ? wake : undefined}>
     <div className="player-picture" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {elsewhere ? <div className="flex h-full flex-col justify-center gap-6 px-5 pt-6 pb-56 sm:px-8 lg:flex-row lg:items-center lg:justify-start lg:gap-12 lg:px-20 lg:pb-48">{artwork && <div className="aspect-video w-full max-w-80 shrink-0 overflow-hidden lg:w-[min(35vw,35rem)] lg:max-w-none [&_img]:size-full [&_img]:object-cover">{artwork}</div>}<div className="min-w-0"><p className="text-lg text-muted-foreground">Playing on {state?.installationName || "another Couch"}</p><h1 className="my-2 break-words text-[clamp(2rem,5vw,3rem)] leading-tight font-semibold">{current?.title}</h1><p className="max-w-[50ch] text-base text-muted-foreground sm:text-lg">The picture and sound are on {state?.installationName || "another Couch"}. Everything here controls it.</p></div></div>

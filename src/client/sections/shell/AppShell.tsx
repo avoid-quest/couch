@@ -59,8 +59,8 @@ function useShellValue() {
   const lastBrowsePath = useRef("/find");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
   useEffect(() => {
-    if (section === "Now" && state && !state.currentEntryId) router.history.replace(lastBrowsePath.current);
-  }, [section, state?.currentEntryId, !!state, router]);
+    if (section === "Now" && state && !state.currentEntryId && state.queue.length === 0) router.history.replace(lastBrowsePath.current);
+  }, [section, state?.currentEntryId, state?.queue.length, !!state, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
@@ -266,6 +266,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
       <header className="app-header">
         <nav className="section-nav" aria-label="Main navigation">{navItems.map(({ name, label }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined} onClick={() => { if (name === "Find") shell.closeOnlineRequest(); }}>{label}</Link></Button>)}</nav>
         <div className="header-status">
+          {!current && !!state?.queue.length && <Button asChild variant="ghost"><Link to="/" aria-label="Open queue">Queue ({state.queue.length})</Link></Button>}
           {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} localHost={localHost} state={state} run={run} />}
           {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={state?.installationName ?? details?.name} state={state} run={run} />}
           {nativeHost && !localHost && !tvPresentation && <InstallationUpdates />}

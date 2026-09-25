@@ -253,6 +253,8 @@ body :is([data-slot="popover-content"], [data-slot="sheet-content"]) :is(button,
 .app-shell .player-page { position: relative; height: 100dvh; min-height: 28rem; overflow: hidden; background: #000; }
 .app-shell .player-idle { height: auto; min-height: 100dvh; overflow: visible; }
 .app-shell .player-idle .queue-panel-standard { padding-inline: 0; }
+.app-shell .player-idle .queue-standard-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.app-shell .player-idle .queue-standard-header h2 { display: block; font-size: 1.5rem; font-weight: 600; }
 .app-shell .player-picture, .app-shell .player-picture .video-stage { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border: 0; border-radius: 0; }
 .app-shell .player-page .audio-stage-caption { visibility: hidden; }
 .app-shell .player-audio-stage { position: absolute; inset: 0; display: flex; align-items: center; gap: 3rem; padding: 3rem 5rem 12rem; pointer-events: none; }
