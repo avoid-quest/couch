@@ -34,15 +34,21 @@ around playback.
 ## Add an optional DNS name
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
-The name must work from the TV and each phone that will use it. Add its HTTP
-origin using Couch's port:
+The name must work from the TV and each phone that will use it. On the playback
+computer, open **Settings → Connections → Local network domain**, enter the
+hostname without a scheme or port (for example, `couch.home`), and save. Couch
+uses its current HTTP port and keeps the direct IP address available.
+
+For multiple names or a bare name on port 80, add HTTP origins through the
+launching environment instead:
 
 ```sh
 COUCH_ADVERTISE_URLS=http://couch.home:4100
 ```
 
-Set this in the same launching environment or TV environment file and restart
-Couch. Multiple names can be comma-separated. Origins cannot contain credentials,
+Set this in the launching environment or TV environment file and restart Couch.
+Multiple names can be comma-separated and work alongside the name saved in
+Settings. Origins cannot contain credentials,
 paths, queries or fragments. HTTPS and names on any other port are unsupported
 by this listener. Setting an origin does not create a DNS or mDNS record.
 

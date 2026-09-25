@@ -39,6 +39,12 @@ export const historyQuery = (credentials: Credentials, provider?: string) =>
 export const removeHistory = (credentials: Credentials, mediaId: string) =>
   apiFetch(credentials, `/api/progress/${encodeURIComponent(mediaId)}`, { method: "DELETE" });
 
+export const removeFromContinue = (credentials: Credentials, mediaId: string) =>
+  apiFetch(credentials, `/api/progress/${encodeURIComponent(mediaId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clearResume: true }) });
+
+export const undoProgressAction = (credentials: Credentials, undoToken: string) =>
+  apiFetch(credentials, "/api/progress/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: undoToken }) });
+
 export type MusicBrowse =
   | { kind: "artists" | "albums"; artist?: MusicArtist; q: string; offset: number }
   | { kind: "album"; album: MusicAlbum; q: string; offset: number };

@@ -7,7 +7,7 @@ import type { ConnectionInfo, PlaybackCommand, PlayerState, ServerMessage, Sessi
 import { frontendPaths } from "../../src/shared/page-paths";
 import { seedConfiguredFixture } from "./configured-fixture";
 import { remoteSocketUrl } from "./build";
-import { startHttpRemote, type Wait } from "./ui";
+import { assertResponsive, startHttpRemote, type Wait } from "./ui";
 
 // The existing WebKit/X11 HTTP-remote driver, with the production sidecar and
 // a pipe-level native peer. Run in the Linux test container (including its null
@@ -136,9 +136,10 @@ try {
   await ui.button("Stop playback");
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
-  await ui.button("YouTube");
   await ui.type("#media-search", "provider fixture");
-  await ui.button("Play: Provider result fixture");
+  await until("provider fixture appears in Find", async () => await ui.execute('return !!document.querySelector(\'[aria-label="Play Provider result fixture"]\')'));
+  await assertResponsive(ui, "Phone Find");
+  await ui.button("Play Provider result fixture");
   await until("provider result Play creates one occurrence and reaches the native pipe", () => {
     const occurrences = latest?.queue.filter(item => item.source === `web:${providerUrl}`) ?? [];
     return occurrences.length === 1 && latest?.currentEntryId === occurrences[0]?.id && latest?.player.status === "playing"
@@ -151,7 +152,7 @@ try {
   await until("provider playback stops through the browser", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Saved");
   await remote.refresh();
-  await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !!document.querySelector('.primary-nav')"));
+  await until("refresh retains the deep-link route and pairing", async () => await ui.execute("return location.pathname") === "/saved" && await ui.execute("return !!localStorage.getItem('couch.remote-token') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && !!document.querySelector('.section-nav')"));
   await ui.section("Now");
   assert.equal(await ui.execute("return isSecureContext"), true, "Loopback supplies a supported secure context; ordinary HTTP LAN addresses do not");
   const registrations = () => ui.request(`/session/${ui.session()}/execute/async`, {
@@ -165,6 +166,7 @@ try {
   receipt = JSON.stringify({ revision: build.revision, build, simulatedNative: true, hardwareVerified: false, checks, assets }, null, 2);
 } finally {
   let cleanupError: unknown;
+  if (!receipt) await remote?.screenshot("journey-failure").catch(() => {});
   try { await remote?.close(); } catch (error) { cleanupError = error; }
   try { socket?.close(); } catch (error) { cleanupError ??= error; }
   try { send({ type: "shutdown" }); } catch { /* The process may already have failed. */ }

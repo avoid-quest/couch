@@ -29,11 +29,11 @@ const media = Bun.serve({ hostname: "127.0.0.1", port: 4200, fetch: () => new Re
 try {
   await until("diagnostics native driver starts", async () => { try { return (await fetch("http://127.0.0.1:4444/status")).ok; } catch { return false; } });
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('[aria-label=Settings]')"));
+  await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
   await tv.button("Settings"); await tv.settingsSection("connection");
   await tv.button("Pair a remote", 'section[aria-label="Settings"]');
-  await until("pairing dialog loads its current code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent || '')"));
-  const code = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong').textContent") as string;
+  await until("pairing dialog loads its current code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] [data-pairing-code]')?.textContent || '')"));
+  const code = await tv.execute("return document.querySelector('[role=dialog] [data-pairing-code]').textContent") as string;
   await tv.key(keys.escape);
   phone = await startHttpRemote(origin, code, artifacts, until);
   const token = await phone.ui.execute("return localStorage.getItem('couch.remote-token')") as string;
@@ -59,10 +59,12 @@ try {
   socket = new NativeWebSocket(await remoteSocketUrl(origin, guest), { headers: { origin } });
   socket.onmessage = event => { const message = JSON.parse(String(event.data)); if (message.type === "state") state = message.state; };
   await until("ordinary remote receives player state", () => state !== null);
-  await tv.type("#media-url", "http://127.0.0.1:4200/fixture.mkv");
-  await tv.type("#media-title", "Diagnostic native fixture"); await tv.click("[role=dialog] form button[type=submit]");
-  await until("native queue offers the diagnostic fixture", () => tv.execute(`return !!document.querySelector('[aria-label="Play Diagnostic native fixture"]')`));
-  await tv.click('[aria-label="Play Diagnostic native fixture"]');
+  await tv.section("Find");
+  await tv.type("#media-search", "http://127.0.0.1:4200/fixture.mkv");
+  await until("Find offers the diagnostic fixture link", () => tv.execute("return !!document.querySelector('.find-link-card')"));
+  await tv.button("Direct media", ".find-link-choice");
+  await tv.button("Play", ".find-link-actions");
+  await until("native queue contains the diagnostic fixture", () => state?.queue.some(entry => entry.source === "http://127.0.0.1:4200/fixture.mkv") === true);
   await until("diagnostic fixture plays through native mpv", () => state?.player.status === "playing" && state.player.position > 0.5);
   const before = state!.player;
   // The idle report is cached for five seconds. Wait for a fresh observation.

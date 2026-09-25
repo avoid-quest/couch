@@ -55,6 +55,16 @@ function sourceView(source: LibrarySource, trusted: boolean): LibrarySource {
 }
 
 export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
+  type ProgressRows = import("./store").ProgressSnapshot;
+  const progressUndo = new Map<string, { rows: ProgressRows; expected: ProgressRows; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
+  const rememberProgress = (rows: ProgressRows, expected: ProgressRows = []) => {
+    const undoToken = crypto.randomUUID();
+    const expiresAt = Date.now() + 6_000;
+    const timer = setTimeout(() => progressUndo.delete(undoToken), 6_000);
+    timer.unref?.();
+    progressUndo.set(undoToken, { rows, expected, expiresAt, timer });
+    return { undoToken, expiresAt };
+  };
   return {
     async handle(request: Request, trusted: boolean, authorize = () => {}, playedBy?: PlaybackActor): Promise<Response> {
       const { pathname, searchParams } = new URL(request.url);
@@ -103,6 +113,36 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           });
           return Response.json({ items, profile: activeProfile });
         }
+        if (viewing && pathname === "/api/progress/undo") {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          authorize();
+          if (Object.keys(changes).length !== 1 || typeof changes.token !== "string") throw new RequestError("Send the removal token.");
+          const removal = progressUndo.get(changes.token);
+          if (!removal || removal.expiresAt < Date.now()) throw new RequestError("Undo is no longer available for this action.", 410);
+          viewing.session.restoreProgress(removal.rows, removal.expected);
+          clearTimeout(removal.timer);
+          progressUndo.delete(changes.token);
+          return Response.json({ ok: true });
+        }
+        const historyQueue = /^\/api\/progress\/([^/]+)\/queue$/.exec(pathname);
+        if (viewing && historyQueue) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          authorize();
+          if (Object.keys(changes).length !== 1 || typeof changes.profileId !== "string") throw new RequestError("Choose the current watching profile.");
+          if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("Playback settings changed. Try again.", 409);
+          let mediaId: string;
+          try { mediaId = decodeURIComponent(historyQueue[1]!); }
+          catch { throw new RequestError("Invalid media identity."); }
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (mediaId.startsWith("recording:")) throw new RequestError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
+          if (!viewing.store.sharedProgress(mediaId)) throw new RequestError("History item not found.", 404);
+          const saved = viewing.session.state.queue.find(entry => playbackMediaId(entry) === mediaId) ?? viewing.store.historySource(mediaId);
+          if (!saved || playbackMediaId(saved) !== mediaId) throw new RequestError("Open this item from its source again.", 409);
+          viewing.session.loadQueue([saved], "append", authorize, playedBy);
+          return Response.json({ ok: true });
+        }
         const historyPlay = /^\/api\/progress\/([^/]+)\/play$/.exec(pathname);
         if (viewing && historyPlay) {
           if (request.method !== "POST") return methodNotAllowed("POST");
@@ -129,8 +169,8 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
           if (request.method === "DELETE") {
             authorize();
-            viewing.session.removeHistory(mediaId);
-            return Response.json({ ok: true });
+            const rows = viewing.session.removeHistory(mediaId);
+            return Response.json({ ok: true, ...rememberProgress(rows) });
           }
           const changes = await body(request);
           authorize();
@@ -142,8 +182,9 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           const libraryItemId = mediaId.startsWith("library:") ? mediaId.slice(8) : null;
           const item = existing ?? (libraryItemId ? library.getItem(libraryItemId) : null);
           if (!item) throw new RequestError("Media item not found.", 404);
+          const before = changes.clearResume ? viewing.store.sharedProgressRows(mediaId) : null;
           viewing.session.editProgress(mediaId, changes as { watched?: boolean; clearResume?: boolean }, { title: item.title, libraryItemId });
-          return Response.json({ progress: viewing.store.sharedProgress(mediaId) });
+          return Response.json({ progress: viewing.store.sharedProgress(mediaId), ...(before?.length ? rememberProgress(before, viewing.store.sharedProgressRows(mediaId)) : {}) });
         }
         if (pathname === "/api/library/sources") {
           if (request.method === "GET") return Response.json({ sources: library.listSources().map(source => sourceView(source, trusted)) });

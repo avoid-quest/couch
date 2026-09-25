@@ -270,6 +270,7 @@ pub struct NowPlaying {
 pub struct PlayerState {
     pub playback_id: Option<String>,
     pub status: &'static str,
+    pub buffering: bool,
     pub position: f64,
     pub duration: Option<f64>,
     pub volume: f64,
@@ -291,6 +292,7 @@ impl Default for PlayerState {
         Self {
             playback_id: None,
             status: if cfg!(any(target_os = "linux", target_os = "macos", windows)) { "idle" } else { "unavailable" },
+            buffering: false,
             position: 0.0,
             duration: None,
             volume: 80.0,

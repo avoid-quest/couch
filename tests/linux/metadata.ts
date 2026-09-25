@@ -59,7 +59,7 @@ async function metadataLayout(target: UiDriver, width: number) {
   checks.push(`metadata layout and controls at ${width} CSS pixels`);
 }
 async function redactCredentials() {
-  for (const target of [sessionId ? ui : null, phone?.ui]) if (target) await target.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], #administrator-code, #pairing-code, input[type=password]').forEach(element => element.style.setProperty('visibility', 'hidden', 'important'))");
+  for (const target of [sessionId ? ui : null, phone?.ui]) if (target) await target.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code], #administrator-code, #pairing-code, input[type=password]').forEach(element => element.style.setProperty('visibility', 'hidden', 'important'))");
 }
 async function phoneCapture(name: string) { await redactCredentials(); await phone!.screenshot(name); }
 async function launch() {
@@ -73,8 +73,8 @@ async function keyboard(target: UiDriver, selector: string, value: string) {
   await until(`real keyboard fills ${selector}`, () => target.execute("return document.activeElement === document.querySelector(arguments[0]) && document.querySelector(arguments[0]).value === arguments[1]", [selector, value]));
 }
 async function movieEditor(target: UiDriver, title: string, itemId: string) {
-  await target.section("Library"); await target.button("Movies", '[aria-label="Library view"]');
-  await target.button(`Details for ${title}`, `[data-video-item="${itemId}"]`); await target.button("Edit metadata");
+  await target.section("Library"); await target.type("#media-search", title);
+  await target.button(`Details: ${title}`, `[data-hit-id="Library:${itemId}"]`); await target.button("Edit metadata");
   await until("metadata editor loads the current title", () => target.execute("return document.querySelector('[data-metadata-field=title]')?.value === arguments[0]", [title]));
 }
 async function capture(name: string) {
@@ -135,7 +135,7 @@ try {
   await fixtures();
   await until("Tauri driver is ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   await launch(); await ui.key(keys.escape); await ui.click(".pair-shortcut");
-  const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
+  const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   await ui.key(keys.escape);
   for (let index = 0; index < 2; index++) {
     const response = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) }); assert.equal(response.status, 200);
@@ -213,9 +213,8 @@ try {
     await metadataLayout(phone.ui, width); await phoneCapture(`metadata-editor-${width}`);
   }
   await phone.restore(); await phone.ui.key(keys.escape);
-  await phone.ui.section("Library"); await phone.ui.button("Shows", '[aria-label="Library view"]');
-  await phone.ui.button("Browse Generated series seasons"); await phone.ui.button("Browse Season 1");
-  await phone.ui.button("Details for Wrong episode"); await phone.ui.button("Edit metadata");
+  await phone.ui.section("Library"); await phone.ui.type("#media-search", "Wrong episode");
+  await phone.ui.button("Details: Wrong episode", '[aria-label="Search results"]'); await phone.ui.button("Edit metadata");
   await until("phone episode editor loads imported order", () => phone!.ui.execute("return document.querySelector('[data-metadata-field=episode]')?.value === '7'"));
   await keyboard(phone.ui, '[data-metadata-field="season"]', "2"); await keyboard(phone.ui, '[data-metadata-field="episode"]', "4");
   await phone.ui.button("Save corrections");

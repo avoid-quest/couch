@@ -36,7 +36,7 @@ async function openNative() {
 
 async function connections(ui: UiDriver, description: string) {
   if (!await ui.execute("return location.pathname.startsWith('/settings')")) {
-    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')"));
+    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
     await ui.section("Settings");
   }
   if (!await ui.execute("return document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=connection]')?.getAttribute('aria-current') === 'page'")) await ui.settingsSection("connection");
@@ -54,8 +54,8 @@ try {
   let tv = await openNative();
   await connections(tv, "configured native Connections loads its setup controls");
   await tv.button("Pair a remote", ".app-header");
-  await until("native pairing dialog exposes its current code", () => tv.execute("return /^\\d{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent ?? '')"));
-  const pairingCode = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong').textContent") as string;
+  await until("native pairing dialog exposes its current code", () => tv.execute("return /^\\d{6}$/.test(document.querySelector('[role=dialog] [data-pairing-code]')?.textContent ?? '')"));
+  const pairingCode = await tv.execute("return document.querySelector('[role=dialog] [data-pairing-code]').textContent") as string;
   await tv.key(keys.escape);
 
   primary = await startHttpRemote(`${origin}/settings/connection`, pairingCode, artifacts, until);

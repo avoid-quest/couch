@@ -2459,6 +2459,8 @@ mod linux_mpv {
                 loading: !player.loaded
                     || property::<bool>(&player.mpv, "idle-active").unwrap_or(true)
                     || property::<bool>(&player.mpv, "paused-for-cache").unwrap_or(false),
+                buffering: player.loaded
+                    && property::<bool>(&player.mpv, "paused-for-cache").unwrap_or(false),
                 speed: property::<f64>(&player.mpv, "speed").unwrap_or(1.0),
                 audio_delay: property::<f64>(&player.mpv, "audio-delay").unwrap_or(0.0),
                 subtitle_delay: property::<f64>(&player.mpv, "sub-delay").unwrap_or(0.0),

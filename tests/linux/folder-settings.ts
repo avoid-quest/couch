@@ -72,9 +72,9 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
   const play = async () => {
     await phone.section("Library");
     await phone.type("#media-search", item.title);
-    const region = '[aria-label="Library search results"]';
-    await until("phone library finds the retained folder item", () => phone.execute("return !!document.querySelector(arguments[0])", [`${region} [aria-label=${JSON.stringify(`Play: ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume: ${item.title}`)}]`]));
-    await phone.click(`${region} [aria-label=${JSON.stringify(`Play: ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume: ${item.title}`)}]`);
+    const region = '[aria-label="Search results"]';
+    await until("phone library finds the retained folder item", () => phone.execute("return !!document.querySelector(arguments[0])", [`${region} [aria-label=${JSON.stringify(`Play ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume ${item.title}`)}]`]));
+    await phone.click(`${region} [aria-label=${JSON.stringify(`Play ${item.title}`)}], ${region} [aria-label=${JSON.stringify(`Resume ${item.title}`)}]`);
     await until("phone folder Play reaches the one native player with the saved media identity", () => all(state => state.player.status === "playing" && state.player.position > 0.5 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${item.id}`), 30_000);
     assert.equal(await phone.execute("return !!document.querySelector('.video-stage')"), false);
   };

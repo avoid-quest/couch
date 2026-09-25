@@ -17,9 +17,8 @@ export function AppearanceSettings({ tvPresentation, credentials, connected, adm
       {(tvPresentation || scope === "tv" || scope === "all") && <TvInterfaceSize appearance={appearance} credentials={credentials} connected={connected} administrator={administrator} native={tvPresentation} hostName={hostName} />}
       {!tvPresentation && scope !== "tv" && (
         <section className="space-y-3" aria-labelledby="remote-interface-size">
-          <h3 id="remote-interface-size">This client interface size</h3>
+          <div className="settings-choice-row grid grid-cols-[16rem_minmax(0,1fr)] items-center gap-4 border-t border-border py-3 max-[900px]:grid-cols-1"><h3 id="remote-interface-size">This client interface size</h3><InterfaceSizeChoices label="This client interface size" value={size} onChange={value => void change(value)} /></div>
           <p className="text-muted-foreground">Text and controls on this client. Other clients keep their own size.</p>
-          <InterfaceSizeChoices label="This client interface size" value={size} onChange={value => void change(value)} />
           <Button variant="outline" className="min-h-11" onClick={() => void change(1)}>Reset this client to default</Button>
           {notice && <p role="status">{notice}</p>}
         </section>

@@ -79,26 +79,26 @@ export function AdvancedSettings({ credentials, connected }: { credentials: ApiC
     {notice && <p role="status">{notice}</p>}
     {report && <>
       <p className="text-xs text-muted-foreground">Collected {diagnosticTime(report.collectedAt)}. Helper checks are cached for up to {report.limits.helperSeconds / 60} minutes.</p>
-      <section className="space-y-2"><h3 className="font-medium">Build and system</h3><DiagnosticFacts facts={[
+      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Build and system</h3><DiagnosticFacts facts={[
         { name: "Couch version", value: report.build.version, source: report.build.packaged ? "Packaged coordinator" : "Development coordinator" },
         { name: "Commit", value: report.build.revision, source: "Coordinator build" },
         { name: "Build target", value: report.build.target, source: "Coordinator build" },
         ...report.system,
       ]} /></section>
-      <section className="space-y-2"><h3 className="font-medium">Native player, display and audio</h3>{report.native ? <DiagnosticFacts facts={[
+      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Native player, display and audio</h3>{report.native ? <DiagnosticFacts facts={[
         { name: "Native version", value: report.native.build.version, source: "Native host build" },
         { name: "Native commit", value: report.native.build.revision, source: "Native host build" },
         ...report.native.facts,
       ]} /> : <p className="text-muted-foreground">{report.nativeError ?? "Native details are unavailable."}</p>}</section>
-      <section className="space-y-2"><h3 className="font-medium">Media helpers</h3><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
-      <section className="space-y-2"><h3 className="font-medium">Effective configuration</h3><DiagnosticFacts facts={report.configuration} /></section>
-      <section className="space-y-2"><h3 className="font-medium">Sources</h3>{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
-      <section className="space-y-2">
+      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Media helpers</h3><DiagnosticFacts facts={report.helpers.map(helper => ({ name: helper.name, value: helper.version ?? helper.status, source: `${helper.source}. ${helper.error ?? helper.status}` }))} /></section>
+      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Effective configuration</h3><DiagnosticFacts facts={report.configuration} /></section>
+      <section className="space-y-2 border-t border-border py-4"><h3 className="font-medium">Sources</h3>{report.sources.length ? <DiagnosticFacts facts={report.sources.map(source => ({ name: source.name, value: source.status, source: source.error ?? "No error reported" }))} /> : <p className="text-muted-foreground">No source status is available.</p>}</section>
+      <section className="space-y-2 border-t border-border py-4">
         <h3 className="font-medium">Recent errors</h3>
         <p className="text-xs text-muted-foreground">Up to {report.limits.retentionDays} days, {report.limits.recentEntries} entries or {report.limits.historyBytes / 1024} KiB. Dates and times are UTC.</p>
         <p className="text-xs text-muted-foreground">Current session started {diagnosticTime(report.sessionStartedAt)}.</p>
         {report.historyError && <p role="status">{report.historyError}</p>}
-        {report.recent.length ? <ol className="max-h-72 space-y-3 overflow-y-auto rounded-lg border p-3">{report.recent.map((entry, index) => <li key={index} className="min-w-0 break-words">
+        {report.recent.length ? <ol className="max-h-72 divide-y divide-border overflow-y-auto">{report.recent.map((entry, index) => <li key={index} className="min-w-0 space-y-1 break-words py-3">
           <p className="text-xs text-muted-foreground">{diagnosticTime(entry.at)} · {entry.source} · {entry.sessionId === report.sessionId ? "Current session" : "Earlier session"}</p>
           <p>{entry.message}</p>
           <p className="text-xs text-muted-foreground">Build {entry.build.version ?? "unknown"} · Commit {entry.build.revision ?? "unknown"}</p>

@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { BrowseRequest, ProviderId, ProviderItem, ProviderPage } from "../../shared/providers";
 import { ProviderError, providerItemId } from "./http";
-import { isStreamingCommunityHost } from "../../shared/streamingcommunity";
+import { isStreamingCommunityHost, streamingCommunityOrigin as defaultStreamingCommunityOrigin } from "../../shared/streamingcommunity";
 import { streamingCommunityPreview } from "../streamingcommunity";
 import { browseStreamingCommunity } from "./streamingcommunity";
 import { browseYouTube } from "./youtube";
@@ -69,7 +69,7 @@ export async function loadProviderList(provider: ProviderId, url: string, signal
   return { ...page, items };
 }
 
-export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => "https://streamingcommunityz.academy", browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {
+export function createProviders({ databasePath, onChange = () => {}, streamingCommunityOrigin = () => defaultStreamingCommunityOrigin, browse = adapters(streamingCommunityOrigin) }: { databasePath: string; onChange?: () => void; streamingCommunityOrigin?: () => string; browse?: Record<ProviderId, Adapter> }) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA busy_timeout = 2000; PRAGMA journal_mode = WAL;");

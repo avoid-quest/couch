@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +9,7 @@ type Props = { active: SettingsPage };
 
 export function SettingsNav({ active }: Props) {
   const navigate = useNavigate();
-  const { identity, tvPresentation, details } = useShell();
+  const { identity, tvPresentation, details, state } = useShell();
   const sourcePage = active.startsWith("source-");
   const administrator = identity?.authority === "host" || identity?.authority === "administrator";
   const visible = (id: string) => (id !== "tv-appearance" || !tvPresentation && !!details?.tvPresentation && administrator)
@@ -18,7 +18,7 @@ export function SettingsNav({ active }: Props) {
   const groups = [
     { label: "Playback", pages: ["playback", "appearance"] },
     { label: "Library", pages: ["sources"] },
-    { label: details?.tvPresentation ? "TV" : "Playback device", pages: ["general", "display", "sound", "tv-appearance"] },
+    { label: state?.installationName ?? details?.name ?? "This device", pages: ["general", "sound", "display", "tv-appearance"] },
     { label: "Connections", pages: ["connection", "bluetooth"] },
     { label: "System", pages: ["updates", "advanced"] },
   ].map(group => ({
@@ -41,17 +41,15 @@ export function SettingsNav({ active }: Props) {
         ))}
       </SelectContent>
     </Select>
-    <nav aria-label="Settings pages" className={`settings-nav-rail min-w-0 self-start ${tvPresentation ? "" : "max-w-44"}`}>
+    <nav aria-label="Settings pages" className="settings-nav-rail settings-page-nav min-w-0 self-start">
       {groups.map(group => (
-        <div key={group.label} className="border-b border-border pb-1 last:border-0">
-          <p aria-hidden="true" className="px-3 pt-4 text-xs font-semibold uppercase tracking-widest text-muted-foreground first:pt-0">{group.label}</p>
+        <div key={group.label} className="mb-5">
+          <p aria-hidden="true" className="mb-1 px-3 text-xs font-normal text-muted-foreground">{group.label}</p>
           {group.pages.map(([id, page]) => (
-            <Button key={id} data-settings-page={id} variant="ghost" asChild className={`h-auto min-h-11 justify-start gap-3 p-3 text-left whitespace-normal ${tvPresentation ? "flex" : "w-full justify-between"} ${tvPresentation
-              ? "aria-[current=page]:bg-primary! aria-[current=page]:text-primary-foreground! aria-[current=page]:hover:bg-primary! aria-[current=page]:hover:text-primary-foreground!"
-              : "aria-[current=page]:bg-muted aria-[current=page]:text-foreground"}`}>
+            <Button key={id} data-settings-page={id} variant="ghost" asChild className="h-auto min-h-11 w-full justify-start gap-3 rounded-none px-3 py-2.5 text-left font-normal whitespace-normal">
               <Link aria-current={active === id || id === "sources" && sourcePage ? "page" : undefined} to={page.path}>
-                <span>{page.label}</span>
-                {!tvPresentation && active !== id && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+                <Check aria-hidden="true" className={`size-4 shrink-0 ${active === id || id === "sources" && sourcePage ? "" : "invisible"}`} />
+                <span>{id === "connection" ? "Remotes" : page.label}</span>
               </Link>
             </Button>
           ))}

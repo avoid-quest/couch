@@ -5,7 +5,7 @@ import type { TvAppearance } from "./appearance";
 export type { VideoQuality } from "./providers";
 
 export type PlaybackActor = { deviceId: string; name: string };
-export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio" };
+export type QueueEntry = { id: string; title: string; source: string; thumbnail?: string; artworkId?: string; duration?: number; live?: boolean; quality?: VideoQuality; automaticTitle?: boolean; kind?: "radio"; addedBy?: PlaybackActor };
 export type MediaTrack = { id: string; index: number; kind: "video" | "audio" | "subtitle"; label: string; language: string; selected: boolean };
 export type Chapter = { title: string; position: number };
 export type ReplayGainMode = "off" | "track" | "album";
@@ -20,6 +20,7 @@ export type NavigationKey = "up" | "down" | "left" | "right" | "select" | "back"
 export type PlayerState = {
   playbackId: string | null;
   status: "unavailable" | "idle" | "loading" | "playing" | "paused" | "ended" | "error";
+  buffering?: boolean;
   position: number;
   duration: number | null;
   volume: number;
@@ -37,9 +38,11 @@ export type PlayerState = {
 
 export type SessionState = {
   queue: QueueEntry[];
+  queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   presentationId?: string | null;
   playedBy?: PlaybackActor;
+  activity?: { id: string; actor: PlaybackActor; text: string };
   queueCursorEntryId?: string | null;
   queueError?: string | null;
   player: PlayerState;
@@ -66,14 +69,15 @@ export type SessionState = {
 
 export type Action =
   | { type: "navigate"; key: NavigationKey }
-  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean }
-  | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
-  | { type: "enqueueAlbum"; albumId: string; playNow?: boolean }
-  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality }
-  | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean }
-  | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean }
-  | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean }
+  | { type: "enqueue"; entry: QueueEntry; playNow?: boolean; placement?: "next" }
+  | { type: "enqueueLibrary"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
+  | { type: "enqueueAlbum"; albumId: string; playNow?: boolean; placement?: "next" }
+  | { type: "enqueueProvider"; provider: ProviderId; url: string; shape: MediaShape; title?: string; thumbnail?: string; playNow?: boolean; quality?: VideoQuality; placement?: "next" }
+  | { type: "enqueueJellyfin"; itemId: string; entryId: string; playNow?: boolean; fromStart?: boolean; placement?: "next" }
+  | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next" }
+  | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "remove"; entryId: string }
+  | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }

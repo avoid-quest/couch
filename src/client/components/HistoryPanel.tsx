@@ -2,11 +2,9 @@ import type { ProviderId } from "../../shared/providers";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Check, History, MoreHorizontal, Play, Radio, RotateCcw, X } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { HistoryItem, ViewingProgress } from "../../shared/library";
@@ -14,7 +12,8 @@ import type { RadioStation } from "../../shared/radio";
 import { mergeRecent } from "../recent";
 import { AuthArtwork } from "./AuthArtwork";
 import { MediaArtwork } from "./MediaArtwork";
-import { historyQuery, removeHistory } from "@/api/library";
+import { historyQuery, removeFromContinue, removeHistory, undoProgressAction } from "@/api/library";
+import { useOptionalSessionGate } from "@/session/session-context";
 
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
@@ -23,7 +22,7 @@ export function progressTime(seconds: number) {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
-export function ProgressActions({ origin, token, connected, mediaId, title, progress, onUpdated }: {
+export function ProgressActions({ origin, token, connected, mediaId, title, progress, onUpdated, inContinue = false }: {
   origin: string;
   token: string;
   connected: boolean;
@@ -31,7 +30,9 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
   title: string;
   progress?: ViewingProgress | null;
   onUpdated: () => void;
+  inContinue?: boolean;
 }) {
+  const session = useOptionalSessionGate();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +56,12 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
     setPending(true);
     setError(null);
     try {
-      await removeHistory({ origin, token }, mediaId);
+      const { undoToken, expiresAt } = await (await (inContinue ? removeFromContinue({ origin, token }, mediaId) : removeHistory({ origin, token }, mediaId))).json() as { undoToken?: string; expiresAt?: number };
       onUpdated();
+      if (undoToken && expiresAt && expiresAt > Date.now()) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
+        await undoProgressAction({ origin, token }, undoToken);
+        onUpdated();
+      }, expiresAt - Date.now());
       setOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not remove this history item.");
@@ -66,10 +71,10 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
     <PopoverTrigger asChild><Button variant="ghost" size="icon" disabled={!connected} aria-label={`Watching options for ${title}`}><MoreHorizontal aria-hidden="true" /></Button></PopoverTrigger>
     <PopoverContent align="end" className="max-w-[calc(100vw-2rem)] gap-3" aria-label={`Watching options for ${title}`}>
       <p className="break-words font-medium">{title}</p>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {error && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error}</p>}
       <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ watched: !progress?.watched })}><Check aria-hidden="true" />{progress?.watched ? "Mark unwatched" : "Mark watched"}</Button>
-      {!!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
-      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from history</Button>
+      {!inContinue && !!progress?.position && <Button variant="outline" className="justify-start" disabled={!connected || pending} onClick={() => void update({ clearResume: true })}><RotateCcw aria-hidden="true" />Clear resume point</Button>}
+      <Button variant="ghost" className="justify-start" disabled={!connected || pending} onClick={() => void remove()}><X aria-hidden="true" />Remove from {inContinue ? "Continue" : "history"}</Button>
       {pending && <p className="text-sm text-muted-foreground" role="status">Saving…</p>}
     </PopoverContent>
   </Popover>;
@@ -132,18 +137,18 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
 
   return <section className={`history-panel space-y-4${presentation === "inspect" ? " history-inspect" : ""}`} aria-label="Playback history">
     <div><h3 className="text-xl font-semibold">Recently played</h3></div>
-    {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" disabled={!connected || loading} onClick={() => void refetch()}>Try again</Button></AlertDescription></Alert>}
+    {error && <div role="alert" className="flex flex-wrap items-center gap-2 border-l-2 border-destructive py-2 pl-3 text-destructive">{error}<Button variant="outline" disabled={!connected || loading} onClick={() => void refetch()}>Try again</Button></div>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
-    {!loading && !error && !entries.length && <Card className="p-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</Card>}
-    <ul className="history-items space-y-3" aria-busy={loading}>{entries.map(entry => {
-      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key}><Card className="flex flex-row flex-wrap items-center gap-3 p-3">
+    {!loading && !error && !entries.length && <p className="border-t pt-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</p>}
+    <ul className={`history-items${presentation === "inspect" ? "" : " divide-y"}`} aria-busy={loading}>{entries.map(entry => {
+      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
           <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
         </div>
-        {onRadio && <div className="catalog-row-actions flex flex-wrap gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
-      </Card></li>; }
+        {onRadio && <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
+      </li>; }
       const item = entry.item;
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;
@@ -151,7 +156,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
         {artwork(item, "history-inspect-art")}
         <Button variant="ghost" className="history-inspect-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(item.mediaId); }}><strong>{item.title}</strong><small>{summary(item)}</small></Button>
       </li>;
-      return <li key={entry.key}><Card className="flex flex-row flex-wrap items-center gap-3 p-3">
+      return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary"><History aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
@@ -162,7 +167,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
         </div>
         {playbackActions(item)}
         {!available && <p className="w-full text-sm text-muted-foreground">Open this file again on the playback device to play it. Its resume point and watched mark are saved.</p>}
-      </Card></li>;
+      </li>;
     })}</ul>
     {presentation === "inspect" && <Dialog open={active && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
       {detail && <>{artwork(detail, "history-inspect-art history-inspect-detail-art")}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Recently played</DialogDescription></DialogHeader><p>{summary(detail)}</p>{detail.lastPlayedAt && <p className="text-sm text-muted-foreground">Last played {new Date(detail.lastPlayedAt).toLocaleDateString()}</p>}

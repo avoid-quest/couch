@@ -11,6 +11,7 @@ import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
+export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
 const progressView = ({ playedBy, ...row }: ProgressRow): HistoryItem => ({ ...row, watched: !!row.watched, ...(playedBy ? { playedBy: JSON.parse(playedBy) } : {}) });
 
 function profileName(value: unknown) {
@@ -84,9 +85,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
     INSERT OR IGNORE INTO installation VALUES (1, 'Couch');
     CREATE TABLE IF NOT EXISTS installation_identity (id INTEGER PRIMARY KEY CHECK (id = 1), installationId TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_sharing (id INTEGER PRIMARY KEY CHECK (id = 1), enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)));
+    CREATE TABLE IF NOT EXISTS installation_origin_domain (id INTEGER PRIMARY KEY CHECK (id = 1), domain TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS installation_appearance (id INTEGER PRIMARY KEY CHECK (id = 1), scale REAL NOT NULL CHECK (scale IN (1, 1.15, 1.3)));
     INSERT OR IGNORE INTO installation_appearance VALUES (1, 1);
   `);
+  db.query("UPDATE streamingcommunity_origin SET origin = ? WHERE origin = 'https://streamingcommunityz.academy'").run(streamingCommunityOrigin);
 
   db.query("INSERT OR IGNORE INTO installation_identity VALUES (1, ?)").run(crypto.randomUUID());
   db.query("INSERT OR IGNORE INTO installation_sharing VALUES (1, ?)").run(Number(remoteControlEnabled));
@@ -124,6 +127,8 @@ export function openStore(path: string, remoteControlEnabled = false) {
     installationId() { return db.query<{ installationId: string }, []>("SELECT installationId FROM installation_identity WHERE id = 1").get()!.installationId; },
     remoteControlEnabled() { return !!db.query<{ enabled: number }, []>("SELECT enabled FROM installation_sharing WHERE id = 1").get()!.enabled; },
     saveRemoteControlEnabled(enabled: boolean) { db.query("INSERT INTO installation_sharing VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled").run(Number(enabled)); },
+    originDomain() { return db.query<{ domain: string }, []>("SELECT domain FROM installation_origin_domain WHERE id = 1").get()?.domain ?? ""; },
+    saveOriginDomain(domain: string) { db.query("INSERT INTO installation_origin_domain VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET domain = excluded.domain").run(domain); },
     streamingCommunityOrigin: () => db.query<{ origin: string }, []>("SELECT origin FROM streamingcommunity_origin WHERE id = 1").get()?.origin ?? streamingCommunityOrigin,
     saveStreamingCommunityOrigin: (origin: string) => { db.query("INSERT INTO streamingcommunity_origin VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET origin = excluded.origin").run(origin); },
     audioOutput() { return db.query<{ name: string }, []>("SELECT name FROM audio_output WHERE id = 1").get()?.name ?? null; },
@@ -225,6 +230,9 @@ export function openStore(path: string, remoteControlEnabled = false) {
       const { profileId: _profileId, ...progress } = row;
       return progressView(progress);
     },
+    sharedProgressRows(mediaId: string): ProgressSnapshot {
+      return db.query<ProgressRow & { profileId: string }, [string]>(`SELECT profileId, ${progressColumns} FROM viewing_progress WHERE mediaId = ? ORDER BY profileId`).all(mediaId);
+    },
     sharedHistory(limit = 40, include: (mediaId: string) => boolean = () => true): HistoryItem[] {
       const items: HistoryItem[] = [];
       const maximum = Math.max(1, Math.min(100, Math.floor(limit) || 40));
@@ -262,8 +270,25 @@ export function openStore(path: string, remoteControlEnabled = false) {
         if (changes.clearResume) db.query("UPDATE viewing_progress SET position = 0 WHERE profileId = ? AND mediaId = ?").run(profileId, mediaId);
       })();
     },
-    removeSharedProgress(mediaId: string) {
-      return db.query("DELETE FROM viewing_progress WHERE mediaId = ?").run(mediaId).changes > 0;
+    takeSharedProgress(mediaId: string): ProgressSnapshot {
+      return db.transaction(() => {
+        const rows = db.query<ProgressRow & { profileId: string }, [string]>(`SELECT profileId, ${progressColumns} FROM viewing_progress WHERE mediaId = ? ORDER BY profileId`).all(mediaId);
+        if (rows.length) db.query("DELETE FROM viewing_progress WHERE mediaId = ?").run(mediaId);
+        return rows;
+      }).immediate();
+    },
+    restoreSharedProgress(rows: ProgressSnapshot, expected: ProgressSnapshot = []) {
+      db.transaction(() => {
+        if (!rows.length) throw new ViewingError("This history item is no longer available to restore.", 410);
+        const current = db.query<ProgressRow & { profileId: string }, [string]>(`SELECT profileId, ${progressColumns} FROM viewing_progress WHERE mediaId = ? ORDER BY profileId`).all(rows[0]!.mediaId);
+        if (JSON.stringify(current) !== JSON.stringify(expected)) throw new ViewingError("This history item changed. Check the current history before trying again.", 409);
+        db.query("DELETE FROM viewing_progress WHERE mediaId = ?").run(rows[0]!.mediaId);
+        const restore = db.query(`INSERT INTO viewing_progress (profileId, mediaId, title, libraryItemId, position, duration, watched, lastPlayedAt, playedBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        for (const row of rows) {
+          if (!db.query("SELECT 1 FROM watching_profiles WHERE id = ?").get(row.profileId)) throw new ViewingError("A watching profile changed after removal. Check the current history.", 409);
+          restore.run(row.profileId, row.mediaId, row.title, row.libraryItemId, row.position, row.duration, row.watched, row.lastPlayedAt, row.playedBy);
+        }
+      }).immediate();
     },
     saveQueue(queue: QueueEntry[], cursorEntryId: string | null = null) {
       db.transaction(() => {

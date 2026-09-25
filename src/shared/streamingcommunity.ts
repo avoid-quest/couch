@@ -1,4 +1,4 @@
-export const streamingCommunityOrigin = "https://streamingcommunityz.academy";
+export const streamingCommunityOrigin = "https://streamingcommunityz.photos";
 
 export function isStreamingCommunityHost(hostname: string): boolean {
   return /^(?:www\.)?[a-z0-9]*stream[a-z0-9]*unity[a-z0-9]*\.[a-z]{2,63}$/i.test(hostname);

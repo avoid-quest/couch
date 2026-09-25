@@ -12,9 +12,9 @@ import type { Controller, ControllerIdentity } from "../../../../shared/controll
 
 const formatSeen = (at: number | null) => at ? new Date(at).toLocaleString() : "never";
 
-export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, setRemoteControlEnabled, administratorClaimed }: {
+export function ConnectionsSettings({ credentials, connected, urls, identity, remoteControlEnabled, setRemoteControlEnabled, administratorClaimed, managedLan = false, lanError }: {
   credentials: ApiCredentials; connected: boolean; urls: string[]; identity: ControllerIdentity;
-  remoteControlEnabled: boolean; setRemoteControlEnabled: (enabled: boolean) => void; administratorClaimed: boolean;
+  remoteControlEnabled: boolean; setRemoteControlEnabled: (enabled: boolean) => void; administratorClaimed: boolean; managedLan?: boolean; lanError?: string | null;
 }) {
   const queryClient = useQueryClient();
   const selfId = identity.controller?.id;
@@ -28,6 +28,15 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       return await response.json() as { code: string };
     },
   });
+  const originDomain = useQuery({
+    queryKey: ["settings", "origin-domain", credentials.origin],
+    enabled: connected && identity.authority === "host" && managedLan,
+    queryFn: () => apiFetch(credentials, "/api/settings/origin-domain").then(response => response.json() as Promise<{ domain: string }>),
+  });
+  const [domain, setDomain] = useState("");
+  const [domainPending, setDomainPending] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  useEffect(() => { if (originDomain.data) setDomain(originDomain.data.domain); }, [originDomain.data]);
   const [code, setCode] = useState("");
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -36,6 +45,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const [pairingOpen, setPairingOpen] = useState(false);
   const [sharingPending, setSharingPending] = useState(false);
   const [sharingError, setSharingError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const pairingRef = useRef<HTMLButtonElement>(null);
   const pairUrl = urls[0];
   useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
@@ -61,6 +71,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         body: action === "role" ? JSON.stringify({ role: device.role === "administrator" ? "controller" : "administrator" }) : undefined,
       });
       await queryClient.invalidateQueries({ queryKey: controllersQuery(credentials).queryKey });
+      if (action === "remove") setRemoving(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Request failed."); }
     finally { setPending(false); }
   }
@@ -73,6 +84,17 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
       setRemoteControlEnabled(enabled);
     } catch (reason) { setSharingError(reason instanceof Error ? reason.message : "Could not save remote control."); }
     finally { setSharingPending(false); }
+  }
+
+  async function saveDomain(event: FormEvent) {
+    event.preventDefault();
+    if (domainPending) return;
+    setDomainPending(true); setDomainError(null);
+    try {
+      await apiFetch(credentials, "/api/settings/origin-domain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain: domain.trim() }) });
+      await originDomain.refetch();
+    } catch (reason) { setDomainError(reason instanceof Error ? reason.message : "Could not save the local domain."); }
+    finally { setDomainPending(false); }
   }
 
   return (
@@ -88,6 +110,16 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         <div className="flex items-center justify-between gap-4"><div><h3 className="font-medium">Allow remote control</h3><p className="text-sm text-muted-foreground">Let browsers and other Couch apps on your LAN pair with this computer.</p></div><Switch aria-label="Allow remote control" checked={remoteControlEnabled} disabled={sharingPending} onCheckedChange={saveSharing} /></div>
         {sharingError && <p role="alert">{sharingError}</p>}
       </section>}
+      {identity.authority === "host" && managedLan && <section aria-label="Local network domain" className="space-y-3">
+        <h3 className="font-medium">Local network domain</h3>
+        <p className="text-sm text-muted-foreground">Use a local DNS name for pairing links. The name must resolve only to this computer’s selected LAN address; Couch adds its port automatically.</p>
+        <form className="flex flex-wrap items-end gap-3" onSubmit={event => void saveDomain(event)}>
+          <div className="min-w-0 space-y-2"><Label htmlFor="origin-domain">Domain name</Label><Input id="origin-domain" className="min-h-11" placeholder="couch.home" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomain(event.target.value)} disabled={!connected || domainPending || originDomain.isPending} /></div>
+          <Button type="submit" className="min-h-11" disabled={!connected || domainPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{domainPending ? "Saving…" : "Save domain"}</Button>
+        </form>
+        {(originDomain.error || domainError) && <p role="alert" className="text-sm text-destructive">{domainError ?? (originDomain.error instanceof Error ? originDomain.error.message : "Could not read the local domain.")}</p>}
+        {lanError && <p role="status" className="text-sm text-muted-foreground">{lanError}</p>}
+      </section>}
       {identity.authority === "host" && !administratorClaimed && (
         <section aria-label="Administrator setup" data-administrator-setup className="space-y-3">
           <h3 className="font-medium">Set up your administrator remote</h3>
@@ -98,12 +130,12 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         </section>
       )}
       {identity.authority === "controller" && identity.claimAvailable && (
-        <section aria-label="Claim administrator" className="space-y-3">
-          <h3 className="font-medium">Claim administrator</h3>
+        <section aria-label="Claim administration" className="space-y-3">
+          <h3 className="font-medium">Claim administration</h3>
           <form className="flex flex-wrap items-end gap-3" onSubmit={claim}>
             <div className="min-w-0 space-y-2"><Label htmlFor="administrator-code">Administrator code</Label>
               <Input id="administrator-code" className="min-h-11" value={code} onChange={event => setCode(event.target.value)} pattern="[0-9]{10}|[a-fA-F0-9]{32,256}" maxLength={256} required disabled={claiming} /></div>
-            <Button className="min-h-11" type="submit" disabled={claiming || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming ? "Claiming…" : "Claim administrator"}</Button>
+            <Button className="min-h-11" type="submit" disabled={claiming || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code.trim())}>{claiming ? "Claiming…" : "Claim administration"}</Button>
           </form>
           {claimError && <p role="alert">{claimError}</p>}
         </section>
@@ -114,16 +146,16 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         {!manager ? <p className="text-sm text-muted-foreground">Claim administration to manage devices.</p>
           : controllers.isPending ? <p role="status" className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3.5" />Loading devices…</p>
           : controllers.isError ? <p role="alert">Could not load devices. <Button variant="outline" className="min-h-11" onClick={() => void controllers.refetch()}>Retry</Button></p>
-          : <ul className="divide-y rounded-md border">
+          : <ul className="divide-y border-t border-border">
               {controllers.data.map(device => (
-                <li key={device.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <li key={device.id} className="flex flex-wrap items-center gap-3 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{device.name}{device.id === selfId && <span className="ml-2 font-normal text-muted-foreground">(this device)</span>}</p>
                     <p className="text-sm text-muted-foreground">{device.role === "administrator" ? "Administrator" : "Controller"} · last seen {formatSeen(device.lastSeenAt)}</p>
                   </div>
                   {device.id !== selfId && <>
                     <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => void act(device, "role")}>{device.role === "administrator" ? "Make controller" : "Make administrator"}</Button>
-                    <Button variant="destructive" className="min-h-11" disabled={pending} onClick={() => void act(device, "remove")}>Remove</Button>
+                    {removing === device.id ? <span className="flex flex-wrap items-center gap-2"><span>Remove {device.name}?</span><Button variant="destructive" className="min-h-11" disabled={pending} onClick={() => void act(device, "remove")}>Remove</Button><Button variant="outline" className="min-h-11" disabled={pending} onClick={() => setRemoving(null)}>Cancel</Button></span> : <Button variant="destructive" className="min-h-11" disabled={pending} onClick={() => setRemoving(device.id)}>Remove</Button>}
                   </>}
                 </li>
               ))}

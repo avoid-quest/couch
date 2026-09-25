@@ -10,7 +10,7 @@ const actions: Action[] = [];
 const queue = ["one", "two", "three"].map(id => ({ id, title: id, source: `https://media.example/${id}` }));
 const state: SessionState = { queue, currentEntryId: "one", queueCursorEntryId: "one", activeProfile: { id: "household", name: "Household" }, player: { playbackId: "playing", status: "playing", position: 5, duration: 100, volume: 80, seekable: true, error: null } };
 const flush = () => act(async () => { await Bun.sleep(15); });
-const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label)!;
+const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const press = async (node: HTMLElement) => {
   await act(async () => node.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 })));
   await act(async () => node.click());
@@ -40,7 +40,6 @@ afterEach(async () => {
 
 test("a queue entry removes itself through the socket remove action", async () => {
   expect(actions).toEqual([]);
-  await press(button("Queue options for two"));
-  await press(button("Remove two"));
+  await press(document.querySelector<HTMLElement>('[data-queue-entry-id="two"] .queue-row-actions > button:last-child')!);
   expect(actions).toEqual([{ type: "remove", entryId: "two" }]);
 });

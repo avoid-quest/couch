@@ -17,7 +17,7 @@ export async function captureGuideClock(ui: UiDriver, artifactDir: string, name:
     const marker = document.createElement('div'); marker.id = 'iptv-capture-origin';
     Object.assign(marker.style, { position: 'fixed', left: '8px', top: '8px', width: '8px', height: '8px', background: 'rgb(13,217,101)', zIndex: '100000' });
     document.body.append(marker);
-    document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(node => node.style.visibility = 'hidden');
+    document.querySelectorAll('[data-pairing-code], .pair-shortcut strong').forEach(node => node.style.visibility = 'hidden');
   `);
   try {
     assert.deepEqual(before.viewport, [1600, 1000, 1], "Native clock qualification uses the strict 1600x1000 viewport");

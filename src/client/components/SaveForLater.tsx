@@ -24,5 +24,5 @@ export function SaveForLater({ origin, token, connected, reference, title }: {
     } catch (error) { if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "Could not save this item."); }
     finally { if (!request.signal.aborted) setPending(false); }
   };
-  return <div className="grid gap-1"><Button variant="outline" aria-label={`Save ${title} for later`} disabled={!connected || pending} onClick={() => void save()}><BookmarkPlus aria-hidden="true" />For later</Button>{notice && <p className="text-sm" role="status">{notice}</p>}</div>;
+  return <div className="grid gap-1"><Button variant="outline" aria-label={`Save ${title} for later`} disabled={!connected || pending} onClick={() => void save()}><BookmarkPlus aria-hidden="true" />Save</Button>{notice && <p className="text-sm" role="status">{notice}</p>}</div>;
 }

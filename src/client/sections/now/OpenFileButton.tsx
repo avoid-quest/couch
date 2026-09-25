@@ -6,7 +6,7 @@ import type { Action } from "../../../shared/protocol";
 import { createId } from "../../session/session";
 
 // Local files use the native picker but still enqueue through the session.
-export function OpenFileButton({ connected, run }: { connected: boolean; run: (action: Action) => Promise<boolean> }) {
+export function OpenFileButton({ connected, run, playNow = false }: { connected: boolean; run: (action: Action) => Promise<boolean>; playNow?: boolean }) {
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +16,7 @@ export function OpenFileButton({ connected, run }: { connected: boolean; run: (a
     setError(null);
     try {
       const file = await invoke<{ source: string; title: string } | null>("choose_media");
-      if (file && !await run({ type: "enqueue", entry: { id: createId(), ...file } })) setError("Could not add this file. Try again when connected.");
+      if (file && !await run({ type: "enqueue", entry: { id: createId(), ...file }, playNow })) setError("Could not add this file. Try again when connected.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open this file.");
     } finally {

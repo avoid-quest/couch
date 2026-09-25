@@ -11,11 +11,11 @@ import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useIdleCursor } from "../useIdleCursor";
 import { useInterfaceSize } from "../interface-size";
-import { useTvPresentation } from "../useTvPresentation";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
 import { desktopClientProtocol } from "../../shared/desktop-protocol";
+import { applyUndo, undoPlan, type UndoPlan } from "./undo";
 
 const tokenKey = "couch.remote-token";
 const installationKey = "couch.remote-installation-id";
@@ -45,6 +45,16 @@ function storedRemoteName() {
   try { return localStorage.getItem(remoteNameKey) || "My remote"; } catch { return "My remote"; }
 }
 
+export function dispatchTvRoute(key: "home" | "info") {
+  const dispatch = (remaining: number) => {
+    const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
+    const open = [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.getAttribute("data-state") !== "closed" && element.getClientRects().length > 0);
+    if (open && remaining > 0) { applyTvNavigation("back"); requestAnimationFrame(() => dispatch(remaining - 1)); }
+    else window.dispatchEvent(new Event(`couch-${key}`));
+  };
+  dispatch(3);
+}
+
 export function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -64,6 +74,10 @@ type SessionGateValue = SessionBag & {
   error: string | null;
   setError: (error: string | null) => void;
   run: (action: Action) => Promise<boolean>;
+  undoNotice: { id: number; text: string } | null;
+  undoAction: () => Promise<void>;
+  dismissUndo: () => void;
+  offerUndo: (text: string, undo: () => Promise<void>, duration?: number) => void;
   pair: (event: { preventDefault: () => void }) => Promise<void>;
   unpair: () => void;
   pairing: boolean;
@@ -74,7 +88,6 @@ type SessionGateValue = SessionBag & {
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
   setRemoteControlEnabled: (enabled: boolean) => void;
-  tv: ReturnType<typeof useTvPresentation>;
   registerBackHandler: (handler: () => void) => void;
 };
 
@@ -84,6 +97,10 @@ export function useSessionGate(): SessionGateValue {
   const value = useContext(SessionGateContext);
   if (!value) throw new Error("useSessionGate must be used inside SessionGate.");
   return value;
+}
+
+export function useOptionalSessionGate(): SessionGateValue | null {
+  return useContext(SessionGateContext);
 }
 
 export function SessionGate({ children }: PropsWithChildren) {
@@ -116,22 +133,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   function handleNavigation(key: NavigationKey) {
     if (!tvPresentation) return;
     document.documentElement.setAttribute("data-keyboard", "");
-    if (key === "home") {
-      const goHome = (remaining: number) => {
-        if (document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]') && remaining) {
-          applyTvNavigation("back");
-          requestAnimationFrame(() => goHome(remaining - 1));
-        } else tv.openHome();
-      };
-      goHome(3);
-      return;
-    }
-    if (key === "info") { tv.showControls({ keyboard: true, fromHome: true }); return; }
-    if (!tv.browsing && key !== "back") {
-      tv.showControls({ keyboard: true });
-      if (!tv.controlsVisible) return;
-    }
-    requestAnimationFrame(() => applyTvNavigation(key));
+    if (key !== "home" && key !== "info") { requestAnimationFrame(() => applyTvNavigation(key)); return; }
+    dispatchTvRoute(key);
   }
 
   const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
@@ -175,12 +178,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [state, connected, queryClient]);
 
   useInterfaceSize(tvPresentation, state?.appearance);
-  const tv = useTvPresentation({ enabled: tvPresentation, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   useIdleCursor(tvPresentation);
-  useNavigation(() => {
-    if (tvPresentation && tv.dismissLayer()) return;
-    backHandler.current();
-  });
+  useNavigation(() => backHandler.current());
 
   useEffect(() => {
     if (!localHost || !credentials) return;
@@ -248,14 +247,65 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const currentCredentials = useRef(credentials);
   const commandAttempt = useRef(0);
+  const noticeSequence = useRef(0);
+  const currentState = useRef(state);
+  const undoPlanRef = useRef<{ plan: UndoPlan } | { undo: () => Promise<void> } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [undoNotice, setUndoNotice] = useState<{ id: number; text: string } | null>(null);
   currentCredentials.current = credentials;
+  currentState.current = state;
+
+  const dismissUndo = () => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    undoPlanRef.current = null;
+    setUndoNotice(null);
+  };
+  useEffect(() => { dismissUndo(); return () => { if (undoTimer.current) clearTimeout(undoTimer.current); }; }, [credentials?.origin, credentials?.token, credentials?.installationId]);
+
+  const undoAction = async () => {
+    const pending = undoPlanRef.current;
+    dismissUndo();
+    if (!pending || !credentials || credentials !== currentCredentials.current) return;
+    setError(null);
+    try { if ("plan" in pending) await applyUndo(pending.plan, command, () => currentState.current); else await pending.undo(); }
+    catch (reason) { if (credentials === currentCredentials.current) setError(errorText(reason)); }
+  };
+
+  const offerUndo = (text: string, undo: () => Promise<void>, duration = 6_000) => {
+    dismissUndo();
+    const id = ++noticeSequence.current;
+    undoPlanRef.current = { undo };
+    setUndoNotice({ id, text });
+    undoTimer.current = setTimeout(dismissUndo, duration);
+  };
 
   const run = async (action: Action) => {
     if (credentials !== currentCredentials.current) return false;
+    const started = performance.now();
+    const before = currentState.current;
+    dismissUndo();
     const attempt = ++commandAttempt.current;
     setError(null);
     try {
       await command(action);
+      if (before && credentials === currentCredentials.current && attempt === commandAttempt.current) {
+        const undoable = action.type === "remove" || !!before.currentEntryId && (action.type === "stop" || action.type === "play" && action.entryId !== before.currentEntryId || "playNow" in action && action.playNow);
+        let plan = undoable && currentState.current && undoPlan(action, before, currentState.current);
+        for (let tries = 0; undoable && !plan && tries < 20 && credentials === currentCredentials.current && attempt === commandAttempt.current; tries++) {
+          await new Promise(resolve => setTimeout(resolve, 25));
+          plan = currentState.current && undoPlan(action, before, currentState.current);
+        }
+        if (plan && credentials === currentCredentials.current && attempt === commandAttempt.current) {
+          undoPlanRef.current = { plan };
+          const remaining = 6_000 - (performance.now() - started);
+          if (remaining <= 0) dismissUndo();
+          else {
+            setUndoNotice({ id: ++noticeSequence.current, text: plan.text });
+            undoTimer.current = setTimeout(dismissUndo, remaining);
+          }
+        }
+      }
       return credentials === currentCredentials.current;
     } catch (reason) {
       if (credentials === currentCredentials.current && attempt === commandAttempt.current) setError(errorText(reason));
@@ -306,9 +356,9 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const value: SessionGateValue = {
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
-    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, reconnect, pair, unpair,
+    state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, undoNotice, undoAction, dismissUndo, offerUndo, reconnect, pair, unpair,
     pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
-    tv, registerBackHandler: handler => { backHandler.current = handler; },
+    registerBackHandler: handler => { backHandler.current = handler; },
   };
   return <SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider>;
 }

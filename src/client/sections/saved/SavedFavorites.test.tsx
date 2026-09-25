@@ -140,8 +140,13 @@ test("Saved keeps saved collections together without a separate history destinat
   await act(async () => root.render(<QueryClientProvider client={client}><SavedSection state={null} credentials={{ origin: "http://localhost", token: "paired" }} connected canPlay active
     onBrowse={section => browsed.push(section)} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={() => {}} /></QueryClientProvider>));
   await flush();
-  for (const itemTitle of ["Saved local movie", "Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
-  expect(screen.getAllByRole("heading").map((node: HTMLElement) => node.textContent)).toEqual(["For later", "Lists", "Online and radio"]);
+  expect(document.body.textContent).toContain("Saved local movie");
+  await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Channels and stations/ }), { button: 0 }));
+  await flush();
+  for (const itemTitle of ["Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
+  await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Lists/ }), { button: 0 }));
+  await flush();
+  expect(document.body.textContent).toContain("Lists");
   expect(calls.every(call => call.method === "GET")).toBe(true);
   expect(calls.some(call => call.path === "/api/progress/history")).toBe(false);
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();

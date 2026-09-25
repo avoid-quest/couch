@@ -1,0 +1,132 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Window } from "happy-dom";
+import { act } from "react";
+import type { Root } from "react-dom/client";
+import type { SessionState } from "../../../shared/protocol";
+import type { ShellValue } from "../shell/AppShell";
+import { ShellContext } from "../shell/shell-context";
+
+let root: Root;
+let window: Window;
+const originals = new Map<string, PropertyDescriptor | undefined>();
+const actions: unknown[] = [];
+let leaves = 0;
+const state: SessionState = {
+  queue: [{ id: "current", title: "Evening movie", source: "library:movie", duration: 100 }],
+  currentEntryId: "current",
+  activeProfile: { id: "household", name: "Household" },
+  player: { playbackId: "playback", status: "playing", position: 12, duration: 100, volume: 40, seekable: true, error: null },
+};
+const shell = {
+  state, credentials: { origin: "http://localhost", token: "paired" }, connected: true,
+  run: async (action: unknown) => { actions.push(action); return true; },
+  available: true, nativeHost: false, localHost: true, active: true,
+  current: state.queue[0], programme: null, videoQualityPreference: { quality: "auto" },
+  leavePlayer: () => { leaves++; },
+} as unknown as ShellValue;
+
+beforeEach(async () => {
+  actions.length = 0; leaves = 0;
+  window = new Window({ url: "http://localhost/" });
+  for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "MutationObserver", "ResizeObserver", "Event", "KeyboardEvent", "PointerEvent", "MouseEvent", "CustomEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
+    originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    const value = key === "IS_REACT_ACT_ENVIRONMENT" ? true : key === "window" ? window : Reflect.get(window, key);
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
+  }
+  const { createRoot } = await import("react-dom/client");
+  const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount()); await window.happyDOM.abort();
+  for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
+  originals.clear();
+});
+
+test("player keys leave focused buttons outside the player available", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const outside = document.createElement("button"); outside.textContent = "Undo"; document.body.append(outside);
+  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  outside.focus();
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  outside.dispatchEvent(enter);
+  const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+  outside.dispatchEvent(space);
+  expect(enter.defaultPrevented).toBe(false);
+  expect(space.defaultPrevented).toBe(false);
+  expect(document.activeElement).toBe(outside);
+  expect(actions).toEqual([]);
+  expect(document.querySelector('[role="slider"][aria-label="Volume"]')).toBeNull();
+  expect(document.querySelector('[role="group"][aria-label="Playback host volume"]')?.textContent).toContain("40%");
+});
+
+test("Escape leaves an open overlay to close itself before leaving the player", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); dialog.setAttribute("data-state", "open"); document.body.append(dialog);
+  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(leaves).toBe(0);
+  dialog.remove();
+  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(leaves).toBe(1);
+});
+
+test("Escape closes the player sheet before leaving the player", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-panel="settings"]')!.click());
+  expect(document.querySelector('[role="dialog"][data-state="open"]')).not.toBeNull();
+  await act(async () => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+  expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+  expect(leaves).toBe(0);
+});
+
+test("keyboard commands use the latest session callbacks", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  const latest: unknown[] = [];
+  const changed = { ...shell, credentials: { origin: "http://another-host", token: "new" }, run: async (action: unknown) => { latest.push(action); return true; } } as unknown as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={changed}><PlayerPage /></ShellContext.Provider>));
+  window.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+  expect(actions).toEqual([]);
+  expect(latest).toEqual([{ type: "pause", playbackId: "playback", paused: true }]);
+});
+
+test("chapters mark the timeline and name the current chapter", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const chapters = [{ title: "Opening", position: 0 }, { title: "The meeting", position: 10 }, { title: "Finale", position: 80 }];
+  const withChapters = { ...shell, state: { ...state, player: { ...state.player, position: 12, chapters } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={withChapters}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelectorAll("[data-chapter-tick]")).toHaveLength(2);
+  expect(document.querySelector(".time-labels")?.textContent).toContain("The meeting");
+});
+
+test("an error offers Skip even at the end of Up next", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const errored = { ...shell, state: { ...state, player: { ...state.player, status: "error" as const, error: "The video could not be loaded." } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={errored}><PlayerPage /></ShellContext.Provider>));
+  const skip = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "Skip")!;
+  expect(skip.disabled).toBe(false);
+  await act(async () => skip.click());
+  expect(actions).toEqual([{ type: "next", playbackId: "playback" }]);
+  expect(document.querySelector('.player-status h2')).not.toBeNull();
+});
+
+test("loading uses progress and buffering uses a badge", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const loading = { ...shell, state: { ...state, player: { ...state.player, status: "loading" as const } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={loading}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector('.player-status [data-slot="progress"]')).not.toBeNull();
+  const buffering = { ...loading, state: { ...loading.state!, player: { ...loading.state!.player, buffering: true } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={buffering}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector('[data-slot="badge"][role="status"]')?.textContent).toBe("Buffering");
+});
+
+test("idle Up next stays accessible without a current item", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const idle = { ...shell, current: undefined, state: { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={idle}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector('[aria-label="Up next"]')).not.toBeNull();
+  expect(document.querySelector<HTMLButtonElement>('[aria-label="Play Evening movie"]')).not.toBeNull();
+  expect(document.querySelector<HTMLButtonElement>('[data-page-first]')?.textContent).toBe("Find something to play");
+});

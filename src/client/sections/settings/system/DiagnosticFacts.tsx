@@ -2,7 +2,7 @@ import type { DiagnosticFact } from "../../../../shared/diagnostics";
 
 export function DiagnosticFacts({ facts }: { facts: DiagnosticFact[] }) {
   return (
-    <dl className="divide-y rounded-lg border px-3">
+    <dl className="divide-y divide-border">
       {facts.map((fact, index) => (
         <div key={index} className="min-w-0 py-2">
           <dt className="text-xs text-muted-foreground">{fact.name}</dt>

@@ -1,10 +1,8 @@
 import { MetadataEditor } from "./MetadataEditor";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Check, Play, Plus, RotateCcw, Search } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,7 +111,7 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
     finally { setPending(false); }
   };
   const openDetail = (item: LibraryItem, trigger: HTMLElement) => { detailTrigger.current = trigger; setDetail(item); };
-  const actions = (item: LibraryItem) => <div className="video-item-actions flex flex-wrap gap-2">
+  const actions = (item: LibraryItem) => <div className="mt-auto flex flex-wrap gap-2 [&>button]:flex-auto @max-[360px]/catalog:[&>button]:basis-full">
     <Button aria-label={`${item.progress?.position ? "Resume" : "Play"} ${item.title}`} disabled={!connected || !canPlay || !item.available || busy || loading || pending} onClick={() => void enqueue(item, { playNow: true })}><Play aria-hidden="true" />{item.progress?.position ? "Resume" : "Play"}</Button>
     {!!item.progress?.position && <Button variant="outline" aria-label={`Play ${item.title} from start`} disabled={!connected || !canPlay || !item.available || busy || loading || pending} onClick={() => void enqueue(item, { playNow: true, fromStart: true })}><RotateCcw aria-hidden="true" />From start</Button>}
     <Button variant="secondary" aria-label={`Up next: ${item.title}`} disabled={!connected || !item.available || busy || loading || pending} onClick={() => void enqueue(item)}><Plus aria-hidden="true" />Up next</Button>
@@ -128,45 +126,45 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
   const total = browse.kind === "seasons" ? seasons.length : browse.kind === "shows" ? shows?.total ?? 0 : items?.total ?? 0;
   const searchLabel = `Search ${browse.kind === "episodes" ? "episodes" : view}`;
 
-  return <section ref={panel} className="video-library space-y-4" aria-label={view === "movies" ? "Movie library" : "Show library"} aria-busy={active && loading}>
+  return <section ref={panel} className="@container/catalog min-w-0 space-y-4" aria-label={view === "movies" ? "Movie library" : "Show library"} aria-busy={active && loading}>
     <div className="flex flex-wrap items-center gap-3">
       {!!trail.length && <Button data-back variant="ghost" onClick={back}><ArrowLeft aria-hidden="true" />Back</Button>}
       <div className="min-w-0 flex-1"><h3 className="break-words text-xl font-semibold">{show?.title ?? (view === "movies" ? "Movies" : "Shows")}</h3>
         <p className="mt-1 text-sm text-muted-foreground">{browse.kind === "episodes" ? `${seasonTitle(browse.season)} · In episode order` : browse.kind === "seasons" ? "Choose a season" : "From your library folders"}</p></div>
     </div>
-    {browse.kind === "seasons" && show && <Card className="video-show-summary gap-3 p-3">
-      {show.fanartId && <AuthArtwork origin={origin} token={token} id={show.fanartId} video className="video-fanart" />}
+    {browse.kind === "seasons" && show && <div className="grid gap-3 border-b pb-4 empty:hidden">
+      {show.fanartId && <AuthArtwork origin={origin} token={token} id={show.fanartId} video className="aspect-video h-auto max-h-60 w-full [&>img]:object-cover" />}
       {(show.originalTitle || show.premiered || show.year) && <p className="break-words text-sm text-muted-foreground">{[show.originalTitle, show.premiered ?? show.year].filter(Boolean).join(" · ")}</p>}
       {!!show.genres.length && <p className="text-sm text-muted-foreground">{show.genres.join(" · ")}</p>}
-      {show.plot && <p className="video-plot text-sm leading-relaxed text-muted-foreground">{show.plot}</p>}
-    </Card>}
+      {show.plot && <p className="wrap-anywhere whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{show.plot}</p>}
+    </div>}
     {browse.kind !== "seasons" && <form role="search" className="flex items-end gap-2" onSubmit={search}>
       <div className="min-w-0 flex-1"><Label htmlFor={queryId} className="sr-only">{searchLabel}</Label><Input id={queryId} type="search" aria-label={searchLabel} placeholder={searchLabel} value={draft} maxLength={200} disabled={!connected} onChange={event => setDraft(event.target.value)} /></div>
       <Button type="submit" variant="secondary" size="icon" aria-label="Search" disabled={!connected || loading}><Search aria-hidden="true" /></Button>
     </form>}
-    {error && <Alert variant="destructive"><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></AlertDescription></Alert>}
+    {error && <div role="alert" className="grid gap-3 border-l-2 border-destructive py-2 pl-3 text-destructive"><p>{error}</p><Button variant="outline" className="justify-self-start" disabled={!connected || loading} onClick={() => setRefresh(value => value + 1)}>Try again</Button></div>}
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to this TV to browse and play videos.</p>}
     {busy && connected && !error && <p role="status" className="text-sm text-muted-foreground">Loading library…</p>}
     {!busy && <p className="text-sm text-muted-foreground" aria-live="polite">{total} {browse.kind}</p>}
-    {!busy && total === 0 && <Card className="p-5 text-sm text-muted-foreground">{browse.q ? "No matching videos. Try another title." : "Add a video folder on the TV, or scan an existing folder again."}</Card>}
-    {!busy && browse.kind === "shows" && <ul className="video-posters">{shows?.items.map(item => <li key={item.id}><Button variant="ghost" className="video-poster-card" data-video-show={item.id} aria-label={`Browse ${item.title} seasons`} onClick={() => open({ kind: "seasons", show: item, q: "", offset: 0 }, `[data-video-show="${item.id}"]`)} disabled={!connected}>
-      <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="video-poster" /><strong>{item.title}</strong><span className="text-sm font-normal text-muted-foreground">{item.seasonCount} seasons · {item.episodeCount} episodes</span>
+    {!busy && total === 0 && <p className="border-t pt-5 text-sm text-muted-foreground">{browse.q ? "No matching videos. Try another title." : "Add a video folder on the TV, or scan an existing folder again."}</p>}
+    {!busy && browse.kind === "shows" && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,10rem),1fr))] @max-[360px]/catalog:grid-cols-2 @max-[360px]/catalog:gap-2">{shows?.items.map(item => <li key={item.id} className="min-w-0"><Button variant="ghost" className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 whitespace-normal p-1 text-left" data-video-show={item.id} aria-label={`Browse ${item.title} seasons`} onClick={() => open({ kind: "seasons", show: item, q: "", offset: 0 }, `[data-video-show="${item.id}"]`)} disabled={!connected}>
+      <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="aspect-[2/3] h-auto w-full [&>svg]:size-[30%] [&>svg]:max-h-14 [&>svg]:max-w-14 [&>svg]:opacity-55" /><strong className="wrap-anywhere text-base leading-[1.4] @max-[360px]/catalog:text-sm">{item.title}</strong><span className="text-sm font-normal text-muted-foreground">{item.seasonCount} seasons · {item.episodeCount} episodes</span>
     </Button></li>)}</ul>}
-    {!busy && browse.kind === "seasons" && <ul className="video-posters">{seasons.map(item => <li key={item.season ?? "unknown"}><Button variant="ghost" className="video-poster-card" data-video-season={item.season ?? "unknown"} aria-label={`Browse ${seasonTitle(item.season)}`} onClick={() => open({ kind: "episodes", show: browse.show, season: item.season, q: "", offset: 0 }, `[data-video-season="${item.season ?? "unknown"}"]`)} disabled={!connected}>
-      <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="video-poster" /><strong>{seasonTitle(item.season)}</strong><span className="text-sm font-normal text-muted-foreground">{item.episodeCount} episodes</span>
+    {!busy && browse.kind === "seasons" && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,10rem),1fr))] @max-[360px]/catalog:grid-cols-2 @max-[360px]/catalog:gap-2">{seasons.map(item => <li key={item.season ?? "unknown"} className="min-w-0"><Button variant="ghost" className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 whitespace-normal p-1 text-left" data-video-season={item.season ?? "unknown"} aria-label={`Browse ${seasonTitle(item.season)}`} onClick={() => open({ kind: "episodes", show: browse.show, season: item.season, q: "", offset: 0 }, `[data-video-season="${item.season ?? "unknown"}"]`)} disabled={!connected}>
+      <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="aspect-[2/3] h-auto w-full [&>svg]:size-[30%] [&>svg]:max-h-14 [&>svg]:max-w-14 [&>svg]:opacity-55" /><strong className="wrap-anywhere text-base leading-[1.4] @max-[360px]/catalog:text-sm">{seasonTitle(item.season)}</strong><span className="text-sm font-normal text-muted-foreground">{item.episodeCount} episodes</span>
     </Button></li>)}</ul>}
-    {!busy && browse.kind === "movies" && <ul className="video-posters">{items?.items.map(item => <li key={item.id}><Card className="video-movie-card gap-3 p-2" data-video-item={item.id}>
-      <Button variant="ghost" className="video-poster-card" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
-        <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="video-poster" /><strong>{item.title}</strong>
+    {!busy && browse.kind === "movies" && <ul className="divide-y">{items?.items.map(item => <li key={item.id} className="grid min-w-0 grid-cols-[6rem_minmax(0,1fr)] items-start gap-4 py-3" data-video-item={item.id}>
+      <Button variant="ghost" className="h-auto w-full min-w-0 flex-col items-stretch justify-start gap-2 whitespace-normal p-0 text-left" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>
+        <AuthArtwork origin={origin} token={token} id={item.artworkId} video className="aspect-[2/3] h-auto w-full [&>svg]:size-[30%] [&>svg]:max-h-14 [&>svg]:max-w-14 [&>svg]:opacity-55" /><strong className="sr-only">{item.title}</strong>
       </Button>
-      <div className="flex items-start justify-between gap-2"><div className="space-y-1">{summary(item)}</div>{progress(item)}</div>{actions(item)}
-    </Card></li>)}</ul>}
-    {!busy && browse.kind === "episodes" && <ul className="space-y-2">{items?.items.map(item => <li key={item.id}><Card className="catalog-row gap-3 p-3" data-video-item={item.id}>
-      <div className="catalog-row-main flex min-w-0 items-center gap-3"><AuthArtwork origin={origin} token={token} id={item.artworkId} video className="video-episode-thumb" />
-        <div className="min-w-0 flex-1 space-y-1"><Button variant="link" className="video-episode-title" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>{item.title}</Button>{summary(item)}</div>{progress(item)}</div>
-      <div className="catalog-row-actions">{actions(item)}</div>
-    </Card></li>)}</ul>}
+      <div className="grid min-w-0 gap-3"><Button variant="link" className="h-auto w-fit justify-start p-0 text-left text-base whitespace-normal wrap-anywhere" onClick={event => openDetail(item, event.currentTarget)}>{item.title}</Button><div className="flex items-start justify-between gap-2"><div className="space-y-1">{summary(item)}</div>{progress(item)}</div>{actions(item)}</div>
+    </li>)}</ul>}
+    {!busy && browse.kind === "episodes" && <ul className="divide-y">{items?.items.map(item => <li key={item.id} className="grid grid-cols-[minmax(0,1fr)] items-center gap-3 py-3 @min-[760px]/catalog:grid-cols-[minmax(0,1fr)_auto]" data-video-item={item.id}>
+      <div className="flex min-w-0 items-center gap-3"><AuthArtwork origin={origin} token={token} id={item.artworkId} video className="aspect-video h-auto w-20 @max-[360px]/catalog:w-14" />
+        <div className="min-w-0 flex-1 space-y-1"><Button variant="link" className="h-auto justify-start p-0 text-left text-base whitespace-normal wrap-anywhere" aria-label={`Details for ${item.title}`} onClick={event => openDetail(item, event.currentTarget)}>{item.title}</Button>{summary(item)}</div>{progress(item)}</div>
+      <div className="flex flex-wrap items-center gap-2 @min-[760px]/catalog:justify-end [&>button]:px-3 [&>button]:text-sm @max-[420px]/catalog:[&>button]:grow">{actions(item)}</div>
+    </li>)}</ul>}
     {!busy && browse.kind !== "seasons" && total > pageSize && <nav className="flex items-center justify-between gap-2" aria-label="Video library pages">
       <Button variant="outline" disabled={!connected || loading || browse.offset === 0} onClick={() => setBrowse(value => ({ ...value, offset: Math.max(0, value.offset - pageSize) }))}>Previous</Button>
       <span className="text-sm text-muted-foreground">{browse.offset + 1}–{Math.min(browse.offset + pageSize, total)} of {total}</span>
@@ -175,12 +173,12 @@ export function VideoLibraryPanel({ origin, token, connected, canPlay, canManage
     <Dialog open={active && detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}>
       <DialogContent className="video-detail" onCloseAutoFocus={event => { event.preventDefault(); if (active && detailTrigger.current?.isConnected) detailTrigger.current.focus(); }}>
         {detail && <><DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>{[detail.video?.show?.title, detail.video?.year, detail.video?.genres.join(" · ")].filter(Boolean).join(" · ") || "From your library folders"}</DialogDescription></DialogHeader>
-          {detail.video?.fanartId && <AuthArtwork origin={origin} token={token} id={detail.video.fanartId} video className="video-fanart" />}
+          {detail.video?.fanartId && <AuthArtwork origin={origin} token={token} id={detail.video.fanartId} video className="aspect-video h-auto max-h-60 w-full [&>img]:object-cover" />}
           {detail.video?.originalTitle && detail.video.originalTitle !== detail.title && <p className="break-words text-sm text-muted-foreground">Original title: {detail.video.originalTitle}</p>}
           {detail.video?.premiered && <p className="text-sm text-muted-foreground">{detail.video.type === "episode" ? "Aired" : "Released"} {detail.video.premiered}</p>}
-          <p className="video-plot text-sm leading-relaxed">{detail.video?.plot || "No description in this video's NFO."}</p>
+          <p className="wrap-anywhere whitespace-pre-wrap text-sm leading-relaxed">{detail.video?.plot || "No description in this video's NFO."}</p>
           {canManage && <MetadataEditor key={detail.id} origin={origin} token={token} id={detail.id} connected={connected} onSaved={() => setRefresh(value => value + 1)} />}
-          {summary(detail)}{actions(detail)}{notice && <p className="text-sm text-primary" role="status">{notice}</p>}{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          {summary(detail)}{actions(detail)}{notice && <p className="text-sm text-primary" role="status">{notice}</p>}{error && <p role="alert" className="border-l-2 border-destructive py-2 pl-3 text-destructive">{error}</p>}
         </>}
       </DialogContent>
     </Dialog>

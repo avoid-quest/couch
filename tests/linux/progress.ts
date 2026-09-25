@@ -86,14 +86,14 @@ export async function verifyLocalProgress(context: ProgressContext): Promise<Per
 
   await ui.section("Library");
   await ui.type("#media-search", item.title);
-  await until("native Library displays the committed resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[aria-label="Library search results"] ${labeled(`Resume: ${item.title}`)}`]));
+  await until("native Library displays the committed resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[aria-label="Search results"] ${labeled(`Resume ${item.title}`)}`]));
   let previous = first().player.playbackId;
-  await ui.click(`[aria-label="Library search results"] ${labeled(`Resume: ${item.title}`)}`);
+  await ui.click(`[aria-label="Search results"] ${labeled(`Resume ${item.title}`)}`);
   await until("native Library Resume starts its scanned item for both remotes", () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source === mediaId));
   await started(previous, first().currentEntryId!, 7, "native Library Resume passes the saved point to libmpv");
   await pause();
   await stop();
-  await ui.button(`Details for ${item.title}`, '[aria-label="Library search results"]');
+  await ui.button(`Details: ${item.title}`, '[aria-label="Search results"]');
   await until("native Library offers an explicit restart for resumable media", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [`[role=dialog] ${labeled(`Play ${item.title} from start`)}`]));
   previous = first().player.playbackId;
   await ui.click(`[role=dialog] ${labeled(`Play ${item.title} from start`)}`);
@@ -261,7 +261,7 @@ export async function verifyJellyfinResume(context: Pick<ProgressContext, "ui" |
     });
     await ui.section("Jellyfin");
     await ui.type("#media-search", item.title);
-    const resume = `[aria-label="Jellyfin search results"] ${labeled(`Resume: ${item.title}`)}`;
+    const resume = `[aria-label="Search results"] ${labeled(`Resume ${item.title}`)}`;
     await until("native Jellyfin Continue watching displays the server's resume action", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [resume]));
     previous = first().player.playbackId;
     await ui.click(resume);
@@ -271,7 +271,7 @@ export async function verifyJellyfinResume(context: Pick<ProgressContext, "ui" |
     await seek(7);
     await stop();
     await until("Jellyfin resume stop is reported before an explicit restart", async () => (await activeSessions()).length === 0 && Math.abs((await resumeItem())?.resumePosition - 7) < 0.4);
-    await ui.button(`Details for ${item.title}`, '[aria-label="Jellyfin search results"]');
+    await ui.button(`Details: ${item.title}`, '[aria-label="Search results"]');
     const restart = `[role=dialog] ${labeled(`Play ${item.title} from start`)}`;
     await until("native Jellyfin Continue watching offers Play from start", async () => await ui.execute("return !!document.querySelector(arguments[0] + ':enabled')", [restart]));
     previous = first().player.playbackId;

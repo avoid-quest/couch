@@ -50,7 +50,7 @@ async function api(path: string, body?: unknown, index = 0) {
   return response.json() as Promise<any>;
 }
 async function screenshot(name: string) {
-  await ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code], #administrator-code').forEach(element => element.style.visibility = 'hidden')");
+  await ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code], #administrator-code').forEach(element => element.style.visibility = 'hidden')");
   const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await capture.exited, 0);
 }
@@ -103,7 +103,7 @@ try {
   await until("fresh TV displays its administrator setup dialog", () => ui.execute("return /^[0-9]{10}$/.test(document.querySelector('[data-administrator-code]')?.textContent || '')"));
   await ui.key(keys.escape);
   await ui.click(".pair-shortcut");
-  const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
+  const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   assert.match(code, /^\d{6}$/);
   await ui.key(keys.escape);
   for (let index = 0; index < 2; index++) {
@@ -148,20 +148,20 @@ try {
   await httpRemote.minimize();
   await otherRemote.restore();
   await otherRemote.ui.section("Queue");
-  await otherRemote.ui.button("Pause", ".player-controls");
+  await otherRemote.ui.button("Pause", ".player-band");
   await until("second actual browser pauses the cue on both controller snapshots", () => all(state => state.player.status === "paused"));
   await otherRemote.screenshot("cue-second-phone-paused");
   await otherRemote.minimize();
   await httpRemote.restore();
   await httpRemote.ui.section("Queue");
-  await httpRemote.ui.button("Resume", ".player-controls");
+  await httpRemote.ui.button("Resume", ".player-band");
   await until("first actual browser resumes the cue paused by the second browser", () => all(state => state.player.status === "playing"));
-  await httpRemote.ui.button("Pause", ".player-controls");
+  await httpRemote.ui.button("Pause", ".player-band");
   await until("first actual browser pauses before bounded stop evidence", () => all(state => state.player.status === "paused"));
   await httpRemote.screenshot("cue-first-phone-controls");
   await httpRemote.minimize();
   await otherRemote.restore();
-  await otherRemote.ui.button("Stop playback", ".player-controls");
+  await otherRemote.ui.button("Stop playback", ".player-band");
   await until("second actual browser stops the shared cue and retires its playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   await otherRemote.minimize();
   }
@@ -176,7 +176,7 @@ try {
   clients.forEach(client => client.connect());
   await until("both persisted pairings reconnect with the same queue and no autoplay", () => all(state => state.player.status === "idle" && state.player.playbackId === null && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds)));
   for (const [index, remote] of [httpRemote, otherRemote].entries()) {
-    await until(`actual HTTP browser ${index + 1} reconnects stopped after desktop restart`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.textContent === 'Ready'"));
+    await until(`actual HTTP browser ${index + 1} reconnects stopped after desktop restart`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
     await remote!.restore();
     await remote!.ui.section("Queue");
     await remote!.screenshot(`cue-phone-${index + 1}-reconnected`);

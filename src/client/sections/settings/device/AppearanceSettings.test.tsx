@@ -30,8 +30,8 @@ test("desktop size changes this client without touching the selected host's TV s
   const { AppearanceSettings } = await import("./AppearanceSettings");
   await act(async () => root.render(<AppearanceSettings scope="device" tvPresentation={false} credentials={{ origin: "http://localhost", token: "admin" }} connected administrator />));
   expect(screen.queryByRole("group", { name: "TV interface size" })).toBeNull();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Larger" })));
-  expect(screen.getByRole("button", { name: "Larger" }).getAttribute("aria-pressed")).toBe("true");
+  await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Larger" })));
+  expect(screen.getByRole("radio", { name: "Larger" }).getAttribute("aria-checked")).toBe("true");
   expect(localStorage.getItem("couch.remote-interface-size")).toBe("1.15");
   expect(request).not.toHaveBeenCalled();
 });
@@ -40,7 +40,7 @@ test("TV presentation keeps its preview request separate from client storage", a
   const { AppearanceSettings } = await import("./AppearanceSettings");
   await act(async () => root.render(<AppearanceSettings scope="device" tvPresentation credentials={{ origin: "http://localhost", token: "admin" }} connected administrator />));
   expect(screen.queryByRole("group", { name: "This client interface size" })).toBeNull();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Larger" })));
+  await act(async () => fireEvent.click(screen.getByRole("radio", { name: "Larger" })));
   expect(request).toHaveBeenCalledTimes(1);
   expect((request.mock.calls[0] as unknown[])[0]).toBe("http://localhost/api/appearance");
   expect(localStorage.getItem("couch.remote-interface-size")).toBeNull();

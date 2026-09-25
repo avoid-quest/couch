@@ -87,7 +87,7 @@ test("Client-only Windows offers remote playback and keeps offline recovery remo
   await render();
   expect(button("Retry")).toBeDefined();
   expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
-  await act(async () => fireEvent.click(button("Play on: 192.168.1.10:4100"))); await flush();
+  await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
   expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
   expect(invoke.mock.calls.some(([name, args]) => name === "select_playback_device" && (args as any).mode === "local")).toBe(false);
 });
@@ -98,7 +98,7 @@ test("an external Tauri page uses browser UI without accessing local commands", 
   await render();
   expect(screen.getByText("Local installation")).toBeDefined();
   expect(invoke).not.toHaveBeenCalled();
-  expect(screen.queryByRole("button", { name: /^Play on:/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Playing (here|on)/ })).toBeNull();
 });
 
 test("a native marker on an external origin never grants local presentation", () => {
@@ -148,7 +148,7 @@ test("a selected remote stays in the bundled app shell with one playback device 
   connectionError = "Cannot reach that Couch.";
   await render();
   expect(screen.getByText("Local installation")).toBeDefined();
-  expect(screen.getAllByRole("button", { name: `Play on: ${choice.address}` })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: `Playing on ${choice.address}` })).toHaveLength(1);
   expect(screen.queryByRole("banner", { name: "App playback device controls" })).toBeNull();
 });
 
@@ -156,8 +156,8 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   interruption = "sharing";
   await render();
-  await act(async () => fireEvent.click(button(`Play on: ${choice.mode === "local" ? "This computer" : choice.address}`))); await flush();
-  await act(async () => fireEvent.click(button("http://192.168.1.10:4100"))); await flush();
+  await act(async () => fireEvent.click(button("Playing here"))); await flush();
+  await act(async () => fireEvent.click(screen.getByRole("radio", { name: "http://192.168.1.10:4100" }))); await flush();
   expect(screen.getByText(/turns off this computer's remote control/)).toBeDefined();
   expect(screen.queryByText(/stops playback on this computer/)).toBeNull();
   expect(choice.mode).toBe("local");
@@ -192,37 +192,34 @@ test("closing the device chooser reconnects the same remote and restores trigger
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   await render();
   const initial = invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
-  await act(async () => fireEvent.click(button(`Play on: ${choice.mode === "local" ? "This computer" : choice.address}`))); await flush();
+  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial);
-  await act(async () => fireEvent.click(button(`Play on: ${choice.address}`))); await flush();
+  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial + 1);
   expect(choice.mode).toBe("remote");
-  expect(document.activeElement).toBe(button(`Play on: ${choice.address}`));
+  expect(document.activeElement).toBe(button(`Playing on ${choice.address}`));
 });
 
 test("Play on marks the current computer and switches directly to a remembered Couch", async () => {
   choice = { mode: "local", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100", "http://192.168.1.20:4100"], localSetupComplete: true };
   await render();
-  await act(async () => fireEvent.click(button("Play on: This computer"))); await flush();
-  expect(screen.queryByRole("button", { name: "This computer Selected", exact: true })).not.toBeNull();
-  expect(button("This computer Selected").getAttribute("aria-pressed")).toBe("true");
-  expect(button("http://192.168.1.20:4100").getAttribute("aria-pressed")).toBe("false");
-  await act(async () => fireEvent.click(button("http://192.168.1.20:4100"))); await flush();
+  await act(async () => fireEvent.click(button("Playing here"))); await flush();
+  expect(screen.getByRole("radio", { name: "This computer" }).getAttribute("aria-checked")).toBe("true");
+  expect(screen.getByRole("radio", { name: "http://192.168.1.20:4100" }).getAttribute("aria-checked")).toBe("false");
+  await act(async () => fireEvent.click(screen.getByRole("radio", { name: "http://192.168.1.20:4100" }))); await flush();
   expect(choice.address).toBe("http://192.168.1.20:4100");
   expect(screen.queryByRole("button", { name: "Stop and switch" })).toBeNull();
-  expect(button("Play on: http://192.168.1.20:4100")).toBeDefined();
+  expect(button("Playing on http://192.168.1.20:4100")).toBeDefined();
 });
 
-test("Another Couch opens focused address entry without a submenu", async () => {
+test("Another Couch address is entered inline in Play on", async () => {
   choice.mode = "local"; choice.localSetupComplete = true;
   await render();
-  await act(async () => fireEvent.click(button("Play on: This computer"))); await flush();
-  await act(async () => fireEvent.click(button("Another Couch"))); await flush();
-  expect(screen.queryByRole("button", { name: "This computer Selected", exact: true })).toBeNull();
-  expect(screen.getByRole("dialog", { name: "Another Couch" })).toBeDefined();
-  const address = screen.getByRole("textbox", { name: "Couch address" }) as HTMLInputElement;
-  expect(document.activeElement).toBe(address);
-  expect(address.value).toBe("");
+  await act(async () => fireEvent.click(button("Playing here"))); await flush();
+  const address = screen.getByRole("textbox", { name: "Another Couch address" }) as HTMLInputElement;
+  await act(async () => fireEvent.change(address, { target: { value: "192.168.1.20:4100" } }));
+  await act(async () => fireEvent.click(button("Connect"))); await flush();
+  expect(choice.address).toBe("192.168.1.20:4100");
 });
 
 

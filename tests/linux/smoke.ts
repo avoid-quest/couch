@@ -85,8 +85,8 @@ try {
   assert.equal(build.revision, revision, "running sidecar identifies the launched revision");
   assert.equal(build.dirty, false, "native smoke starts from a clean build");
 
-  await tv.addDirectMedia("http://127.0.0.1:4200/generated-local-media.mkv", "Generated local smoke media");
-  await until("native app queues generated local media", () => state?.queue.length === 1 && state.queue[0]?.title === "Generated local smoke media");
+  await tv.addDirectMedia("http://127.0.0.1:4200/generated-local-media.mkv");
+  await until("native app queues generated local media", () => state?.queue.length === 1 && state.queue[0]?.title === "127.0.0.1/generated-local-media.mkv");
   const entryId = state!.queue[0]!.id;
   if (mpvThreading) {
     assert.equal(process.env.TAURI_VIDEO_TELEMETRY, "1", "threading qualification records native frame telemetry");

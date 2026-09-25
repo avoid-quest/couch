@@ -6,7 +6,6 @@ import { librarySourcesQuery } from "@/api/library";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,29 +83,29 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
       <DialogTrigger asChild><Button variant="outline" data-action="library-folders" data-tv-local-only={host || undefined} aria-label={`${sources.length} library folder${sources.length === 1 ? "" : "s"}`}><FolderOpen aria-hidden="true" />Folders<Badge variant="secondary">{sources.length}</Badge>{sources.some(source => source.status === "scanning") && <span className="inline-block size-[7px] rounded-full bg-primary" aria-label="Scanning" />}</Button></DialogTrigger>
       <DialogContent data-tv-local-only={host || undefined}>
         <DialogHeader><DialogTitle>Library folders</DialogTitle><DialogDescription>{"An administrator manages TV folders in Settings > Sources."}</DialogDescription></DialogHeader>
-        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-        <ul className="space-y-3">{sources.map(source => <li key={source.id}>
-          <Card className="gap-3 p-4">
+        {error && <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 border-b border-border bg-transparent px-0"><AlertDescription>{error}</AlertDescription></Alert>}
+        <ul>{sources.map(source => <li key={source.id}>
+          <div className="space-y-2 border-b border-border py-3">
             <div className="flex flex-wrap items-center justify-between gap-2"><strong className="break-words text-base">{source.name}</strong><Badge variant={source.status === "error" || source.status === "unavailable" ? "destructive" : "secondary"}>{statusLabels[source.status]}</Badge></div>
             <p className="text-sm text-muted-foreground">{source.itemCount} items</p>
             {host && source.path && <p className="break-all text-sm text-muted-foreground">{source.path}</p>}
-            {source.error && <Alert variant="destructive"><AlertDescription>{source.error}</AlertDescription></Alert>}
+            {source.error && <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 border-b border-border bg-transparent px-0"><AlertDescription>{source.error}</AlertDescription></Alert>}
             {source.warning && <p className="text-sm text-muted-foreground">{source.warning.replace(" Media is still playable.", "")}</p>}
-          </Card>
+          </div>
         </li>)}</ul>
         <Button variant="outline" data-tv-local-only={host || undefined} onClick={() => { setFoldersOpen(false); onManage(); }}>Manage folders in Sources</Button>
       </DialogContent>
     </Dialog>}
       </div>
     </div>
-    {error && <Alert variant="destructive"><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={refresh}>Try again</Button></AlertDescription></Alert>}
+    {error && <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 border-b border-border bg-transparent px-0"><AlertDescription className="space-y-3"><p>{error}</p><Button variant="outline" disabled={!connected || loading} onClick={refresh}>Try again</Button></AlertDescription></Alert>}
     <Tabs value={view} onValueChange={setView} className="gap-4">
       <TabsList aria-label="Library view" className="grid h-auto w-full grid-cols-3 gap-1 md:grid-cols-6"><TabsTrigger value="all"><FolderOpen aria-hidden="true" />All media</TabsTrigger><TabsTrigger value="movies"><Film aria-hidden="true" />Movies</TabsTrigger><TabsTrigger value="shows"><Tv aria-hidden="true" />Shows</TabsTrigger><TabsTrigger value="artists"><MicVocal aria-hidden="true" />Artists</TabsTrigger><TabsTrigger value="albums"><Disc3 aria-hidden="true" />Albums</TabsTrigger><TabsTrigger value="collections">Collections</TabsTrigger></TabsList>
       {(["movies", "shows"] as const).map(videoView => <TabsContent key={videoView} value={videoView} forceMount hidden={view !== videoView}><VideoLibraryPanel canManage={canManage} origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} view={videoView} active={view === videoView} onEnqueue={onEnqueue} /></TabsContent>)}
       {(["artists", "albums"] as const).map(musicView => <TabsContent key={musicView} value={musicView} forceMount hidden={view !== musicView}><MusicPanel origin={origin} token={token} connected={connected} canPlay={canPlay} view={musicView} active={view === musicView} onEnqueue={onEnqueue} onQueueAlbum={onQueueAlbum} onArtistTracks={selected => { setArtist(selected); setDraft(""); setQuery(""); setOffset(0); setView("all"); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }} /></TabsContent>)}
       <TabsContent value="collections" forceMount hidden={view !== "collections"}><CollectionsPanel origin={origin} token={token} connected={connected} canPlay={canPlay} version={0} active={view === "collections"} /></TabsContent>
       <TabsContent value="all" className="space-y-4">
-    {artist && <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted p-3"><p className="min-w-0 flex-1 break-words text-sm">Tracks by <strong>{artist.name}</strong>, including singles</p><Button variant="outline" onClick={() => { setArtist(null); setOffset(0); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }}>Show all artists</Button></div>}
+    {artist && <div className="flex flex-wrap items-center gap-2 border-b border-border py-3"><p className="min-w-0 flex-1 break-words text-sm">Tracks by <strong>{artist.name}</strong>, including singles</p><Button variant="outline" onClick={() => { setArtist(null); setOffset(0); requestAnimationFrame(() => document.querySelector<HTMLInputElement>("#library-query")?.focus()); }}>Show all artists</Button></div>}
     <form className="flex w-full items-end gap-2" role="search" onSubmit={search}>
       <div className="min-w-0 flex-1"><Label htmlFor="library-query" className="sr-only">Search library</Label><Input id="library-query" aria-label="Search library" type="search" placeholder="Search title, artist or album" maxLength={200} value={draft} disabled={!connected} onChange={event => setDraft(event.target.value)} /></div>
       <Button className="primary-button" variant="secondary" size="icon" type="submit" aria-label="Search" disabled={!connected || loading}><Search aria-hidden="true" /></Button>
@@ -114,11 +113,11 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     <div className="text-sm text-muted-foreground" aria-live="polite">{loading ? "Loading library…" : `${results.total} item${results.total === 1 ? "" : "s"}`}</div>
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to browse and play your library.</p>}
-    {!loading && !error && results.items.length === 0 && <Card className="p-5 text-sm leading-relaxed text-muted-foreground">{query ? "No matching media. Try another title or artist." : sources.length ? "No media found yet. Scans include supported audio and video files." : "An administrator can add TV folders in Settings > Sources to start your collection."}</Card>}
-    <ul className="space-y-2 aria-busy:opacity-70" aria-busy={loading}>{results.items.map(item => <li key={item.id}>
-      <Card className="gap-3 p-3">
+    {!loading && !error && results.items.length === 0 && <p className="border-t border-border py-4 text-sm leading-relaxed text-muted-foreground">{query ? "No matching media. Try another title or artist." : sources.length ? "No media found yet. Scans include supported audio and video files." : "An administrator can add TV folders in Settings > Sources to start your collection."}</p>}
+    <ul className="aria-busy:opacity-70" aria-busy={loading}>{results.items.map(item => <li key={item.id}>
+      <div className="space-y-3 border-b border-border py-3">
         <div className="flex min-w-0 items-center gap-3">
-          {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind === "video"} className={`library-kind ${item.kind} size-11`} /> : <span className={`library-kind ${item.kind} grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary`} aria-label={item.kind}>{item.kind === "audio" ? <Music2 aria-hidden="true" className="size-5" /> : <Video aria-hidden="true" className="size-5" />}</span>}
+          {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind === "video"} className={`library-kind ${item.kind} size-11`} /> : <span className={`library-kind ${item.kind} grid size-11 shrink-0 place-items-center text-muted-foreground`} aria-label={item.kind}>{item.kind === "audio" ? <Music2 aria-hidden="true" className="size-5" /> : <Video aria-hidden="true" className="size-5" />}</span>}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2"><strong className="break-words text-base font-medium">{item.title}</strong>{item.progress?.watched && <Badge variant="secondary"><Check aria-hidden="true" />Watched</Badge>}</div>
             <span className="mt-1 block break-words text-sm leading-relaxed text-muted-foreground">{[item.artist, item.album, duration(item.duration)].filter(Boolean).join(" · ") || (item.kind === "audio" ? "Audio" : "Video")}{!item.available && " · File unavailable"}</span>
@@ -131,7 +130,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
           {!!item.progress?.position && <Button variant="outline" className="min-h-11" aria-label={`Play ${item.title} from start`} disabled={!connected || !canPlay || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title, { playNow: true, fromStart: true })}><RotateCcw aria-hidden="true" />From start</Button>}
           <Button variant="secondary" className="min-h-11" aria-label={`Up next: ${item.title}`} disabled={!connected || !item.available || loading || enqueuing !== null} onClick={() => void enqueue(item.id, item.title)}><Plus aria-hidden="true" />{enqueuing?.id === item.id && !enqueuing.playNow ? "Adding…" : "Up next"}</Button>
         </div>
-      </Card>
+      </div>
     </li>)}</ul>
     {results.total > pageSize && <nav className="flex items-center justify-between gap-2" aria-label="Library pages">
       <Button variant="outline" disabled={!connected || offset === 0 || loading} onClick={() => setOffset(value => Math.max(0, value - pageSize))}>Previous</Button>

@@ -23,7 +23,7 @@ type Context = {
   origin: string;
   artifacts: string;
   code: string;
-  remotes: { state: SessionState | null }[];
+  remotes: { token: string; state: SessionState | null }[];
   command: (index: number, action: Action) => void;
   reconnect: (index: number) => void;
   until: (check: () => unknown | Promise<unknown>, timeout?: number) => Promise<void>;
@@ -33,10 +33,10 @@ type Context = {
 
 export async function captureBandcampAudio(ui: UiDriver, title: string, name: string, artifacts: string, screenshot: Context["screenshot"]) {
   await ui.waitFor("Bandcamp audio shows its title and decoded artwork on the TV", () => ui.execute(`
-    const artwork = document.querySelector('.audio-stage-artwork img');
-    return document.querySelector('.audio-stage-caption h1')?.textContent === arguments[0] && artwork?.naturalWidth > 0 && artwork.getBoundingClientRect().width >= 200;
+    const artwork = document.querySelector('.player-audio-art img');
+    return document.querySelector('.player-audio-copy h1')?.textContent === arguments[0] && artwork?.naturalWidth > 0 && artwork.getBoundingClientRect().width >= 200;
   `, [title]));
-  const rect = await ui.execute("return document.querySelector('.audio-stage-artwork').getBoundingClientRect().toJSON()");
+  const rect = await ui.execute("return document.querySelector('.player-audio-art').getBoundingClientRect().toJSON()");
   assert.deepEqual(await ui.execute("return [innerWidth, innerHeight, devicePixelRatio]"), [1600, 1000, 1], "Audio artwork CSS coordinates match the native display");
   await screenshot(name);
   const decode = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", `${artifacts}/${name}.png`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdout: "pipe", stderr: "inherit" });
@@ -61,6 +61,13 @@ export async function verifyBandcamp(context: Context) {
   let phase = "";
   const queue = () => remotes[0]!.state!.queue;
   const idle = () => until(() => remotes.every(remote => remote.state?.player.status === "idle"));
+  const save = await fetch(`${origin}/api/providers/favorites`, { method: "POST", headers: { origin, Authorization: `Bearer ${remotes[0]!.token}`, "content-type": "application/json" }, body: JSON.stringify({ item: { provider: "bandcamp", kind: "collection", title: "Jazz Format Mixtape vol.1", url: albumUrl } }) });
+  assert.equal(save.status, 200, "A public album can be saved for browsing from the current UI");
+  async function albumAction(target: UiDriver, label: "Play" | "Up next") {
+    const button = await target.execute("return [...document.querySelectorAll('[role=dialog] button')].find(button => button.textContent.trim() === arguments[0] && !button.hasAttribute('aria-label'))", [label]);
+    assert.ok(button, `Album offers ${label}`);
+    await target.clickElement(button["element-6066-11e4-a52e-4f735466cecf"]);
+  }
   async function observe(entry: QueueEntry) {
     await until(() => {
       const failed = remotes.find(remote => remote.state?.currentEntryId === entry.id && remote.state.player.status === "error");
@@ -71,27 +78,22 @@ export async function verifyBandcamp(context: Context) {
     await until(() => remotes.every(remote => remote.state?.currentEntryId === entry.id && remote.state.player.status === "playing" && remote.state.player.position > initial + 2));
     return { entryId: entry.id, source: entry.source, playbackId: remotes[0]!.state!.player.playbackId, initialPosition: initial, position: remotes[0]!.state!.player.position, tracks: remotes[0]!.state!.player.tracks };
   }
-  async function openAlbum(target: UiDriver, suggested = false) {
-    await target.section("Online");
-    await target.button("Bandcamp", ".provider-selector");
-    if (suggested) {
-      await target.button("Home", ".provider-toolbar");
-      await until(async () => await target.execute(`return !!document.querySelector('[aria-label="Open Jazz Format Mixtape vol.1"]')`));
-      await target.button("Open Jazz Format Mixtape vol.1");
-    } else {
-      await target.type("#provider-search", albumUrl);
-      await target.button("Open", ".provider-search");
-    }
+  async function openAlbum(target: UiDriver) {
+    if (await target.execute("return !!document.querySelector('[role=dialog]')")) await target.key(keys.escape);
+    await target.section("Saved");
+    await target.click('[aria-label="Saved sections"] [role="tab"]:nth-child(2)');
+    await until(async () => await target.execute("return !!document.querySelector('[aria-label=\"Open Jazz Format Mixtape vol.1\"]')"));
+    await target.click('[aria-label="Open Jazz Format Mixtape vol.1"]');
     await until(async () => {
       const error = await target.execute("return document.querySelector('.provider-error')?.textContent");
       if (error) throw new Error(error);
-      return await target.execute("return document.querySelectorAll('.provider-item').length") === 22;
+      return await target.execute("return document.querySelectorAll('[role=dialog] [aria-label=\"Album tracks\"] li').length") === 22;
     }, 45_000);
-    assert.equal(await target.execute("return !!document.querySelector('#provider-quality')"), false, "Bandcamp does not offer video quality");
-    const titles = await target.execute("return [...document.querySelectorAll('.provider-item h4')].map(title => title.textContent.trim())") as string[];
+    assert.equal(await target.execute("return !!document.querySelector('[role=dialog] [aria-label^=\"Video quality\"]')"), false, "Bandcamp does not offer video quality");
+    const titles = await target.execute("return [...document.querySelectorAll('[role=dialog] [aria-label=\"Album tracks\"] h4')].map(title => title.textContent.trim())") as string[];
     assert.equal(titles[0], "Intro");
     assert.equal(titles.at(-1), "Nujabes - The Final View");
-    await until(async () => await target.execute("return document.querySelector('.provider-album img')?.naturalWidth > 0"));
+    await until(async () => await target.execute("return [...document.querySelectorAll('[role=dialog] img')].some(image => image.naturalWidth > 0)"));
     return titles;
   }
   async function appended(before: Set<string>, titles: string[]) {
@@ -109,7 +111,7 @@ export async function verifyBandcamp(context: Context) {
   }
   async function run(name: string, url: string, check: () => Promise<Record<string, unknown>>) {
     const started = performance.now();
-    phase = "open Bandcamp catalog";
+    phase = "open a saved Bandcamp album";
     console.log(`START ${name}`);
     let result: Record<string, unknown>;
     try {
@@ -118,7 +120,7 @@ export async function verifyBandcamp(context: Context) {
     } catch (error) {
       await phone?.minimize().catch(() => {});
       await screenshot(`${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-failed`).catch(() => {});
-      const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), titles: [...document.querySelectorAll('.provider-item h4')].map(element => element.textContent) }").catch(() => null);
+      const diagnostics = await ui.execute("return { alerts: [...document.querySelectorAll('[role=alert]')].map(element => element.textContent), titles: [...document.querySelectorAll('[aria-label=\"Album tracks\"] h4')].map(element => element.textContent) }").catch(() => null);
       result = { name, url, kind: "webpage", video: false, catalog: { provider: "bandcamp" }, status: "failed", phase, error: String(error), diagnostics };
       console.log(`FAIL ${name} during ${phase}: ${String(error)}`);
     } finally {
@@ -129,18 +131,19 @@ export async function verifyBandcamp(context: Context) {
   }
 
   await run("Bandcamp native album playback and transport", albumUrl, async () => {
-    const titles = await openAlbum(ui, true);
-    phase = "return to the suggested album and restore keyboard focus";
+    const titles = await openAlbum(ui);
+    phase = "return to the saved album and restore keyboard focus";
     await ui.key(keys.escape);
     await until(async () => await ui.execute("return document.activeElement?.getAttribute('aria-label') === 'Open Jazz Format Mixtape vol.1'"));
     await ui.button("Open Jazz Format Mixtape vol.1");
-    await until(async () => await ui.execute("return document.querySelectorAll('.provider-track').length") === 22);
+    await until(async () => await ui.execute("return document.querySelectorAll('[role=dialog] [aria-label=\"Album tracks\"] li').length") === 22);
     await screenshot("bandcamp-native-album");
     const before = new Set(queue().map(entry => entry.id));
     phase = "play the complete album through the TV UI";
-    await ui.button("Play album");
+    await albumAction(ui, "Play");
     const entries = await appended(before, titles);
     const first = await observe(entries[0]!);
+    await ui.key(keys.escape);
     phase = "advance to the next ordered track through native controls";
     await ui.controls();
     await ui.button("Next in queue");
@@ -170,25 +173,26 @@ export async function verifyBandcamp(context: Context) {
     await phone.restore();
     assert.equal(await phone.ui.execute("return !!document.querySelector('.video-stage, video')"), false, "The HTTP client has no screen view");
     const titles = await openAlbum(phone.ui);
-    await phone.ui.execute("document.querySelector('.provider-album').scrollIntoView({ block: 'center' })");
+    await phone.ui.execute("document.querySelector('[role=dialog] [aria-label=\"Album tracks\"]').scrollIntoView({ block: 'center' })");
     await assertResponsive(phone.ui, "Phone Bandcamp album");
     await phone.screenshot("bandcamp-http-album");
-    await phone.ui.execute("document.querySelector('.provider-track:nth-child(6)').scrollIntoView({ block: 'center' })");
+    await phone.ui.execute("document.querySelector('[role=dialog] [aria-label=\"Album tracks\"] li:nth-child(6)').scrollIntoView({ block: 'center' })");
     await phone.screenshot("bandcamp-http-album-tracks");
     phase = "append the complete album through the phone UI without autoplay";
     let before = new Set(queue().map(entry => entry.id));
-    await phone.ui.button("Add album to queue");
+    await albumAction(phone.ui, "Up next");
     const queued = await appended(before, titles);
     assert.ok(remotes.every(remote => remote.state?.player.status === "idle"), "Adding a phone album keeps playback stopped");
     phase = "play the complete album through the phone UI";
     before = new Set(queue().map(entry => entry.id));
-    await until(async () => await phone!.ui.execute("return [...document.querySelectorAll('.provider-album-actions button')].some(button => button.textContent.trim() === 'Play album' && !button.disabled)"));
-    await phone.ui.button("Play album");
+    await until(async () => await phone!.ui.execute("return [...document.querySelectorAll('[role=dialog] button')].some(button => button.textContent.trim() === 'Play' && !button.disabled)"));
+    await albumAction(phone.ui, "Play");
     const played = await appended(before, titles);
     const observation = await observe(played[0]!);
+    await phone.ui.key(keys.escape);
     phase = "show native playback and stop from the phone";
     await phone.ui.controls();
-    await until(async () => await phone!.ui.execute("return document.querySelector('.media-title')?.textContent === 'Intro' && document.querySelector('.playback-status')?.textContent === 'Playing'"));
+    await until(async () => await phone!.ui.execute("return document.querySelector('.player-band-heading h1')?.textContent === 'Intro' && !!document.querySelector('.player-band:not(.player-band-hidden)')"));
     await phone.ui.execute("window.scrollTo(0, 0)");
     await assertResponsive(phone.ui, "Phone Bandcamp playback controls");
     await phone.screenshot("bandcamp-http-controls");
@@ -202,9 +206,8 @@ export async function verifyBandcamp(context: Context) {
   await run("Bandcamp missing public track failure", missingUrl, async () => {
     await phone?.minimize();
     const before = queue();
-    await ui.section("Online");
-    await ui.button("Bandcamp", ".provider-selector");
-    phase = "open the deliberately missing public track in the native catalog";
+    await openAlbum(ui);
+    phase = "open the deliberately missing public track in the saved collection browser";
     await ui.type("#provider-search", missingUrl);
     await ui.button("Open", ".provider-search");
     let error = "";
@@ -219,10 +222,10 @@ export async function verifyBandcamp(context: Context) {
 
 export async function verifyBandcampRestart(phone: HttpRemote, queue: QueueEntry[], until: Context["until"]) {
   await phone.restore();
-  await until(async () => await phone.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.textContent === 'Ready'"));
+  await until(async () => await phone.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
   await phone.ui.section("Queue");
-  await until(async () => await phone.ui.execute("return document.querySelectorAll('.queue-entry').length", []) === queue.length);
-  assert.deepEqual(await phone.ui.execute("return [...document.querySelectorAll('.queue-entry-title')].map(element => element.textContent.trim())"), queue.map(entry => entry.title), "The reconnected HTTP app receives the persisted album queue in order without autoplay");
+  await until(async () => await phone.ui.execute("return document.querySelectorAll('.queue-panel [data-queue-entry-id]').length") === queue.length);
+  assert.deepEqual(await phone.ui.execute("return [...document.querySelectorAll('.queue-panel [data-queue-entry-id] button[aria-label^=\"Play \"]')].map(button => button.getAttribute('aria-label').slice(5))"), queue.map(entry => entry.title), "The reconnected HTTP app receives the persisted album queue in order without autoplay");
   assert.equal(await phone.ui.execute("return !!document.querySelector('.video-stage, video')"), false);
   await phone.screenshot("bandcamp-http-after-restart");
   await phone.minimize();

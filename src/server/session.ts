@@ -22,6 +22,7 @@ type SessionOptions = {
 };
 
 export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
+  const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let desiredVolume = store.volume;
   let audioInterrupted = false;
   let resolution: AbortController | null = null;
@@ -87,6 +88,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const cursorEntryId = state.queue.slice(0, cursor + 1).findLast(entry => retained.has(entry.id))?.id ?? null;
     store.saveQueue(queue, cursorEntryId);
     state.queue = queue;
+    state.queueRemoval = undefined;
     state.queueCursorEntryId = cursorEntryId;
     state.queueError = null;
     cancelWebRecovery();
@@ -209,7 +211,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const intent = playIntent;
     const playbackId = crypto.randomUUID();
     state.webRetry = { paused: recovery.paused };
-    state.player = { ...previous, playbackId, status: "loading", error: null };
+    state.player = { ...previous, playbackId, status: "loading", buffering: false, error: null };
     const current = () => admitted() && !controller.signal.aborted && intent === playIntent && state.player.playbackId === playbackId;
     const failed = (error: unknown) => {
       if (!current()) return;
@@ -292,7 +294,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     state.playedBy = undefined;
     state.currentEntryId = entry.id;
     state.presentationId = playbackId;
-    state.player = { ...state.player, playbackId, status: "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
+    state.player = { ...state.player, playbackId, status: "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: null };
     broadcast();
     const failed = (error: unknown) => {
       if (!admitted() || state.player.playbackId !== playbackId) return;
@@ -363,7 +365,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       expiry = sourceExpiry;
       pendingPause = paused;
       subtitleWarning = warning ?? null;
-      state.player = { ...previous, playbackId, status: "loading", error: null, tracks: [], chapters: [] };
+      state.player = { ...previous, playbackId, status: "loading", buffering: false, error: null, tracks: [], chapters: [] };
       progress.replaceTransport(previous.playbackId, playbackId, state.queue.find(item => item.id === entry!.id));
       send({ type: "load", playbackId, ...media, paused,
         ...(entry!.live || fresh.metadata?.live ? {} : { startPosition: position }),
@@ -393,7 +395,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     state.currentEntryId = null;
     state.presentationId = null;
     subtitleWarning = null;
-    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
+    state.player = { ...state.player, playbackId: null, status: state.player.status === "unavailable" ? "unavailable" : "loading", buffering: false, position: 0, duration: null, seekable: false, tracks: [], chapters: [], speed: undefined, replayGain: undefined, audioDelay: undefined, subtitleDelay: undefined, subtitleError: null, nowPlaying: null, error: state.player.status === "unavailable" ? state.player.error : null };
     if (state.player.status !== "unavailable") send({ type: "stop" });
     broadcast();
   };
@@ -451,9 +453,13 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       broadcast();
     },
     updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
+    notice(actor: PlaybackActor, text: string) {
+      state.activity = { id: crypto.randomUUID(), actor, text };
+      try { broadcast(); } finally { state.activity = undefined; }
+    },
     get state() { return structuredClone(state); },
     enrichEntry,
-    loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize = () => {}, playedBy?: PlaybackActor) {
+    loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize = () => {}, playedBy?: PlaybackActor, placement?: "next") {
       assertAdmitted();
       authorize();
       if (mode === "play") {
@@ -461,9 +467,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         if (!entries.length) throw new Error("This playlist is empty. Add items before playing it.");
       }
       if (entries.length + (mode === "append" ? state.queue.length : 0) > 500) throw new Error("The queue can hold up to 500 items. Remove some items before loading this playlist.");
-      const added = entries.map(entry => ({ ...entry, id: crypto.randomUUID() }));
+      const added = entries.map(entry => ({ ...entry, id: crypto.randomUUID(), ...(playedBy ? { addedBy: { ...playedBy } } : {}) }));
       if (mode !== "append") persistProgress(progress.checkpoint, true);
-      saveQueue(mode === "append" ? [...state.queue, ...added] : added);
+      const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
+      saveQueue(mode === "append" ? placement === "next" ? [...state.queue.slice(0, cursor + 1), ...added, ...state.queue.slice(cursor + 1)] : [...state.queue, ...added] : added);
       if (mode === "play") {
         try { play(added[0]!.id, true, false, authorize, false, playedBy); }
         catch (error) {
@@ -571,8 +578,16 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     removeHistory(mediaId: string) {
       assertAdmitted();
       if (progress.mediaId === mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before removing it from history.", 409);
-      if (!store.removeSharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
+      const removed = store.takeSharedProgress(mediaId);
+      if (!removed.length) throw new ViewingError("History item not found.", 404);
       progress.discard(mediaId);
+      invalidate("library");
+      return removed;
+    },
+    restoreProgress(removed: import("./store").ProgressSnapshot, expected: import("./store").ProgressSnapshot = []) {
+      assertAdmitted();
+      if (progress.mediaId === removed[0]?.mediaId && ["loading", "playing", "paused"].includes(state.player.status)) throw new ViewingError("Stop this item before restoring its history.", 409);
+      store.restoreSharedProgress(removed, expected);
       invalidate("library");
     },
     command(action: Action, authorize = () => {}, playedBy?: PlaybackActor) {
@@ -583,16 +598,37 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           if (action.playNow) available();
           if (state.queue.length >= 500) throw new Error("The queue is full. Remove an item before adding another.");
           if (state.queue.some(entry => entry.id === action.entry.id)) throw new Error("That queue entry already exists.");
-          saveQueue([...state.queue, { ...action.entry, title: action.entry.title.trim() }]);
+          const entry = { ...action.entry, title: action.entry.title.trim(), addedBy: playedBy ? { ...playedBy } : undefined };
+          const cursor = state.queue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
+          saveQueue(action.placement === "next" ? [...state.queue.slice(0, cursor + 1), entry, ...state.queue.slice(cursor + 1)] : [...state.queue, entry]);
           if (action.playNow) play(action.entry.id, true, false, authorize, false, playedBy);
           else broadcast();
           break;
         case "remove": {
           const index = state.queue.findIndex(entry => entry.id === action.entryId);
           if (index === -1) throw new Error("That queue entry no longer exists.");
+          const entry = state.queue[index]!;
           saveQueue(state.queue.filter(entry => entry.id !== action.entryId));
+          const token = crypto.randomUUID();
+          const expiresAt = Date.now() + 6_000;
+          const timer = setTimeout(() => removedEntries.delete(token), 6_000);
+          timer.unref?.();
+          removedEntries.set(token, { entry, index, queueIds: state.queue.map(entry => entry.id), currentEntryId: state.currentEntryId === action.entryId ? null : state.currentEntryId, expiresAt, timer });
+          state.queueRemoval = { entryId: action.entryId, token };
           if (state.currentEntryId === action.entryId) stop();
           else broadcast();
+          break;
+        }
+        case "restoreRemoved": {
+          const removed = removedEntries.get(action.token);
+          if (!removed || Date.now() >= removed.expiresAt) throw new Error("Undo expired. Check the current queue.");
+          if (state.currentEntryId !== removed.currentEntryId || state.queue.length !== removed.queueIds.length || state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) || state.queue.length >= 500) throw new Error("The shared queue or playback changed. Check its current state before trying again.");
+          const queue = [...state.queue];
+          queue.splice(removed.index, 0, removed.entry);
+          saveQueue(queue);
+          clearTimeout(removed.timer);
+          removedEntries.delete(action.token);
+          broadcast();
           break;
         }
         case "move": {
@@ -697,7 +733,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         state.playedBy = undefined;
         state.currentEntryId = next.id;
         state.presentationId = player.playbackId;
-        state.player = { ...state.player, playbackId: player.playbackId, status: "loading" };
+        state.player = { ...state.player, playbackId: player.playbackId, status: "loading", buffering: false };
         const mediaId = playbackMediaId(next);
         progress.begin(next, player.playbackId!, mediaId ? store.progressOwner(mediaId) ?? state.activeProfile.id : state.activeProfile.id);
       }

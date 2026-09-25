@@ -10,13 +10,13 @@ import { videoFixtureMovie, videoFixtureTitles } from "./video-library-fixture";
 
 type Context = MusicContext & { clients: readonly (MusicContext["clients"][number] & { socket: WebSocket; connect(): void })[] };
 type SavedVideoLibrary = { source: LibrarySource; movie: LibraryItem; show: VideoShow; ids: string[]; queue: QueueEntry[] };
-const active = '[aria-label="Library search results"]';
+const active = '[aria-label="Search results"]';
 const labeled = (value: string) => `[aria-label=${JSON.stringify(value)}]`;
-const row = (id: string) => `${active} li:has(button[aria-label=${JSON.stringify(`Details for ${id}`)}])`;
+const row = (id: string) => `${active} li:has(button[aria-label=${JSON.stringify(`Details: ${id}`)}])`;
 
 async function nativeScreenshot(context: Context, name: string) {
   await context.httpRemote.minimize();
-  await context.ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code]').forEach(element => element.style.visibility = 'hidden')");
+  await context.ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code]').forEach(element => element.style.visibility = 'hidden')");
   const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${context.artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await child.exited, 0);
 }
@@ -77,7 +77,6 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await stop();
   await httpRemote.minimize();
   await ui.section("Library");
-  await ui.execute("window.__videoLibraryStage = document.querySelector('.video-stage')");
   assert.ok(await Bun.file("/mnt/video-fixtures/Movie/Observatory.mkv").exists(), "The playable movie exists in this native test container");
   await addTVFolder(ui, until, "video-fixtures");
   let source!: LibrarySource;
@@ -108,13 +107,13 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await ui.section("Library");
   await ui.type("#media-search", movie.title);
   await loadedArtwork(ui, context, 240, "native Find decodes the movie poster");
-  await ui.button(`Details for ${movie.title}`, active);
+  await ui.button(`Details: ${movie.title}`, active);
   assert.ok(await ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('A local film about a night under the stars.')"));
   await ui.key(keys.escape);
-  await until("movie details restore the actual opener", () => ui.execute("return document.activeElement?.getAttribute('aria-label') === arguments[0]", [`Details for ${movie.title}`]));
-  await ui.button(`Up next: ${movie.title}`, active);
+  await until("movie details restore the actual opener", () => ui.execute("return document.activeElement?.getAttribute('aria-label') === arguments[0]", [`Details: ${movie.title}`]));
+  await ui.button(`Queue: ${movie.title}`, active);
   await until("TV movie Queue commits to both controllers", () => all(state => state.queue.some(entry => entry.source === `library:${movie.id}`)));
-  await ui.button(`Play: ${movie.title}`, active);
+  await ui.button(`Play ${movie.title}`, active);
   await until("TV movie Play runs native video and two audio tracks", () => all(state => state.player.status === "playing" && state.player.position > 0 && state.player.tracks?.filter(track => track.kind === "audio").length === 2 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${movie.id}`));
   await ui.watching();
   await assertNativeVideoPixels(ui.execute, artifactDir, "native-library-movie-playback");
@@ -128,7 +127,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await httpRemote.ui.type("#media-search", movie.title);
   await loadedArtwork(httpRemote.ui, context, 240, "HTTP phone decodes cached movie poster");
   await assertResponsive(httpRemote.ui, "Phone movie search");
-  await httpRemote.ui.button(`Details for ${movie.title}`, active);
+  await httpRemote.ui.button(`Details: ${movie.title}`, active);
   await httpRemote.ui.button(`Play ${movie.title} from start`, '[role=dialog]');
   await until("phone Play from start clears the movie resume offset in native playback", () => all(state => state.player.status === "playing" && state.player.position > 0 && state.player.position < 4 && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${movie.id}`));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
@@ -138,8 +137,8 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await httpRemote.ui.key(keys.escape);
   await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", episodes[0]!.title);
-  await httpRemote.ui.button(`Up next: ${episodes[0]!.title}`, active);
-  await httpRemote.ui.button(`Play: ${episodes[0]!.title}`, active);
+  await httpRemote.ui.button(`Queue: ${episodes[0]!.title}`, active);
+  await httpRemote.ui.button(`Play ${episodes[0]!.title}`, active);
   await until("phone episode selection replaces movie playback on the one native player", () => all(state => state.player.status === "playing" && state.queue.find(entry => entry.id === state.currentEntryId)?.source === `library:${episodes[0]!.id}`));
   await stop();
   const currentMovie = async () => (await api(`/api/library/items?videoType=movie&q=${encodeURIComponent(videoFixtureMovie)}`)).items.find((item: LibraryItem) => item.id === movie.id) as LibraryItem;
@@ -169,7 +168,7 @@ export async function verifyVideoLibrary(context: Context): Promise<SavedVideoLi
   await clients[0]!.command({ type: "enqueueLibrary", itemId: episodes[3]!.id, entryId: crypto.randomUUID() });
   clients[1]!.connect();
   await until("reconnecting controller receives the current queue snapshot with the new episode", () => all(state => state.queue.at(-1)?.source === `library:${episodes[3]!.id}`));
-  assert.equal(await ui.execute("return window.__videoLibraryStage === document.querySelector('.video-stage')"), true, "VideoStage remains mounted throughout catalog browsing/playback");
+  assert.equal(await ui.execute("return !!document.querySelector('.video-stage')"), false, "Find releases the native video stage after playback");
   await rescan(context, source.id);
   assert.deepEqual((await api(`/api/library/items?showId=${show.id}`)).items.map((item: LibraryItem) => item.id), episodes.map(item => item.id));
   assert.ok(Math.abs((await currentMovie()).progress!.position - 7) < 0.5);
@@ -231,7 +230,7 @@ export async function assertVideoLibraryAfterRestart(context: Context, expected:
   await rescan(context, expected.source.id);
   await httpRemote.restore();
   await until("restoring the source enables the same movie UUID and resume action on the phone", () => httpRemote.ui.execute("return !!document.querySelector(arguments[0] + ' button[aria-label^=Resume]:enabled')", [row(movie.title)]));
-  await httpRemote.ui.click(`${row(movie.title)} ${labeled(`Resume: ${movie.title}`)}`);
+  await httpRemote.ui.click(`${row(movie.title)} ${labeled(`Resume ${movie.title}`)}`);
   await until("phone resumes the preserved movie point in native playback after restart", () => clients.every(client => client.state?.player.status === "playing" && client.state.player.position >= 6.5 && client.state.player.position < 10 && client.state.queue.find(item => item.id === client.state!.currentEntryId)?.source === `library:${movie.id}`));
   await restoreQueue(context, expected.queue);
   await Bun.write(`${artifactDir}/video-library-after-restart.json`, JSON.stringify({ movie: (await api(`/api/library/items?q=${encodeURIComponent(movie.title)}`)).items.find((item: LibraryItem) => item.id === movie.id), show: (await api("/api/library/video/shows?q=Observatory")).items[0], freshArtwork, queueRestored: true }, null, 2));

@@ -7,7 +7,7 @@ let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const requests: { value: number; resolve: (accepted?: boolean) => void; reject: (error: Error) => void }[] = [];
 const commit = (value: number) => new Promise<boolean>((resolve, reject) => requests.push({ value, resolve: (accepted = true) => resolve(accepted), reject }));
-const render = async (value = 12.38, { disabled = false, playbackId = "first", volume = false } = {}) => act(async () => root.render(<RangeControl key={playbackId} label={volume ? "Volume" : "Playback position"} value={value} max={volume ? 100 : 60} disabled={disabled} onCommit={commit} showValue={volume} />));
+const render = async (value = 12.38, { disabled = false, playbackId = "first", volume = false } = {}) => act(async () => root.render(<RangeControl key={playbackId} label={volume ? "Volume" : "Playback position"} value={value} max={volume ? 100 : 60} disabled={disabled} onCommit={commit} showValue={volume} keyboardStep={volume ? 1 : 10} />));
 const slider = () => document.querySelector<HTMLElement>('[role="slider"]')!;
 const key = async (key: string) => act(async () => { slider().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); slider().dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true })); });
 beforeEach(async () => {
@@ -25,13 +25,13 @@ afterEach(async () => {
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
-test("Home followed by four arrows seeks to four while player observations lag acknowledgements", async () => {
+test("Home followed by four arrows seeks forty seconds while player observations lag acknowledgements", async () => {
   await render();
   await key("Home");
   await act(async () => requests[0]!.resolve());
   for (let i = 0; i < 4; i++) { await key("ArrowRight"); await act(async () => requests.at(-1)!.resolve()); }
-  expect(requests.map(request => request.value)).toEqual([0, 1, 2, 3, 4]);
-  expect(slider().getAttribute("aria-valuenow")).toBe("4");
+  expect(requests.map(request => request.value)).toEqual([0, 10, 20, 30, 40]);
+  expect(slider().getAttribute("aria-valuenow")).toBe("40");
 });
 
 test("an old acknowledgement does not discard a newer keyboard edit", async () => {
@@ -40,7 +40,7 @@ test("an old acknowledgement does not discard a newer keyboard edit", async () =
   await key("ArrowRight");
   await act(async () => requests[0]!.resolve());
   await key("ArrowRight");
-  expect(requests.map(request => request.value)).toEqual([0, 1, 2]);
+  expect(requests.map(request => request.value)).toEqual([0, 10, 20]);
 });
 
 test("authoritative observations continue after leaving the keyboard edit", async () => {
@@ -104,8 +104,8 @@ test("a new playback identity discards the old draft and acknowledgement", async
   await render(24, { playbackId: "second" });
   await key("ArrowRight");
   await act(async () => requests[0]!.resolve());
-  expect(requests.map(request => request.value)).toEqual([0, 25]);
-  expect(slider().getAttribute("aria-valuenow")).toBe("25");
+  expect(requests.map(request => request.value)).toEqual([0, 34]);
+  expect(slider().getAttribute("aria-valuenow")).toBe("34");
 });
 
 
@@ -114,7 +114,7 @@ test("failed commands release the draft, but old rejections preserve newer edits
   await key("Home");
   await key("ArrowRight");
   await act(async () => requests[0]!.reject(new Error("Old command rejected")));
-  expect(slider().getAttribute("aria-valuenow")).toBe("1");
+  expect(slider().getAttribute("aria-valuenow")).toBe("10");
   await act(async () => requests[1]!.resolve(false));
   expect(slider().getAttribute("aria-valuenow")).toBe("12.38");
   await key("Home");
@@ -130,8 +130,8 @@ test("late playback observations do not interrupt a focused keyboard edit", asyn
   await render(0.02);
   await key("ArrowRight");
   await render(1.02);
-  expect(requests.map(request => request.value)).toEqual([0, 1, 2]);
-  expect(slider().getAttribute("aria-valuenow")).toBe("2");
+  expect(requests.map(request => request.value)).toEqual([0, 10, 20]);
+  expect(slider().getAttribute("aria-valuenow")).toBe("20");
   await act(async () => slider().blur());
   expect(slider().getAttribute("aria-valuenow")).toBe("1.02");
 });

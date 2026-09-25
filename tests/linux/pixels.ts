@@ -28,7 +28,7 @@ export async function assertNativeVideoPixels(execute: Execute, artifactDir: str
       background: 'rgb(13,217,101)', zIndex: '100000', pointerEvents: 'none',
     });
     document.body.append(marker);
-    document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(pairing => pairing.style.visibility = 'hidden');
+    document.querySelectorAll('[data-pairing-code], .pair-shortcut strong').forEach(pairing => pairing.style.visibility = 'hidden');
   `);
   try {
     // Native fullscreen and WebKit viewport resize arrive separately. Use the
@@ -83,7 +83,7 @@ export async function assertNativeUiPixels(execute: Execute, artifactDir: string
       background: 'rgb(13,217,101)', zIndex: '100000', pointerEvents: 'none',
     });
     document.body.append(marker);
-    document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(pairing => pairing.style.visibility = 'hidden');
+    document.querySelectorAll('[data-pairing-code], .pair-shortcut strong').forEach(pairing => pairing.style.visibility = 'hidden');
   `);
   try {
     await Bun.sleep(250);

@@ -83,3 +83,14 @@ test("a failed removal keeps the row and reports the server error", async () => 
   expect(document.body.textContent).toContain("History item not found.");
   expect(document.body.textContent).toContain("Evening movie");
 });
+
+test("Remove from Continue clears resume without deleting history", async () => {
+  const { ProgressActions } = await import("./HistoryPanel");
+  await act(async () => root.render(<ProgressActions origin="http://localhost" token="paired" connected mediaId="library:movie" title="Evening movie" progress={items[0]} inContinue onUpdated={() => {}} />));
+  await press(button("Watching options for Evening movie"));
+  await press(button("Remove from Continue"));
+  const request = fetchSpy.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === "POST");
+  expect(request?.[0]).toBe("http://localhost/api/progress/library%3Amovie");
+  expect(JSON.parse(String((request?.[1] as RequestInit | undefined)?.body))).toEqual({ clearResume: true });
+  expect(calls.some(call => call.method === "DELETE")).toBe(false);
+});

@@ -31,6 +31,16 @@ test("saves one origin across reopen while retaining queue, devices and installa
   expect(second.store.queue).toEqual(first.store.queue);
 });
 
+test("updates the previous default origin while preserving custom origins", () => {
+  const directory = mkdtempSync(join(tmpdir(), "couch-sc-origin-")); cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
+  const path = join(directory, "couch.sqlite"), first = fixture(path);
+  first.store.saveStreamingCommunityOrigin("https://streamingcommunityz.academy");
+  const second = fixture(path);
+  expect(second.store.streamingCommunityOrigin()).toBe("https://streamingcommunityz.photos");
+  second.store.saveStreamingCommunityOrigin("https://streamingcommunity.example");
+  expect(fixture(path).store.streamingCommunityOrigin()).toBe("https://streamingcommunity.example");
+});
+
 test("rejects controller writes, malformed origins, credentials and demotion during body read", async () => {
   const f = fixture();
   for (const authority of ["controller", null] as const) {

@@ -41,7 +41,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
     {!connected && <p role="status">Connect to the TV to check its media tools.</p>}
     {connected && report && <>
       <p className="text-muted-foreground">Last completed check: {new Date(report.checkedAt).toLocaleString()}. Checks within {report.cacheSeconds} seconds share the latest result.</p>
-      {report.tools.map(tool => <div key={tool.name} className="min-w-0 space-y-2 rounded-lg border p-3">
+      {report.tools.map(tool => <div key={tool.name} className="min-w-0 space-y-2 border-t border-border py-4">
         <h4 className="font-medium">{tool.name}</h4>
         <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
           <dt>Expected version</dt><dd className="break-all">{tool.expectedVersion ?? "Unknown for this build"}</dd>
@@ -53,7 +53,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
         {tool.installed.error && <p className="text-muted-foreground">{tool.installed.error}</p>}
         {tool.effective.source !== "package" && tool.effective.error && <p className="text-muted-foreground">{tool.effective.error}</p>}
       </div>)}
-      <div className="space-y-2 rounded-lg border p-3">
+      <div className="space-y-2 border-t border-border py-4">
         <h4 className="font-medium">ffprobe</h4>
         <p>Runtime dependency: {report.ffprobe.status === "ready" ? `Available, version ${report.ffprobe.version}` : statuses[report.ffprobe.status]}</p>
         {report.ffprobe.error && <p className="text-muted-foreground">{report.ffprobe.error}</p>}
@@ -61,7 +61,7 @@ export function ToolsSettings({ credentials, connected, children, revision }: Pr
       </div>
     </>}
     {children}
-    {connected && <div className="space-y-2 rounded-lg border p-3">
+    {connected && <div className="space-y-2 border-t border-border py-4">
       <h4 className="font-medium">System packages and security</h4>
       {packages && typeof packages.available === "number" ? <>
         <p>{packages.available} actionable distribution upgrades in APT's current plan; {packages.security} from security repositories.</p>

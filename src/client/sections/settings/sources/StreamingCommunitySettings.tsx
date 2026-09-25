@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api/client";
-import { validStreamingCommunityOrigin } from "../../../../shared/streamingcommunity";
+import { streamingCommunityOrigin, validStreamingCommunityOrigin } from "../../../../shared/streamingcommunity";
 import type { SourceCredentials } from "@/components/sourceTypes";
 
 type Props = { credentials: SourceCredentials | null; connected: boolean; canManage: boolean };
@@ -54,11 +54,11 @@ export function StreamingCommunitySettings({ credentials, connected, canManage }
   return (
     <section aria-label="StreamingCommunity settings" className="space-y-3 border-t pt-4" data-tv-local-only>
       <h3 className="font-semibold">StreamingCommunity</h3>
-      <p className="text-sm text-muted-foreground">Paste a film or episode link to play it on the TV. Browse and search are not available. If the website moves, an administrator can update its address here. Saved links keep their original address.</p>
+      <p className="text-sm text-muted-foreground">Browse and search StreamingCommunity in Find, or paste a film or episode link to play it on the TV. If the website moves, an administrator can update its address here. Saved links keep their original address.</p>
       {canManage ? (
         <form className="space-y-3" onSubmit={event => void save(event)}>
           <Label htmlFor="streamingcommunity-origin">Current website origin</Label>
-          <Input autoComplete="off" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setSite(event.target.value)} placeholder="https://streamingcommunityz.academy" spellCheck={false} type="url" value={site || page.data || ""} />
+          <Input autoComplete="off" disabled={!available || page.isFetching || pending} id="streamingcommunity-origin" maxLength={254} onChange={event => setSite(event.target.value)} placeholder={streamingCommunityOrigin} spellCheck={false} type="url" value={site || page.data || ""} />
           <Button disabled={!available || page.isFetching || pending || !validStreamingCommunityOrigin(site.trim().replace(/\/$/, ""))}>{pending ? "Saving…" : "Save website origin"}</Button>
         </form>
       ) : <p className="text-sm text-muted-foreground">Use an administrator remote to update the website origin.</p>}

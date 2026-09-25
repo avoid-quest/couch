@@ -15,13 +15,15 @@ type Options = {
   enqueue: (entry: QueueEntry, intent: number | undefined, authorize: () => void, playedBy?: PlaybackActor) => void;
 };
 type Row = { id: string; entry: string };
-const publicItem = (entry: QueueEntry) => { const { source: _source, automaticTitle: _automaticTitle, ...item } = entry; return item; };
+type RemovedRow = Row & { source: string; savedAt: number; position: number };
+const publicItem = (entry: QueueEntry) => { const { source, automaticTitle: _automaticTitle, ...item } = entry; return { ...item, ...(source.startsWith("web:") ? { url: source.slice(4) } : {}) }; };
 
 export function createForLater({ databasePath, onChange, lookup, prepare, reservePlay, enqueue }: Options) {
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true, mode: 0o700 });
   const db = new Database(databasePath, { create: true, strict: true });
   db.run("PRAGMA journal_mode = WAL");
   db.run("CREATE TABLE IF NOT EXISTS for_later (id TEXT PRIMARY KEY, source TEXT NOT NULL UNIQUE, entry TEXT NOT NULL, savedAt INTEGER NOT NULL)");
+  db.run("CREATE TABLE IF NOT EXISTS for_later_undo (token TEXT PRIMARY KEY, item TEXT NOT NULL, expiresAt INTEGER NOT NULL)");
   if (!db.query<{ name: string }, []>("PRAGMA table_info(for_later)").all().some(column => column.name === "position")) {
     db.transaction(() => {
       db.run("ALTER TABLE for_later ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
@@ -50,7 +52,13 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
             if (typeof reference.url !== "string" || typeof reference.title !== "string" || reference.url.length > 2048 || /[\u0000-\u001f\u007f\\]/.test(reference.url)) throw new ControllerError("Choose an item to save.");
             let parsed: URL; try { parsed = new URL(reference.url); } catch { throw new ControllerError("Choose an item to save."); }
             if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new ControllerError("Choose an item to save.");
-            entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}` };
+            if (reference.thumbnail !== undefined) {
+              if (typeof reference.thumbnail !== "string" || reference.thumbnail.length > 2048 || /[\u0000-\u001f\u007f\\]/.test(reference.thumbnail)) throw new ControllerError("Choose an item to save.");
+              let thumbnail: URL; try { thumbnail = new URL(reference.thumbnail); } catch { throw new ControllerError("Choose an item to save."); }
+              if (!["http:", "https:"].includes(thumbnail.protocol) || thumbnail.username || thumbnail.password) throw new ControllerError("Choose an item to save.");
+            }
+            if (reference.duration !== undefined && (typeof reference.duration !== "number" || !Number.isFinite(reference.duration) || reference.duration < 0 || reference.duration > 86_400)) throw new ControllerError("Choose an item to save.");
+            entry = { id: crypto.randomUUID(), title: reference.title.trim().slice(0, 300), source: `web:${reference.url}`, ...(reference.thumbnail ? { thumbnail: reference.thumbnail } : {}), ...(reference.duration !== undefined ? { duration: reference.duration } : {}) };
           } else {
             if (!reference || typeof reference !== "object" || Object.keys(reference).length !== 2 || !["queue", "library", "jellyfin"].includes((reference as ForLaterReference).kind) || typeof (reference as { id?: unknown }).id !== "string" || !/^[\w-]{1,80}$/.test((reference as { id: string }).id)) throw new ControllerError("Choose a library or queue item to save.");
             const found = await lookup(reference);
@@ -80,6 +88,25 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           onChange();
           return Response.json({ ok: true });
         }
+        if (path === "/api/for-later/restore") {
+          if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
+          const token = await settingField(request, "token");
+          authorize();
+          if (typeof token !== "string" || !/^[\w-]{1,80}$/.test(token)) throw new ControllerError("Choose an item to restore.");
+          const item = db.transaction(() => {
+            const saved = db.query<{ item: string; expiresAt: number }, [string]>("SELECT item, expiresAt FROM for_later_undo WHERE token = ?").get(token);
+            if (!saved || saved.expiresAt <= Date.now()) throw new ControllerError("Undo has expired.", 404);
+            const row = JSON.parse(saved.item) as RemovedRow;
+            if (db.query("SELECT 1 FROM for_later WHERE source = ? OR id = ?").get(row.source, row.id)) throw new ControllerError("This item changed on another controller.", 409);
+            if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM for_later").get()!.count >= 500) throw new ControllerError("For later can hold 500 items. Remove something before restoring this one.");
+            db.query("UPDATE for_later SET position = position + 1 WHERE position >= ?").run(row.position);
+            db.query("INSERT INTO for_later (id, source, entry, savedAt, position) VALUES (?, ?, ?, ?, ?)").run(row.id, row.source, row.entry, row.savedAt, row.position);
+            db.query("DELETE FROM for_later_undo WHERE token = ?").run(token);
+            return publicItem(JSON.parse(row.entry) as QueueEntry);
+          })();
+          onChange();
+          return Response.json({ item });
+        }
         const match = /^\/api\/for-later\/([\w-]{1,80})(?:\/(load))?$/.exec(path);
         if (!match) throw new ControllerError("For later endpoint not found.", 404);
         const id = match[1]!;
@@ -97,9 +124,17 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
           return Response.json({ ok: true });
         }
         if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { Allow: "DELETE" } });
-        const removed = db.query("DELETE FROM for_later WHERE id = ?").run(id);
-        if (removed.changes) onChange();
-        return Response.json({ ok: true });
+        const undoToken = db.transaction(() => {
+          db.query("DELETE FROM for_later_undo WHERE expiresAt <= ?").run(Date.now());
+          const row = db.query<RemovedRow, [string]>("SELECT id, source, entry, savedAt, position FROM for_later WHERE id = ?").get(id);
+          if (!row) return null;
+          const token = crypto.randomUUID();
+          db.query("DELETE FROM for_later WHERE id = ?").run(id);
+          db.query("INSERT INTO for_later_undo VALUES (?, ?, ?)").run(token, JSON.stringify(row), Date.now() + 15_000);
+          return token;
+        })();
+        if (undoToken) onChange();
+        return Response.json({ ok: true, ...(undoToken ? { undoToken } : {}) });
       } catch (error) {
         // The session appended the item before a newer control canceled Play.
         if (error instanceof Error && error.message === "Added to the queue. Playback was canceled by a newer control.") return Response.json({ ok: true, notice: "Added to Up next. Playback was canceled by a newer control." });

@@ -4,7 +4,6 @@ import { ListMusic, RefreshCw } from "lucide-react";
 import { avoidRadioPlaylistId, type RadioPlaylist } from "../../../../shared/radio";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/api/client";
@@ -68,7 +67,7 @@ export function RadioSettings({ credentials, connected, canManage }: Props) {
         {notice && <p className="text-sm" role="status">{notice}</p>}
         <div className="space-y-3">
           {available && sources.filter(source => source.id !== avoidRadioPlaylistId).map(source => (
-            <Card className="min-w-0 gap-3 p-4" data-radio-source-id={source.id} key={source.id}>
+            <div className="min-w-0 space-y-3 border-t border-border py-4" data-radio-source-id={source.id} key={source.id}>
               <div className="min-w-0"><h4 className="break-words font-medium">{source.name}</h4><p className="mt-1 break-all text-sm text-muted-foreground">{source.url}</p></div>
               <p className="text-sm text-muted-foreground">{source.stationCount} cached stations · {source.updatedAt ? `Updated ${new Date(source.updatedAt).toLocaleString()}` : "Not imported yet"}</p>
               {source.error && <Alert variant="destructive"><AlertDescription className="space-y-1 break-words"><p>{source.error}</p>{source.updatedAt && <p>The last imported stations are still available.</p>}</AlertDescription></Alert>}
@@ -83,15 +82,15 @@ export function RadioSettings({ credentials, connected, canManage }: Props) {
                   <Button className="min-h-11" disabled={!canWrite} onClick={() => setRemoving(source.id)} variant="outline">Remove playlist</Button>
                 </div>
               )}
-            </Card>
+            </div>
           ))}
         </div>
-        <Card className="min-w-0 gap-3 p-4">
+        <div className="min-w-0 space-y-3 border-t border-border py-4">
           <div className="flex items-center gap-3"><ListMusic aria-hidden="true" className="size-6 shrink-0 text-primary" /><div><h4 className="font-medium">avoid radio</h4><p className="text-sm text-muted-foreground">Included with Couch. Available on Home and in Radio.</p></div></div>
           {builtIn?.updatedAt && <p className="text-sm text-muted-foreground">{builtIn.stationCount} stations · Updated {new Date(builtIn.updatedAt).toLocaleString()}</p>}
           {builtIn?.error && <Alert variant="destructive"><AlertDescription>{builtIn.error}</AlertDescription></Alert>}
           <Button className="min-h-11" disabled={!canWrite} onClick={() => void update("avoid?refresh=true", "GET")} variant="outline"><RefreshCw aria-hidden="true" />Refresh avoid radio</Button>
-        </Card>
+        </div>
         <form className="space-y-3 border-t pt-4" onSubmit={add}>
           <h4 className="font-medium">Add a radio playlist</h4>
           <p className="text-sm text-muted-foreground">Import a supported extended M3U feed. Importing the same URL again refreshes its stations and updates its name.</p>

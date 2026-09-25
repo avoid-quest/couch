@@ -3,7 +3,7 @@ import type { RadioStation } from "../../../shared/radio";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Item } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -51,27 +51,27 @@ export function AvoidRadioHome(props: Props) {
   return <section className="space-y-4" aria-labelledby={headingId}>
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 id={headingId} className="text-xl font-medium">avoid radio</h2>{props.onBrowse && <Button variant="ghost" onClick={props.onBrowse}>All radio</Button>}</div>
     {loading && !radio.catalog && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3.5" />Loading stations…</p>}
-    {loading && !radio.catalog && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))]">
-      {Array.from({ length: 4 }, (_, index) => <li key={index}><Card className="h-full gap-3 p-3"><Skeleton className="aspect-video w-full rounded-lg" /><Skeleton className="h-4 w-2/5" /><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full" /></Card></li>)}
+    {loading && !radio.catalog && <ul className="list-none divide-y p-0">
+      {Array.from({ length: 4 }, (_, index) => <li key={index} className="flex items-center gap-4 py-4"><Skeleton className="aspect-video w-24 shrink-0 rounded-none" /><div className="grid flex-1 gap-2"><Skeleton className="h-4 w-2/5 rounded-none" /><Skeleton className="h-5 w-3/4 rounded-none" /><Skeleton className="h-3 w-full rounded-none" /></div></li>)}
     </ul>}
     {!props.connected && <p role="status" className="text-sm text-muted-foreground">Connect to a playback computer to load radio.</p>}
     {radio.error && <Alert variant="destructive"><AlertDescription className="flex flex-wrap items-center justify-between gap-3"><p>{radio.error}</p><Button variant="outline" disabled={!props.connected || loading} onClick={radio.refresh}>Retry avoid radio</Button></AlertDescription></Alert>}
     {radio.actionError && <Alert variant="destructive"><AlertDescription>{radio.actionError}</AlertDescription></Alert>}
     {radio.notice && <p role="status" className="text-sm text-muted-foreground">{radio.notice}</p>}
     {radio.catalog && !loading && !radio.catalog.stations.length && !radio.error && <p className="text-sm text-muted-foreground">No stations are available from avoid radio right now.</p>}
-    {radio.catalog && <ul className="grid list-none gap-3 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))]">
+    {radio.catalog && <ul className="list-none p-0">
       {radio.catalog.stations.slice(0, props.limit).map(station => {
         const current = props.connected ? radio.programmes[station.id] : undefined;
         const live = current && current.expiresAt > radio.now ? current : undefined;
-        return <li key={station.id} className="min-w-0"><Card className="h-full justify-between gap-3 p-3">
-          <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-3 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(station.id); }}>
-            <AvoidRadioArtwork key={live?.artworkUrl || station.logoUrl || station.id} station={station} programme={live} />
-            <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{station.name}<Badge variant="secondary">{props.connected && props.currentStationId === station.id ? "Playing" : "Live"}</Badge></span>
-            <strong className="line-clamp-2 text-base font-medium">{live?.title || station.name}</strong>
-            {live?.description && <span className="line-clamp-2 text-sm text-muted-foreground">{live.description}</span>}
+        return <Item asChild key={station.id} className="min-w-0 justify-between gap-4 rounded-none border-0 border-b border-border bg-transparent px-0 py-4"><li>
+          <Button variant="ghost" className="h-auto min-w-0 flex-1 items-center justify-start gap-4 p-0 text-left whitespace-normal" aria-label={`Details: ${station.name}`} onClick={event => { trigger.current = event.currentTarget; setDetailId(station.id); }}>
+            <span className="w-24 shrink-0"><AvoidRadioArtwork key={live?.artworkUrl || station.logoUrl || station.id} station={station} programme={live} /></span>
+            <span className="grid min-w-0 gap-1"><span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{station.name}<Badge variant="secondary">{props.connected && props.currentStationId === station.id ? "Playing" : "Live"}</Badge></span>
+              <strong className="line-clamp-2 text-base font-medium">{live?.title || station.name}</strong>
+              {live?.description && <span className="line-clamp-2 text-sm text-muted-foreground">{live.description}</span>}</span>
           </Button>
           <RadioStationActions station={station} saved={radio.favorites.some(favorite => favorite.id === station.id)} connected={props.connected} canPlay={props.canPlay} busy={radio.busy} onPlay={() => void radio.action(station, "play")} onQueue={() => void radio.action(station, "queue")} onFavorite={() => void radio.action(station, "favorite")} />
-        </Card></li>;
+        </li></Item>;
       })}
     </ul>}
     <Dialog open={detailId !== null && !!detail} onOpenChange={open => { if (!open) setDetailId(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (props.active !== false) trigger.current?.focus({ preventScroll: true }); }}>

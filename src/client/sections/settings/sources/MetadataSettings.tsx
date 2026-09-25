@@ -17,6 +17,7 @@ export function MetadataSettings({ credentials, connected, canManage }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const available = connected && canManage && !!credentials;
   const page = useQuery({
     queryKey: ["metadata", "provider"],
@@ -39,6 +40,7 @@ export function MetadataSettings({ credentials, connected, canManage }: Props) {
       if (typeof value.configured !== "boolean") throw new Error(value.error || "Could not save metadata setup.");
       await queryClient.invalidateQueries({ queryKey: ["metadata", "provider"] });
       setToken("");
+      setConfirmClear(false);
       setNotice(clear ? "TMDB token cleared. Saved metadata remains available." : "TMDB token saved on the TV. Use a video's metadata editor to search and preview a match.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save metadata setup.");
@@ -58,8 +60,9 @@ export function MetadataSettings({ credentials, connected, canManage }: Props) {
           <Input autoComplete="new-password" className="min-h-11" disabled={!available || pending} id="metadata-token" maxLength={2048} onChange={event => setToken(event.target.value)} spellCheck={false} type="password" value={token} />
           <div className="flex flex-wrap gap-2">
             <Button className="min-h-11" disabled={!available || pending || !token} type="submit">Save TMDB token</Button>
-            {page.data?.configured && <Button className="min-h-11" disabled={!available || pending} onClick={event => void save(event, true)} type="button" variant="outline">Clear TMDB token</Button>}
+            {page.data?.configured && !confirmClear && <Button className="min-h-11" disabled={!available || pending} onClick={() => setConfirmClear(true)} type="button" variant="outline">Clear TMDB token</Button>}
           </div>
+          {confirmClear && <div role="group" aria-label="Confirm clearing TMDB token" className="space-y-2 border-t pt-3"><p>Clear the saved TMDB token? Saved metadata stays available.</p><div className="flex flex-wrap gap-2"><Button type="button" variant="destructive" disabled={!available || pending} onClick={event => void save(event, true)}>Clear token</Button><Button type="button" variant="outline" disabled={pending} onClick={() => setConfirmClear(false)}>Cancel</Button></div></div>}
         </form>
       ) : <p className="text-sm">Use an administrator remote to configure TMDB.</p>}
       {(page.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not read metadata setup."}</AlertDescription></Alert>}

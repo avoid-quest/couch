@@ -283,6 +283,21 @@ test("history replay validates current playback settings and keeps durable sourc
   expect(store.progress("household", mediaId)?.position).toBe(0);
 });
 
+test("history can queue a saved online source while the player is unavailable", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "saved-web", title: "Saved episode", source: "web:https://video.example/episode", thumbnail: "https://video.example/art.jpg", duration: 1800 };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 20, duration: 1800, watched: false, lastPlayedAt: 100 }, entry);
+  const endpoint = `/api/progress/${encodeURIComponent(mediaId)}/queue`;
+  expect((await request(endpoint)).status).toBe(405);
+  expect((await request(endpoint, "POST", { profileId: "other" })).status).toBe(409);
+  expect((await request(endpoint, "POST", { profileId: "household", source: entry.source })).status).toBe(400);
+  expect((await request(endpoint, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue).toMatchObject([{ title: entry.title, source: entry.source, thumbnail: entry.thumbnail, duration: entry.duration }]);
+  expect(session.state.currentEntryId).toBeNull();
+});
+
 test("history removal clears every profile's row and refuses entries that are playing or unknown", async () => {
   const { request, session, store } = fixture();
   const mediaId = `library:${"a".repeat(40)}`;
@@ -302,6 +317,35 @@ test("history removal clears every profile's row and refuses entries that are pl
   expect(store.progress("guest", mediaId)).toBeNull();
   expect(await (await request("/api/progress/history")).json()).toMatchObject({ items: [] });
   expect((await request(`/api/progress/${encodeURIComponent(mediaId)}`, "DELETE")).status).toBe(404);
+});
+
+test("history removal Undo restores every profile's exact progress once", async () => {
+  const { request, store } = fixture();
+  const mediaId = `library:${"a".repeat(40)}`;
+  const guest = store.createProfile("Guest");
+  store.saveProgress("household", { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 10, duration: 100, watched: false, lastPlayedAt: 100 });
+  store.saveProgress(guest.id, { mediaId, title: "Shared item", libraryItemId: "a".repeat(40), position: 20, duration: 100, watched: true, lastPlayedAt: 90 });
+  const before = [store.progress("household", mediaId), store.progress(guest.id, mediaId)];
+  const removed = await request(`/api/progress/${encodeURIComponent(mediaId)}`, "DELETE");
+  const { undoToken } = await removed.json() as { undoToken: string };
+  expect(removed.status).toBe(200);
+  expect(store.progress("household", mediaId)).toBeNull();
+  expect((await request("/api/progress/undo", "POST", { token: undoToken })).status).toBe(200);
+  expect([store.progress("household", mediaId), store.progress(guest.id, mediaId)]).toEqual(before);
+  expect((await request("/api/progress/undo", "POST", { token: undoToken })).status).toBe(410);
+});
+
+test("Remove from Continue clears the resume point and Undo restores it", async () => {
+  const { request, store } = fixture();
+  const mediaId = `library:${"a".repeat(40)}`;
+  store.saveProgress("household", { mediaId, title: "Half watched", libraryItemId: "a".repeat(40), position: 42, duration: 100, watched: false, lastPlayedAt: 100 });
+  const before = store.progress("household", mediaId);
+  const response = await request(`/api/progress/${encodeURIComponent(mediaId)}`, "POST", { clearResume: true });
+  const { undoToken } = await response.json() as { undoToken: string };
+  expect(store.progress("household", mediaId)).toMatchObject({ position: 0, watched: false });
+  expect((await (await request("/api/progress/history")).json()).items).toHaveLength(1);
+  expect((await request("/api/progress/undo", "POST", { token: undoToken })).status).toBe(200);
+  expect(store.progress("household", mediaId)).toEqual(before);
 });
 
 test("person naming requires an explicit valid request and retains generic label API compatibility", async () => {

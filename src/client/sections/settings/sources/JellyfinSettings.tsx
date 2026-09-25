@@ -88,7 +88,7 @@ export function JellyfinSettings({ credentials, connected, canManage }: Props) {
           </div>
         )}
         {confirmDisconnect && (
-          <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-3 border-t border-border py-3">
             <p>Disconnecting removes the saved access token and stops any item playing from this Jellyfin connection on the TV. Your Jellyfin library and watching history stay on its server.</p>
             <div className="flex flex-wrap gap-2">
               <Button className="min-h-11" disabled={!canWrite} onClick={() => void update("disconnect")} variant="destructive">{pending === "disconnect" ? "Disconnecting…" : "Disconnect and stop Jellyfin"}</Button>
@@ -110,7 +110,7 @@ export function JellyfinSettings({ credentials, connected, canManage }: Props) {
         )}
       </>}
       {!connected && <p className="text-muted-foreground" role="status">Connect this remote to the TV to use Jellyfin settings.</p>}
-      {(page.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not load Jellyfin settings."}</AlertDescription></Alert>}
+      {(page.error || error) && <Alert variant="destructive" className="rounded-none border-x-0 border-t-0 border-b border-border bg-transparent px-0"><AlertDescription>{error ?? "Could not load Jellyfin settings."}</AlertDescription></Alert>}
       {notice && <p className="text-primary" role="status">{notice}</p>}
     </section>
   );

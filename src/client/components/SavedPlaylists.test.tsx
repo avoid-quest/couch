@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
+import { toast } from "sonner";
 import type { Root } from "react-dom/client";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
@@ -10,6 +11,14 @@ const playlist = { id: "friday", name: "Friday night", revision: 3, updatedAt: 1
 const button = (label: string) => [...document.querySelectorAll("button")].find(node => node.getAttribute("aria-label") === label || node.textContent === label)!;
 const flush = () => act(async () => { await Bun.sleep(15); });
 const click = async (node: HTMLElement) => { await act(async () => node.click()); await flush(); };
+const undo = async () => {
+  const latest = toast.getToasts().at(-1);
+  const action = latest && "action" in latest ? latest.action : undefined;
+  expect(latest && "duration" in latest ? latest.duration : null).toBe(6_000);
+  expect(action && typeof action === "object" && "label" in action ? action.label : null).toBe("Undo");
+  await act(async () => { if (action && typeof action === "object" && "onClick" in action) action.onClick({} as React.MouseEvent<HTMLButtonElement>); });
+  await flush();
+};
 
 beforeEach(async () => {
   writes.length = 0;
@@ -22,19 +31,19 @@ beforeEach(async () => {
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
-    return Response.json(path === "/api/playlists" ? { playlists: [{ ...playlist, entryCount: 1 }] } : { playlist });
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true, ...(init.method === "DELETE" ? { undoToken: "restore-token" } : {}) }); }
+    return Response.json(path === "/api/playlists" ? { playlists: [{ ...playlist, entryCount: 1, totalDuration: 2700 }] } : { playlist });
   }) as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); request.mockRestore(); await window.happyDOM.abort();
+  await act(async () => root.unmount()); toast.dismiss(); request.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
 
-for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} reuses authenticated playlist loading and deletion confirmation`, async () => {
+for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialog"} loads lists and offers Undo after deletion`, async () => {
   const { SavedPlaylists } = await import("./SavedPlaylists");
   await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} inline={inline} />));
   await flush();
@@ -43,14 +52,25 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
   expect(document.querySelector('[data-slot="badge"]')).toBeNull();
   expect(writes).toEqual([]);
-  await click(button("Up next"));
+  await click(button("Add to Up next"));
   expect(writes).toEqual([{ path: "/api/playlists/friday/load", method: "POST", body: { revision: 3, mode: "append" } }]);
-  await click(button("Delete list"));
-  expect(writes).toHaveLength(1);
-  await click(button("Cancel"));
-  expect(writes).toHaveLength(1);
-  await click(button("Delete list")); await click(button("Confirm delete"));
+  await click(button("Delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/friday", method: "DELETE", body: { revision: 3 } });
+  await undo();
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists/restore", method: "POST", body: { token: "restore-token" } });
+});
+
+test("Lists shows total length and keeps Up next with its generated name", async () => {
+  const { SavedPlaylists } = await import("./SavedPlaylists");
+  await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={2} inline />));
+  await flush();
+  expect(document.querySelector('[data-playlist-id="friday"]')?.textContent).toContain("1 item, 0:45");
+  await click(button("Keep Up next as a list"));
+  expect(writes.at(-1)).toEqual({ path: "/api/playlists", method: "POST", body: { name: expect.stringMatching(/^Up next, /), scope: "upNext" } });
+  await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
+  expect(button("All lists")).toBeTruthy();
+  await click(button("All lists"));
+  expect(document.activeElement?.getAttribute("data-playlist-id")).toBe("friday");
 });
 
 const sources = {
@@ -68,8 +88,8 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
-    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true }); }
-    return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1 }] } : { playlist: saved });
+    if (init?.method) { writes.push({ path, method: init.method, body: JSON.parse(String(init.body)) }); return Response.json({ ok: true, ...(init.method === "DELETE" ? { undoToken: "restore-token" } : {}) }); }
+    return Response.json(path === "/api/playlists" ? { playlists: [{ ...saved, entryCount: 1, totalDuration: 2700 }] } : { playlist: saved });
   }) as typeof fetch);
   const { SavedPlaylists } = await import("./SavedPlaylists");
   await act(async () => root.render(<SavedPlaylists origin="http://localhost" token="paired" connected canPlay version={1} queueCount={1} />));
@@ -77,8 +97,8 @@ for (const [provider, source] of Object.entries(sources)) test(`${provider} sour
   expect(document.querySelector('[data-slot="badge"]')?.textContent).toBe(providerLabels[provider as keyof typeof sources]);
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="source-list"]')!);
   expect(writes).toEqual([]);
-  await click(button("Up next"));
+  await click(button("Add to Up next"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list/load", method: "POST", body: { revision: 2, mode: "append" } });
-  await click(button("Delete list")); await click(button("Confirm delete"));
+  await click(button("Delete"));
   expect(writes.at(-1)).toEqual({ path: "/api/playlists/source-list", method: "DELETE", body: { revision: 2 } });
 });

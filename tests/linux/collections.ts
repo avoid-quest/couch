@@ -50,7 +50,7 @@ async function open(target: UiDriver) { await target.section("Library"); await t
 async function selected(target: UiDriver, name: string) { await until(`collection ${name} is open`, () => target.execute("return document.querySelector('.collections-panel h3')?.textContent === arguments[0] && !document.querySelector('.collections-panel')?.textContent.includes('Refreshing preview')", [name])); }
 async function stop() { await clients[0]!.command({ type: "stop" }); await until("Stop reaches both controllers", () => all(state => state.player.status === "idle")); }
 async function capture(name: string) {
-  await ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code]').forEach(element => element.style.visibility = 'hidden')");
+  await ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code]').forEach(element => element.style.visibility = 'hidden')");
   const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await child.exited, 0);
 }
@@ -110,7 +110,7 @@ try {
   await until("official Tauri driver ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   await launch();
   await ui.click(".pair-shortcut");
-  const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
+  const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   await ui.key(keys.escape);
   for (let i = 0; i < 2; i++) {
     const response = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
@@ -132,8 +132,8 @@ try {
   await capture("native-collection-preview");
   await ui.button("Play preview", panel);
   await until("native collection play commits visible order to both controllers", () => all(state => state.player.status === "playing" && state.queue.map(item => item.title).join(",") === "Red,Blue" && state.currentEntryId === state.queue[0]?.id));
-  await ui.button("Show playback");
-  await until("native browser closes before video pixel sampling", () => ui.execute("return !!document.querySelector('.tv-browser[hidden]')"));
+  await ui.controls();
+  await until("native player opens before video pixel sampling", () => ui.execute("return !!document.querySelector('.player-page .video-stage')"));
   await assertNativeVideoPixels(ui.execute, artifactDir, "native-collection-playing", [253, 0, 0]);
   await assertNativeUiPixels(ui.execute, artifactDir);
   await stop();
