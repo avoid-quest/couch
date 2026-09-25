@@ -274,10 +274,10 @@ export function ShellChrome({ children }: PropsWithChildren) {
   const onPlayer = paired && section === "Now" && !!current;
   const installationName = state?.installationName ?? details?.name;
 
-  if (setupPending) return <div className="app-shell flex min-h-dvh flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
+  if (setupPending) return <div className="app-shell glass-shell flex min-h-dvh flex-col bg-background"><LocalSharingPrompt credentials={credentials} /></div>;
 
   return (
-    <div className={cn("app-shell flex min-h-dvh flex-col bg-background", tvPresentation && "tv-shell")}>
+    <div className={cn("app-shell flex min-h-dvh flex-col bg-background", tvPresentation ? "tv-shell" : "glass-shell")}>
       <main id="main" className="flex flex-1 flex-col">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
         <div className="tv-browser flex flex-1 flex-col" data-tv-navigation-scope={tvPresentation ? "" : undefined}>

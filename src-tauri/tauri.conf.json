@@ -22,6 +22,10 @@
         "minHeight": 600,
         "fullscreen": false,
         "decorations": true,
+        "theme": "Dark",
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "scrollBarStyle": "fluentOverlay",
         "transparent": true,
         "backgroundColor": "#000000",
         "dragDropEnabled": false

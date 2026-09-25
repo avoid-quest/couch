@@ -721,12 +721,17 @@ pub fn run() {
             let handle = app.handle().clone();
             let main = tauri::WebviewWindowBuilder::from_config(app, &config)?
                 .initialization_script(format!(
-                    "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', {{ value: true }}); Object.defineProperty(window, '__COUCH_TV_PRESENTATION__', {{ value: {} }});",
-                    tv_presentation
+                    "Object.defineProperty(window, '__COUCH_NATIVE_HOST__', {{ value: true }}); Object.defineProperty(window, '__COUCH_TV_PRESENTATION__', {{ value: {} }}); {}",
+                    tv_presentation,
+                    if cfg!(target_os = "macos") { "document.documentElement.classList.add('native-macos');" } else { "" }
                 ))
                 .on_navigation(move |url| operating_mode::app_origin(handle.config(), url))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                 .build()?;
+            #[cfg(target_os = "macos")]
+            if !tv_presentation {
+                desktop_lifecycle::install_liquid_glass(&main)?;
+            }
             if !tv_presentation {
                 desktop_lifecycle::recover_window(&main)?;
             }

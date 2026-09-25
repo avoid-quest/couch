@@ -102,6 +102,10 @@ html { view-transition-name: none; }
 /* The mini player grows into the player band and back. */
 ::view-transition-group(couch-player-band) { animation-duration: .32s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 
+/* One dark glass surface on Mac avoids a seam between chrome and page. */
+html.native-macos body.native-host .glass-shell { background: rgb(0 0 0 / 85%); }
+html.native-macos body.native-host .glass-shell .app-header { background: transparent; }
+
 /* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
    rectangle must be clear; the band, status text and open sheet stay solid. */
 body.native-host:has(.player-page .video-stage.has-video),

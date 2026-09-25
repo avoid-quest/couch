@@ -3,6 +3,24 @@ use std::sync::atomic::Ordering;
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
+#[cfg(target_os = "macos")]
+pub(crate) fn install_liquid_glass(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use window_vibrancy::{apply_liquid_glass, LiquidGlassOptions, NSGlassEffectViewStyle};
+
+    let glass_window = window.clone();
+    window.with_webview(move |webview| {
+        // Keep the WebView inside the glass view so the native mpv view can
+        // continue attaching beneath it in the same parent.
+        let content = unsafe { &*(webview.inner() as *const objc2_app_kit::NSView) };
+        let options = LiquidGlassOptions::new(NSGlassEffectViewStyle::Regular).content_view(content);
+        if let Err(error) = apply_liquid_glass(&glass_window, options) {
+            if !matches!(error, window_vibrancy::Error::UnsupportedPlatformVersion(_)) {
+                log::warn!("Mac Liquid Glass unavailable: {error}");
+            }
+        }
+    })
+}
+
 fn main_window_activated(event: &tauri::WindowEvent, closed: bool, visible: bool, minimized: bool) -> bool {
     matches!(event, tauri::WindowEvent::Focused(true))
         || closed && visible && !minimized && matches!(event, tauri::WindowEvent::Resized(_))
