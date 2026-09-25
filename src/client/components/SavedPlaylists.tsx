@@ -172,7 +172,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         </div>
         <Separator />
         {!loading && !playlists.length && <p className="text-sm text-muted-foreground">Your kept lists will appear here.</p>}
-        <ul ref={listRef} className="max-h-80 divide-y overflow-y-auto" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <li key={item.id}>
+        <ul ref={listRef} className="max-h-80 divide-y overflow-y-auto" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <li key={item.id} data-nav-row>
           <Button variant="ghost" className="h-auto min-h-11 w-full justify-between gap-3 rounded-none px-0 py-3 text-left whitespace-normal" data-playlist-id={item.id} disabled={disabled} onClick={() => select(item.id)}>
             <span className="min-w-0 break-words">{item.name}</span>
             <span className="flex shrink-0 items-center gap-2">
@@ -182,7 +182,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           </Button>
         </li>)}</ul>
       </> : playlist && <>
-        <div className="flex flex-wrap gap-2" aria-label="Load list">
+        <div className="flex flex-wrap gap-2" aria-label="Load list" data-nav-row>
           <Button disabled={disabled || !canPlay || !playlist.entries.length} onClick={() => void load("play")}><Play aria-hidden="true" />Play</Button>
           <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("append")}><Plus aria-hidden="true" />Add to Up next</Button>
           <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("replace")}>Replace Up next</Button>
@@ -193,7 +193,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           void update(path, { revision: playlist.revision, operation: "rename", name: (rename ?? playlist.name).trim() }, "List renamed.").then(ok => { if (ok) setRename(null); });
         }}>
           <Label htmlFor="rename-playlist">List name</Label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-nav-row>
             <Input id="rename-playlist" className="min-h-11 min-w-0 flex-1" value={rename ?? playlist.name} onChange={event => setRename(event.target.value)} maxLength={80} required autoComplete="off" disabled={disabled} />
             <Button variant="outline" type="submit" disabled={disabled || !(rename ?? "").trim() || rename?.trim() === playlist.name}>Rename</Button>
           </div>
@@ -206,7 +206,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
           void update(path, { revision: playlist.revision, operation: "move", entryId: String(active.id), beforeEntryId }, "List order kept.");
         }}>
           <SortableContext items={playlist.entries.map(entry => entry.id)} strategy={verticalListSortingStrategy}>
-        <ol ref={entriesRef} className="max-h-80 divide-y overflow-y-auto" aria-label="List items" aria-busy={loading}>{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-2 py-2">
+        <ol ref={entriesRef} className="max-h-80 divide-y overflow-y-auto" aria-label="List items" aria-busy={loading}>{playlist.entries.map((entry, index) => <SortableRow key={entry.id} id={entry.id} label={`Reorder ${entry.title}`} editing>{drag => <li data-nav-row ref={drag.setNodeRef} style={drag.style} className="flex flex-wrap items-center gap-2 py-2">
           {drag.handle}
           <span className="w-6 shrink-0 text-center text-sm text-muted-foreground">{index + 1}</span>
           <span className="min-w-0 flex-1 break-words text-sm">{entry.title}{entry.live && <span className="ml-2 text-xs text-muted-foreground">LIVE</span>}</span>
@@ -222,13 +222,13 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         </li>}</SortableRow>)}</ol></SortableContext></DndContext>
         {!playlist.entries.length && <p className="text-sm text-muted-foreground">This list is empty. Fill Up next, then keep it here.</p>}
         <Separator />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-nav-row>
           <Button variant="outline" disabled={disabled || !queueCount} onClick={() => setConfirm("saveQueue")}><Bookmark aria-hidden="true" />Update from Up next</Button>
           <Button variant="ghost" disabled={disabled} onClick={() => void deleteList()}><Trash2 aria-hidden="true" />Delete</Button>
         </div>
         {confirm && <div className="grid gap-3 border-t pt-3">
           <p className="text-sm">Replace the kept contents of {playlist.name} with the current {queueCount} Up next items?</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-nav-row>
             <Button disabled={disabled || !queueCount} onClick={() => void update(path, { revision: playlist.revision, operation: "saveQueue" }, "List updated from Up next.")}>Replace saved items</Button>
             <Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button>
           </div>

@@ -7,8 +7,8 @@ import type { Channel, PackageFormat } from "../../../../scripts/hosted-policy";
 const releases = catalog();
 const channels = ["stable", "preview"] as const satisfies readonly Channel[];
 const labels: Record<PackageFormat, { name: string; target: string; note: string }> = {
-  dmg: { name: "Mac", target: "Apple Silicon · macOS 14 or later · DMG", note: "Drag Couch to Applications. Ad-hoc signing may require manual approval in macOS Privacy & Security, including after an update." },
-  nsis: { name: "Windows", target: "x86_64 · Windows 11 · per-user NSIS", note: "Client-only Preview. Connect to another Couch for playback. Windows Full remains in development." },
+  dmg: { name: "Mac", target: "Apple Silicon · macOS 26 or later · DMG", note: "Drag Couch to Applications. Ad-hoc signing may require manual approval in macOS Privacy & Security, including after an update." },
+  nsis: { name: "Windows", target: "x86_64 · Windows 11 · per-user NSIS", note: "Play on this computer or connect to another Couch. Installed Windows checks remain in progress." },
   appimage: { name: "Linux", target: "x86_64 · AppImage", note: "Save in a writable location, allow execution, then open it. A compatible glibc and FUSE 2 are needed. Wider Linux installed checks remain open." },
   deb: { name: "Debian TV", target: "Debian 13 · x86_64 · X11 · DEB", note: "The retained package for Debian desktop and dedicated TV setups." },
 };
@@ -29,7 +29,7 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
       <header>
         <h1>Download Couch</h1>
         <p class="intro">One app for local playback and remote control where each mode is supported. Choose <strong>This computer</strong> or connect to another Couch when you open it.</p>
-        <p class="muted">These are published downloads. Installed playback, update and permission checks are still in progress for Mac and Linux. Windows is Client-only in this Preview.</p>
+        <p class="muted">These are published downloads. Installed playback, update and permission checks are still in progress across desktop platforms.</p>
       </header>
 
       {channels.map(channel => <section aria-label={channel === "preview" ? "Preview downloads" : "Stable downloads"} data-channel={channel} hidden={Object.keys(releases[channel]).length === 0}>
@@ -53,14 +53,14 @@ const labels: Record<PackageFormat, { name: string; target: string; note: string
         <h2 id="install">Install and update</h2>
         <p>Mac: open the DMG and drag Couch to Applications. Windows: run the NSIS installer for your user. Linux AppImage: save it in a writable location, mark it executable and run it. No developer tools are needed.</p>
         <p>OS trust prompts and local network permission are separate from Couch's signed update verification. Approve access only if you want this computer to serve or control another Couch.</p>
-        <p>Couch checks its own Stable or Preview channel. Manual updates are the default; automatic installation is optional when idle. If an update fails, retry in Couch. If Couch cannot open, reinstall a compatible version in the same location to keep its data. Do not install an older version as a repair.</p>
+        <p>Couch checks its own Stable or Preview channel. Manual updates are the default; automatic installation is optional when idle. Preview .12 installations need a manual reinstall of .13 to enroll the new updater key. Reinstall in the same location to keep Couch data and pairing. Do not install an older version as a repair.</p>
       </section>
 
       <section aria-labelledby="tv">
         <details>
           <summary id="tv">Using a dedicated Debian TV?</summary>
           <p>After downloading the Debian package, open a terminal in its folder and run:</p>
-          <pre><code id="deb-command">sudo apt install ./Couch_0.2.0-preview.12_amd64.deb</code></pre>
+          <pre><code id="deb-command">sudo apt install ./Couch_0.2.0-preview.13_amd64.deb</code></pre>
           <p>Then run <code>sudo couch-setup --tv</code>. This sets up a dedicated Couch account, automatic sign-in and TV power settings. Your administrator account stays available. Reboot to enter the Couch session.</p>
           <p>On first use, choose <strong>This computer</strong>, allow remote control, and pair your phone using the code on screen. Migrating an existing Couch TV keeps its data and paired devices.</p>
         </details>

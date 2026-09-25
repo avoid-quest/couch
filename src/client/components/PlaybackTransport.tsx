@@ -30,11 +30,11 @@ export function PlaybackTimeline({ state, connected, run, pageFirst = false }: P
   const player = state.player;
   const current = state.queue.find(entry => entry.id === state.currentEntryId);
   const { seekable, transportReady } = playbackCapabilities(state, connected);
-  if (!current || !seekable) return null;
+  if (!current) return null;
   const chapters = player.chapters?.filter(chapter => chapter.position > 0 && chapter.position < (player.duration ?? 0)) ?? [];
   const chapter = player.chapters?.findLast(item => item.position <= player.position);
   return <div className="seek-control playback-timeline">
-    {player.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
+    {seekable && player.duration ? <div className="relative"><RangeControl key={player.playbackId || "idle"} label="Playback position" value={player.position || 0} max={player.duration} showValue={false} keyboardStep={10} pageFirst={pageFirst} disabled={!transportReady}
       onCommit={async position => player.playbackId ? run({ type: "seek", playbackId: player.playbackId, position }) : false} />{chapters.map(item => <span key={item.position} data-chapter-tick aria-hidden="true" className="pointer-events-none absolute top-1/2 z-10 h-1 w-1 -translate-x-1/2 -translate-y-1/2 bg-background" style={{ left: `${item.position / player.duration! * 100}%` }} />)}</div> : null}
     <div className="time-labels"><span>{formatDuration(player.position || 0)}{chapter && <span className="ml-3 text-muted-foreground">{chapter.title}</span>}</span><span>{player.duration || current.duration ? <><span className="timeline-total">{formatDuration(player.duration || current.duration || 0)}</span><span className="timeline-end">−{formatDuration(((player.duration || current.duration || 0) - player.position) / (player.speed || 1))} ends {formatEndTime(((player.duration || current.duration || 0) - player.position) / (player.speed || 1))}</span></> : ""}</span></div>
   </div>;

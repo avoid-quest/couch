@@ -1,9 +1,25 @@
 {
   "stable": {},
   "preview": {
-    "dmg": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_aarch64.dmg", "url": "https://cdn.crabnebula.app/asset/01M38BG4VDR70XYWAB0RV9ZS56" },
-    "nsis": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_x64-setup.exe", "url": "https://cdn.crabnebula.app/asset/01M38BT679GTKK2D80DJGWTE47" },
-    "appimage": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_amd64.AppImage", "url": "https://cdn.crabnebula.app/asset/01M38B81A3WYY8BQ6TTJKRQ1JX" },
-    "deb": { "version": "0.2.0-preview.12", "filename": "Couch_0.2.0-preview.12_amd64.deb", "url": "https://cdn.crabnebula.app/asset/01M38AMHSP1BYG544PSN4ZFPVA" }
+    "dmg": {
+      "version": "0.2.0-preview.13",
+      "filename": "Couch_0.2.0-preview.13_aarch64.dmg",
+      "url": "https://cdn.crabnebula.app/asset/01M3CRAWW6QG7PYETPZ7WXBYAY"
+    },
+    "nsis": {
+      "version": "0.2.0-preview.13",
+      "filename": "Couch_0.2.0-preview.13_x64-setup.exe",
+      "url": "https://cdn.crabnebula.app/asset/01M3CRFZ6RHWMSBFY18QWVTQW9"
+    },
+    "appimage": {
+      "version": "0.2.0-preview.13",
+      "filename": "Couch_0.2.0-preview.13_amd64.AppImage",
+      "url": "https://cdn.crabnebula.app/asset/01M3CSQF5V20WCHB3J9BXWAHF7"
+    },
+    "deb": {
+      "version": "0.2.0-preview.13",
+      "filename": "Couch_0.2.0-preview.13_amd64.deb",
+      "url": "https://cdn.crabnebula.app/asset/01M3CS49GZW52S2YYKJ5PGZ40B"
+    }
   }
 }

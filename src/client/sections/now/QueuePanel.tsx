@@ -71,7 +71,9 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
     const row = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])].find(row => row.dataset.queueEntryId === focused.id);
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
       ?? row?.querySelector<HTMLElement>("button:not(:disabled)")
-      ?? panelRef.current?.querySelector<HTMLElement>(".queue-standard-entry:not(:disabled), .queue-standard-played:not(:disabled)");
+      ?? panelRef.current?.querySelector<HTMLElement>(".queue-standard-entry:not(:disabled), .queue-standard-played:not(:disabled)")
+      ?? panelRef.current?.closest(".player-sheet")?.querySelector<HTMLElement>("button:not(:disabled)")
+      ?? panelRef.current?.closest('[data-page="Now"]')?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)");
     focusedEntry.current = null;
     replacement?.focus({ preventScroll: true });
   });
@@ -94,7 +96,7 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
           <QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />
         </li></Item>;
       })}</ol>
-    </section> : <Empty className="queue-standard-empty items-start border-0 p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on any result and it plays after this.</EmptyDescription></EmptyHeader></Empty>}
+    </section> : <Empty className="queue-standard-empty items-start border-0 p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on any result to play it later.</EmptyDescription></EmptyHeader></Empty>}
     {previous.length > 0 && <section className="queue-standard-group" aria-labelledby="queue-played-title"><h3 id="queue-played-title">Played</h3><ol className="queue-standard-list" aria-label="Played">{[...previous].reverse().map(entry => <li key={entry.id} data-queue-entry-id={entry.id}><Button variant="ghost" className="queue-standard-played" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}>{entry.title}</Button></li>)}</ol></section>}
   </section>;
 }

@@ -36,7 +36,7 @@ export async function sealNative(format: "dmg" | "nsis", directory: string) {
   assert.equal(inventory.build?.revision ?? inventory.revision, revision, "Package inventory belongs to another revision.");
   assert.equal(inventory.build?.version ?? inventory.version, version, "Package inventory belongs to another version.");
   assert.equal(inventory.build?.dirty ?? false, false, "Package inventory has dirty source.");
-  assert.equal(inventory.build?.clientOnly ?? inventory.clientOnly, format === "nsis", "Mac must be Full capable; Windows remains Client-only.");
+  assert.equal(inventory.build?.clientOnly ?? inventory.clientOnly, false, "Desktop packages must be Full capable.");
   assert.equal(inventory.build?.target ?? inventory.target, format === "dmg" ? "aarch64-apple-darwin" : "x86_64-pc-windows-msvc");
   const entries = format === "dmg"
     ? [inventory.dmg, inventory.updater]

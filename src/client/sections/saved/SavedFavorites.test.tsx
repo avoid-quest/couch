@@ -67,6 +67,8 @@ afterEach(async () => {
 test("one saved list shows existing online and radio favorites without catalog or queue writes", async () => {
   await render();
   expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  expect(screen.getAllByRole("listitem").every((row: HTMLElement) => row.hasAttribute("data-nav-row"))).toBe(true);
+  expect(button("Add Evening video to Up next").closest("li")?.contains(button("Add Evening radio to Up next"))).toBe(false);
   expect(document.body.textContent).toContain("YouTube");
   expect(document.body.textContent).toContain("Bandcamp");
   expect(document.body.textContent).toContain("Radio");
@@ -144,6 +146,7 @@ test("Saved keeps saved collections together without a separate history destinat
   await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Channels and stations/ }), { button: 0 }));
   await flush();
   for (const itemTitle of ["Evening video", "Evening album", "Evening radio"]) expect(document.body.textContent).toContain(itemTitle);
+  expect(screen.getAllByRole("listitem").every((row: HTMLElement) => row.hasAttribute("data-nav-row"))).toBe(true);
   await act(async () => fireEvent.mouseDown(screen.getByRole("tab", { name: /Lists/ }), { button: 0 }));
   await flush();
   expect(document.body.textContent).toContain("Lists");
@@ -152,18 +155,19 @@ test("Saved keeps saved collections together without a separate history destinat
   expect(screen.queryByRole("button", { name: "History" })).toBeNull();
 });
 
-test("opening a saved collection browses its provider and URL, with Back returning to that provider", async () => {
+test("opening a saved collection keeps its own trail and returns to Saved", async () => {
   const { SavedFavorites } = await import("./SavedFavorites");
   const { ProviderPanel } = await import("@/components/ProviderPanel");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const wrapClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrap = (node: React.ReactNode) => <QueryClientProvider client={wrapClient}>{node}</QueryClientProvider>;
   const browsed: URL[] = [];
+  const disc = { ...album, id: "disc-two", title: "Disc two", url: "https://artist.bandcamp.com/album/disc-two" };
   request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("/items")) {
       browsed.push(url);
-      return Response.json({ provider: "bandcamp", title: "Evening album", items: [] });
+      return Response.json({ provider: "bandcamp", title: url.searchParams.get("url") === album.url ? album.title : disc.title, items: url.searchParams.get("url") === album.url ? [disc] : [] });
     }
     return Response.json({ favorites: url.pathname === "/api/providers/favorites" ? [album] : [], items: [] });
   }) as typeof fetch);
@@ -171,16 +175,23 @@ test("opening a saved collection browses its provider and URL, with Back returni
     const [selected, setSelected] = useState<ProviderItem | null>(null);
     const connection = { origin: "http://localhost", token: "paired", connected: true, canPlay: true };
     return selected
-      ? wrap(<ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} version={1} defaultQuality="auto" onEnqueue={async () => true} />)
+      ? wrap(<><button onClick={() => setSelected(null)}>‹ Saved</button><h1>{selected.title}</h1><ProviderPanel onPlayHistory={async () => true} {...connection} initialItem={selected} collectionMode showHeading={false} version={1} defaultQuality="auto" onEnqueue={async () => true} /></>)
       : wrap(<SavedFavorites {...connection} onEnqueueProvider={async () => true} onEnqueueRadio={async () => true} onOpenProvider={setSelected} />);
   }
   await act(async () => root.render(<SavedCollection />));
   await flush(); await click("Open Evening album");
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
   expect(browsed.at(-1)?.searchParams.get("url")).toBe(album.url);
-  expect(document.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Bandcamp");
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Back" })));
-  await flush();
+  expect(screen.queryByRole("tablist", { name: "Online providers" })).toBeNull();
+  expect(screen.queryByRole("search")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  expect(document.body.textContent).not.toContain("Recently played");
+  await click("Open Disc two");
+  expect(browsed.at(-1)?.searchParams.get("url")).toBe(disc.url);
+  await click("Back");
   expect(browsed.at(-1)?.pathname).toBe("/api/providers/bandcamp/items");
-  expect(document.body.textContent).toContain("Recently played");
+  expect(browsed.at(-1)?.searchParams.get("url")).toBe(album.url);
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+  await click("‹ Saved");
+  expect(button("Open Evening album")).toBeDefined();
 });

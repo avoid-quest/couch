@@ -111,13 +111,13 @@ test("the host can change whether this computer accepts remotes", async () => {
   expect(button("Pair a remote").disabled).toBe(false);
 });
 
-test("the host can save a local network domain", async () => {
-  await render({ authority: "host", controller: null, claimAvailable: false });
-  await act(async () => { fireEvent.change(screen.getByRole("textbox", { name: "Domain name" }), { target: { value: "couch.home" } }); });
-  await act(async () => { fireEvent.click(button("Save domain")); });
+test("an administrator can save a network address", async () => {
+  await render();
+  await act(async () => { fireEvent.change(screen.getByRole("textbox", { name: "Network address" }), { target: { value: "http://couch.home:4100" } }); });
+  await act(async () => { fireEvent.click(button("Save address")); });
   await flush();
-  expect(calls.some(call => call.path === "/api/settings/origin-domain" && call.method === "POST" && JSON.stringify(call.body) === JSON.stringify({ domain: "couch.home" }))).toBe(true);
-  expect((screen.getByRole("textbox", { name: "Domain name" }) as HTMLInputElement).value).toBe("couch.home");
+  expect(calls.some(call => call.path === "/api/settings/origin-domain" && call.method === "POST" && JSON.stringify(call.body) === JSON.stringify({ domain: "http://couch.home:4100" }))).toBe(true);
+  expect((screen.getByRole("textbox", { name: "Network address" }) as HTMLInputElement).value).toBe("http://couch.home:4100");
 });
 
 test("a failed sharing save keeps pairing disabled and reports the error", async () => {

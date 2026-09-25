@@ -81,6 +81,9 @@ afterEach(async () => {
 test("Continue shows only unfinished items and preserves resume, restart, and queue identity", async () => {
   await renderHome();
   expect(document.querySelector('section[aria-label="Continue"]')).toBeDefined();
+  expect(row("Halfway home").hasAttribute("data-nav-row")).toBe(true);
+  expect(row("Album track").hasAttribute("data-nav-row")).toBe(true);
+  expect(row("Halfway home").contains(button("Queue", row("Album track")))).toBe(false);
   expect(document.body.textContent).toContain("Halfway home");
   expect(document.body.textContent).toContain("Album track");
   expect(document.body.textContent).not.toContain("Finished film");

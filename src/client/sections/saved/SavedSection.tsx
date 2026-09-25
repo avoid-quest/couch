@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionState } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
@@ -12,6 +12,8 @@ import { radioFavoritesListQuery } from "@/api/radio";
 import { apiFetch } from "@/api/client";
 
 type SavedTab = "later" | "channels" | "lists";
+let lastSavedTab: SavedTab = "later";
+let lastSavedContext = "";
 
 export function SavedSection({ state, credentials, connected, canPlay, active, onBrowse, ...favoriteActions }: SavedFavoriteActions & {
   state: SessionState | null;
@@ -21,7 +23,20 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   active: boolean;
   onBrowse: (section: string) => void;
 }) {
-  const [tab, setTab] = useState<SavedTab>("later");
+  const context = `${credentials.origin}\0${credentials.token}`;
+  const page = useRef<HTMLElement>(null);
+  const [tab, setTab] = useState<SavedTab>(() => {
+    if (lastSavedContext !== context) { lastSavedContext = context; lastSavedTab = "later"; }
+    return lastSavedTab;
+  });
+  useEffect(() => {
+    if (lastSavedContext !== context) { lastSavedContext = context; lastSavedTab = "later"; setTab("later"); }
+  }, [context]);
+  useEffect(() => {
+    if (!active || !page.current?.closest(".tv-shell")) return;
+    const frame = requestAnimationFrame(() => page.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [active]);
   const showCounts = active && connected;
   const laterCount = useQuery({ ...forLaterQuery(credentials), enabled: showCounts });
   const providerCount = useQuery({ ...providerFavoritesQuery(credentials), enabled: showCounts });
@@ -36,10 +51,10 @@ export function SavedSection({ state, credentials, connected, canPlay, active, o
   const channels = <SavedFavorites origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} showHeading={false} {...favoriteActions} />;
   const lists = <SavedPlaylists origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} version={state?.playlistVersion ?? 0} queueCount={state?.queue.length ?? 0} inline />;
 
-  return <section className="min-w-0 pb-8" aria-label="Saved media">
-    {active && <Tabs value={tab} onValueChange={value => setTab(value as SavedTab)} orientation="vertical" className="saved-page-layout -ml-[.8rem] grid grid-cols-[15rem_minmax(0,1fr)] gap-8 max-[700px]:ml-0 max-[700px]:grid-cols-1">
+  return <section ref={page} className="min-w-0 pb-8" aria-label="Saved media">
+    {active && <Tabs value={tab} onValueChange={value => { lastSavedTab = value as SavedTab; setTab(lastSavedTab); }} orientation="vertical" className="saved-page-layout -ml-[.8rem] grid grid-cols-[15rem_minmax(0,1fr)] gap-8 max-[700px]:ml-0 max-[700px]:grid-cols-1">
       <TabsList variant="line" className="saved-page-nav w-full" aria-label="Saved sections">
-        {tabs.map(([value, label, count]) => <TabsTrigger key={value} value={value} className="h-12 w-full justify-start gap-3 rounded-none px-3 text-left font-normal">
+        {tabs.map(([value, label, count], index) => <TabsTrigger key={value} value={value} data-page-first={index === 0 || undefined} className="h-12 w-full justify-start gap-3 rounded-none px-3 text-left font-normal">
           <span className="min-w-0 flex-1">{label}</span>
           {connected && <span className="tabular-nums text-muted-foreground">{count ?? "…"}</span>}
         </TabsTrigger>)}

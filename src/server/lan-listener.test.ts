@@ -175,13 +175,16 @@ test("port 80 aliases get their own best-effort listener, drop out when the bind
     await listener.refresh();
     expect(ports.filter(port => port === 4100)).toEqual([4100]);
     expect(listener.server).not.toBeNull();
+    expect(listener.servers).toHaveLength(1);
     expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: expect.stringContaining("cannot listen on port 80") });
     refuse80 = false; await listener.refresh();
     expect(ports).toContain(80);
+    expect(listener.servers).toHaveLength(2);
     expect(changes.at(-1)).toEqual({ urls: ["http://couch.home", "http://192.168.1.20:4100"], error: null });
     await listener.setEnabled(false);
     expect([...stops].sort((a, b) => a - b)).toEqual([80, 4100]);
     expect(listener.server).toBeNull();
+    expect(listener.servers).toEqual([]);
   } finally { await listener.close(); }
 });
 test("a listener that already owns port 80 does not start a second one", async () => {
@@ -193,5 +196,41 @@ test("a listener that already owns port 80 does not start a second one", async (
     start: (_network, port) => { ports.push(port); return { stop: async () => {} }; },
     changed: () => {},
   });
-  try { await listener.refresh(); expect(ports).toEqual([80]); } finally { await listener.close(); }
+  try { await listener.refresh(); expect(ports).toEqual([80]); expect(listener.servers).toHaveLength(1); } finally { await listener.close(); }
+});
+test("a proposed alias must resolve to the selected LAN address and obtain its HTTP port before save", async () => {
+  let refuse80 = true;
+  const advertised: string[] = [];
+  const listener = createLanListener({
+    port: 4100, enabled: true, advertised, interfaces: () => ({ eth0: [entry(network.address)] }),
+    resolve: (async (name: string) => [{ address: name === "wrong.home" ? "192.168.1.21" : network.address, family: 4 }]) as never,
+    start: (_network, port) => { if (port === 80 && refuse80) throw new Error("EACCES"); return { stop: async () => {} }; }, changed: () => {},
+  });
+  try {
+    await listener.refresh();
+    await expect(listener.validateAlias("http://wrong.home:4100")).rejects.toThrow("does not resolve only");
+    await expect(listener.validateAlias("http://couch.home")).rejects.toThrow("cannot listen on port 80");
+    await listener.validateAlias("http://couch.home:4100");
+    refuse80 = false;
+    await listener.validateAlias("http://couch.home");
+    advertised.push("http://couch.home");
+    await listener.refresh();
+    expect(listener.server).not.toBeNull();
+  } finally { await listener.close(); }
+});
+test("the host can validate a future alias while sharing is off without opening LAN access", async () => {
+  const ports: number[] = [], stopped: number[] = [];
+  const listener = createLanListener({
+    port: 4100, enabled: false, advertised: [], interfaces: () => ({ eth0: [entry(network.address)] }),
+    resolve: (async () => [{ address: network.address, family: 4 }]) as never,
+    start: (_network, port) => { ports.push(port); return { stop: async () => { stopped.push(port); } }; }, changed: () => {},
+  });
+  try {
+    await listener.refresh();
+    await listener.validateAlias("http://couch.home:4100");
+    await listener.validateAlias("http://couch.home");
+    expect(ports).toEqual([80]);
+    expect(stopped).toEqual([80]);
+    expect(listener.server).toBeNull();
+  } finally { await listener.close(); }
 });

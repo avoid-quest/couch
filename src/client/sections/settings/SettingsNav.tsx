@@ -29,7 +29,7 @@ export function SettingsNav({ active }: Props) {
   const current = sourcePage ? "sources" : active;
   return <>
     <Select value={current} onValueChange={id => { const page = settingsPages[id as SettingsPage]; if (page) void navigate({ to: page.path }); }}>
-      <SelectTrigger aria-label="Settings page" className="settings-nav-select mb-6 w-full">
+      <SelectTrigger aria-label="Settings page" data-page-first className="settings-nav-select mb-6 w-full">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -45,9 +45,9 @@ export function SettingsNav({ active }: Props) {
       {groups.map(group => (
         <div key={group.label} className="mb-5">
           <p aria-hidden="true" className="mb-1 px-3 text-xs font-normal text-muted-foreground">{group.label}</p>
-          {group.pages.map(([id, page]) => (
+          {group.pages.map(([id, page], index) => (
             <Button key={id} data-settings-page={id} variant="ghost" asChild className="h-auto min-h-11 w-full justify-start gap-3 rounded-none px-3 py-2.5 text-left font-normal whitespace-normal">
-              <Link aria-current={active === id || id === "sources" && sourcePage ? "page" : undefined} to={page.path}>
+              <Link data-page-first={group === groups[0] && index === 0 || undefined} aria-current={active === id || id === "sources" && sourcePage ? "page" : undefined} to={page.path}>
                 <Check aria-hidden="true" className={`size-4 shrink-0 ${active === id || id === "sources" && sourcePage ? "" : "invisible"}`} />
                 <span>{id === "connection" ? "Remotes" : page.label}</span>
               </Link>

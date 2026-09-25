@@ -122,11 +122,35 @@ test("loading uses progress and buffering uses a badge", async () => {
   expect(document.querySelector('[data-slot="badge"][role="status"]')?.textContent).toBe("Buffering");
 });
 
-test("idle Up next stays accessible without a current item", async () => {
+test("Now keeps a stopped queue available and plays its next item", async () => {
   const { PlayerPage } = await import("./PlayerPage");
-  const idle = { ...shell, current: undefined, state: { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
+  const idle = { ...shell, active: false, current: undefined, state: { ...state, queue: [state.queue[0]!, { id: "next", title: "Next movie", source: "library:movie", duration: 120 }], currentEntryId: null, queueCursorEntryId: "current", player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
   await act(async () => root.render(<ShellContext.Provider value={idle}><PlayerPage /></ShellContext.Provider>));
-  expect(document.querySelector('[aria-label="Up next"]')).not.toBeNull();
-  expect(document.querySelector<HTMLButtonElement>('[aria-label="Play Evening movie"]')).not.toBeNull();
-  expect(document.querySelector<HTMLButtonElement>('[data-page-first]')?.textContent).toBe("Find something to play");
+  expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
+  expect(document.querySelector('[aria-label="Up next"] [aria-label="Play Next movie"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Played"] [aria-label="Play Evening movie"]')).not.toBeNull();
+  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Play Next movie"]')!.click());
+  expect(actions).toEqual([{ type: "play", entryId: "next" }]);
+});
+
+test("a sheet does not reopen when playback ends and a new item starts", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  await act(async () => root.render(<ShellContext.Provider value={shell}><PlayerPage /></ShellContext.Provider>));
+  await act(async () => document.querySelector<HTMLButtonElement>('[data-panel="queue"]')!.click());
+  expect(document.querySelector('[role="dialog"][data-state="open"]')).not.toBeNull();
+  const idle = { ...shell, active: false, current: undefined, state: { ...state, currentEntryId: null, player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={idle}><PlayerPage /></ShellContext.Provider>));
+  const next = { ...shell, current: { ...state.queue[0]!, id: "next", title: "Next movie" }, state: { ...state, currentEntryId: "next", queue: [{ ...state.queue[0]!, id: "next", title: "Next movie" }], player: { ...state.player, playbackId: "next-playback" } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={next}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector('[role="dialog"][data-state="open"]')).toBeNull();
+});
+
+test("the player heading uses available artist, source, and starter metadata", async () => {
+  const { PlayerPage } = await import("./PlayerPage");
+  const attributed = { ...shell, state: { ...state, playedBy: { deviceId: "phone", name: "Kitchen phone" }, player: { ...state.player, nowPlaying: { title: "Evening movie", artist: "Known artist" } } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={attributed}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Known artist, Your library, started from Kitchen phone");
+  const unattributed = { ...shell, state: { ...state, playedBy: undefined, player: { ...state.player, nowPlaying: null } } } as ShellValue;
+  await act(async () => root.render(<ShellContext.Provider value={unattributed}><PlayerPage /></ShellContext.Provider>));
+  expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Your library");
 });

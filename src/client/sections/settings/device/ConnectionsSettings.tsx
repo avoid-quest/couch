@@ -22,7 +22,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   const controllers = useQuery({ ...controllersQuery(credentials), enabled: connected && manager });
   const setupCode = useQuery({
     queryKey: ["controllers", "setup-code"],
-    enabled: connected && identity.authority === "host" && !administratorClaimed, retry: false,
+    enabled: connected && remoteControlEnabled && identity.authority === "host" && !administratorClaimed, retry: false,
     queryFn: async ({ signal }) => {
       const response = await apiFetch(credentials, "/api/controllers/claim-code", { signal });
       return await response.json() as { code: string };
@@ -30,7 +30,7 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
   });
   const originDomain = useQuery({
     queryKey: ["settings", "origin-domain", credentials.origin],
-    enabled: connected && identity.authority === "host" && managedLan,
+    enabled: connected && manager && managedLan,
     queryFn: () => apiFetch(credentials, "/api/settings/origin-domain").then(response => response.json() as Promise<{ domain: string }>),
   });
   const [domain, setDomain] = useState("");
@@ -110,21 +110,21 @@ export function ConnectionsSettings({ credentials, connected, urls, identity, re
         <div className="flex items-center justify-between gap-4"><div><h3 className="font-medium">Allow remote control</h3><p className="text-sm text-muted-foreground">Let browsers and other Couch apps on your LAN pair with this computer.</p></div><Switch aria-label="Allow remote control" checked={remoteControlEnabled} disabled={sharingPending} onCheckedChange={saveSharing} /></div>
         {sharingError && <p role="alert">{sharingError}</p>}
       </section>}
-      {identity.authority === "host" && managedLan && <section aria-label="Local network domain" className="space-y-3">
-        <h3 className="font-medium">Local network domain</h3>
-        <p className="text-sm text-muted-foreground">Use a local DNS name for pairing links. The name must resolve only to this computer’s selected LAN address; Couch adds its port automatically.</p>
+      {manager && managedLan && <section aria-label="Local network address" className="space-y-3">
+        <h3 className="font-medium">Local network address</h3>
+        <p className="text-sm text-muted-foreground">Use a DNS name that resolves only to this computer’s selected LAN address. A bare name uses port 80; include Couch’s port when port 80 is unavailable.</p>
         <form className="flex flex-wrap items-end gap-3" onSubmit={event => void saveDomain(event)}>
-          <div className="min-w-0 space-y-2"><Label htmlFor="origin-domain">Domain name</Label><Input id="origin-domain" className="min-h-11" placeholder="couch.home" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomain(event.target.value)} disabled={!connected || domainPending || originDomain.isPending} /></div>
-          <Button type="submit" className="min-h-11" disabled={!connected || domainPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{domainPending ? "Saving…" : "Save domain"}</Button>
+          <div className="min-w-0 space-y-2"><Label htmlFor="origin-domain">Network address</Label><Input id="origin-domain" className="min-h-11" placeholder="http://couch.avoid.local" autoCapitalize="none" autoComplete="off" spellCheck={false} value={domain} onChange={event => setDomain(event.target.value)} disabled={!connected || domainPending || originDomain.isPending} /></div>
+          <Button type="submit" className="min-h-11" disabled={!connected || domainPending || originDomain.isPending || domain.trim() === (originDomain.data?.domain ?? "")}>{domainPending ? "Saving…" : "Save address"}</Button>
         </form>
         {(originDomain.error || domainError) && <p role="alert" className="text-sm text-destructive">{domainError ?? (originDomain.error instanceof Error ? originDomain.error.message : "Could not read the local domain.")}</p>}
         {lanError && <p role="status" className="text-sm text-muted-foreground">{lanError}</p>}
       </section>}
-      {identity.authority === "host" && !administratorClaimed && (
+      {identity.authority === "host" && remoteControlEnabled && !administratorClaimed && (
         <section aria-label="Administrator setup" data-administrator-setup className="space-y-3">
           <h3 className="font-medium">Set up your administrator remote</h3>
           {setupCode.isPending ? <p role="status" className="text-muted-foreground"><Spinner className="mr-2 inline size-3.5" />Loading setup code…</p>
-            : setupCode.isError || !setupCode.data || !pairUrl ? <p role="alert">Could not load administrator setup. Reload this page on the TV.</p> : (
+            : setupCode.isError || !setupCode.data || !pairUrl ? <p role="alert">Could not load administrator setup. Check the LAN connection and try again.</p> : (
               <div className="min-w-0 space-y-2"><p className="text-sm text-muted-foreground">Pair the remote above, then enter this one-use administrator code.</p><a className="break-all underline" href={pairUrl}>{pairUrl}</a><p className="font-mono text-2xl tracking-wider" data-administrator-code>{setupCode.data.code}</p></div>
             )}
         </section>

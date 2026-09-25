@@ -310,9 +310,9 @@ if (import.meta.main) {
     } else if (operation === "restore") await restorePublic(directory, manifest);
     else if (operation === "resume") {
       const uploaded: CloudRelease = await Bun.file(join(directory, "receipts", `upload-${channel}.json`)).json();
-      verifyCloud(uploaded, manifest, channel, channel === "preview" && packageFormat(manifest.format) === "appimage");
+      verifyCloud(uploaded, manifest, channel, channel === "preview");
       if (releaseId) assert.equal(releaseId, uploaded.id, "Retry the completed uploaded draft.");
-      verifyCloud(JSON.parse(cn(["show", application, uploaded.id, ...channels])), manifest, channel, channel === "preview" && packageFormat(manifest.format) === "appimage");
+      verifyCloud(JSON.parse(cn(["show", application, uploaded.id, ...channels])), manifest, channel, channel === "preview");
       if (process.env.GITHUB_OUTPUT) await Bun.write(Bun.file(process.env.GITHUB_OUTPUT), `${await Bun.file(process.env.GITHUB_OUTPUT).text()}release-id=${uploaded.id}\n`);
     } else if (operation === "readiness") {
       await Bun.write(join(directory, `readiness-${channel}.json`), JSON.stringify(await verifyPublic(manifest, channel), null, 2) + "\n");
@@ -358,7 +358,7 @@ if (import.meta.main) {
         }
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       }
-      verifyCloud(release, manifest, channel, operation === "upload" && channel === "preview" && packageFormat(manifest.format) === "appimage");
+      verifyCloud(release, manifest, channel, operation === "upload" && channel === "preview");
       if (operation === "publish") {
         await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
         cn(["publish", application, releaseId!, ...channels]);

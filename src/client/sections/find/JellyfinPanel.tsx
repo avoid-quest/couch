@@ -73,7 +73,7 @@ export function JellyfinPanel({ origin, token, host, connected, canPlay = true, 
       </form>
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading library…</p>}
       {!loading && page?.items.length === 0 && <p className="border-t border-border py-4 text-sm text-muted-foreground">{search.query ? "No matching items. Try another search." : search.resume ? "No unfinished movies, episodes or music for this Jellyfin account." : "No movies, episodes or music found in this library."}</p>}
-      {!!page?.items.length && <ul aria-busy={loading}>{page.items.map(item => <li key={item.id}>
+      {!!page?.items.length && <ul aria-busy={loading}>{page.items.map(item => <li key={item.id} data-nav-row>
         <div className="space-y-3 border-b border-border py-3">
           <div className="flex min-w-0 items-center gap-3">
           <span className={`jellyfin-kind jellyfin-kind-${item.kind.toLowerCase()} grid size-11 shrink-0 place-items-center text-muted-foreground`} aria-hidden="true">{item.kind === "Audio" ? <Music2 className="size-5" /> : item.kind === "Episode" ? <Tv className="size-5" /> : <Video className="size-5" />}</span>

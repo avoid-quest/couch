@@ -62,6 +62,9 @@ afterEach(async () => {
 test("saved shared items display without queue writes; explicit actions retain the saved entry", async () => {
   await render();
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
+  const firstRow = button("Queue Evening movie").closest("li");
+  expect(firstRow?.hasAttribute("data-nav-row")).toBe(true);
+  expect(firstRow?.contains(button("Queue Evening song"))).toBe(false);
   await click("Queue Evening movie"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);

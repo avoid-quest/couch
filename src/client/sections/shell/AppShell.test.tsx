@@ -80,30 +80,31 @@ test("the local host's update page names this app", async () => {
   expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
 });
 
-async function render(status: "playing" | "unavailable", remoteOffline = false) {
+async function render(status: "playing" | "unavailable" | "idle", remoteOffline = false, emptyQueue = false) {
   const { ShellChrome } = await import("./AppShell");
   const { NativeModeGate } = await import("./PlaybackDevice");
   if (remoteOffline) Object.defineProperty(window, "__TAURI_INTERNALS__", { configurable: true, value: { invoke: async (command: string) => command === "playback_device" ? { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: false } : undefined } });
   const state: SessionState = {
     installationName: "Desk Couch",
     activeProfile: { id: "household", name: "Household" },
-    queue: status === "playing" ? [{ id: "movie", title: "Movie", source: "library:movie" }] : [],
+    queue: status === "unavailable" || emptyQueue ? [] : [{ id: "movie", title: "Movie", source: "library:movie" }],
     currentEntryId: status === "playing" ? "movie" : null,
     player: { playbackId: status === "playing" ? "movie" : null, status, position: 0, duration: null, volume: 50, seekable: false, error: status === "unavailable" ? "Video backend missing" : null },
   };
   const shell = {
     nativeHost: true, localHost: !remoteOffline, tvPresentation: false, credentials: { origin: remoteOffline ? "http://192.168.1.10:4100" : "http://localhost", token: "host" },
     state, status: remoteOffline ? "server-unavailable" : "connected", statusLabel: remoteOffline ? "Server unavailable" : "Connected", details: { tvPresentation: false },
-    connected: !remoteOffline, active: status === "playing", current: state.queue[0] ?? null,
-    available: status === "playing", section: "Find", tv: { browsing: true, controlsVisible: false },
+    connected: !remoteOffline, active: status === "playing", current: status === "playing" ? state.queue[0] : null,
+    available: status !== "unavailable", section: "Find", tv: { browsing: true, controlsVisible: false },
     run: async () => true, reconnect: () => {}, host: null, remoteControlEnabled: false, pairingRequired: false,
     sourcesOpen: false, onlineRequest: null, remoteOpen: false, setRemoteOpen: () => {},
     sectionUrl: () => "/find",
     videoQualityPreference: { quality: "auto" },
   } as unknown as ShellValue;
   const base = createRootRoute({ component: () => <NativeModeGate><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></NativeModeGate> });
+  const now = createRoute({ getParentRoute: () => base, path: "/", component: (await import("../now/PlayerPage")).PlayerPage });
   const find = createRoute({ getParentRoute: () => base, path: "/find", component: () => <p>Find view</p> });
-  const router = createRouter({ routeTree: base.addChildren([find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
+  const router = createRouter({ routeTree: base.addChildren([now, find]), history: createMemoryHistory({ initialEntries: ["/find"] }) });
   await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
 }
 
@@ -112,6 +113,20 @@ test("the shared browsing shell leaves video to the player page", async () => {
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
   expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeDefined();
+  expect([...screen.getByRole("navigation", { name: "Main navigation" }).querySelectorAll("a")].map(link => link.textContent)).toEqual(["Find", "Saved", "Settings"]);
+});
+
+test("a stopped queue stays reachable from Find without a top-level queue page", async () => {
+  await render("idle");
+  await act(async () => fireEvent.click(screen.getByRole("link", { name: "Open queue" })));
+  expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
+  expect(screen.getByRole("button", { name: "Play Movie" })).toBeDefined();
+});
+
+test("an idle session without queued entries has no queue shortcut", async () => {
+  await render("idle", false, true);
+  expect(screen.queryByRole("link", { name: "Open queue" })).toBeNull();
+  expect(screen.getByText("Find view")).toBeDefined();
 });
 
 test("browsing does not allocate a native video rectangle", async () => {

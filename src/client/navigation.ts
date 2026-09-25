@@ -34,8 +34,8 @@ function moveFocus(key: string) {
     return;
   }
   if (key === "ArrowDown" && active.closest(".app-header")) {
-    const first = scope.querySelector<HTMLElement>("[data-page-first]");
-    if (first && visible(first)) { focus(first); return; }
+    const first = [...scope.querySelectorAll<HTMLElement>("[data-page-first]")].find(element => visible(element) && (!remoteNavigation || !element.closest(localOnly)));
+    if (first) { focus(first); return; }
   }
   if (key === "ArrowDown" && active.closest(".player-page [role=slider]")) {
     const play = scope.querySelector<HTMLElement>(".player-page .play-button");
@@ -43,9 +43,11 @@ function moveFocus(key: string) {
   }
   const from = active.getBoundingClientRect();
   const horizontal = key === "ArrowLeft" || key === "ArrowRight";
+  const row = key === "ArrowRight" ? active.closest("[data-nav-row]") : null;
+  const destinations = row ? controls.filter(element => row.contains(element)) : controls;
   const sign = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
   const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
-  const candidates = controls.filter(element => element !== active).map(element => {
+  const candidates = destinations.filter(element => element !== active).map(element => {
     const to = element.getBoundingClientRect();
     const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
     const forward = (horizontal ? dx : dy) * sign;

@@ -178,6 +178,9 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const [address, setAddress] = useState("");
   const [warning, setWarning] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
+  const dismiss = useRef(device?.dismiss);
+  dismiss.current = device?.dismiss;
+  useEffect(() => () => dismiss.current?.(), []);
   if (!device) return null;
   const close = () => { setOpen(false); setDialog(null); device.dismiss(); };
   const select = async (mode: "local" | "remote", target?: string, confirmed = false) => {
@@ -194,8 +197,8 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   return <>
     <Popover open={open} onOpenChange={value => { setOpen(value); if (value) device.show(); else if (!dialog) device.dismiss(); }}>
-      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="sm" className="max-w-full gap-2 text-[.95rem]"><span className="size-2 shrink-0 rounded-full bg-current" aria-hidden="true" /><span className="truncate">{device.mode === "local" ? "Playing here" : `Playing on ${label}`}</span></Button></PopoverTrigger>
-      <PopoverContent align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="w-[min(26rem,calc(100vw-2rem))] gap-4 rounded-sm p-4 text-sm shadow-none" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
+      <PopoverTrigger asChild><Button ref={trigger} data-tv-local-only variant="ghost" size="sm" className="max-w-full gap-2 text-[.95rem]"><span className="size-2 shrink-0 rounded-full bg-current" aria-hidden="true" /><span className="truncate">{device.mode === "local" ? "Playing here" : `Playing on ${label}`}</span></Button></PopoverTrigger>
+      <PopoverContent data-tv-local-only align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="w-[min(26rem,calc(100vw-2rem))] gap-4 rounded-sm p-4 text-sm shadow-none" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
         <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
         <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-1">
           {!buildInfo.clientOnly && <Field orientation="horizontal" className="min-h-11 items-center"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>{device.mode === "local" ? installationName || "This computer" : "This computer"}</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>}
@@ -207,7 +210,7 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
       </PopoverContent>
     </Popover>
     <Dialog open={dialog !== null} onOpenChange={value => { if (!value) close(); }}>
-      <DialogContent showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={event => { if (device.pending) event.preventDefault(); }} onEscapeKeyDown={event => { if (device.pending) event.preventDefault(); }}>
+      <DialogContent data-tv-local-only showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={event => { if (device.pending) event.preventDefault(); }} onEscapeKeyDown={event => { if (device.pending) event.preventDefault(); }}>
         <DialogHeader><DialogTitle>{dialog === "confirmation" ? "Switch playback device?" : "Another Couch"}</DialogTitle><DialogDescription>{dialog === "confirmation" ? warning === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : warning === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode." : "Enter the LAN address shown on the playback computer, then pair there. A custom domain must point to that LAN."}</DialogDescription></DialogHeader>
         {dialog === "confirmation" ? <DialogFooter><Button variant="outline" onClick={close} disabled={device.pending}>Keep {installationName || "this computer"}</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></DialogFooter> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
           <div className="space-y-2"><Label htmlFor="another-couch-address">Couch address</Label><Input id="another-couch-address" autoFocus value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} /></div>
