@@ -5,12 +5,12 @@ import { assertResponsive } from "./ui";
 import { strict as assert } from "node:assert";
 import { keys, type UiDriver, type Wait } from "./ui";
 
-export const folderSettings = '[aria-label="TV folder settings"]';
+export const folderSettings = '[data-folder-settings]';
 export const folderCard = (id: string) => `${folderSettings} [data-folder-source="${id}"]`;
 export async function openFolderSources(ui: UiDriver, until: Wait) {
   await ui.button("Settings");
   await ui.settingsSection("source-folders");
-  await until("Library opens its canonical Sources folder manager", () => ui.execute("return document.querySelectorAll(arguments[0]).length === 1 && [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === 'Add TV folder' && !button.disabled)", [folderSettings]));
+  await until("Library opens its canonical Sources folder manager", () => ui.execute("return document.querySelectorAll(arguments[0]).length === 1 && [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === 'Add folder' && !button.disabled)", [folderSettings]));
 }
 export async function closeFolderSources(ui: UiDriver, until: Wait) {
   if (await ui.execute("return !!document.querySelector('.settings-page:not([hidden])')")) {
@@ -22,8 +22,8 @@ export async function closeFolderSources(ui: UiDriver, until: Wait) {
 }
 async function chooseTVFolder(ui: UiDriver, until: Wait, name: string) {
   await openFolderSources(ui, until);
-  await ui.button("Add TV folder", folderSettings);
-  const browser = '[aria-label="TV folder browser"]';
+  await ui.button("Add folder", folderSettings);
+  const browser = '[aria-label="Folder browser"]';
   await until("TV folder browser exposes permitted media locations", () => ui.execute("return !!document.querySelector(arguments[0]) && [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === 'mnt' && !button.disabled)", [browser]));
   await ui.button("mnt", browser);
   await until("mounted media location lists the fixture folder", () => ui.execute("return [...document.querySelectorAll(arguments[0] + ' button')].some(button => button.textContent.trim() === arguments[1] && !button.disabled)", [browser, name]));
@@ -32,14 +32,14 @@ async function chooseTVFolder(ui: UiDriver, until: Wait, name: string) {
 }
 export async function addTVFolder(ui: UiDriver, until: Wait, name: string) {
   await chooseTVFolder(ui, until, name);
-  await ui.button("Test and add this folder", '[aria-label="TV folder browser"]');
+  await ui.button("Add this folder", '[aria-label="Folder browser"]');
   let id = "";
   await until("verified TV source appears with an explicit scan action", async () => {
-    id = await ui.execute("return [...document.querySelectorAll('[data-folder-source]')].find(card => card.textContent.includes(arguments[0]) && [...card.querySelectorAll('button')].some(button => button.textContent.trim() === 'Start scan' && !button.disabled))?.getAttribute('data-folder-source') ?? ''", [`/mnt/${name}`]);
+    id = await ui.execute("return [...document.querySelectorAll('[data-folder-source]')].find(card => card.textContent.includes(arguments[0]) && [...card.querySelectorAll('button')].some(button => button.textContent.trim() === 'Scan' && !button.disabled))?.getAttribute('data-folder-source') ?? ''", [`/mnt/${name}`]);
     return !!id;
   });
   assert.ok(id);
-  await ui.button("Start scan", folderCard(id));
+  await ui.button("Scan", folderCard(id));
   await closeFolderSources(ui, until);
   return id;
 }
@@ -89,7 +89,7 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
     await httpRemote.screenshot("folder-sources-phone");
     await closeFolderSources(phone, until);
     await chooseTVFolder(phone, until, name);
-    await phone.button("Test and add this folder", '[aria-label="TV folder browser"]');
+    await phone.button("Add this folder", '[aria-label="Folder browser"]');
     await until("duplicate TV folder reports an actionable error", () => phone.execute("return document.querySelector(arguments[0])?.textContent.includes('already a source')", [folderSettings]));
     assert.equal((await sources()).filter(source => source.id === sourceId).length, 1);
     assert.equal((await items())[0]?.id, item.id);
@@ -100,18 +100,18 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
     await rename(path, offline);
     await mkdir(path);
     await openFolderSources(phone, until);
-    await action("Test access");
+    await action("Test");
     await ready("unavailable");
-    await action("Scan again");
+    await action("Rescan");
     await ready("unavailable");
     assert.equal((await items())[0]?.id, item.id, "An empty replacement must retain the catalog identity");
     assert.equal((await items())[0]?.available, false);
     await httpRemote.screenshot("folder-unavailable-original-kept");
     await rm(path, { recursive: true });
     await rename(offline, path);
-    await action("Test access");
+    await action("Test");
     await ready("ready");
-    await action("Scan again");
+    await action("Rescan");
     await ready("ready");
     assert.equal((await items())[0]?.id, item.id);
     assert.equal((await items())[0]?.available, true);
@@ -134,16 +134,16 @@ export async function verifyFolderSettings({ origin, until, clients, api, httpRe
         assert.ok((await sources()).some(source => source.id === sourceId));
         assert.equal((await items())[0]?.id, item.id);
         await openFolderSources(phone, until);
-        await action("Test access");
+        await action("Test");
         await ready("ready");
         await closeFolderSources(phone, until);
         await play();
         const entryId = clients[0]!.state!.currentEntryId!;
         await openFolderSources(phone, until);
-        await action("Remove source");
-        const confirmation = '[aria-label="Confirm source removal"]';
-        assert.ok(await phone.execute("return document.querySelector(arguments[0])?.textContent.includes('Current playback continues')", [confirmation]));
-        await phone.button("Remove source, keep files", confirmation);
+        await action("Remove");
+        const confirmation = '[role="alertdialog"]';
+        assert.ok(await phone.execute("return document.querySelector(arguments[0])?.textContent.includes('queued items from it stop working')", [confirmation]));
+        await phone.button("Remove", confirmation);
         await until("phone removal clears only its catalog source", async () => !(await sources()).some(source => source.id === sourceId));
         assert.equal(await Bun.file(`${path}/Folder acceptance.mkv`).exists(), true);
         assert.ok(all(state => state.currentEntryId === entryId && state.player.status === "playing" && state.queue.some(entry => entry.id === entryId)), "Removal keeps current native playback and its queue entry");

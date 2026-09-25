@@ -187,7 +187,7 @@ seedConfiguredFixture(unavailable);
 await writeFile(`${unavailable}/operating-mode.json`, JSON.stringify({ mode: "remote", address: "http://127.0.0.1:49999", targets: ["http://127.0.0.1:49999"], localSetupComplete: true }));
 native = await open("0", unavailable);
 try {
-  await until("unavailable selected host exposes Retry", () => role(native.session, '//button[normalize-space(.)="Retry"]'), 30_000);
+  await until("unavailable selected host exposes Try again", () => role(native.session, '//button[normalize-space(.)="Try again"]'), 30_000);
   await until("unavailable selected host exposes Use this computer", () => role(native.session, '//button[normalize-space(.)="Use this computer"]'));
   assert.equal(await health(), false, "remote selection does not start a local playback host");
   const window = await windowId();
@@ -227,12 +227,12 @@ try {
       const geometry = await command("xwininfo", "-id", selectedWindow);
       return /Width:\s*1200/.test(geometry) && /Height:\s*780/.test(geometry);
     });
-    await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Connect"]'));
+    await until("selected remote offers pairing in the shared shell", () => role(native.session, '//button[normalize-space(.)="Pair"]'));
     const pairingCode = (await Bun.file("/artifacts/lifecycle-selected-host-error.log").text()).match(/Pairing code: (\d{6})/)?.[1];
     assert.ok(pairingCode, "selected host prints a pairing code");
-    await typeByLabel(native.session, "Device name", "Native restart remote");
+    await typeByLabel(native.session, "Remote name", "Native restart remote");
     await typeByLabel(native.session, "Pairing code", pairingCode);
-    await click(native.session, '//button[normalize-space(.)="Connect"]');
+    await click(native.session, '//button[normalize-space(.)="Pair"]');
     await until("paired desktop client connects to the selected host", () => role(native.session, '//nav[@aria-label="Main navigation"]'));
     const paired = await request(`/session/${native.session}/execute/sync`, { script: "return localStorage.getItem('couch.pairing:' + arguments[0]);", args: [selectedHost] }) as string;
     assert.ok(paired, "native pairing is stored for the selected origin");
@@ -247,9 +247,10 @@ try {
     remoteHost.kill();
     await remoteHost.exited;
     await until("selected host outage keeps recovery in the shared shell", () => role(native.session, '//*[@role="status" and contains(normalize-space(.),"selected Couch is offline")]'), 30_000);
+    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
     assert.equal(await role(native.session, '//button[normalize-space(.)="Update this app"]'), true, "local update access survives selected host outage");
     await click(native.session, '//button[normalize-space(.)="Update this app"]');
-    await until("local updater loads while selected host is offline", () => role(native.session, '//div[@role="dialog"]//button[normalize-space(.)="Check this app for updates"]'), 30_000);
+    await until("local updater loads while selected host is offline", () => role(native.session, '//div[@role="dialog"]//button[normalize-space(.)="Check for updates"]'), 30_000);
     await command("xdotool", "key", "Escape");
     await until("local updater closes without changing playback device", async () => !await role(native.session, '//div[@role="dialog"]'));
     remoteHost = startSelectedHost();
@@ -291,7 +292,8 @@ try {
     assert.equal(restoredIdentity.controller?.name, "Native restart remote", "selected host device name survives app restart");
     await click(native.session, '//nav[@aria-label="Main navigation"]//a[@aria-label="Settings"]');
     await click(native.session, '//nav[@aria-label="Settings pages"]//a[normalize-space(.)="Updates"]');
-    await until("restarted administrator sees selected-host update target", () => role(native.session, '//label[normalize-space(.)="Release channel for selected host"]'));
+    await until("restarted administrator sees selected-host update target", () => role(native.session, '//label[normalize-space(.)="Channel"]'));
+    await click(native.session, '//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
     assert.equal(await role(native.session, '//button[normalize-space(.)="Update this app"]'), true, "local update access stays separate after relaunch");
   } finally { await closeDriver(native); }
 } finally { remoteHost.kill(); await remoteHost.exited; }

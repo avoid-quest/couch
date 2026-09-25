@@ -5,7 +5,7 @@ import { assertResponsive, type UiDriver, type Wait, type startHttpRemote } from
 type Remote = { token: string; state: SessionState | null; command: (action: Action) => Promise<void> };
 type HttpRemote = Awaited<ReturnType<typeof startHttpRemote>>;
 type Context = { origin: string; ui: UiDriver; httpRemote: HttpRemote; clients: readonly Remote[]; until: Wait; artifactDir: string };
-const settings = '[aria-label="Jellyfin settings"]';
+const settings = '[data-jellyfin-settings]';
 
 export async function verifyJellyfinSettings({ origin, httpRemote, clients, until, artifactDir }: Context) {
   if (!process.env.COUCH_TEST_JELLYFIN) return null;
@@ -48,13 +48,13 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.type("#jellyfin-url", server);
     await phone.type("#jellyfin-user", username);
     await phone.type("#jellyfin-password", password);
-    await phone.button((await api("/api/jellyfin")).connected ? "Test and replace connection" : "Test and connect", settings);
+    await phone.button((await api("/api/jellyfin")).connected ? "Replace" : "Connect", settings);
   };
   const saved = async (username: string) => until("phone connection test saves the selected Jellyfin account", async () => (await api("/api/jellyfin")).username === username && await phone.execute("return !document.querySelector('.jellyfin-connect') && document.querySelector(arguments[0])?.textContent.includes('Connection tested and saved.')", [settings]), 30_000);
   const disconnect = async () => {
     await phone.click('[data-action="jellyfin-disconnect"]');
-    assert.equal(await phone.execute("return document.querySelector(arguments[0]).textContent.includes('stops any item playing')", [settings]), true);
-    await phone.button("Disconnect and stop Jellyfin", settings);
+    assert.equal(await phone.execute("return document.querySelector('[role=alertdialog]').textContent.includes('Jellyfin playback stops')"), true);
+    await phone.button("Disconnect", "[role=alertdialog]");
     await until("phone disconnect removes the saved connection and stops its native playback", async () => !(await api("/api/jellyfin")).connected && all(state => state.player.status === "idle") && await phone.execute("return !!document.querySelector('#jellyfin-url:not(:disabled)')"));
   };
   const play = async () => {
@@ -78,7 +78,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.button("Test connection", settings);
     await until("phone verifies its saved token with real Jellyfin", () => phone.execute("return document.querySelector(arguments[0])?.textContent.includes('accepted the saved connection')", [settings]));
     await play();
-    await phone.button("Reconnect or replace", settings);
+    await phone.button("Change account", settings);
     await connect(url, "Settings replacement", "wrong-fixture-password");
     await until("phone failed replacement reports an inline error and clears its password", () => phone.execute("return !!document.querySelector(arguments[0] + ' [role=alert]') && document.querySelector('#jellyfin-password')?.value === ''", [settings]));
     assert.equal((await api("/api/jellyfin")).username, config.username, "A failed replacement leaves the previous shared connection working");
@@ -96,7 +96,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await phone.button("Test connection", settings);
     await until("phone detects an actually revoked Jellyfin access token", () => phone.execute("return document.querySelector(arguments[0] + ' [role=alert]')?.textContent.includes('rejected the saved connection')", [settings]));
     await httpRemote.screenshot("jellyfin-phone-expired-credentials");
-    await phone.button("Reconnect or replace", settings);
+    await phone.button("Change account", settings);
     await connect(url);
     await saved(config.username);
     await proxy.stop(true);
@@ -104,7 +104,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await until("phone shows an inline unavailable-server error when the configured listener is stopped", () => phone.execute("return document.querySelector(arguments[0] + ' [role=alert]')?.textContent.includes('Could not reach')", [settings]), 30_000);
     await httpRemote.screenshot("jellyfin-phone-unavailable-server");
     proxy = startProxy();
-    await phone.button("Reconnect or replace", settings);
+    await phone.button("Change account", settings);
     await connect(url, "Settings replacement");
     await saved("Settings replacement");
     assert.deepEqual(clients[0]!.state!.activeProfile, originalProfile, "Replacing the Jellyfin account leaves the Couch watching profile unchanged");

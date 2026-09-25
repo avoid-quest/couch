@@ -57,7 +57,7 @@ test("player keys leave focused buttons outside the player available", async () 
   expect(document.activeElement).toBe(outside);
   expect(actions).toEqual([]);
   expect(document.querySelector('[role="slider"][aria-label="Volume"]')).toBeNull();
-  expect(document.querySelector('[role="group"][aria-label="Playback host volume"]')?.textContent).toContain("40%");
+  expect(document.querySelector('[role="group"][aria-label="Couch volume"]')?.textContent).toContain("40%");
 });
 
 test("Escape leaves an open overlay to close itself before leaving the player", async () => {
@@ -98,7 +98,7 @@ test("chapters mark the timeline and name the current chapter", async () => {
   const withChapters = { ...shell, state: { ...state, player: { ...state.player, position: 12, chapters } } } as ShellValue;
   await act(async () => root.render(<ShellProviders value={withChapters}><PlayerPage /></ShellProviders>));
   expect(document.querySelectorAll("[data-chapter-tick]")).toHaveLength(2);
-  expect(document.querySelector(".time-labels")?.textContent).toContain("The meeting");
+  expect(document.querySelector("[data-time-labels]")?.textContent).toContain("The meeting");
 });
 
 test("an error offers Skip even at the end of Up next", async () => {
@@ -109,17 +109,18 @@ test("an error offers Skip even at the end of Up next", async () => {
   expect(skip.disabled).toBe(false);
   await act(async () => skip.click());
   expect(actions).toEqual([{ type: "next", playbackId: "playback" }]);
-  expect(document.querySelector('.player-status h2')).not.toBeNull();
+  expect(document.querySelector("[data-player-status] h2")).not.toBeNull();
 });
 
-test("loading uses progress and buffering uses a badge", async () => {
+test("loading and buffering are spinner status lines", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const loading = { ...shell, state: { ...state, player: { ...state.player, status: "loading" as const } } } as ShellValue;
   await act(async () => root.render(<ShellProviders value={loading}><PlayerPage /></ShellProviders>));
-  expect(document.querySelector('.player-status [data-slot="progress"]')).not.toBeNull();
+  expect(document.querySelector("[data-player-status]")?.textContent).toContain("Loading Evening movie");
   const buffering = { ...loading, state: { ...(loading as unknown as { state: SessionState }).state, player: { ...(loading as unknown as { state: SessionState }).state.player, buffering: true } } } as unknown as ShellValue;
   await act(async () => root.render(<ShellProviders value={buffering}><PlayerPage /></ShellProviders>));
-  expect(document.querySelector('[data-slot="badge"][role="status"]')?.textContent).toBe("Buffering");
+  expect(document.querySelector("[data-player-status]")).toBeNull();
+  expect([...document.querySelectorAll('[role="status"]')].some(node => node.textContent === "Buffering…")).toBe(true);
 });
 
 test("Now keeps a stopped queue available and plays its next item", async () => {
@@ -149,8 +150,8 @@ test("the player heading uses available artist, source, and starter metadata", a
   const { PlayerPage } = await import("./PlayerPage");
   const attributed = { ...shell, state: { ...state, playedBy: { deviceId: "phone", name: "Kitchen phone" }, player: { ...state.player, nowPlaying: { title: "Evening movie", artist: "Known artist" } } } } as ShellValue;
   await act(async () => root.render(<ShellProviders value={attributed}><PlayerPage /></ShellProviders>));
-  expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Known artist, Your library, started from Kitchen phone");
+  expect(document.querySelector("[data-player-heading] > span")?.textContent).toMatch(/^Known artist · .+ · played from Kitchen phone$/);
   const unattributed = { ...shell, state: { ...state, playedBy: undefined, player: { ...state.player, nowPlaying: null } } } as ShellValue;
   await act(async () => root.render(<ShellProviders value={unattributed}><PlayerPage /></ShellProviders>));
-  expect(document.querySelector(".player-band-heading > span")?.textContent).toBe("Your library");
+  expect(document.querySelector("[data-player-heading] > span")?.textContent).not.toContain("·");
 });

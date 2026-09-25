@@ -1,10 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiSend } from "@/api/client";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Item } from "@/components/ui/item";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { MediaList, MediaRow } from "@/components/MediaRow";
+import { useOptionalShell } from "@/sections/shell/shell-context";
+import { cn } from "@/lib/utils";
 import type { Action, QueueEntry, SessionState, VideoQuality } from "../../../shared/protocol";
 import type { Credentials } from "../../session/session";
 import { formatEndTime } from "@/time-format";
@@ -18,6 +21,8 @@ type Props = {
   nativeHost: boolean;
   defaultQuality: VideoQuality;
   run: (action: Action) => Promise<boolean>;
+  /** Show the "Up next" heading; a sheet already titles it. */
+  titled?: boolean;
 };
 
 function duration(seconds: number) {
@@ -31,8 +36,8 @@ function knownLength(entry: QueueEntry): number | null {
   return entry.live || entry.duration == null || !Number.isFinite(entry.duration) ? null : Math.max(0, entry.duration);
 }
 
-export function QueuePanel({ state, credentials, connected, available, run }: Props) {
-  const [notice, setNotice] = useState("");
+export function QueuePanel({ state, credentials, connected, available, run, titled = true }: Props) {
+  const shell = useOptionalShell();
   const [keptQueue, setKeptQueue] = useState("");
   const keep = useMutation({ mutationFn: (name: string) => apiSend(credentials, "/api/playlists", { name, scope: "upNext" }, "POST", 20_000) });
   const keeping = keep.isPending;
@@ -55,13 +60,12 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
 
   const keepUpNext = async () => {
     if (!connected || keeping || !upNext.length) return;
-    setNotice("");
     try {
       const name = `Up next, ${new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
       await keep.mutateAsync(name);
-      setNotice(`Kept ${name} in Saved.`);
+      toast(`Saved as ${name}.`);
       setKeptQueue(upNextKey);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not keep Up next."); }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't save Up next."); }
   };
 
   useLayoutEffect(() => {
@@ -70,32 +74,35 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
     const row = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])].find(row => row.dataset.queueEntryId === focused.id);
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
       ?? row?.querySelector<HTMLElement>("button:not(:disabled)")
-      ?? panelRef.current?.querySelector<HTMLElement>(".queue-standard-entry:not(:disabled), .queue-standard-played:not(:disabled)")
-      ?? panelRef.current?.closest(".player-sheet")?.querySelector<HTMLElement>("button:not(:disabled)")
+      ?? panelRef.current?.querySelector<HTMLElement>("[data-play]:not(:disabled)")
+      ?? panelRef.current?.closest("[data-player-sheet]")?.querySelector<HTMLElement>("button:not(:disabled)")
       ?? panelRef.current?.closest('[data-page="Now"]')?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)");
     focusedEntry.current = null;
     replacement?.focus({ preventScroll: true });
   });
 
-  return <section ref={panelRef} className="queue-panel queue-panel-standard" aria-labelledby="queue-title" onFocusCapture={event => {
+  return <section ref={panelRef} data-queue-panel className="grid gap-6" aria-labelledby="queue-title" onFocusCapture={event => {
     const element = event.target, row = element.closest<HTMLElement>("[data-queue-entry-id]");
     focusedEntry.current = row ? { element, id: row.dataset.queueEntryId!, label: element.getAttribute("aria-label") } : null;
   }}>
-    <div className="queue-standard-header"><h2 id="queue-title">Up next</h2><Button variant="ghost" disabled={!connected || !upNext.length || keeping || isKept} onClick={() => void keepUpNext()}>{keeping ? "Keeping…" : isKept ? "Kept in Saved" : "Keep as a list"}</Button></div>
-    {state?.queueError && <Alert variant="destructive" className="queue-feedback"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
-    {notice && <p className="queue-feedback" role="status">{notice}</p>}
-    {upNext.length ? <section className="queue-standard-group" aria-labelledby="queue-next-title"><h3 id="queue-next-title">{upNext.length} to play{doneIn == null ? "" : `, done by ${formatEndTime(doneIn)}`}</h3>
-      <ol className="queue-standard-list" aria-label="Up next">{upNext.map((entry, index) => {
+    <div className="flex items-center justify-between gap-4">
+      <h2 id="queue-title" className={cn("text-base font-medium", !titled && "sr-only")}>Up next</h2>
+      <Button variant="ghost" className="ml-auto" disabled={!connected || !upNext.length || keeping || isKept} onClick={() => void keepUpNext()}>{keeping ? "Saving…" : isKept ? "Saved" : "Save as list"}</Button>
+    </div>
+    {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
+    {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · done by ${formatEndTime(doneIn)}`}</h3>
+      {/* Rows stack their actions under the title: the sheet is narrow at every viewport. */}
+      <MediaList aria-label="Up next" className="[&>li]:grid-cols-1 [&_[data-slot=item-actions]]:justify-start [&_[data-slot=item-actions]]:opacity-100">{upNext.map((entry, index) => {
         const starts = startsIn;
         const length = knownLength(entry);
         startsIn = startsIn == null || length == null ? null : startsIn + length;
-        const meta = [entry.live ? "Live" : length == null ? "Length unknown" : duration(length), starts == null ? null : `starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(", ");
-        return <Item asChild key={entry.id} className="queue-standard-row" data-queue-entry-id={entry.id}><li>
-          <Button variant="ghost" className="queue-play queue-standard-entry" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}><span className="queue-standard-title">{entry.title}</span><span className="queue-standard-meta">{meta}</span></Button>
-          <QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />
-        </li></Item>;
-      })}</ol>
-    </section> : <Empty className="queue-standard-empty items-start border-0 p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on any result to play it later.</EmptyDescription></EmptyHeader></Empty>}
-    {previous.length > 0 && <section className="queue-standard-group" aria-labelledby="queue-played-title"><h3 id="queue-played-title">Played</h3><ol className="queue-standard-list" aria-label="Played">{[...previous].reverse().map(entry => <li key={entry.id} data-queue-entry-id={entry.id}><Button variant="ghost" className="queue-standard-played" aria-label={`Play ${entry.title}`} disabled={!available} onClick={() => void run({ type: "play", entryId: entry.id })}>{entry.title}</Button></li>)}</ol></section>}
+        const meta = [entry.live ? "Live" : length == null ? null : duration(length), starts == null ? null : `starts ${formatEndTime(starts)}`, entry.addedBy && `added by ${entry.addedBy.name}`].filter(Boolean).join(" · ");
+        return <MediaRow key={entry.id} data-queue-entry-id={entry.id} title={entry.title} meta={meta || undefined} primary={{ label: "Play", disabled: !available, onClick: () => void run({ type: "play", entryId: entry.id }) }}
+          actions={<QueueActions credentials={credentials} entry={entry} index={cursorIndex + 1 + index} queue={queue} connected={connected} run={run} firstUpcomingIndex={cursorIndex + 1} lastUpcomingIndex={queue.length - 1} />} />;
+      })}</MediaList>
+    </section> : <Empty className="items-start p-0 text-left"><EmptyHeader className="items-start text-left"><EmptyTitle>Nothing queued</EmptyTitle><EmptyDescription>Use Queue on anything in Find.</EmptyDescription></EmptyHeader>{shell && <EmptyContent className="items-start"><Button variant="outline" onClick={() => shell.changeSection("Find")}>Find</Button></EmptyContent>}</Empty>}
+    {previous.length > 0 && <section className="grid gap-2" aria-labelledby="queue-played-title"><h3 id="queue-played-title" className="text-sm text-muted-foreground">Played</h3>
+      <MediaList aria-label="Played">{[...previous].reverse().map(entry => <MediaRow key={entry.id} data-queue-entry-id={entry.id} title={entry.title} className="text-muted-foreground" primary={{ label: "Play", disabled: !available, onClick: () => void run({ type: "play", entryId: entry.id }) }} />)}</MediaList>
+    </section>}
   </section>;
 }

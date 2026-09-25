@@ -82,7 +82,7 @@ const media = Bun.serve({ hostname: "0.0.0.0", port: 45312, fetch: request => {
 } });
 async function start() {
   native = (await driver(45344, "/session", { capabilities: { alwaysMatch: { browserName: "wry", "tauri:options": { application: "/usr/bin/couch" } } } })).sessionId;
-  await until("packaged TV connects", () => tv.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("packaged TV connects", () => tv.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   if (await tv.execute("return !!document.querySelector('[role=dialog]')")) await tv.key(keys.escape);
   return driver(45344, `/session/${native}/execute/async`, { script: "const done = arguments[arguments.length - 1]; window.__TAURI_INTERNALS__.invoke('connection_info').then(done)", args: [] });
 }
@@ -210,7 +210,7 @@ async function startPhone(code: string) {
   };
   await phone.type("#pairing-code", code);
   await phone.click(".pair-form button[type=submit], .pair-form button:not([type])");
-  await until("phone pairs through the real form", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("phone pairs through the real form", () => phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
 }
 async function selectorsAndUploads(code: string) {
   await load("bitmap");
@@ -316,7 +316,7 @@ async function preferencesAndRestart(token: string) {
   await load("text");
   assert.ok(!first().player.tracks?.some(t => t.kind === "subtitle" && t.selected));
   if (browser) {
-    await until("paired phone reconnects after native restart", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+    await until("paired phone reconnects after native restart", () => phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
     await driver(45345, `/session/${browser}/window/maximize`, {});
     await settings(phone);
     await until("phone shows the restarted Household subtitle Off selection", () => phone.execute("return document.querySelector('#playback-subtitles')?.textContent.trim() === 'Off'"));

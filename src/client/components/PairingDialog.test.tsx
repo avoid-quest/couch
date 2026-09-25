@@ -54,19 +54,19 @@ test("loading, failure and retry retain manual recovery without an address-only 
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog();
-  expect(qr()).toBeNull(); expect(screen.getByText("Loading pairing QR…")).toBeDefined();
+  expect(qr()).toBeNull(); expect(screen.getByText("Loading…")).toBeDefined();
   expect(button("Close")).toBeDefined();
   await act(async () => resolve(Response.json({ error: "Unavailable" }, { status: 503 }))); await flush();
-  expect(qr()).toBeNull(); expect(screen.getByRole("alert").textContent).toContain("Could not load the QR or pairing code");
+  expect(qr()).toBeNull(); expect(screen.getByRole("alert").textContent).toContain("Couldn't load the code.");
   request.mockResolvedValue(Response.json({ code: "123456" }));
-  await act(async () => button("Retry pairing QR").click()); await flush();
+  await act(async () => button("Try again").click()); await flush();
   expect(qr()).not.toBeNull();
 });
 
 test("disconnect removes a valid QR, ignores late responses and reconnect fetches again", async () => {
   await renderDialog(); expect(qr()).not.toBeNull();
   await renderDialog(false); expect(qr()).toBeNull();
-  expect(screen.getByRole("status").textContent).toContain("Reconnecting to the TV");
+  expect(screen.getByRole("status").textContent).toContain("Offline. Reconnecting to Couch…");
   let resolve!: (response: Response) => void;
   request.mockImplementation(() => new Promise(done => { resolve = done; }));
   await renderDialog(); expect(qr()).toBeNull();
@@ -82,7 +82,7 @@ test("disconnect removes a valid QR, ignores late responses and reconnect fetche
 test("no advertised address leaves Close and manual recovery available", async () => {
   await renderDialog(true, { ...host, urls: [] });
   expect(qr()).toBeNull(); expect(request).not.toHaveBeenCalled();
-  expect(screen.getByRole("status").textContent).toContain("Connect the TV to the network");
+  expect(screen.getByRole("status").textContent).toContain("No network. Connect Couch to Wi-Fi or Ethernet.");
   expect(button("Close")).toBeDefined();
 });
 

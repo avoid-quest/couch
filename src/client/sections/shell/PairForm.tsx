@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
@@ -18,11 +19,13 @@ export async function requestPairing(origin: string, code: string, name: string)
     signal: AbortSignal.timeout(8_000),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, name }),
-  });
+  }).catch(() => { throw new Error("Couldn't reach Couch. Check you're on the same Wi-Fi."); });
   const result = await response.json() as { token?: string; installationId?: string; error?: string };
-  if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "That code is no longer valid. Scan the QR again or enter the code currently shown on the playback computer." : result.error || "Could not pair with the player.");
+  if (!response.ok || !result.token || !result.installationId) throw new Error(response.status === 401 ? "Code expired. Enter the code shown on Couch now." : result.error || "Couldn't pair.");
   return { origin, token: result.token, installationId: result.installationId };
 }
+
+const slot = "h-12 min-w-0 w-auto flex-1 text-2xl";
 
 // The shell remounts per connection, so a pairing that outlives its form never applies.
 export function PairForm() {
@@ -34,24 +37,22 @@ export function PairForm() {
   const pair = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    pairing.mutate(undefined, {
-      onSuccess: credentials => { setPairingCode(""); savePairing(credentials); },
-      onError: reason => setError(`${errorText(reason)} Check that your device and playback computer are on the same network, then try Connect again.`),
-    });
+    pairing.mutate(undefined, { onSuccess: credentials => { setPairingCode(""); savePairing(credentials); } });
   };
   return (
-    <form onSubmit={pair} className="pair-form w-full max-w-md space-y-8">
+    <form onSubmit={pair} className="pair-form grid max-w-md gap-6">
       <FieldGroup>
-        <Field><FieldLabel htmlFor="remote-name">Device name</FieldLabel><Input id="remote-name" className="rounded-none border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required /></Field>
+        <Field><FieldLabel htmlFor="remote-name">Remote name</FieldLabel><Input id="remote-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required /></Field>
         <Field><FieldLabel htmlFor="pairing-code">Pairing code</FieldLabel>
           <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} containerClassName="w-full justify-start gap-2">
-            <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={0} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={1} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={2} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
+            <InputOTPGroup className="min-w-0 flex-1">{[0, 1, 2].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>
             <InputOTPSeparator />
-            <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={3} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={4} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={5} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
+            <InputOTPGroup className="min-w-0 flex-1">{[3, 4, 5].map(index => <InputOTPSlot key={index} index={index} className={slot} />)}</InputOTPGroup>
           </InputOTP>
         </Field>
       </FieldGroup>
-      <Button disabled={pairing.isPending || pairingCode.length !== 6 || !remoteName.trim()}>{pairing.isPending ? "Connecting…" : "Connect"}</Button>
+      {pairing.error && <Alert variant="destructive"><AlertDescription>{errorText(pairing.error)}</AlertDescription></Alert>}
+      <Button className="justify-self-start" disabled={pairing.isPending || pairingCode.length !== 6 || !remoteName.trim()}>{pairing.isPending ? "Pairing…" : "Pair"}</Button>
     </form>
   );
 }

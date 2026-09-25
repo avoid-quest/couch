@@ -187,7 +187,7 @@ test.each(["origin", "token", "installationId"] as const)("changing %s resets co
   expect(current.pairingRequired).toBe(false);
   expect(socket.closed).toBe(true);
   expect((await pending)?.message).toContain("Connection lost");
-  await expect(current.command({ type: "stop" })).rejects.toThrow("Wait for the player to reconnect");
+  await expect(current.command({ type: "stop" })).rejects.toThrow("Reconnecting. Try again in a moment.");
   await act(async () => socket.receive({ type: "state", state }));
   expect(current.state).toBeNull();
   if (key === "origin") {

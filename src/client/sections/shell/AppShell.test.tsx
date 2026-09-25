@@ -60,24 +60,23 @@ async function renderUpdates(authority: "host" | "administrator" | "controller",
 
 test("a remote administrator manages only the selected host's update policy", async () => {
   await renderUpdates("administrator", false);
-  expect(screen.getByLabelText("Release channel for selected host")).toBeDefined();
-  expect(screen.getByLabelText("Install updates on selected host")).toBeDefined();
-  expect(screen.queryByLabelText("Release channel for this app")).toBeNull();
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check selected host for updates" })));
+  expect(screen.getByLabelText("Channel")).toBeDefined();
+  expect(screen.getByLabelText("Install updates")).toBeDefined();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Check for updates" })));
   expect(fetchSpy?.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input) === "http://192.168.1.20:4100/api/updates/check" && init?.method === "POST")).toBe(true);
 });
 
 test("a remote controller cannot manage the selected host's updates", async () => {
   await renderUpdates("controller", false);
-  expect(screen.getByText("An administrator can install updates.")).toBeDefined();
-  expect(screen.queryByLabelText("Install updates on selected host")).toBeNull();
+  expect(screen.getByText("Only an admin can change this.")).toBeDefined();
+  expect(screen.queryByLabelText("Install updates")).toBeNull();
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-test("the local host's update page names this app", async () => {
+test("the local host's update page offers its controls", async () => {
   await renderUpdates("host", true);
-  expect(screen.getByLabelText("Release channel for this app")).toBeDefined();
-  expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
+  expect(screen.getByLabelText("Channel")).toBeDefined();
+  expect(screen.getByLabelText("Install updates")).toBeDefined();
 });
 
 async function render(status: "playing" | "unavailable" | "idle", remoteOffline = false, emptyQueue = false) {
@@ -118,14 +117,14 @@ test("the shared browsing shell leaves video to the player page", async () => {
 
 test("a stopped queue stays reachable from Find without a top-level queue page", async () => {
   await render("idle");
-  await act(async () => fireEvent.click(screen.getByRole("link", { name: "Open queue" })));
+  await act(async () => fireEvent.click(screen.getByRole("link", { name: "Up next (1)" })));
   expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
   expect(screen.getByRole("button", { name: "Play Movie" })).toBeDefined();
 });
 
 test("an idle session without queued entries has no queue shortcut", async () => {
   await render("idle", false, true);
-  expect(screen.queryByRole("link", { name: "Open queue" })).toBeNull();
+  expect(screen.queryByRole("link", { name: /^Up next/ })).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
 });
 
@@ -136,18 +135,19 @@ test("browsing does not allocate a native video rectangle", async () => {
   expect(videoRects).toHaveLength(0);
 });
 
-test("a playback backend error remains visible while browsing Find", async () => {
+test("a missing player is a quiet status line while browsing Find", async () => {
   await render("unavailable");
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByRole("button", { name: "Playing here" })).toBeDefined();
-  expect(screen.getByRole("alert").textContent).toContain("Video backend missing");
+  expect(document.querySelector("[data-status-line]")?.textContent).toBe("Player not running on this computer.");
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
 });
 
 test("a Client-only app keeps offline recovery on the selected remote", async () => {
   buildInfo.clientOnly = true;
   await render("unavailable", true);
-  expect(screen.getByText("Reconnecting to Desk Couch. Browsing and the queue come back when it answers.")).toBeDefined();
-  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  expect(screen.getByText("Offline. Reconnecting to Desk Couch…")).toBeDefined();
+  expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
   expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
 });

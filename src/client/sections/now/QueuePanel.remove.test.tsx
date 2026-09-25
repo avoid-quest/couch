@@ -43,6 +43,6 @@ afterEach(async () => { queryClient.clear();
 
 test("a queue entry removes itself through the socket remove action", async () => {
   expect(actions).toEqual([]);
-  await press(document.querySelector<HTMLElement>('[data-queue-entry-id="two"] .queue-row-actions > button:last-child')!);
+  await press(document.querySelector<HTMLElement>('[data-queue-entry-id="two"] [data-slot=item-actions] > button:last-child')!);
   expect(actions).toEqual([{ type: "remove", entryId: "two" }]);
 });

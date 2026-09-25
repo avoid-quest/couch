@@ -47,9 +47,9 @@ try {
   `);
   assert.ok(connected.build?.packaged && connected.build.revision && !connected.error);
   assert.deepEqual(connected.build, JSON.parse(inside("cat", "/evidence/native-build.json")));
-  await until("Local setup offers an explicit sharing choice", () => execute("return Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Keep private')"));
-  await execute("Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Keep private').click(); return true");
-  await until("Local setup completes without enabling sharing", () => execute("return !document.body.innerText.includes('Allow remote control?')"));
+  await until("Local setup offers an explicit sharing choice", () => execute("return Array.from(document.querySelectorAll('button')).some(button => button.textContent.trim() === 'Not now')"));
+  await execute("Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Not now').click(); return true");
+  await until("Local setup completes without enabling sharing", () => execute("return !document.body.innerText.includes('Allow remotes?')"));
   const tools = inside("runuser", "-u", "qualifier", "--", "sh", "-c", "pid=$(pgrep -n -x couch-server); tr '\\0' '\\n' < /proc/$pid/environ | grep '^COUCH_BUNDLED_TOOLS=' ");
   assert.equal(tools, "COUCH_BUNDLED_TOOLS=/usr/lib/Couch/tools");
   checks.push("Native launcher, backend and packaged helper paths agree");

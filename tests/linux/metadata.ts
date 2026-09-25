@@ -42,7 +42,7 @@ async function scan(sourceId: string, unavailable = false) {
 }
 async function metadataLayout(target: UiDriver, width: number) {
   const layout = await target.execute(`
-    const editor = document.querySelector('.metadata-editor'), dialog = editor.closest('[role=dialog]');
+    const editor = document.querySelector('[data-metadata-editor]'), dialog = editor.closest('[role=dialog]');
     const controls = [...editor.querySelectorAll('button, input, textarea')].filter(element => element.getClientRects().length && getComputedStyle(element).visibility === 'visible');
     const minimum = innerWidth < 960 || matchMedia('(pointer: coarse)').matches ? 44 : 24;
     return { width: innerWidth, scrollWidth: document.documentElement.scrollWidth, minimum,
@@ -74,7 +74,7 @@ async function keyboard(target: UiDriver, selector: string, value: string) {
 }
 async function movieEditor(target: UiDriver, title: string, itemId: string) {
   await target.section("Library"); await target.type("#media-search", title);
-  await target.button(`Details: ${title}`, `[data-hit-id="Library:${itemId}"]`); await target.button("Edit metadata");
+  await target.button(`Details: ${title}`, `[data-hit-id="Library:${itemId}"]`); await target.button("Edit details");
   await until("metadata editor loads the current title", () => target.execute("return document.querySelector('[data-metadata-field=title]')?.value === arguments[0]", [title]));
 }
 async function capture(name: string) {
@@ -159,16 +159,16 @@ try {
   const view = (): Promise<MetadataView> => data(`/api/metadata/items/${movie.id}`);
   await movieEditor(ui, "Wrong movie", movie.id);
   await keyboard(ui, '[data-metadata-field="title"]', "Correct movie");
-  await ui.execute("document.documentElement.removeAttribute('data-keyboard'); [...document.querySelectorAll('.metadata-editor button')].find(button => button.textContent === 'Save corrections').focus()");
+  await ui.execute("document.documentElement.removeAttribute('data-keyboard'); [...document.querySelectorAll('[data-metadata-editor] button')].find(button => button.textContent === 'Save').focus()");
   const before = await view(), beforeVersion = clients[0]!.state!.versions?.library ?? 0;
   await clients[1]!.command({ type: "navigate", key: "select" });
   await until("guest selection reaches the real native navigation handler", () => ui.execute("return document.documentElement.hasAttribute('data-keyboard')"));
   await ui.request(`/session/${ui.session()}/execute/async`, { script: "const done = arguments[arguments.length - 1]; requestAnimationFrame(() => requestAnimationFrame(() => done(null)));", args: [] });
   assert.equal((await view()).revision, before.revision, "guest navigation cannot activate a protected metadata save");
-  await ui.button("Save corrections");
+  await ui.button("Save", '[data-metadata-editor]');
   await until("native title correction commits and both controllers receive invalidation", async () => (await view()).values.title === "Correct movie" && all(state => (state.versions?.library ?? 0) > beforeVersion && state.versions?.library === clients[0]!.state!.versions?.library));
   await capture("native-metadata-editor");
-  assert.equal(await ui.execute("return document.querySelector('.metadata-editor').textContent.includes('On your paired administrator phone or browser')"), true);
+  assert.equal(await ui.execute("return document.querySelector('[data-metadata-editor]').textContent.includes('On your paired administrator phone or browser')"), true);
   await ui.key(keys.escape); await ui.button("Play Correct movie");
   await until("metadata correction preserves native playback", () => all(state => state.player.status === "playing" && state.player.position > 1));
   await ui.watching();
@@ -179,22 +179,22 @@ try {
   await keyboard(phone.ui, '[data-metadata-field="title"]', "Phone correction");
   const upload = await phone.ui.element("[data-metadata-artwork]");
   await phone.ui.request(`/session/${phone.ui.session()}/element/${upload}/value`, { text: "/mnt/invalid-metadata-artwork.png" });
-  await until("phone file input reads the invalid image fixture", () => phone!.ui.execute("return document.querySelector('.metadata-editor').textContent.includes('Artwork selected')"));
-  await phone.ui.button("Save corrections");
-  await until("invalid artwork rejects the whole phone correction", () => phone!.ui.execute("return document.querySelector('.metadata-editor [role=alert]')?.textContent.includes('Artwork must')"));
+  await until("phone file input reads the invalid image fixture", () => phone!.ui.execute("return document.querySelector('[data-metadata-editor]').textContent.includes('Save to apply.')"));
+  await phone.ui.button("Save", '[data-metadata-editor]');
+  await until("invalid artwork rejects the whole phone correction", () => phone!.ui.execute("return document.querySelector('[data-metadata-editor] [role=alert]')?.textContent.includes('Artwork must')"));
   assert.equal((await view()).values.title, "Correct movie"); assert.equal((await view()).values.artworkId, null);
   await phone.ui.request(`/session/${phone.ui.session()}/element/${upload}/value`, { text: "/mnt/metadata-artwork.png" });
-  await until("phone file input reads actual artwork", () => phone!.ui.execute("return document.querySelector('.metadata-editor').textContent.includes('Artwork selected')"));
-  await phone.ui.button("Save corrections");
+  await until("phone file input reads actual artwork", () => phone!.ui.execute("return document.querySelector('[data-metadata-editor]').textContent.includes('Save to apply.')"));
+  await phone.ui.button("Save", '[data-metadata-editor]');
   await until("phone saves its title and artwork together", async () => { const current = await view(); return current.values.title === "Phone correction" && !!current.values.artworkId; });
   await phoneCapture("phone-metadata-editor"); await phone.minimize();
-  await keyboard(ui, '[data-metadata-field="title"]', "Stale TV correction"); await ui.button("Save corrections");
-  await until("TV keeps its stale draft with an explicit reload error", () => ui.execute("return document.querySelector('.metadata-editor [role=alert]')?.textContent.includes('Reload') && document.querySelector('[data-metadata-field=title]').value === 'Stale TV correction'"));
+  await keyboard(ui, '[data-metadata-field="title"]', "Stale TV correction"); await ui.button("Save", '[data-metadata-editor]');
+  await until("TV keeps its stale draft with an explicit reload error", () => ui.execute("return document.querySelector('[data-metadata-editor] [role=alert]')?.textContent.includes('Reload') && document.querySelector('[data-metadata-field=title]').value === 'Stale TV correction'"));
   assert.equal((await view()).values.title, "Phone correction");
   await phone.restore(); await phone.ui.button("Search TMDB");
-  await until("missing TMDB access leaves metadata untouched and explains setup", () => phone!.ui.execute("return document.querySelector('.metadata-editor [role=alert]')?.textContent.includes('authorized TMDB')"));
+  await until("missing TMDB access leaves metadata untouched and explains setup", () => phone!.ui.execute("return document.querySelector('[data-metadata-editor] [role=alert]')?.textContent.includes('authorized TMDB')"));
   assert.equal((await view()).values.title, "Phone correction");
-  await phone.ui.button("Download saved metadata");
+  await phone.ui.button("Export", '[data-metadata-editor]');
   const download = `${artifacts}/downloads/couch-metadata-${movie.id}.tar`;
   await until("the administrator browser writes its explicit archive download", () => Bun.file(download).exists());
   const files = await new Bun.Archive(await Bun.file(download).bytes()).files();
@@ -214,10 +214,10 @@ try {
   }
   await phone.restore(); await phone.ui.key(keys.escape);
   await phone.ui.section("Library"); await phone.ui.type("#media-search", "Wrong episode");
-  await phone.ui.button("Details: Wrong episode", '[aria-label="Search results"]'); await phone.ui.button("Edit metadata");
+  await phone.ui.button("Details: Wrong episode", '[aria-label="Search results"]'); await phone.ui.button("Edit details");
   await until("phone episode editor loads imported order", () => phone!.ui.execute("return document.querySelector('[data-metadata-field=episode]')?.value === '7'"));
   await keyboard(phone.ui, '[data-metadata-field="season"]', "2"); await keyboard(phone.ui, '[data-metadata-field="episode"]', "4");
-  await phone.ui.button("Save corrections");
+  await phone.ui.button("Save", '[data-metadata-editor]');
   await until("phone episode order correction commits", async () => { const saved = await data(`/api/metadata/items/${episode.id}`); return saved.values.season === 2 && saved.values.episode === 4 && saved.origins.episode === "Manual"; });
   await phoneCapture("phone-episode-order");
   await rename("/mnt/metadata-fixtures", "/mnt/metadata-offline"); await scan(source, true);
@@ -227,7 +227,7 @@ try {
   await launch(); await Promise.all(clients.map(client => client.connect()));
   await until("offline restart reconnects both controllers without autoplay", () => all(state => state.player.status === "idle"));
   assert.equal((await view()).values.title, "Phone correction"); assert.equal((await view()).origins.title, "Manual");
-  await phone.restore(); await phone.refresh(); await until("administrator phone reconnects after restart", () => phone!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await phone.restore(); await phone.refresh(); await until("administrator phone reconnects after restart", () => phone!.ui.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   await movieEditor(phone.ui, "Phone correction", movie.id);
   assert.equal(await phone.ui.execute("return document.querySelector('[data-metadata-field=title]')?.previousElementSibling?.textContent"), "Origin: Manual");
   await phoneCapture("phone-metadata-offline-restart");

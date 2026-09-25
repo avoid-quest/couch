@@ -24,20 +24,20 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
   const open = async () => {
     await phone.button("Settings");
     await phone.settingsSection("source-radio");
-    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('[aria-labelledby=radio-settings-title]').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
+    await until("Radio opens its one canonical Sources form on the administrator phone", () => phone.execute("return document.querySelectorAll('[data-radio-settings]').length === 1 && !!document.querySelector('#radio-source-name:not(:disabled)')"));
   };
   const close = async () => { await phone.section("Radio"); await phone.type("#media-search", "Imported station"); };
   const importSource = async (name: string, url: string) => {
     await phone.type("#radio-source-name", name);
     await phone.type("#radio-source-url", url);
-    await phone.button("Import playlist", "[aria-labelledby=radio-settings-title]");
+    await phone.button("Add", "[data-radio-settings]");
     await until("source import completes and restores its form", () => phone.execute("return document.querySelector('#radio-source-name:not(:disabled)')?.value === ''"), 20_000);
   };
   const sourceCard = (id: string) => `[data-radio-source-id="${id}"]`;
   const refresh = async (id: string) => {
     const source = async () => (await api("/api/radio/sources")).sources.find((source: RadioPlaylistSummary) => source.id === id);
     const before = await source();
-    await phone.button("Refresh playlist", sourceCard(id));
+    await phone.button("Refresh", sourceCard(id));
     await until("source refresh completes", async () => {
       const after = await source();
       return (after.updatedAt !== before.updatedAt || after.error !== before.error) && await phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')");
@@ -88,7 +88,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
       mode = failure;
       await refresh(imported.id);
       assert.equal((await stations(imported.id)).length, 3, "Failed refresh retains the previously imported catalog");
-      assert.equal(await phone.execute("return !!document.querySelector('[aria-labelledby=radio-settings-title] [role=alert]')?.textContent.trim()"), true, "Failed refresh reports an error while the cached catalog stays playable");
+      assert.equal(await phone.execute("return !!document.querySelector('[data-radio-settings] [role=alert]')?.textContent.trim()"), true, "Failed refresh reports an error while the cached catalog stays playable");
       observations.push({ phase: failure, source: (await summaries()).find(source => source.id === imported.id) });
     }
     await httpRemote.screenshot("radio-sources-cached-failure");
@@ -97,12 +97,12 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     assert.equal((await summaries()).find(source => source.id === imported.id)!.error, null);
     await importSource("Temporary source", "http://127.0.0.1:4206/temporary.m3u");
     const temporary = (await summaries()).find(source => source.name === "Temporary source")!;
-    await phone.button("Remove playlist", sourceCard(temporary.id));
-    assert.equal(await phone.execute("return document.querySelector(arguments[0]).textContent.includes('All saved favorites stay available')", [sourceCard(temporary.id)]), true);
-    await phone.button("Keep source", sourceCard(temporary.id));
+    await phone.button("Remove", sourceCard(temporary.id));
+    assert.equal(await phone.execute("return document.querySelector('[role=alertdialog]').textContent.includes('Saved stations stay')"), true);
+    await phone.button("Cancel", "[role=alertdialog]");
     assert.ok((await summaries()).some(source => source.id === temporary.id));
-    await phone.button("Remove playlist", sourceCard(temporary.id));
-    await phone.button("Remove source", sourceCard(temporary.id));
+    await phone.button("Remove", sourceCard(temporary.id));
+    await phone.button("Remove", "[role=alertdialog]");
     await until("confirmed removal deletes only the selected source", async () => !(await summaries()).some(source => source.id === temporary.id));
     assert.ok((await api("/api/radio/favorites")).favorites.some((station: RadioStation) => station.id === importedStations[0]!.id), "Source removal retains unrelated favorites");
     await close();
@@ -116,7 +116,7 @@ export async function verifyRadioSettings({ origin, ui, until, clients, api, htt
     await until("native Find receives the imported stations", () => ui.execute("return [...document.querySelectorAll('[aria-label=\"Search results\"] button[aria-label^=\"Play Imported station\"]')].length === 3"));
     if (process.env.COUCH_TEST_LIVE_RADIO === "1") {
       await open();
-      await phone.button("Refresh avoid radio", "[aria-labelledby=radio-settings-title]");
+      await phone.button("Refresh", "[data-avoid-radio]");
       await until("one-step avoid import completes in Sources", () => phone.execute("return !!document.querySelector('#radio-source-name:not(:disabled)')"), 20_000);
       const avoid = (await summaries()).find(source => source.name === "avoid radio")!;
       assert.ok(avoid, "The actual avoid radio source imports");

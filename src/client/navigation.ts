@@ -38,7 +38,7 @@ function moveFocus(key: string) {
     if (first) { focus(first); return; }
   }
   if (key === "ArrowDown" && active.closest(".player-page [role=slider]")) {
-    const play = scope.querySelector<HTMLElement>(".player-page .play-button");
+    const play = scope.querySelector<HTMLElement>(".player-page [data-play-button]");
     if (play && visible(play)) { focus(play); return; }
   }
   const from = active.getBoundingClientRect();
@@ -74,7 +74,7 @@ export function applyTvNavigation(key: NavigationKey) {
   try {
     document.documentElement.setAttribute("data-keyboard", "");
     const scope = navigationScope();
-    if (key !== "back" && scope.querySelector(".player-band-hidden")) {
+    if (key !== "back" && scope.querySelector("[data-player-band=hidden]")) {
       sendKey(document.body, key === "select" ? "Enter" : { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[key]);
       return true;
     }

@@ -1,19 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isNativeHost } from "@/session/native-context";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Music2 } from "lucide-react";
-import { Icon } from "@/components/Icon";
+import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 const nativeHost = isNativeHost();
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-export function VideoStage({ active, title, audioOnly = false, subtitle, artwork }: {
-  active: boolean;
-  title: string;
-  audioOnly?: boolean;
-  subtitle?: string;
-  artwork?: ReactNode;
-}) {
+// The native player draws video behind the WebView inside this rectangle.
+export function VideoStage({ active, audioOnly = false }: { active: boolean; audioOnly?: boolean }) {
   const element = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -51,21 +45,10 @@ export function VideoStage({ active, title, audioOnly = false, subtitle, artwork
     };
   }, []);
 
+  // .video-stage and .has-video are global hooks: index.css clears the page behind native video.
   return (
-    <div ref={element} className={`video-stage${nativeHost && active && !audioOnly ? " has-video" : ""}${active && audioOnly ? " audio-stage" : ""}`} aria-label="Video playback">
-      {active && audioOnly && !error ? (
-        <div className="audio-stage-caption flex h-full w-full flex-nowrap items-center justify-center gap-16 px-[6vw]">
-          <div className={`audio-stage-artwork h-[75%] max-h-[720px] w-auto shrink-0${artwork ? "" : " without-artwork"}`} aria-hidden="true">{artwork || <Music2 />}</div>
-          <div className="audio-stage-copy min-w-0 flex-1"><p className="eyebrow">Listening now</p><h1>{title}</h1>{subtitle && <p className="audio-stage-track" role="status">{subtitle}</p>}</div>
-        </div>
-      ) : (!active || error) && (
-        <div className="stage-caption">
-          <div className="stage-icon"><Icon name="screen" /></div>
-          <p className="eyebrow">Couch</p>
-          <span>{error ? "Video display unavailable" : "Ready when you are."}</span>
-          <p>{error || (active ? title : "Open Home to choose something to watch or listen to.")}</p>
-        </div>
-      )}
+    <div ref={element} className={cn("video-stage absolute inset-0 grid place-items-center", nativeHost && active && !audioOnly && "has-video")} aria-label="Video playback">
+      {error && <p role="status" className="grid max-w-md gap-1 px-(--gutter) pb-48 text-center"><span className="text-base font-medium">Can't show video</span><span className="text-sm text-muted-foreground">{error}</span></p>}
     </div>
   );
 }

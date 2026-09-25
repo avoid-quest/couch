@@ -44,11 +44,11 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
     const before = entries().length;
     await target.section("Find");
     await target.type("#media-search", source);
-    await until(`${title} appears as a pasted link`, () => target.execute("return !!document.querySelector('.find-link-card')"));
-    if (source.endsWith(".mp3")) await target.button("Direct media", ".find-link-choice");
-    if (quality) await target.button(quality === "auto" ? "1080p" : quality, ".find-link-choice");
-    else assert.equal(await target.execute("return [...document.querySelectorAll('.find-link-choice > span')].some(span => span.textContent === 'Quality')"), false, "Audio-only links have no video quality choice");
-    await target.button("Queue", ".find-link-actions");
+    await until(`${title} appears as a pasted link`, () => target.execute("return !!document.querySelector('[aria-label=\"Pasted link\"]')"));
+    if (source.endsWith(".mp3")) await target.button("Direct media", '[aria-label="Pasted link"]');
+    if (quality) await target.button(quality === "auto" ? "Auto (1080p)" : quality === "best" ? "Best" : quality, '[aria-label="Pasted link"]');
+    else assert.equal(await target.execute("return !!document.querySelector('[aria-label="Pasted link"] [aria-label="Video quality"]')"), false, "Audio-only links have no video quality choice");
+    await target.button("Queue", '[aria-label="Pasted link"]');
     await until(`${title} reaches the shared queue with its intended quality`, () => clients.every(client => client.state!.queue.filter(entry => !initialQueue.some(old => old.id === entry.id)).length === before + 1 && (!quality || client.state!.queue.at(-1)?.quality === quality)));
   };
 
@@ -60,7 +60,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await httpRemote.screenshot("quality-phone-settings");
   await close(phone);
   await httpRemote.refresh();
-  await until("the first HTTP browser reconnects after reload", () => phone.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("the first HTTP browser reconnects after reload", () => phone.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   await settings(phone);
   await selected(phone, "480p");
   await close(phone);
@@ -113,7 +113,7 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await enqueueProvider(other, "1080p");
   await addLink(other, "Other remote default link", "1080p");
   await otherRemote.refresh();
-  await until("second HTTP browser reconnects with its own stored choice", () => other.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("second HTTP browser reconnects with its own stored choice", () => other.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   await settings(other);
   await selected(other, "1080p");
   await close(other);
@@ -123,8 +123,8 @@ export async function verifyVideoQuality({ ui, httpRemote, otherRemote, until, c
   await addLink(phone, "Audio-only Bandcamp link", undefined, "https://artist.bandcamp.com/track/example");
   await addLink(phone, "Audio-only file link", undefined, "http://127.0.0.1:4200/radio.mp3");
   await phone.type("#media-search", "http://127.0.0.1:4200/radio.mp3");
-  await phone.button("Direct media", ".find-link-choice");
-  assert.equal(await phone.execute("return [...document.querySelectorAll('.find-link-choice > span')].some(span => span.textContent === 'Quality')"), false, "Direct media keeps its quality-free controls");
+  await phone.button("Direct media", '[aria-label="Pasted link"]');
+  assert.equal(await phone.execute("return !!document.querySelector('[aria-label="Pasted link"] [aria-label="Video quality"]')"), false, "Direct media keeps its quality-free controls");
   await httpRemote.screenshot("quality-phone-queue");
 
   await Bun.write(`${artifactDir}/video-quality.json`, JSON.stringify({

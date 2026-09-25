@@ -50,15 +50,20 @@ afterEach(async () => {
   originals.clear();
 });
 async function render(sharing = false) {
-  const { NativeModeGate, PlaybackDevice, InstallationUpdates, LocalSharingPrompt, usePlaybackDevice } = await import("./PlaybackDevice");
+  const { NativeModeGate, PlaybackDevice, DeviceRecovery, LocalSharingPrompt, usePlaybackDevice } = await import("./PlaybackDevice");
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   function Controls() {
     const device = usePlaybackDevice();
-    return <><p>Local installation</p><PlaybackDevice />{device?.mode === "remote" && <InstallationUpdates />}{sharing && <LocalSharingPrompt credentials={{ origin: "http://127.0.0.1:4100", token: "local-secret" }} />}</>;
+    return <><p>Local installation</p><PlaybackDevice updates={device?.mode === "remote"} /><DeviceRecovery />{sharing && <LocalSharingPrompt credentials={{ origin: "http://127.0.0.1:4100", token: "local-secret" }} />}</>;
   }
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => root.render(<NativeModeGate><QueryClientProvider client={client!}><Controls /></QueryClientProvider></NativeModeGate>));
   await flush();
+}
+
+async function openUpdates() {
+  await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
+  await act(async () => fireEvent.click(button("Update this app"))); await flush();
 }
 
 test("first launch chooses a device before requesting local startup", async () => {
@@ -74,8 +79,8 @@ test("first launch chooses a device before requesting local startup", async () =
 test("Client-only Windows offers remote playback and keeps offline recovery remote", async () => {
   buildInfo.clientOnly = true;
   await render();
-  expect(screen.getByRole("heading", { name: "Connect to another Couch" })).toBeDefined();
-  expect(screen.getByText(/Local playback is unavailable/)).toBeDefined();
+  expect(screen.getByRole("heading", { name: "Connect to a Couch" })).toBeDefined();
+  expect(screen.getByText(/controls a Couch on your network/)).toBeDefined();
   expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
   await act(async () => fireEvent.change(screen.getByRole("textbox", { name: "Couch address" }), { target: { value: "192.168.1.10:4100" } }));
   await act(async () => fireEvent.click(button("Connect"))); await flush();
@@ -85,7 +90,7 @@ test("Client-only Windows offers remote playback and keeps offline recovery remo
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await render();
-  expect(button("Retry")).toBeDefined();
+  expect(button("Try again")).toBeDefined();
   expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
   await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
   expect(screen.queryByRole("button", { name: "This computer" })).toBeNull();
@@ -132,10 +137,10 @@ test("an unavailable remembered target retains recovery and only switches after 
   connectionError = "Cannot reach that Couch.";
   await render();
   expect(screen.getByText("Cannot reach that Couch.")).toBeDefined();
-  expect(button("Retry")).toBeDefined();
+  expect(button("Try again")).toBeDefined();
   expect(button("Use this computer")).toBeDefined();
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
-  await act(async () => fireEvent.click(button("Retry"))); await flush();
+  await act(async () => fireEvent.click(button("Try again"))); await flush();
   expect(choice.mode).toBe("remote");
   connectionError = null;
   await act(async () => fireEvent.click(button("Use this computer"))); await flush();
@@ -148,7 +153,7 @@ test("a selected remote stays in the bundled app shell with one playback device 
   connectionError = "Cannot reach that Couch.";
   await render();
   expect(screen.getByText("Local installation")).toBeDefined();
-  expect(screen.getAllByRole("button", { name: `Playing on ${choice.address}` })).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Playing on 192.168.1.10:4100" })).toHaveLength(1);
   expect(screen.queryByRole("banner", { name: "App playback device controls" })).toBeNull();
 });
 
@@ -158,9 +163,9 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
   await render();
   await act(async () => fireEvent.click(button("Playing here"))); await flush();
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "http://192.168.1.10:4100" }))); await flush();
-  expect(screen.getByText(/turns off this computer's remote control/)).toBeDefined();
-  expect(screen.getByRole("dialog").hasAttribute("data-tv-local-only")).toBe(true);
-  expect(screen.queryByText(/stops playback on this computer/)).toBeNull();
+  expect(screen.getByText(/Remotes can't reach this computer/)).toBeDefined();
+  expect(screen.getByRole("alertdialog").hasAttribute("data-tv-local-only")).toBe(true);
+  expect(screen.queryByText(/Playback here stops/)).toBeNull();
   expect(choice.mode).toBe("local");
   await act(async () => fireEvent.click(button("Stop and switch"))); await flush();
   expect(choice.mode).toBe("remote");
@@ -171,20 +176,20 @@ test("sharing-only interruption needs a deliberate confirmation and preserves th
 test("local first use records private choice after the host saves it", async () => {
   choice.mode = "local";
   await render(true);
-  expect(within(screen.getByRole("dialog")).getByText("Allow remote control?")).toBeDefined();
-  await act(async () => fireEvent.click(button("Keep private"))); await flush();
+  expect(screen.getByRole("heading", { name: "Allow remotes?" })).toBeDefined();
+  await act(async () => fireEvent.click(button("Not now"))); await flush();
   expect(request.mock.calls[0]?.[0]).toBe("http://127.0.0.1:4100/api/settings/sharing");
   expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({ enabled: false });
   expect(choice.localSetupComplete).toBe(true);
-  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Allow remotes?" })).toBeNull();
 });
 
 test("failed local sharing save leaves the prompt available and does not mark setup complete", async () => {
   choice.mode = "local";
   request.mockResolvedValue(Response.json({ error: "Could not save sharing." }, { status: 500 }));
   await render(true);
-  await act(async () => fireEvent.click(button("Keep private"))); await flush();
-  expect(within(screen.getByRole("dialog")).getByText("Could not save sharing.")).toBeDefined();
+  await act(async () => fireEvent.click(button("Not now"))); await flush();
+  expect(screen.getByText("Could not save sharing.")).toBeDefined();
   expect(choice.localSetupComplete).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "complete_local_setup")).toBe(false);
 });
@@ -193,12 +198,12 @@ test("closing the device chooser reconnects the same remote and restores trigger
   choice = { mode: "remote", address: "http://192.168.1.10:4100", targets: ["http://192.168.1.10:4100"], localSetupComplete: true };
   await render();
   const initial = invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
-  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
+  await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial);
-  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
+  await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
   expect(invoke.mock.calls.filter(([name]) => name === "retry_playback_device")).toHaveLength(initial + 1);
   expect(choice.mode).toBe("remote");
-  expect(document.activeElement).toBe(button(`Playing on ${choice.address}`));
+  expect(document.activeElement).toBe(button("Playing on 192.168.1.10:4100"));
 });
 
 test("a route change closes Play on and resumes the selected remote connection", async () => {
@@ -210,7 +215,7 @@ test("a route change closes Play on and resumes the selected remote connection",
   await act(async () => root.render(screenFor("/find"))); await flush();
   const attempts = () => invoke.mock.calls.filter(([name]) => name === "retry_playback_device").length;
   const initial = attempts();
-  await act(async () => fireEvent.click(button(`Playing on ${choice.address}`))); await flush();
+  await act(async () => fireEvent.click(button("Playing on 192.168.1.10:4100"))); await flush();
   expect(attempts()).toBe(initial);
   await act(async () => root.render(screenFor("/now"))); await flush();
   expect(attempts()).toBe(initial + 1);
@@ -234,7 +239,7 @@ test("Play on marks the current computer and switches directly to a remembered C
   await act(async () => fireEvent.click(screen.getByRole("radio", { name: "http://192.168.1.20:4100" }))); await flush();
   expect(choice.address).toBe("http://192.168.1.20:4100");
   expect(screen.queryByRole("button", { name: "Stop and switch" })).toBeNull();
-  expect(button("Playing on http://192.168.1.20:4100")).toBeDefined();
+  expect(button("Playing on 192.168.1.20:4100")).toBeDefined();
 });
 
 test("Another Couch address is entered inline in Play on", async () => {
@@ -270,23 +275,21 @@ test("an offline remote keeps this installation's update controls and shared-win
   await act(async () => fireEvent(screen.getByText("Local installation"), activity)); await flush();
   expect(invoke.mock.calls.some(([name]) => name === "local_update_activity")).toBe(true);
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).endsWith("/api/activity"))).toBe(false);
-  await act(async () => fireEvent.click(button("Update this app")));
-  await flush();
-  expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
-  expect(screen.getByText(/This computer updates itself. The selected playback computer has separate updates/)).toBeDefined();
-  expect(screen.getByText(/Updates and recovery for this app/)).toBeDefined();
+  await openUpdates();
+  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeDefined();
+  expect(screen.getByText(/Only this app/)).toBeDefined();
   expect(screen.getByText("Hosted update")).toBeDefined();
-  expect(button("Install update on this app").disabled).toBe(false);
-  expect(screen.getByLabelText("Release channel for this app")).toBeDefined();
-  expect(screen.getByLabelText("Install updates on this app")).toBeDefined();
-  await act(async () => fireEvent.click(screen.getByLabelText("Release channel for this app"))); await flush();
+  expect(button("Install").disabled).toBe(false);
+  expect(screen.getByLabelText("Channel")).toBeDefined();
+  expect(screen.getByLabelText("Install updates")).toBeDefined();
+  await act(async () => fireEvent.click(screen.getByLabelText("Channel"))); await flush();
   await act(async () => fireEvent.click(screen.getByRole("option", { name: "Stable" }))); await flush();
   expect(request.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input).endsWith("/api/updates/channel") && JSON.parse(String(init?.body)).channel === "stable")).toBe(true);
-  await act(async () => fireEvent.click(screen.getByLabelText("Install updates on this app"))); await flush();
+  await act(async () => fireEvent.click(screen.getByLabelText("Install updates"))); await flush();
   await act(async () => fireEvent.click(screen.getByRole("option", { name: "Auto when idle" }))); await flush();
   expect(request.mock.calls.some(([input, init]: [unknown, RequestInit?]) => String(input).endsWith("/api/updates/policy") && JSON.parse(String(init?.body)).policy === "idle")).toBe(true);
   expect(screen.queryByRole("heading", { name: "Tools" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Repair current release on this app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Repair" })).toBeNull();
   expect(request.mock.calls.some(([input]: [unknown]) => String(input).includes("/api/tools"))).toBe(false);
   expect(invoke.mock.calls.some(([name]) => name === "select_playback_device")).toBe(false);
   expect(choice.mode).toBe("remote");
@@ -294,9 +297,9 @@ test("an offline remote keeps this installation's update controls and shared-win
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await render();
-  await act(async () => fireEvent.click(button("Update this app"))); await flush();
-  expect(screen.getByLabelText("Release channel for this app").textContent).toContain("Stable");
-  expect(screen.getByLabelText("Install updates on this app").textContent).toContain("Auto when idle");
+  await openUpdates();
+  expect(screen.getByLabelText("Channel").textContent).toContain("Stable");
+  expect(screen.getByLabelText("Install updates").textContent).toContain("Auto when idle");
   expect(choice.mode).toBe("remote");
 });
 
@@ -307,10 +310,10 @@ test("this app gives recovery guidance without Linux appliance instructions", as
     return Response.json({ channel: "stable", policy: "manual", status: "unavailable", currentCheck: false, running: { version: "0.1.0", revision: "a".repeat(40) }, candidate: null, lastSuccessfulCheck: null, error: "Updates require the installed Debian AppImage.", installation: { enabled: false, repairAvailable: false, transaction: { updateId: "e".repeat(32), requestId: "f".repeat(32), candidateId: "b".repeat(64), version: "0.2.0", revision: "c".repeat(40), phase: "operator-required", error: null, createdAt: 1, updatedAt: 1 } } });
   }) as typeof fetch);
   await render();
-  await act(async () => fireEvent.click(button("Update this app"))); await flush();
-  expect(screen.getByRole("dialog", { name: "Updates for this computer" })).toBeDefined();
-  expect(screen.getByText("Update needs recovery")).toBeDefined();
-  expect(screen.getAllByText(/Reinstall a verified compatible Couch release for this computer/)).toHaveLength(2);
-  expect(screen.getByText(/In-app updates are unavailable on this installation/)).toBeDefined();
+  await openUpdates();
+  expect(screen.getByRole("dialog", { name: "Update this app" })).toBeDefined();
+  expect(screen.getByText("Needs repair")).toBeDefined();
+  expect(screen.getAllByText(/Reinstall Couch from its installer/)).toHaveLength(1);
+  expect(screen.getByText("Update with the Couch installer. Your data stays.")).toBeDefined();
   expect(screen.queryByText(/SSH|AppImage|journal|Debian/)).toBeNull();
 });

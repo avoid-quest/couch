@@ -29,25 +29,25 @@ function render(value: SessionState) {
   return window.document;
 }
 
-const titles = (document: Window["document"], label: string) => [...document.querySelectorAll(`ol[aria-label="${label}"] button[aria-label^="Play "]`)].map(node => node.getAttribute("aria-label"));
+const titles = (document: Window["document"], label: string) => [...document.querySelectorAll(`ul[aria-label="${label}"] button[aria-label^="Play "]`)].map(node => node.getAttribute("aria-label"));
 
 test("the queue shows upcoming and played items without a legacy presentation", () => {
   const document = render(state);
   expect(titles(document, "Up next")).toEqual(["Play Next", "Play Last"]);
   expect(titles(document, "Played")).toEqual(["Play Played"]);
-  expect(document.querySelector("#queue-next-title")?.textContent).toContain("2 to play, done by");
-  expect(document.querySelectorAll(".queue-row-actions")).toHaveLength(2);
+  expect(document.querySelector("#queue-next-title")?.textContent).toContain("2 to play · done by");
+  expect(document.querySelectorAll("[data-slot=item-actions]")).toHaveLength(2);
 });
 
 test("unknown or live lengths suppress uncertain start and done by times", () => {
   const document = render({ ...state, queue: [queue[0]!, queue[1]!, { ...queue[2]!, duration: undefined }, queue[3]!] });
   expect(document.querySelector("#queue-next-title")?.textContent).toBe("2 to play");
-  const metas = [...document.querySelectorAll(".queue-standard-meta")].map(node => node.textContent);
-  expect(metas[0]).toContain("Length unknown, starts ");
+  const metas = [...document.querySelectorAll('ul[aria-label="Up next"] [data-play] > span:nth-child(2)')].map(node => node.textContent);
+  expect(metas[0]).toStartWith("starts ");
   expect(metas[1]).toBe("4:00");
   const live = render({ ...state, queue: [queue[0]!, { ...queue[1]!, live: true }, queue[2]!, queue[3]!] });
   expect(live.querySelector("#queue-next-title")?.textContent).toBe("2 to play");
-  expect([...live.querySelectorAll(".queue-standard-meta")].every(node => !node.textContent?.includes("starts"))).toBe(true);
+  expect([...live.querySelectorAll('ul[aria-label="Up next"] [data-play] > span:nth-child(2)')].every(node => !node.textContent?.includes("starts"))).toBe(true);
 });
 
 test("a stopped queue honors its cursor and an exhausted queue gives a useful empty state", () => {

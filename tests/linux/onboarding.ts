@@ -34,7 +34,7 @@ const request = async (path: string, body?: unknown, method = body === undefined
 const tv = new UiDriver(request, () => session);
 const launch = async () => {
   session = (await request("/session", { capabilities: { alwaysMatch: { browserName: "wry", timeouts: { implicit: 5_000 }, "tauri:options": { application: "/work/bin/couch" } } } })).sessionId;
-  await until("native app connects", () => tv.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("native app connects", () => tv.execute("return document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
 };
 const restart = async () => {
   await request(`/session/${session}`, undefined, "DELETE"); session = "";
@@ -60,12 +60,12 @@ try {
   await phone.refresh();
   await until("browser refresh resumes the same screen step", () => phone!.ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('Step 2 of 4')"));
   await phone.restore();
-  await until("existing Display Settings offers a virtual output", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Preview on ') && !button.disabled)"));
-  const preview = await phone.ui.execute("return [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Preview on ') && !button.disabled).textContent") as string;
+  await until("existing Display Settings offers a virtual output", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.getAttribute('aria-label')?.startsWith('Try ') && !button.disabled)"));
+  const preview = await phone.ui.execute("return [...document.querySelectorAll('button')].find(button => button.getAttribute('aria-label')?.startsWith('Try ') && !button.disabled).getAttribute('aria-label')") as string;
   await phone.ui.button(preview);
-  await until("native preview offers confirmation", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent === 'Keep this screen' && !button.disabled)"));
-  await phone.ui.button("Keep this screen");
-  await until("display preview is saved", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Keep this screen') && document.querySelector('[role=dialog]').textContent.includes('Saved')"));
+  await until("native preview offers confirmation", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent === 'Keep' && !button.disabled)"));
+  await phone.ui.button("Keep");
+  await until("display preview is saved", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Keep') && document.querySelector('[role=dialog]').textContent.includes('Saved')"));
   await assertResponsive(phone.ui, "First-run screen");
   await phone.ui.button("I can see Couch on the right screen");
   await until("existing Sound Settings offers an output", () => phone!.ui.execute("return [...document.querySelectorAll('button')].some(button => button.textContent.startsWith('Use ') && !button.disabled)"));
@@ -82,7 +82,7 @@ try {
     await until("virtual monitor is capturing before the tone", () => Bun.file(pcm).size > 0);
     await phone.ui.button(`Test ${output}`);
     await until("audio server confirms the requested test route", () => phone!.ui.execute("return document.querySelector('[role=dialog]')?.textContent.includes('audio server confirms the test stream')"));
-    await until("bounded test finishes", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Stop sound test')"));
+    await until("bounded test finishes", () => phone!.ui.execute("return ![...document.querySelectorAll('button')].some(button => button.textContent === 'Stop')"));
   } finally { recorder.kill(); clock.kill(); await Promise.all([recorder.exited, clock.exited]); }
   assert.ok(new Uint8Array(await Bun.file(pcm).arrayBuffer()).some(byte => byte !== 0), "Virtual sink captures non-silent test PCM; audible physical sound is unqualified");
   await phone.ui.button("I heard the test sound");
@@ -107,11 +107,11 @@ try {
   await until("first local item plays on the native TV", () => state?.player.status === "playing" && state.player.position > 0.5 && state.queue.some(entry => entry.id === state!.currentEntryId && entry.source.startsWith("library:")), 30_000);
   await phone.minimize(); await tv.watching();
   await assertNativeVideoPixels(tv.execute, artifacts, "onboarding-first-local-video", [0, 0, 255]);
-  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop playback", ".player-band");
+  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop", "[data-player-band]");
   await until("phone stops its first local item", () => state?.player.status === "idle" && !state.currentEntryId);
   socket.close(); socket = undefined;
   await restart();
-  await until("completed restart keeps home and the paired phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]') && document.querySelector('.header-status [role=status]')?.textContent === 'Connected'"));
+  await until("completed restart keeps home and the paired phone", async () => await tv.execute("return !document.querySelector('[role=dialog]')") && await phone!.ui.execute("return !document.querySelector('[role=dialog]') && document.querySelector('[data-app-status] [role=status]')?.textContent === 'Connected'"));
   await phone.restore(); await phone.ui.button("Settings"); await phone.ui.settingsSection("general");
   await until("saved name and ordinary Settings remain available", () => phone!.ui.execute("return document.querySelector('#tv-name')?.value === 'First-run fixture' && !!document.querySelector('[aria-label=\"Settings sections\"]')"));
   await phone.screenshot("onboarding-complete-settings");

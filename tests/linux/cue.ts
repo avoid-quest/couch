@@ -36,7 +36,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("cue seek acknowledges two seconds within the segment", () => all(state => state.player.status === "paused" && Math.abs(state.player.position - 2) < 0.4));
   const profileId = first().activeProfile.id;
   await httpRemote.ui.section("Queue");
-  await httpRemote.ui.button("Stop playback", ".player-band");
+  await httpRemote.ui.button("Stop", "[data-player-band]");
   await until("phone Stop retires the cue playback ID", () => all(state => state.player.status === "idle" && state.player.playbackId === null));
   if (!entries.some(entry => entry.id === phoneEntryId)) await clients[0]!.command({ type: "remove", entryId: phoneEntryId });
   await clients[0]!.command({ type: "remove", entryId: entries[0]!.id });
@@ -44,7 +44,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   await until("cue resumes at its saved segment-relative position", () => all(state => state.currentEntryId === entries[1]!.id && state.player.status === "playing" && state.player.position >= 1.6 && state.player.position < 3));
   await clients[0]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
   await until("resumed cue pauses before Next", () => all(state => state.player.status === "paused"));
-  await httpRemote.ui.button("Next in queue", ".player-band");
+  await httpRemote.ui.button("Next", "[data-player-band]");
   await until("phone Next starts the final cue from relative zero", () => all(state => state.currentEntryId === entries[2]!.id && state.player.status === "playing" && state.player.position > 0 && state.player.position < 2));
   await stop();
   await clients[0]!.command({ type: "play", entryId: entries[1]!.id, fromStart: true });
@@ -78,7 +78,7 @@ export async function verifyCue(context: MusicContext & { screenshot: (name: str
   const source = (await api("/api/library/sources")).sources.find((source: any) => source.name === "cue-fixtures");
   await httpRemote.minimize();
   await openFolderSources(ui, until);
-  await ui.button("Scan again", folderCard(source.id));
+  await ui.button("Rescan", folderCard(source.id));
   await closeFolderSources(ui, until);
   await until("cue rescan completes before comparing identities", async () => (await api("/api/library/sources")).sources.some((current: any) => current.id === source.id && current.status === "ready" && current.lastScanned > source.lastScanned));
   await until("cue rescan preserves album and track IDs", async () => JSON.stringify((await api(`/api/library/music/albums/${album.id}`)).items.map((item: LibraryItem) => item.id)) === JSON.stringify(tracks.map(track => track.id)));

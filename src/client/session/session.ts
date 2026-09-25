@@ -48,7 +48,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
     const rejectPending = () => {
       for (const request of pending.current.values()) {
         clearTimeout(request.timer);
-        request.reject(new Error("Connection lost. Check the current state before retrying."));
+        request.reject(new Error("Connection lost. Try again."));
       }
       pending.current.clear();
     };
@@ -146,7 +146,7 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
           clearTimeout(request.timer);
           pending.current.delete(message.requestId);
           if (message.ok) request.resolve();
-          else request.reject(new Error(message.error || "The player could not complete this command."));
+          else request.reject(new Error(message.error || "Couch couldn't do that."));
         }
       };
       connection.onerror = () => connection.close();
@@ -224,13 +224,13 @@ export function useSession(credentials: Credentials | null, onNavigation?: (key:
   const command = useCallback((action: Action) => {
     const connection = socket.current;
     if (!sameCredentials(credentials, currentCredentials.current) || !sameCredentials(credentials, socketCredentials.current) || !ready.current || connection?.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("Wait for the player to reconnect before using controls."));
+      return Promise.reject(new Error("Reconnecting. Try again in a moment."));
     }
     return new Promise<void>((resolve, reject) => {
       const requestId = createId();
       const timer = setTimeout(() => {
         pending.current.delete(requestId);
-        reject(new Error("No confirmation received. Check the current state before retrying."));
+        reject(new Error("No reply from Couch. Check before retrying."));
       }, ((action.type === "enqueueProvider" && action.shape === "playlist") || action.type === "videoQuality") ? 35_000 : 8_000);
       pending.current.set(requestId, { resolve, reject, timer });
       const message: ClientMessage = { type: "command", requestId, action };

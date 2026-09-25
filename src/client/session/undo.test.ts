@@ -38,7 +38,7 @@ test("Undo waits for the server to restore the item at its original position", a
 test("Undo refuses a queue changed by another controller", async () => {
   const plan = undoPlan({ type: "remove", entryId: "b" }, state(["a", "b", "c"], "a"), state(["a", "c"], "a", "b"))!;
   const sent: Action[] = [];
-  await expect(applyUndo(plan, async action => { sent.push(action); }, () => state(["a", "c", "other"], "a"))).rejects.toThrow("shared queue or playback changed");
+  await expect(applyUndo(plan, async action => { sent.push(action); }, () => state(["a", "c", "other"], "a"))).rejects.toThrow("Up next changed");
   expect(sent).toEqual([]);
 });
 

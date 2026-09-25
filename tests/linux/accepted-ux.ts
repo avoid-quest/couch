@@ -23,8 +23,8 @@ export async function verifyAcceptedUx(context: MusicContext) {
       if (name === "phone") await httpRemote.restore(); else await httpRemote.minimize();
       await driver.section("Queue");
       await until(`${name} separates current, next and played queue entries`, () => driver.execute(`
-        const ids = label => [...document.querySelectorAll('.queue-panel [aria-label="' + label + '"] [data-queue-entry-id]')].map(row => row.dataset.queueEntryId);
-        return document.querySelector('.player-band-heading h1')?.textContent === 'Search local video'
+        const ids = label => [...document.querySelectorAll('[data-queue-panel] [aria-label="' + label + '"] [data-queue-entry-id]')].map(row => row.dataset.queueEntryId);
+        return document.querySelector('[data-player-heading] h1')?.textContent === 'Search local video'
           && JSON.stringify([ids('Up next'), ids('Played')]) === JSON.stringify([[arguments[0]], [arguments[1]]]);
       `, [ids[2], ids[0]]));
       if (name === "phone") { await assertResponsive(driver, "Phone current session"); await httpRemote.screenshot("accepted-current-session"); }
@@ -36,7 +36,7 @@ export async function verifyAcceptedUx(context: MusicContext) {
     const checkpointSource = first().queue.find(entry => entry.id === first().currentEntryId)!.source;
     await stop();
     await ui.section("Home");
-    await until("TV Browse offers the real unfinished local item", () => ui.execute("return !!document.querySelector('[aria-label=\"Browse and resume\"] [aria-label=\"Resume Search local video\"]')"));
+    await until("TV Browse offers the real unfinished local item", () => ui.execute("return !!document.querySelector('[aria-label=\"Home\"] [aria-label=\"Resume Search local video\"]')"));
     await ui.button("Resume Search local video", '[aria-label="Continue watching"]');
     await until("TV Browse starts a new native playback", () => first().player.status === "playing" && !!first().player.playbackId && first().player.playbackId !== checkpointPlaybackId);
     const resumed = structuredClone(first());
@@ -48,10 +48,10 @@ export async function verifyAcceptedUx(context: MusicContext) {
     await stop();
     await ui.section("Library");
     await ui.type("#media-search", "Search local video");
-    await ui.button("Save Search local video for later", '[aria-label="Search results"]');
+    await ui.button("Save Search local video", '[aria-label="Search results"]');
     await until("native For later save reaches the paired HTTP API", async () => (await api("/api/for-later", undefined, 1)).items.some((saved: any) => saved.title === item.title));
     await ui.section("Queue");
-    await ui.button("Keep as a list", ".queue-panel");
+    await ui.button("Save as list", "[data-queue-panel]");
     await until("native playlist save reaches the paired HTTP API", async () => (await api("/api/playlists", undefined, 1)).playlists.some((saved: any) => saved.name.startsWith("Up next,")));
     const savedItems = await api("/api/for-later"), savedPlaylists = await api("/api/playlists");
     const queueIds = first().queue.map(entry => entry.id);
@@ -64,7 +64,7 @@ export async function verifyAcceptedUx(context: MusicContext) {
     for (const [name, driver] of [["TV", ui], ["phone", httpRemote.ui]] as const) {
       if (name === "phone") await httpRemote.restore(); else await httpRemote.minimize();
       await driver.section("For later");
-      await until(`${name} sees the saved item under the alternate profile`, () => driver.execute("return document.querySelector('[aria-label=\"Saved for later\"]')?.textContent.includes('Search local video')"));
+      await until(`${name} sees the saved item under the alternate profile`, () => driver.execute("return document.querySelector('[aria-label=\"For later\"]')?.textContent.includes('Search local video')"));
       await driver.button("Settings");
       await until(`${name} offers grouped Settings pages`, () => driver.execute("return !!document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=playback]') && !!document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=general]')"));
       for (const section of ["playback", "appearance", "general"]) await driver.settingsSection(section);
