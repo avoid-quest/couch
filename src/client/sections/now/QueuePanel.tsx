@@ -92,7 +92,7 @@ export function QueuePanel({ state, credentials, connected, available, run, titl
     {state?.queueError && <Alert variant="destructive"><AlertDescription>{state.queueError}</AlertDescription></Alert>}
     {upNext.length ? <section className="grid gap-2" aria-labelledby="queue-next-title"><h3 id="queue-next-title" className="text-sm text-muted-foreground">{upNext.length} to play{doneIn == null ? "" : ` · done by ${formatEndTime(doneIn)}`}</h3>
       {/* Rows stack their actions under the title: the sheet is narrow at every viewport. */}
-      <MediaList aria-label="Up next" className="[&>li]:grid-cols-1 [&_[data-slot=item-actions]]:justify-start [&_[data-slot=item-actions]]:opacity-100">{upNext.map((entry, index) => {
+      <MediaList aria-label="Up next">{upNext.map((entry, index) => {
         const starts = startsIn;
         const length = knownLength(entry);
         startsIn = startsIn == null || length == null ? null : startsIn + length;

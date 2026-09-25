@@ -1,5 +1,5 @@
 import { Minus, Plus, Settings } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { SettingsSection } from "@/components/SettingsRow";
+import { DelayControl } from "@/components/DelayControl";
 import type { WatchingProfile } from "../../shared/library";
 import type { Action, PlaybackPreferences as Preferences, PlayerState, QueueEntry, ReplayGainMode } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
@@ -97,35 +98,6 @@ function SubtitleUpload({ playbackId, credentials, connected, disabled, compact 
   </div>;
 }
 
-export function DelayControl({ id, label, value, disabled, onApply }: {
-  id: string;
-  label: string;
-  value: number;
-  disabled: boolean;
-  onApply: (delay: number) => Promise<boolean>;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const apply = async (event: FormEvent) => {
-    event.preventDefault();
-    if (draft === null) return;
-    setPending(true);
-    try {
-      if (await onApply(Number(draft))) setDraft(null);
-    } finally {
-      setPending(false);
-    }
-  };
-  return (
-    <form className="grid gap-2" onSubmit={(event) => void apply(event)}>
-      <Label htmlFor={id}>{label} <span className="text-muted-foreground font-normal">seconds</span></Label>
-      <div className="flex gap-2">
-        <Input id={id} type="number" min={-10} max={10} step={0.1} required value={draft ?? Number(value.toFixed(2))} disabled={disabled || pending} onChange={(event) => setDraft(event.target.value)} />
-        <Button type="submit" variant="secondary" disabled={disabled || pending || draft === null}>{pending ? "Applying…" : "Apply"}</Button>
-      </div>
-    </form>
-  );
-}
 
 function PanelStepper({ label, value, disabled, onStep }: { label: string; value: string; disabled: boolean; onStep: (direction: -1 | 1) => void }) {
   return <div className="flex items-center justify-between gap-2 border-b py-1">

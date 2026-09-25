@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { TRY_AGAIN } from "@/copy";
-import { DelayControl } from "./DelayControl";
+import { DelayControl } from "@/components/DelayControl";
 import type { SoundState } from "../../../../shared/sound";
 
 export function SoundSettings({ credentials, connected, hostName }: { credentials: ApiCredentials; connected: boolean; hostName: string }) {
