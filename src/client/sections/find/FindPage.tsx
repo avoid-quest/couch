@@ -6,15 +6,14 @@ import { BrowseRadio } from "./BrowseRadio";
 import { CollectionHeader, HitList, MoreResults, SearchPanel, SourceProblems } from "./SearchPanel";
 import { SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
 import { readSearchState } from "../../search";
-import { apiFetch } from "@/api/client";
 import { useShell } from "@/sections/shell/AppShell";
 import { useSessionGate } from "@/session/session-context";
 import type { ProviderItem } from "../../../shared/providers";
 
 export function FindPage() {
   const shell = useShell();
-  const { credentials, available, section, changeSearch, playHistory, enqueueCatalog } = shell;
-  const { identity, state, connected, run, videoQualityPreference } = useSessionGate();
+  const { credentials, available, section, changeSearch, enqueueCatalog } = shell;
+  const { identity, connected, run, videoQualityPreference } = useSessionGate();
   const canManageMetadata = identity?.authority === "host" || identity?.authority === "administrator";
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,12 +34,7 @@ export function FindPage() {
     : browse === "radio" ? <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onCommand={run} onBack={() => void navigate({ href: "/find" })} /> : <>
       <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
       <div hidden={!!homeQuery.trim()} className="mt-8">
-        <BrowseHome credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} active={onStage && !homeQuery.trim()} onAddSource={openSources} onBrowse={source => void navigate({ href: `/find?browse=${source}` })} onPlay={playHistory} onAdd={async item => {
-          if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId);
-          if (!state || !item.playable) return false;
-          await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
-          return true;
-        }} />
+        <BrowseHome onBrowse={source => void navigate({ href: `/find?browse=${source}` })} />
       </div>
     </>}
   </section>;

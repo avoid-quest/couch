@@ -123,15 +123,11 @@ test("loading and buffering are spinner status lines", async () => {
   expect([...document.querySelectorAll('[role="status"]')].some(node => node.textContent === "Buffering…")).toBe(true);
 });
 
-test("Now keeps a stopped queue available and plays its next item", async () => {
+test("an idle player renders nothing; the shell returns to Home, which shows Up next", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const idle = { ...shell, active: false, current: undefined, state: { ...state, queue: [state.queue[0]!, { id: "next", title: "Next movie", source: "library:movie", duration: 120 }], currentEntryId: null, queueCursorEntryId: "current", player: { ...state.player, playbackId: null, status: "idle" as const } } } as ShellValue;
   await act(async () => root.render(<ShellProviders value={idle}><PlayerPage /></ShellProviders>));
-  expect(document.querySelector('[data-page="Now"] h1')?.textContent).toBe("Nothing playing");
-  expect(document.querySelector('[aria-label="Up next"] [aria-label="Play Next movie"]')).not.toBeNull();
-  expect(document.querySelector('[aria-label="Played"] [aria-label="Play Evening movie"]')).not.toBeNull();
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Play Next movie"]')!.click());
-  expect(actions).toEqual([{ type: "play", entryId: "next" }]);
+  expect(document.querySelector('[data-page="Now"]')).toBeNull();
 });
 
 test("a sheet does not reopen when playback ends and a new item starts", async () => {

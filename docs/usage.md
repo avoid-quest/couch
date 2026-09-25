@@ -41,8 +41,9 @@ For a real TV, install the native Debian package from
    starting it. Local results open details with Play or Resume. A playlist can
    first open its tracks. Playback happens on the TV; your phone has no video
    player.
-5. Return to **Now** for playback controls, the shared **Up next** queue and
-   recent history. Use **Remote** in the header for the TV's directional pad.
+5. Return to **Home** for what's playing, the shared **Up next** queue, what
+   to continue, your radio stations and what you saved for later. **Open
+   player** shows playback controls. Use **Remote** in the header for the TV's directional pad.
    Confirm picture and sound on the TV, then pause. **Saved** holds lists,
    favorites and media kept for later. **Find** opens provider and source browsing.
 
@@ -498,8 +499,9 @@ tabs, sliders and selects keep their keyboard behavior. Escape closes the topmos
 menu or dialog and restores focus. The TV stays fullscreen throughout browsing,
 playback and Stop, with one continuously mounted VideoStage.
 
-Phones and desktop browsers use the same **Now**, **Find**, **Saved** and
-**Settings** navigation. Now shows playback, Up next and recent history; Find
+Phones and desktop browsers use the same **Home**, **Find**, **Saved** and
+**Settings** navigation. Home shows what's playing, Up next and what to
+continue, and the player opens from it; Find
 combines search and browsing; Saved holds lists and favorites. **Remote** in
 the header opens the TV directional pad. Home, Back, Info, arrows and OK operate the TV
 through authenticated, ephemeral commands. These commands are never replayed

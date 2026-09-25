@@ -16,7 +16,7 @@ function RootError({ error }: ErrorComponentProps) {
   );
 }
 
-// Unknown addresses behave like the old client: land on Now.
+// Unknown addresses behave like the old client: land on Home.
 function NotFound() {
   const router = useRouter();
   useEffect(() => { router.history.replace("/"); }, []);
