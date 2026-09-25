@@ -36,7 +36,7 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: null,
-      includeAssets: ["icons/pwa-192.png", "icons/pwa-512.png"],
+      includeAssets: ["icons/pwa-192.png", "icons/pwa-512.png", "icons/pwa-maskable-512.png"],
       manifest: {
         name: "Couch",
         short_name: "Couch",
@@ -49,7 +49,7 @@ export default defineConfig(({ command }) => ({
         icons: [
           { src: "icons/pwa-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/pwa-512.png", sizes: "512x512", type: "image/png" },
-          { src: "icons/pwa-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "icons/pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
