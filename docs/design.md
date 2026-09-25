@@ -90,9 +90,14 @@ Sentence case, short, no filler. Say what happened and what to do next.
 
 | Say | Not |
 | --- | --- |
-| Couch, or the device's name | host, playback host, coordinator, installation |
-| remote | controller, client |
-| administrator | admin, manager |
-| Up next | queue (in UI copy) |
-| Saved | kept, favorites |
-| Sources | providers, catalogs |
+| the device's name, or Couch | host, playback host/computer/device, coordinator, installation |
+| This computer / Playing here | this installation, this app |
+| remote | controller, client, browser |
+| admin, Make admin, Become admin | administrator, Claim administration |
+| Up next (the list), Queue (the verb) | shared queue, Add to Up next |
+| Saved, Save / Saved | Kept, Keep, favorites |
+| Folders, Jellyfin, Live TV, Radio playlists, Movie & show info | TV folders, IPTV, TV guide, metadata |
+| Try again | Retry, Reload, Refresh |
+| Couldn't load X. | Could not…, Check the connection and… |
+| Offline. Reconnecting to {name}… | 30 variants of "Reconnect to…" |
+| Only an admin can change this. | 20 variants of "An administrator can…" |

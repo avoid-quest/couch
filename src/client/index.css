@@ -1,5 +1,5 @@
 /* The only client stylesheet under Vite. */
-@layer theme, base, components, utilities;
+@layer theme, base, legacy, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
@@ -130,6 +130,10 @@ body { min-width: 0; }
 [data-slot="button"][data-variant="default"]:focus-visible { outline: 2px solid var(--foreground); outline-offset: 2px; }
 :is(button, a, [role="option"]):focus-visible .text-muted-foreground { color: color-mix(in srgb, var(--background) 65%, transparent); }
 html { view-transition-name: none; }
+
+/* Legacy page rules, below components and utilities so utilities in TSX win.
+   Being replaced by shared components; delete rules as their class hooks go. */
+@layer legacy {
 .app-shell { --shell-gutter: 3rem; --shell-header: 3.75rem; --shell-footer: 4.6rem; min-height: 100dvh; }
 .app-shell .app-header { position: relative; z-index: 30; display: flex; min-height: var(--shell-header); align-items: center; justify-content: flex-start; gap: .2rem; padding: 1.4rem var(--shell-gutter) 0; border: 0; background: #000; }
 .app-shell .header-status { display: flex; align-items: center; gap: .2rem; margin-left: auto; color: #fff; }
@@ -342,12 +346,6 @@ body .queue-panel-standard .queue-feedback { margin: .6rem 0; }
 .app-shell .player-page .audio-stage-artwork img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
 .app-shell .player-page .audio-stage-copy h1 { margin: 0; font-size: clamp(2.5rem, 4vw, 3.4rem); font-weight: 600; letter-spacing: -.03em; }
 .app-shell .player-page .audio-stage-copy .eyebrow { display: none; }
-/* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
-   rectangle must be clear; the band, status text and open sheet stay solid. */
-body.native-host:has(.player-page .video-stage.has-video),
-body.native-host:has(.player-page .video-stage.has-video) .app-shell,
-body.native-host:has(.player-page .video-stage.has-video) .tv-browser,
-body.native-host:has(.player-page .video-stage.has-video) .player-page { background: transparent; }
 .app-shell.tv-shell .player-page { height: 100dvh; }
 .app-shell.tv-shell .player-idle { height: auto; }
 @media (prefers-reduced-motion: reduce) { .app-shell .player-band { transition: none; } }
@@ -396,3 +394,11 @@ body.native-host:has(.player-page .video-stage.has-video) .player-page { backgro
 }
 .app-shell .remote-pad { width: 100%; }
 .app-shell .player-band-actions .transport-buttons button { border-radius: .25rem; }
+}
+
+/* macOS mpv sits behind the WebView. Every full-screen ancestor of its video
+   rectangle must be clear; the band, status text and open sheet stay solid. */
+body.native-host:has(.player-page .video-stage.has-video),
+body.native-host:has(.player-page .video-stage.has-video) .app-shell,
+body.native-host:has(.player-page .video-stage.has-video) .tv-browser,
+body.native-host:has(.player-page .video-stage.has-video) .player-page { background: transparent; }
