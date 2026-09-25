@@ -22,7 +22,7 @@ export async function verifyGuide({ origin, ui, httpRemote, clients, until, arti
   const api = (path: string, method = "GET", body?: unknown, token = adminToken) => fetch(`${origin}/api/iptv/${path}`, { method, headers: { Origin: origin, Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const page = async () => (await (await api("guide")).json()) as GuidePage;
   const screenshot = async (name: string) => {
-    await ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(el => el.style.visibility='hidden')");
+    await ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong').forEach(el => el.style.visibility='hidden')");
     const data = await ui.request(`/session/${ui.session()}/screenshot`);
     await Bun.write(`${artifactDir}/${name}.png`, Buffer.from(data, "base64"));
   };

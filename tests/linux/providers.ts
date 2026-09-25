@@ -96,7 +96,7 @@ async function record(result: Record<string, unknown>) {
   await Bun.write(`${artifacts}/native-run-results.json`, JSON.stringify({ ...provenance, cases: results }, null, 2));
 }
 async function screenshot(name: string) {
-  await execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code], #administrator-code').forEach(pairing => pairing.style.visibility='hidden')");
+  await execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code], #administrator-code').forEach(pairing => pairing.style.visibility='hidden')");
   await Bun.sleep(250);
   const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifacts}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await capture.exited, 0);
@@ -111,7 +111,7 @@ try {
   await ui.key(keys.escape);
   await until(async () => !await execute("return !!document.querySelector('[role=dialog]')"));
   await ui.click(".pair-shortcut");
-  const code = await execute("return document.querySelector('.pairing-display strong').textContent");
+  const code = await execute("return document.querySelector('[data-pairing-code]').textContent");
   await ui.key(keys.escape);
   await until(async () => !await execute("return !!document.querySelector('[role=dialog]')"));
   for (let index = 0; index < 2; index++) {

@@ -51,7 +51,7 @@ async function api(path: string, body?: unknown, index = 0) {
   return response.json() as Promise<any>;
 }
 async function screenshot(name: string) {
-  await ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code], #administrator-code').forEach(element => element.style.visibility = 'hidden')");
+  await ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code], #administrator-code').forEach(element => element.style.visibility = 'hidden')");
   const capture = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await capture.exited, 0);
 }
@@ -103,7 +103,7 @@ try {
   await ui.section("Find");
   await until("TV starts on visible Find", () => ui.execute("return !!document.querySelector('[data-page=Find]') && document.querySelector('.section-nav a[href^=\"/find\"]')?.getAttribute('aria-current') === 'page'"));
   await ui.click(".pair-shortcut");
-  const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
+  const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   assert.match(code, /^\d{6}$/);
   await ui.key(keys.escape);
   for (let index = 0; index < 2; index++) {
@@ -163,7 +163,7 @@ try {
   await launch(); clients.forEach(client => client.connect());
   await until("Search pairings reconnect with unchanged queue and no autoplay", () => all(state => state.player.status === "idle" && state.player.playbackId === null && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queueIds)));
   for (const [index, remote] of [httpRemote, otherRemote].entries()) {
-    await until(`Search HTTP browser ${index + 1} reconnects stopped`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.getAttribute('aria-label')?.endsWith(': Connected')"));
+    await until(`Search HTTP browser ${index + 1} reconnects stopped`, () => remote!.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
   }
   console.log("PASS focused Search native playback and restart qualification");
 } catch (error) {

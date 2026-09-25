@@ -109,14 +109,14 @@ test("an error offers Skip even at the end of Up next", async () => {
   expect(skip.disabled).toBe(false);
   await act(async () => skip.click());
   expect(actions).toEqual([{ type: "next", playbackId: "playback" }]);
-  expect(document.querySelector('.player-status-card [data-slot="card"]')).not.toBeNull();
+  expect(document.querySelector('.player-status h2')).not.toBeNull();
 });
 
 test("loading uses progress and buffering uses a badge", async () => {
   const { PlayerPage } = await import("./PlayerPage");
   const loading = { ...shell, state: { ...state, player: { ...state.player, status: "loading" as const } } } as ShellValue;
   await act(async () => root.render(<ShellContext.Provider value={loading}><PlayerPage /></ShellContext.Provider>));
-  expect(document.querySelector('.player-status-card [data-slot="progress"]')).not.toBeNull();
+  expect(document.querySelector('.player-status [data-slot="progress"]')).not.toBeNull();
   const buffering = { ...loading, state: { ...loading.state!, player: { ...loading.state!.player, buffering: true } } } as ShellValue;
   await act(async () => root.render(<ShellContext.Provider value={buffering}><PlayerPage /></ShellContext.Provider>));
   expect(document.querySelector('[data-slot="badge"][role="status"]')?.textContent).toBe("Buffering");

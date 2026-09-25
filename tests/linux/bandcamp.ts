@@ -222,7 +222,7 @@ export async function verifyBandcamp(context: Context) {
 
 export async function verifyBandcampRestart(phone: HttpRemote, queue: QueueEntry[], until: Context["until"]) {
   await phone.restore();
-  await until(async () => await phone.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.playback-status')?.getAttribute('aria-label')?.endsWith(': Connected')"));
+  await until(async () => await phone.ui.execute("return document.querySelector('.header-status [role=status]')?.textContent === 'Connected' && document.querySelector('.header-status button[aria-label^=Playback]')?.getAttribute('aria-label')?.endsWith(': Connected')"));
   await phone.ui.section("Queue");
   await until(async () => await phone.ui.execute("return document.querySelectorAll('.queue-panel [data-queue-entry-id]').length") === queue.length);
   assert.deepEqual(await phone.ui.execute("return [...document.querySelectorAll('.queue-panel [data-queue-entry-id] button[aria-label^=\"Play \"]')].map(button => button.getAttribute('aria-label').slice(5))"), queue.map(entry => entry.title), "The reconnected HTTP app receives the persisted album queue in order without autoplay");

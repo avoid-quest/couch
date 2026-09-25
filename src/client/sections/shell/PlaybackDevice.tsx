@@ -5,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Card } from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -75,7 +75,7 @@ export function NativeModeGate({ children }: PropsWithChildren) {
     return () => { disposed = true; clearTimeout(timer); sequence.current++; };
   }, [choice?.mode, choice?.address, attempt, selecting]);
   if (!native) return children;
-  if (!choice) return <main className="grid min-h-dvh place-items-center p-6"><Card className="max-w-md space-y-3 p-6"><h1 className="text-xl font-semibold">Couch</h1><p role="status">{error ?? "Loading playback device…"}</p>{error && <Button onClick={() => location.reload()}>Retry</Button>}</Card></main>;
+  if (!choice) return <main className="grid min-h-dvh place-items-center p-6"><div className="w-full max-w-md space-y-3"><h1 className="text-xl font-semibold">Couch</h1><p role="status">{error ?? "Loading playback device…"}</p>{error && <Button onClick={() => location.reload()}>Retry</Button>}</div></main>;
   const device: Device = {
     ...choice, pending, error,
     choose: async (mode, address, confirm = false) => {
@@ -95,12 +95,12 @@ export function NativeModeGate({ children }: PropsWithChildren) {
   return <Context.Provider value={device}>
     {choice.mode === "local" ? <Fragment key={`local:${localEpoch}`}>{children}</Fragment> : choice.mode === "remote" ? <>
       <Fragment key={`remote:${choice.address}:${recoveryEpoch}`}>{children}</Fragment>
-      {error && <aside className="fixed bottom-4 right-4 z-50 w-[min(26rem,calc(100vw-2rem))]" aria-label="Playback device recovery"><Card className="gap-2 p-4 shadow-lg">
+      {error && <aside className="fixed right-4 bottom-4 z-50 w-[min(26rem,calc(100vw-2rem))] border-l border-border bg-black p-4" aria-label="Playback device recovery">
         <p className="font-medium">Another Couch needs attention</p>
         <p className="mt-1 text-sm text-muted-foreground" role="alert">{error}</p>
         <p className="mt-1 text-sm text-muted-foreground">Choose another address from Play on{buildInfo.clientOnly ? "." : ", or return to this computer."}</p>
         <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" onClick={device.retry} disabled={pending}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" onClick={() => void device.choose("local")} disabled={pending}>Use this computer</Button>}</div>
-      </Card></aside>}
+      </aside>}
     </> : <main className="flex min-h-dvh flex-col justify-center bg-black px-[clamp(2rem,10vw,8rem)] py-12 text-white" style={{ fontFamily: "'Inter Tight Variable', sans-serif" }} data-tv-navigation-scope>
       <h1 className="text-[clamp(2.3rem,4vw,3rem)] font-semibold tracking-[-.03em]">{buildInfo.clientOnly ? "Connect to another Couch" : "Where do you want to play?"}</h1>
       {buildInfo.clientOnly && <p className="mt-3 max-w-[40rem] text-lg text-white/70">This Client-only app controls another Couch on your network. Local playback is unavailable.</p>}
@@ -153,14 +153,15 @@ function DeviceForm() {
   };
   const submit = (event: FormEvent) => { event.preventDefault(); void selectRemote(); };
   return <div className="mt-8 grid max-w-[48rem] grid-cols-2 gap-8 max-md:grid-cols-1">
-    {!buildInfo.clientOnly && <Button variant="ghost" aria-label="This computer" className="first-run-interactive h-auto min-h-40 flex-col items-start justify-start gap-2 rounded-sm border border-white/20 bg-transparent p-6 text-left text-white" disabled={device.pending} onClick={() => void device.choose("local") }><span className="text-[1.4rem] font-medium">This computer</span><span className="whitespace-normal text-[.95rem] font-normal opacity-65">Play here. Phones can pair as remotes.</span></Button>}
-    <form className="min-h-40 space-y-3 rounded-sm border border-white/20 p-6" onSubmit={submit}>
-      <h2 className="text-[1.4rem] font-medium">Another Couch</h2>
-      <Label htmlFor="playback-address" className="sr-only">Couch address</Label>
-      <Input id="playback-address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} required disabled={device.pending} className="h-12 rounded-none border-0 border-b border-white bg-transparent px-0 text-lg text-white shadow-none placeholder:text-white/40 focus-visible:ring-0" />
-      {confirm ? <Alert><AlertDescription>{confirm === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : confirm === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode."}<div className="mt-3 flex gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="outline" onClick={() => setConfirm(null)}>Keep this computer</Button></div></AlertDescription></Alert> : <Button type="submit" variant="outline" className="first-run-interactive rounded-sm border-white bg-transparent text-white" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
-    </form>
-    {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
+    {!buildInfo.clientOnly && <Button variant="ghost" aria-label="This computer" className="h-auto min-h-40 flex-col items-start justify-start gap-2 rounded-none border-t border-white/20 bg-transparent px-0 py-6 text-left text-white hover:bg-white/10 hover:text-white focus-visible:bg-white focus-visible:text-black" disabled={device.pending} onClick={() => void device.choose("local") }><span className="text-[1.4rem] font-medium">This computer</span><span className="whitespace-normal text-[.95rem] font-normal opacity-65">Play here. Phones can pair as remotes.</span></Button>}
+    <section className="min-w-0 space-y-4 border-t border-white/20 py-6" aria-label="Another Couch">
+      <div><h2 className="text-[1.4rem] font-medium">Another Couch</h2><p className="text-sm text-white/65">Connect to a playback computer on your network.</p></div>
+      <form className="space-y-4" onSubmit={submit}>
+        <Field><FieldLabel htmlFor="playback-address" className="sr-only">Couch address</FieldLabel><Input id="playback-address" value={address} onChange={event => { setAddress(event.target.value); setConfirm(null); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} required disabled={device.pending} className="h-12 rounded-sm border-white/30 bg-transparent text-base text-white placeholder:text-white/40" /></Field>
+        {confirm ? <div className="space-y-3 border-t border-white/20 pt-3"><p className="text-sm text-white/70">{confirm === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : confirm === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode."}</p><div className="flex flex-wrap gap-2"><Button type="button" disabled={device.pending} onClick={() => void selectRemote(true)}>Stop and switch</Button><Button type="button" variant="outline" onClick={() => setConfirm(null)}>Keep this computer</Button></div></div> : <Button type="submit" variant="outline" className="rounded-sm border-white bg-transparent text-white hover:bg-white/10 hover:text-white focus-visible:bg-white focus-visible:text-black" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button>}
+      </form>
+    </section>
+    {device.error && !device.error.startsWith("confirmation-required:") && <p role="alert" className="col-span-full text-sm text-destructive">{device.error}</p>}
   </div>;
 }
 
@@ -193,12 +194,12 @@ export function PlaybackDevice({ credentials = null, connected = false, installa
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   return <>
     <Popover open={open} onOpenChange={value => { setOpen(value); if (value) device.show(); else if (!dialog) device.dismiss(); }}>
-      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="sm" className="playback-device-trigger max-w-full"><span className="truncate">{device.mode === "local" ? "Playing here" : `Playing on ${label}`}</span></Button></PopoverTrigger>
-      <PopoverContent align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="device-menu w-[min(26rem,calc(100vw-2rem))] gap-2" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
-        <p className="device-section-label">Play on</p>
+      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="sm" className="max-w-full gap-2 text-[.95rem]"><span className="size-2 shrink-0 rounded-full bg-current" aria-hidden="true" /><span className="truncate">{device.mode === "local" ? "Playing here" : `Playing on ${label}`}</span></Button></PopoverTrigger>
+      <PopoverContent align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="w-[min(26rem,calc(100vw-2rem))] gap-4 rounded-sm p-4 text-sm shadow-none" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
+        <PopoverHeader><PopoverTitle>Play on</PopoverTitle></PopoverHeader>
         <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-1">
-          {!buildInfo.clientOnly && <div className="flex min-h-11 items-center gap-2"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><Label htmlFor="play-on-local" className="flex min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span>{device.mode === "local" ? installationName || "This computer" : "This computer"}</span><span className="text-muted-foreground">Here</span></Label></div>}
-          {targets.map((target, index) => <div key={target} className="flex min-h-11 items-center gap-2"><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><Label htmlFor={`play-on-remote-${index}`} className="flex min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{device.mode === "remote" && device.address === target && installationName ? installationName : target}</span><span className="truncate text-muted-foreground">{target}</span></Label></div>)}
+          {!buildInfo.clientOnly && <Field orientation="horizontal" className="min-h-11 items-center"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><FieldLabel htmlFor="play-on-local" className="min-w-0 flex-1 cursor-pointer justify-between font-normal"><span>{device.mode === "local" ? installationName || "This computer" : "This computer"}</span><span className="text-muted-foreground">Here</span></FieldLabel></Field>}
+          {targets.map((target, index) => <Field orientation="horizontal" className="min-h-11 items-center" key={target}><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><FieldLabel htmlFor={`play-on-remote-${index}`} className="min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{device.mode === "remote" && device.address === target && installationName ? installationName : target}</span><span className="truncate text-muted-foreground">{target}</span></FieldLabel></Field>)}
         </RadioGroup>
         <form className="mt-2" onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
         <SoundControls credentials={credentials} connected={connected} open={open} installationName={installationName || label} compact state={state} run={run} onClose={close} />
@@ -239,6 +240,6 @@ export function LocalSharingPrompt({ credentials, onRemoteControlChange }: { cre
   return <Dialog open><DialogContent showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} className="!inset-0 !m-0 !flex !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !justify-center !gap-0 !rounded-none !bg-black !px-[clamp(2rem,10vw,8rem)] !py-12 !text-white !shadow-none !ring-0" style={{ fontFamily: "'Inter Tight Variable', sans-serif" }}>
     <DialogHeader className="max-w-[48rem]"><DialogTitle className="text-[clamp(2.3rem,4vw,3rem)] font-semibold tracking-[-.03em]">Allow remote control?</DialogTitle><DialogDescription className="mt-3 max-w-[40rem] text-xl text-white/70">Phones and computers on this network can pair and control playback. You can change this in Settings, Connections.</DialogDescription></DialogHeader>
     {error && <Alert variant="destructive" className="mt-6 max-w-[40rem]"><AlertDescription>{error}</AlertDescription></Alert>}
-    <DialogFooter className="mt-8 flex max-w-[40rem] flex-row justify-start gap-2"><Button disabled={pending} className="rounded-sm bg-white text-black hover:bg-white/85" onClick={() => void setSharing(true)}>Allow remote control</Button><Button variant="ghost" className="first-run-interactive rounded-sm text-white" disabled={pending} onClick={() => void setSharing(false)}>Keep private</Button></DialogFooter>
+    <DialogFooter className="mt-8 flex max-w-[40rem] flex-row justify-start gap-2"><Button disabled={pending} className="rounded-sm bg-white text-black hover:bg-white/85" onClick={() => void setSharing(true)}>Allow remote control</Button><Button variant="ghost" className="rounded-sm text-white hover:bg-white/10 hover:text-white focus-visible:bg-white focus-visible:text-black" disabled={pending} onClick={() => void setSharing(false)}>Keep private</Button></DialogFooter>
   </DialogContent></Dialog>;
 }

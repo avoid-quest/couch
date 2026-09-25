@@ -23,8 +23,8 @@ import { buildInfo } from "../../../shared/build";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
-import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
@@ -202,7 +202,7 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
     if (!this.state.error) return this.props.children;
     return (
       <div className="app-shell"><main id="main">
-        <div className="notice error-notice" role="alert"><span>{this.state.error.message}</span><Button onClick={() => this.setState({ error: null })}>Try again</Button></div>
+        <Alert variant="destructive" className="m-4 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="flex items-center justify-between gap-4 text-sm"><span>{this.state.error.message}</span><Button onClick={() => this.setState({ error: null })}>Try again</Button></AlertDescription></Alert>
       </main></div>
     );
   }
@@ -253,7 +253,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
 
       <main id="main">
         {tvPresentation && state?.appearance && <TvAppearancePreview appearance={state.appearance} credentials={credentials} connected={connected} />}
-        {error && <div className="notice error-notice" role="alert"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></div>}
+        {error && <Alert variant="destructive" className="mx-[var(--shell-gutter)] my-3 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="flex items-center justify-between gap-4 text-sm"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></AlertDescription></Alert>}
         <div className="tv-browser" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
       <header className="app-header">
         <nav className="section-nav" aria-label="Main navigation">{navItems.map(({ name, label }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{label}</Link></Button>)}</nav>
@@ -261,7 +261,7 @@ export function ShellChrome({ children }: PropsWithChildren) {
           {(!nativeHost || tvPresentation) && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} localHost={localHost} state={state} run={run} />}
           {nativeHost && !tvPresentation && <PlaybackDevice credentials={credentials} connected={connected} installationName={state?.installationName ?? details?.name} state={state} run={run} />}
           {nativeHost && !localHost && !tvPresentation && <InstallationUpdates />}
-          {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
+          {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut text-[.95rem]" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
           {credentials && !pairingRequired && !tvPresentation && details?.tvPresentation && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="hidden max-[700px]:inline-flex" aria-label="Remote" onClick={() => shell.setRemoteOpen(true)}><Icon name="remote" /></Button></TooltipTrigger><TooltipContent>Remote</TooltipContent></Tooltip>}
           <DigitalClock />
@@ -269,34 +269,29 @@ export function ShellChrome({ children }: PropsWithChildren) {
       </header>
 
         {!credentials || pairingRequired ? (
-          <Card className="pair-card">
-            <div className="pair-icon"><Icon name="screen" /></div>
-            {localHost && <p className="eyebrow">Your media center</p>}
-            <h1>{localHost ? "Starting your player" : `Pair with ${new URL(credentials?.origin ?? device?.address ?? location.origin).host}`}</h1>
-            {!localHost && credentials && <p role="alert">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
-            <p className="muted">{localHost ? "The local player and your remotes connect here." : "Open Pair a remote on that Couch and type the code it shows."}</p>
-            {localHost ? <Button disabled={booting} className="primary-button" onClick={shell.retryHost}>{booting ? "Starting…" : "Try again"}</Button> : status === "protocol-mismatch" ? <p role="alert">This playback computer uses an incompatible desktop protocol. Update this app or the playback computer, or choose another address.</p> : (
-              <form onSubmit={pair} className="pair-form">
-                <Label htmlFor="remote-name">Device name</Label>
-                <Input id="remote-name" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required />
-               <Label htmlFor="pairing-code">Pairing code</Label>
-                <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} containerClassName="w-full [&_[data-slot=input-otp-group]]:flex-1 [&_[data-slot=input-otp-group]]:justify-center [&_[data-slot=input-otp-group]]:gap-1.5 [&_[data-slot=input-otp-slot]]:h-14 [&_[data-slot=input-otp-slot]]:w-14 [&_[data-slot=input-otp-slot]]:rounded-lg [&_[data-slot=input-otp-slot]]:text-2xl">
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
-                  </InputOTPGroup>
-                  <InputOTPSeparator />
-                  <InputOTPGroup>
-                    <InputOTPSlot index={3} /><InputOTPSlot index={4} /><InputOTPSlot index={5} />
-                  </InputOTPGroup>
-                </InputOTP>
-                <Button className="primary-button" disabled={pairing || pairingCode.length !== 6 || !remoteName.trim()}>{pairing ? "Connecting…" : "Connect"}</Button>
+          <section className="mx-auto flex min-h-[calc(100dvh-var(--shell-header))] w-full max-w-3xl flex-col justify-center gap-8 px-[var(--shell-gutter)] py-12" aria-labelledby="pair-heading">
+            <div className="space-y-3"><h1 id="pair-heading" className="break-words text-[clamp(2.25rem,6vw,3rem)] leading-tight font-semibold tracking-tight">{localHost ? "Starting your player" : `Pair with ${new URL(credentials?.origin ?? device?.address ?? location.origin).host}`}</h1><p className="max-w-[50ch] text-lg text-muted-foreground">{localHost ? "The local player and your remotes connect here." : "Open Pair a remote on that Couch and type the code it shows."}</p></div>
+            {!localHost && credentials && <p role="alert" className="max-w-[55ch] text-sm text-destructive">{credentials.installationId && details?.installationId && credentials.installationId !== details.installationId ? "A different Couch installation is using this address. Check the playback computer and pair again." : "Couch rejected this remote's pairing. Pair again to restore access."}</p>}
+            {localHost ? <Button className="self-start" disabled={booting} onClick={shell.retryHost}>{booting ? "Starting…" : "Try again"}</Button> : status === "protocol-mismatch" ? <p role="alert" className="max-w-[55ch] text-sm text-destructive">This playback computer uses an incompatible desktop protocol. Update this app or the playback computer, or choose another address.</p> : (
+              <form onSubmit={pair} className="pair-form w-full max-w-md space-y-8">
+                <FieldGroup>
+                  <Field><FieldLabel htmlFor="remote-name">Device name</FieldLabel><Input id="remote-name" className="rounded-none border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:ring-0" autoFocus={!!pairingCode} autoComplete="off" maxLength={60} value={remoteName} onChange={event => setRemoteName(event.target.value)} required /></Field>
+                  <Field><FieldLabel htmlFor="pairing-code">Pairing code</FieldLabel>
+                    <InputOTP id="pairing-code" aria-label="Pairing code" maxLength={6} pattern={REGEXP_ONLY_DIGITS} autoFocus={!pairingCode} value={pairingCode} onChange={setPairingCode} containerClassName="w-full justify-start gap-2">
+                      <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={0} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={1} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={2} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
+                      <InputOTPSeparator />
+                      <InputOTPGroup className="min-w-0 flex-1"><InputOTPSlot index={3} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={4} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /><InputOTPSlot index={5} className="h-14 min-w-0 w-auto flex-1 rounded-sm text-2xl" /></InputOTPGroup>
+                    </InputOTP>
+                  </Field>
+                </FieldGroup>
+                <Button disabled={pairing || pairingCode.length !== 6 || !remoteName.trim()}>{pairing ? "Connecting…" : "Connect"}</Button>
               </form>
             )}
-          </Card>
+          </section>
         ) : (
           <>
-            {!connected && <div className="notice" role="status">{status === "server-unavailable" || status === "reconnecting" ? `Reconnecting to ${state?.installationName ?? details?.name ?? new URL(credentials.origin).host}. Browsing and the queue come back when it answers.` : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="ml-3 inline-flex gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>}</span>}</div>}
-            {player?.status === "unavailable" && <p className="notice" role="alert">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</p>}
+            {!connected && <Alert role="status" className="mx-[var(--shell-gutter)] my-3 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="flex flex-wrap items-center gap-3 text-sm"><span>{status === "server-unavailable" || status === "reconnecting" ? `Reconnecting to ${state?.installationName ?? details?.name ?? new URL(credentials.origin).host}. Browsing and the queue come back when it answers.` : status === "protocol-mismatch" ? "This app and the selected Couch use incompatible desktop protocols. Update either installation or choose another address." : "Connecting to the player."}</span>{nativeHost && !localHost && !device?.error && (status === "server-unavailable" || status === "protocol-mismatch") && <span className="inline-flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={reconnect}>Retry</Button>{!buildInfo.clientOnly && <Button variant="outline" size="sm" onClick={() => void device?.choose("local")}>Use this computer</Button>}</span>}</AlertDescription></Alert>}
+            {player?.status === "unavailable" && <Alert variant="destructive" className="mx-[var(--shell-gutter)] my-3 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="text-sm">{player.error || `Playback is unavailable on ${state?.installationName || "this computer"}. Browsing and the queue still work.`}</AlertDescription></Alert>}
             <div className="workspace">
               <div className="media-browser">
                 {children}

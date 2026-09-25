@@ -5,15 +5,13 @@ import { SetupQr } from "./SetupQr";
 
 export function PairingDialog({ credentials, urls, connected, open, onOpenChange, openerRef }: { credentials: Pick<ConnectionInfo, "origin" | "token">; urls: string[]; connected: boolean; open: boolean; onOpenChange: (open: boolean) => void; openerRef?: RefObject<HTMLButtonElement | null> }) {
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="pairing-panel w-full max-w-2xl gap-3 p-5 sm:p-6" showCloseButton={false} onCloseAutoFocus={event => { event.preventDefault(); openerRef?.current?.focus(); }}>
-      <DialogHeader><DialogTitle>Pair a remote</DialogTitle><DialogDescription>On the same network, scan the QR, name your device and connect to this TV.</DialogDescription></DialogHeader>
-      <div className="grid gap-6">
-        <div className="min-w-0 space-y-3">
-          <p className="text-sm text-muted-foreground">Open this address on your phone:</p>
-          <ul className="grid gap-2">{urls.map(url => <li key={url}><a className="block rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm break-all hover:bg-muted" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
-        </div>
-        {connected && urls[0] ? <div className="flex justify-center"><SetupQr url={urls[0]} credentials={credentials} /></div> : <p role="status">{connected ? "No network address available. Connect the TV to the network and reopen this dialog." : "Reconnecting to the TV. The QR will return when connected."}</p>}
-      </div>
+    <DialogContent className="w-[min(36rem,calc(100vw-2rem))] max-w-none gap-6 rounded-sm p-5 sm:p-8" showCloseButton={false} onCloseAutoFocus={event => { event.preventDefault(); openerRef?.current?.focus(); }}>
+      <DialogHeader><DialogTitle className="text-2xl">Pair a remote</DialogTitle><DialogDescription className="text-sm">Scan with a phone on the same network, or open an address and enter the code.</DialogDescription></DialogHeader>
+      {connected && urls[0] ? <SetupQr url={urls[0]} credentials={credentials} /> : <p role="status" className="text-sm text-muted-foreground">{connected ? "No network address available. Connect the TV to the network and reopen this dialog." : "Reconnecting to the TV. The QR will return when connected."}</p>}
+      {!!urls.length && <section className="min-w-0 space-y-2" aria-label="Pairing addresses">
+        <h3 className="text-sm font-medium">Open on your phone</h3>
+        <ul className="grid gap-2">{urls.map(url => <li key={url}><a className="block break-all text-sm underline underline-offset-4" href={url} target="_blank" rel="noreferrer">{url}</a></li>)}</ul>
+      </section>}
       <DialogFooter showCloseButton />
     </DialogContent>
   </Dialog>;

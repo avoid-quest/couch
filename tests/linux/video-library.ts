@@ -16,7 +16,7 @@ const row = (id: string) => `${active} li:has(button[aria-label=${JSON.stringify
 
 async function nativeScreenshot(context: Context, name: string) {
   await context.httpRemote.minimize();
-  await context.ui.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], [data-pairing-code]').forEach(element => element.style.visibility = 'hidden')");
+  await context.ui.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code]').forEach(element => element.style.visibility = 'hidden')");
   const child = Bun.spawn(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "x11grab", "-video_size", "1600x1000", "-i", process.env.DISPLAY!, "-frames:v", "1", `${context.artifactDir}/${name}.png`], { stdout: "ignore", stderr: "inherit" });
   assert.equal(await child.exited, 0);
 }

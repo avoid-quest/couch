@@ -80,7 +80,7 @@ export async function assertSubtitlePixels(context: Context, subtitle: MediaTrac
   await ui.watching();
   await ui.execute(`window.scrollTo(0, 0); const marker = document.createElement('div'); marker.id = 'subtitle-origin';
     Object.assign(marker.style, { position: 'fixed', left: '8px', top: '8px', width: '8px', height: '8px', background: 'rgb(13,217,101)', zIndex: '100000', pointerEvents: 'none' });
-    document.body.append(marker); document.querySelectorAll('.pairing-display, .pair-shortcut strong').forEach(element => element.style.visibility = 'hidden');`);
+    document.body.append(marker); document.querySelectorAll('[data-pairing-code], .pair-shortcut strong').forEach(element => element.style.visibility = 'hidden');`);
   try {
     const position = first().player.position;
     await track(-1, `${name} subtitles are observed off before the pixel comparison`);

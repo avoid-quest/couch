@@ -3,8 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { AudioLines, Bluetooth, MonitorSmartphone, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SoundState } from "../../../shared/sound";
 import type { BluetoothState } from "../../../shared/bluetooth";
@@ -78,13 +79,13 @@ export function SoundControls({ credentials, connected, open, installationName, 
     const volume = state?.player.volume ?? sound?.routing?.volume ?? null;
     const volumeReady = connected && !!run && volume !== null && state?.player.status !== "unavailable" && state?.systemAudio?.volumeWritable !== false && sound?.routing?.volumeWritable !== false;
     const changeVolume = (step: number) => { if (volumeReady && volume !== null) void run({ type: "volume", volume: Math.max(0, Math.min(100, Math.round(volume + step))) }); };
-    return <div className="device-sound-controls">
-      <p className="device-section-label">Sound on {installationName || "this Couch"}</p>
-      {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={pending || !connected} onValueChange={value => void selectOutput(value)} className="gap-1">{outputs.map((output, index) => <div key={output.id} className="flex min-h-11 items-center gap-2"><RadioGroupItem id={`quick-output-${index}`} value={output.id} /><label htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate">{output.name || output.id}</label></div>)}</RadioGroup> : <p className="device-muted">{unavailable}</p>}
-      {observed && observed.id !== selected && <p className="device-muted">Now playing on {observed.name || observed.id}.</p>}
-      <div className="device-volume" role="group" aria-label="Volume"><span>Volume</span><ButtonGroup aria-label="Volume adjustment"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span className="min-w-8 self-center text-center" aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></ButtonGroup></div>
+    return <div className="grid gap-3 border-t border-border pt-3">
+      <h3 className="text-sm font-medium">Sound on {installationName || "this Couch"}</h3>
+      {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={pending || !connected} onValueChange={value => void selectOutput(value)} className="gap-1">{outputs.map((output, index) => <Field orientation="horizontal" className="min-h-11 items-center" key={output.id}><RadioGroupItem id={`quick-output-${index}`} value={output.id} /><FieldLabel htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate font-normal">{output.name || output.id}</FieldLabel></Field>)}</RadioGroup> : <p className="text-sm text-muted-foreground">{unavailable}</p>}
+      {observed && observed.id !== selected && <p className="text-sm text-muted-foreground">Now playing on {observed.name || observed.id}.</p>}
+      <div className="flex items-center justify-between gap-2" role="group" aria-label="Volume"><span>Volume</span><ButtonGroup aria-label="Volume adjustment"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span className="min-w-8 self-center text-center tabular-nums" aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></ButtonGroup></div>
       {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
-      {credentials && <Button variant="ghost" className="device-settings-link" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
+      {credentials && <Button variant="ghost" className="justify-start px-0 text-muted-foreground" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
     </div>;
   }
   return <>
@@ -124,19 +125,16 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   const name = installationName || "Couch";
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <Button variant="ghost" className="playback-status" aria-label={`Playback on ${name}: ${status}`}>
-        <span className={`connection-dot ${connected ? "online" : ""}`} aria-hidden="true" />
-        <span className="playback-status-name">{localHost ? "Playing here" : `Playing on ${name}`}</span>
+      <Button variant="ghost" className="max-w-full gap-2 text-[.95rem]" aria-label={`Playback on ${name}: ${status}`}>
+        <span className={`size-2 shrink-0 rounded-full ${connected ? "bg-current" : "border border-current"}`} aria-hidden="true" />
+        <span className="max-w-48 truncate">{localHost ? "Playing here" : `Playing on ${name}`}</span>
       </Button>
     </PopoverTrigger>
-    <PopoverContent align="end" className="w-80 gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-0.5">
-          <p className="font-medium">Playback on {name}</p>
-          <p className="text-muted-foreground" role="status">{status}</p>
-        </div>
+    <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] gap-4 rounded-sm p-4 text-sm shadow-none">
+      <PopoverHeader className="flex-row items-start justify-between gap-3">
+        <div><PopoverTitle>Playback on {name}</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></div>
         <MonitorSmartphone className="size-5 text-muted-foreground" aria-hidden="true" />
-      </div>
+      </PopoverHeader>
       {credentials?.origin && <p className="flex items-center gap-2 text-muted-foreground"><span className="sr-only">Connection</span><AudioLines className="size-4" aria-hidden="true" />{new URL(credentials.origin).host}</p>}
       <SoundControls credentials={credentials} connected={connected} open={open} installationName={name} compact state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>

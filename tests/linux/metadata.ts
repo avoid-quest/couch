@@ -59,7 +59,7 @@ async function metadataLayout(target: UiDriver, width: number) {
   checks.push(`metadata layout and controls at ${width} CSS pixels`);
 }
 async function redactCredentials() {
-  for (const target of [sessionId ? ui : null, phone?.ui]) if (target) await target.execute("document.querySelectorAll('.pairing-display, .pair-shortcut strong, [data-administrator-code], #administrator-code, #pairing-code, input[type=password]').forEach(element => element.style.setProperty('visibility', 'hidden', 'important'))");
+  for (const target of [sessionId ? ui : null, phone?.ui]) if (target) await target.execute("document.querySelectorAll('[data-pairing-code], .pair-shortcut strong, [data-administrator-code], #administrator-code, #pairing-code, input[type=password]').forEach(element => element.style.setProperty('visibility', 'hidden', 'important'))");
 }
 async function phoneCapture(name: string) { await redactCredentials(); await phone!.screenshot(name); }
 async function launch() {
@@ -135,7 +135,7 @@ try {
   await fixtures();
   await until("Tauri driver is ready", async () => { try { return (await fetch(`${driverOrigin}/status`)).ok; } catch { return false; } });
   await launch(); await ui.key(keys.escape); await ui.click(".pair-shortcut");
-  const code = await ui.execute("return document.querySelector('.pairing-display strong')?.textContent") as string;
+  const code = await ui.execute("return document.querySelector('[data-pairing-code]')?.textContent") as string;
   await ui.key(keys.escape);
   for (let index = 0; index < 2; index++) {
     const response = await fetch(`${origin}/api/pair`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify({ code }) }); assert.equal(response.status, 200);

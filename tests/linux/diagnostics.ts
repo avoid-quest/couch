@@ -32,8 +32,8 @@ try {
   await until("configured native app exposes Settings", () => tv.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
   await tv.button("Settings"); await tv.settingsSection("connection");
   await tv.button("Pair a remote", 'section[aria-label="Settings"]');
-  await until("pairing dialog loads its current code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] .pairing-display strong')?.textContent || '')"));
-  const code = await tv.execute("return document.querySelector('[role=dialog] .pairing-display strong').textContent") as string;
+  await until("pairing dialog loads its current code", () => tv.execute("return /^[0-9]{6}$/.test(document.querySelector('[role=dialog] [data-pairing-code]')?.textContent || '')"));
+  const code = await tv.execute("return document.querySelector('[role=dialog] [data-pairing-code]').textContent") as string;
   await tv.key(keys.escape);
   phone = await startHttpRemote(origin, code, artifacts, until);
   const token = await phone.ui.execute("return localStorage.getItem('couch.remote-token')") as string;

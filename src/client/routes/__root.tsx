@@ -4,13 +4,13 @@ import type { ControllerIdentity } from "../../shared/controllers";
 import { useEffect } from "react";
 import { AppShell } from "../sections/shell/AppShell";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 function RootError({ error }: ErrorComponentProps) {
   return (
-    <div className="notice error-notice" role="alert">
-      <span>{error instanceof Error ? error.message : String(error)}</span>
+    <Alert variant="destructive" className="m-4 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="flex flex-wrap items-center justify-between gap-4 text-sm"><span>{error instanceof Error ? error.message : String(error)}</span>
       <Button asChild><Link to="/">Back to Couch</Link></Button>
-    </div>
+    </AlertDescription></Alert>
   );
 }
 
