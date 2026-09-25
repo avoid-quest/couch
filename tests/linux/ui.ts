@@ -139,7 +139,8 @@ export class UiDriver {
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
     const [button] = await matches();
-    await this.clickElement(button["element-6066-11e4-a52e-4f735466cecf"]);
+    try { await this.clickElement(button["element-6066-11e4-a52e-4f735466cecf"]); }
+    catch (error) { throw new Error(`Could not click ${label}`, { cause: error }); }
   }
 
   async section(label: string) {
