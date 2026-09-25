@@ -203,6 +203,8 @@ class ShellErrorBoundary extends Component<PropsWithChildren, { error: Error | n
 
 export function AppShell() {
   const shell = useShellValue();
+  // PROTOTYPE — throwaway: /prototype draws its own full-screen UI over paired credentials.
+  if (useLocation().pathname === "/prototype" && shell.credentials && !shell.pairingRequired) return <ShellContext.Provider value={shell}><Outlet /></ShellContext.Provider>;
   return <ShellErrorBoundary><ShellContext.Provider value={shell}><ShellChrome><Outlet /></ShellChrome></ShellContext.Provider></ShellErrorBoundary>;
 }
 

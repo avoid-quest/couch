@@ -14,6 +14,7 @@ import { Route as SplatRouteImport } from './routes/$'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as FindRouteImport } from './routes/find'
 import { Route as MusicRouteImport } from './routes/music'
+import { Route as PrototypeRouteImport } from './routes/prototype'
 import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SearchRouteImport } from './routes/search'
@@ -68,6 +69,11 @@ const FindRoute = FindRouteImport.update({
 const MusicRoute = MusicRouteImport.update({
   id: '/music',
   path: '/music',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrototypeRoute = PrototypeRouteImport.update({
+  id: '/prototype',
+  path: '/prototype',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RadioRoute = RadioRouteImport.update({
@@ -228,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
   '/music': typeof MusicRoute
+  '/prototype': typeof PrototypeRoute
   '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
   '/music': typeof MusicRoute
+  '/prototype': typeof PrototypeRoute
   '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
   '/music': typeof MusicRoute
+  '/prototype': typeof PrototypeRoute
   '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/browse'
     | '/find'
     | '/music'
+    | '/prototype'
     | '/radio'
     | '/saved'
     | '/search'
@@ -377,6 +387,7 @@ export interface FileRouteTypes {
     | '/browse'
     | '/find'
     | '/music'
+    | '/prototype'
     | '/radio'
     | '/saved'
     | '/search'
@@ -412,6 +423,7 @@ export interface FileRouteTypes {
     | '/browse'
     | '/find'
     | '/music'
+    | '/prototype'
     | '/radio'
     | '/saved'
     | '/search'
@@ -450,6 +462,7 @@ export interface RootRouteChildren {
   BrowseRoute: typeof BrowseRouteWithChildren
   FindRoute: typeof FindRoute
   MusicRoute: typeof MusicRoute
+  PrototypeRoute: typeof PrototypeRoute
   RadioRoute: typeof RadioRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
@@ -492,6 +505,13 @@ declare module '@tanstack/react-router' {
       path: '/music'
       fullPath: '/music'
       preLoaderRoute: typeof MusicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prototype': {
+      id: '/prototype'
+      path: '/prototype'
+      fullPath: '/prototype'
+      preLoaderRoute: typeof PrototypeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/radio': {
@@ -793,6 +813,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrowseRoute: BrowseRouteWithChildren,
   FindRoute: FindRoute,
   MusicRoute: MusicRoute,
+  PrototypeRoute: PrototypeRoute,
   RadioRoute: RadioRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
