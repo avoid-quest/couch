@@ -7,7 +7,7 @@ import type { ConnectionInfo, PlaybackCommand, PlayerState, ServerMessage, Sessi
 import { frontendPaths } from "../../src/shared/page-paths";
 import { seedConfiguredFixture } from "./configured-fixture";
 import { remoteSocketUrl } from "./build";
-import { startHttpRemote, type Wait } from "./ui";
+import { assertResponsive, startHttpRemote, type Wait } from "./ui";
 
 // The existing WebKit/X11 HTTP-remote driver, with the production sidecar and
 // a pipe-level native peer. Run in the Linux test container (including its null
@@ -137,6 +137,8 @@ try {
   await until("browser Stop reaches the coordinator and its native pipe", () => latest?.currentEntryId === null && commands.at(-1)?.type === "stop");
   await ui.section("Find");
   await ui.type("#media-search", "provider fixture");
+  await until("provider fixture appears in Find", async () => await ui.execute('return !!document.querySelector(\'[aria-label="Play Provider result fixture"]\')'));
+  await assertResponsive(ui, "Phone Find");
   await ui.button("Play Provider result fixture");
   await until("provider result Play creates one occurrence and reaches the native pipe", () => {
     const occurrences = latest?.queue.filter(item => item.source === `web:${providerUrl}`) ?? [];
