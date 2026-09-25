@@ -114,7 +114,7 @@ export function PlayerPage() {
     <div className="absolute inset-0" onClick={() => { if (!shown) { wake(); return; } if (!audioOnly && active && player?.playbackId && transportReady) void run({ type: "pause", playbackId: player.playbackId, paused: playing }); }}>
       {elsewhere ? <div className="flex h-full flex-col justify-center gap-6 px-(--gutter) pb-48 lg:flex-row lg:items-center lg:justify-start lg:gap-12">
         {artwork && <div className="aspect-video w-full max-w-sm shrink-0 overflow-hidden bg-muted lg:w-2/5 lg:max-w-xl [&_img]:size-full [&_img]:object-cover">{artwork}</div>}
-        <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{nowPlaying && <p className="text-base">{nowPlaying}</p>}</div>
+        {!status && <div className="grid min-w-0 gap-2"><p className="text-3xl font-semibold tracking-tight text-muted-foreground">Playing on {name}</p>{nowPlaying && <p className="text-base">{nowPlaying}</p>}</div>}
       </div> : <>
         <VideoStage active={active} audioOnly={audioOnly} />
         {active && audioOnly && <div className="pointer-events-none absolute inset-0 flex flex-col justify-center gap-6 px-(--gutter) pb-48 sm:flex-row sm:items-center sm:justify-start sm:gap-12">
