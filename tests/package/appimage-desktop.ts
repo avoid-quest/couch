@@ -110,7 +110,7 @@ try {
   await click('//button[normalize-space(.)="Keep private"]');
   await until("Private local setup completes", async () => !await element('//button[normalize-space(.)="Keep private"]'));
   await until("Local navigation loads", () => element('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Up next"]'));
-  await click('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Up next"]');
+  await click('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Find"]');
   await until("Local app shows Open file", () => element('//button[normalize-space(.)="Open file"]'));
   const local = await asyncExecute(`
     const connection = await window.__TAURI_INTERNALS__.invoke('connection_info');
@@ -130,6 +130,8 @@ try {
   await until("Selected PulseAudio monitor produces clocked samples", () => Bun.file(`${evidence}/playback-audio.pcm`).size > 4_800);
   await execute("const item=window.__proof.state.queue.find(item=>item.title==='sample.mp4'); window.__proof.socket.send(JSON.stringify({type:'command',requestId:crypto.randomUUID(),action:{type:'play',entryId:item.id,fromStart:true}})); return true");
   await until("Packaged libmpv reports video and audio playback", () => execute("const p=window.__proof.state?.player; return p?.status === 'playing' && p.position > 1 && p.tracks?.some(t=>t.kind === 'video') && p.tracks?.some(t=>t.kind === 'audio')"));
+  await click('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Up next"]');
+  await until("Native video stage is active", () => element('//div[contains(@class,"video-stage") and contains(@class,"has-video")]'));
   inside("sh", "-c", "ps -eo pid,comm,args > /evidence/processes.txt; grep -hE 'lib(mpv|avcodec|avformat|pulse|ass)' /proc/[0-9]*/maps 2>/dev/null > /evidence/media-maps.txt || true");
   inside("runuser", "-u", "qualifier", "--", "env", "DISPLAY=:99", "scrot", "-o", "/evidence/full-playing.png");
   const redPixels = Number(inside("python3", "-c", "from PIL import Image; image=Image.open('/evidence/full-playing.png').convert('RGB'); print(sum(r>190 and g<70 and b<70 for r,g,b in image.getdata()))"));

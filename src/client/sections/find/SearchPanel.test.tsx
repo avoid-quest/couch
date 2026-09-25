@@ -148,10 +148,20 @@ test("empty results and filters give a way back", async () => {
   await until(() => !!button("Resume Evening movie"));
   const what = document.querySelector<HTMLElement>('[aria-label="What filter"]')!;
   await act(async () => [...what.querySelectorAll("button")].find(node => node.textContent?.startsWith("Video"))!.click());
-  expect(button("Play Evening song")).toBeUndefined();
+  await until(() => !button("Play Evening song"));
   expect(button("Resume Evening movie")).toBeDefined();
   await act(async () => button("All", what).click());
   expect(button("Resume Evening movie")).toBeDefined();
+});
+
+test("focus moves to a real result when the focused result is filtered away", async () => {
+  integrated = true; await render(); await search("Evening");
+  await until(() => !!button("Resume Evening movie") && !!button("Play Evening song"));
+  button("Resume Evening movie").focus();
+  const from = document.querySelector<HTMLElement>('[aria-label="From filter"]')!;
+  await act(async () => [...from.querySelectorAll("button")].find(node => node.textContent?.startsWith("Jellyfin"))!.click());
+  await until(() => !button("Resume Evening movie"));
+  expect(document.activeElement?.closest("[data-hit-id]")).toBeTruthy();
 });
 
 test("a pasted direct-media link queues an entry with a server-safe title", async () => {

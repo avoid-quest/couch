@@ -71,7 +71,9 @@ export function QueuePanel({ state, credentials, connected, available, run }: Pr
     const row = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-queue-entry-id]") ?? [])].find(row => row.dataset.queueEntryId === focused.id);
     const replacement = [...(row?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(button => button.getAttribute("aria-label") === focused.label)
       ?? row?.querySelector<HTMLElement>("button:not(:disabled)")
-      ?? panelRef.current?.querySelector<HTMLElement>(".queue-standard-entry:not(:disabled), .queue-standard-played:not(:disabled)");
+      ?? panelRef.current?.querySelector<HTMLElement>(".queue-standard-entry:not(:disabled), .queue-standard-played:not(:disabled)")
+      ?? panelRef.current?.closest(".player-sheet")?.querySelector<HTMLElement>("button:not(:disabled)")
+      ?? panelRef.current?.closest('[data-page="Now"]')?.querySelector<HTMLElement>("[data-page-first]:not(:disabled)");
     focusedEntry.current = null;
     replacement?.focus({ preventScroll: true });
   });

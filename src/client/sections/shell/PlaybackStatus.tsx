@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { AudioLines, Bluetooth, MonitorSmartphone, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -11,6 +12,14 @@ import type { SoundState } from "../../../shared/sound";
 import type { BluetoothState } from "../../../shared/bluetooth";
 import type { Credentials } from "@/session/session";
 import type { Action, SessionState } from "../../../shared/protocol";
+import { knownConnection } from "@/session/connection";
+
+function destinationOrigin(address: string): string | null {
+  try {
+    const url = new URL(/^[a-z]+:\/\//i.test(address.trim()) ? address.trim() : `http://${address.trim()}`);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash ? url.origin : null;
+  } catch { return null; }
+}
 
 export function SoundControls({ credentials, connected, open, installationName, compact = false, state, run, onClose }: {
   credentials: Credentials | null;
@@ -122,7 +131,19 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
   run?: (action: Action) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
+  const [address, setAddress] = useState("");
+  const [target, setTarget] = useState<string | null>(null);
+  const [addressError, setAddressError] = useState("");
   const name = installationName || "Couch";
+  const origin = credentials?.origin ?? location.origin;
+  const known = knownConnection();
+  const other = known?.origin !== origin ? known : null;
+  const choose = (value: string) => {
+    const next = destinationOrigin(value);
+    if (!next) { setAddressError("Enter a Couch address without a path or pairing details."); return; }
+    setAddressError("");
+    if (next !== origin) setTarget(next);
+  };
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
       <Button variant="ghost" className="max-w-full gap-2 text-[.95rem]" aria-label={`Playback on ${name}: ${status}`}>
@@ -132,10 +153,21 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     </PopoverTrigger>
     <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] gap-4 rounded-sm p-4 text-sm shadow-none">
       <PopoverHeader className="flex-row items-start justify-between gap-3">
-        <div><PopoverTitle>Playback on {name}</PopoverTitle><PopoverDescription role="status">{status}</PopoverDescription></div>
+        <div><PopoverTitle>Play on</PopoverTitle><PopoverDescription role="status">{name} · {status}</PopoverDescription></div>
         <MonitorSmartphone className="size-5 text-muted-foreground" aria-hidden="true" />
       </PopoverHeader>
-      {credentials?.origin && <p className="flex items-center gap-2 text-muted-foreground"><span className="sr-only">Connection</span><AudioLines className="size-4" aria-hidden="true" />{new URL(credentials.origin).host}</p>}
+      <div className="grid gap-2">
+        <p className="flex items-center gap-2"><AudioLines className="size-4" aria-hidden="true" />{name} <span className="ml-auto text-muted-foreground">{new URL(origin).host}</span></p>
+        {target ? <div className="grid gap-2 border-t border-border pt-3">
+          <p>Switch this browser to {new URL(target).host}?</p>
+          <p className="text-muted-foreground">Playback on {name} continues. Pair with the other Couch there if needed.</p>
+          <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => location.assign(target)}>Switch Couch</Button><Button size="sm" variant="outline" onClick={() => setTarget(null)}>Keep {name}</Button></div>
+        </div> : <>
+          {other && <Button variant="ghost" className="justify-start px-0" onClick={() => choose(other.origin)}>Play on {other.details.name} <span className="ml-auto text-muted-foreground">{new URL(other.origin).host}</span></Button>}
+          <form onSubmit={event => { event.preventDefault(); choose(address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => { setAddress(event.target.value); setAddressError(""); }} placeholder="Another Couch address" autoComplete="url" spellCheck={false} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={!address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
+          {addressError && <p role="alert" className="text-destructive">{addressError}</p>}
+        </>}
+      </div>
       <SoundControls credentials={credentials} connected={connected} open={open} installationName={name} compact state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>
   </Popover>;

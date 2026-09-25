@@ -142,7 +142,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
     {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner className="size-3.5" />Loading history…</p>}
     {!loading && !error && !entries.length && <p className="border-t pt-5 text-sm text-muted-foreground">{connected ? "Nothing played yet." : "History will return when the TV reconnects."}</p>}
     <ul className={`history-items${presentation === "inspect" ? "" : " divide-y"}`} aria-busy={loading}>{entries.map(entry => {
-      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3">
+      if (entry.kind === "radio") { const station = entry.station; return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3" data-nav-row>
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
           <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
@@ -152,11 +152,11 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
       const item = entry.item;
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);
       const resumable = item.position > 0;
-      if (presentation === "inspect") return <li key={entry.key} className="history-inspect-row">
+      if (presentation === "inspect") return <li key={entry.key} className="history-inspect-row" data-nav-row>
         {artwork(item, "history-inspect-art")}
         <Button variant="ghost" className="history-inspect-title" aria-label={`Details for ${item.title}`} onClick={event => { detailTrigger.current = event.currentTarget; setDetailId(item.mediaId); }}><strong>{item.title}</strong><small>{summary(item)}</small></Button>
       </li>;
-      return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3">
+      return <li key={entry.key} className="flex flex-wrap items-center gap-3 py-3" data-nav-row>
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-primary"><History aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">

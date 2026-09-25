@@ -72,6 +72,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
       // Port 80 is a best-effort extra listener: platforms that refuse the bind
       // keep the direct port and drop only the bare-name aliases.
       if (enabled && wantsPort80 && !port80) { try { port80 = options.start(next, 80); } catch { port80 = null; } }
+      if (!wantsPort80 && port80) { await port80.stop(true); port80 = null; }
       if (moved) changed([`http://${next.address}:${options.port}`], null);
       const { urls, error } = await lanUrls(next, options.port, advertised, options.resolve, !!port80);
       if (!closed) changed(urls, error);
@@ -90,6 +91,20 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     get server() { return active; },
     get network() { return network; },
     refresh,
+    validateAlias: (value: string) => pending = pending.catch(() => {}).then(async () => {
+      if (enabled && (!active || !network)) throw new Error("The LAN listener is unavailable.");
+      const selected = enabled ? network! : selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
+      const result = await lanUrls(selected, options.port, [value], options.resolve, true);
+      if (!result.urls.includes(new URL(value).origin)) throw new Error(result.error ?? "The network address is unavailable.");
+      if (options.port !== 80 && !new URL(value).port && !port80) {
+        try {
+          const listener = options.start(selected, 80);
+          if (enabled) port80 = listener;
+          else await listener.stop(true);
+        }
+        catch { throw new Error("Couch cannot listen on port 80. Include Couch's port in the name or grant the listener the capability."); }
+      }
+    }),
     async setEnabled(value: boolean) {
       enabled = value;
       if (!value && (active || port80)) await stopAll();

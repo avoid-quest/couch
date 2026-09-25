@@ -51,6 +51,7 @@ test("Library opens playable online media without a folder or an owned collectio
   expect(button("Back to recent")).toBeUndefined();
   expect(requests.some(url => url.includes("/api/library"))).toBe(false);
   expect([...document.querySelectorAll('[aria-label="Online providers"] [role="tab"]')].map(node => node.textContent)).toEqual(["YouTube", "Twitch", "RaiPlay", "StreamingCommunity", "Bandcamp"]);
+  expect(button("Radio").closest("[data-nav-row]")?.getAttribute("aria-label")).toBe("More library sources");
   expect(button("Resume A public video").disabled).toBe(false);
   await act(async () => button("Resume A public video").click());
   expect(played).toEqual([[recent, { fromStart: false }]]);
@@ -91,6 +92,7 @@ test("search keeps playback controls and returns explicitly to recent history", 
   await act(async () => document.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }) as unknown as Event));
   expect(requests.some(url => url.includes("q=A+public+video"))).toBe(true);
   expect(button("Play on TV")).toBeDefined();
+  expect(button("Play on TV").closest("li")?.hasAttribute("data-nav-row")).toBe(true);
   await act(async () => button("Play on TV").click());
   expect(played).toEqual([[video, true, "auto"]]);
   await act(async () => button("Back to recent").click());

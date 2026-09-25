@@ -112,6 +112,7 @@ test("the shared browsing shell leaves video to the player page", async () => {
   expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
   expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeDefined();
+  expect([...screen.getByRole("navigation", { name: "Main navigation" }).querySelectorAll("a")].map(link => link.textContent)).toEqual(["Find", "Saved", "Settings"]);
 });
 
 test("browsing does not allocate a native video rectangle", async () => {

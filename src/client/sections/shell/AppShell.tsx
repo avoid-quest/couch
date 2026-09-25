@@ -6,7 +6,6 @@ import type { HistoryPlayback } from "@/components/HistoryPanel";
 import type { Action } from "../../../shared/protocol";
 import { DigitalClock } from "@/components/DigitalClock";
 import { Icon } from "@/components/Icon";
-import { ProviderPanel } from "@/components/ProviderPanel";
 import { RemotePad } from "@/components/RemotePad";
 import { PairingDialog } from "@/components/PairingDialog";
 import { InstallationUpdates, LocalSharingPrompt, PlaybackDevice, usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
@@ -34,7 +33,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ShellContext } from "./shell-context";
 import { readRadioRecents, writeRadioRecents } from "./radio-recents";
 
-const navItems = [{ name: "Now", label: "Up next" }, { name: "Find", label: "Find" }, { name: "Saved", label: "Saved" }, { name: "Settings", label: "Settings" }];
+const navItems = [{ name: "Find", label: "Find" }, { name: "Saved", label: "Saved" }, { name: "Settings", label: "Settings" }];
 
 export type ShellValue = ReturnType<typeof useShellValue>;
 export { useShell, useOptionalShell } from "./shell-context";
@@ -59,6 +58,9 @@ function useShellValue() {
   if (section === "Find") rememberedSearch.current = readSearchState(location.searchStr);
   const lastBrowsePath = useRef("/find");
   if (section !== "Now") lastBrowsePath.current = location.pathname + location.searchStr;
+  useEffect(() => {
+    if (section === "Now" && state && !state.currentEntryId) router.history.replace(lastBrowsePath.current);
+  }, [section, state?.currentEntryId, !!state, router]);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [setupSource, setSetupSource] = useState<"folders" | "jellyfin" | "radio" | "iptv" | "streaming-community">("jellyfin");
   const openSources = (source: typeof setupSource = "jellyfin") => { setSetupSource(source); setSourcesOpen(true); };
@@ -68,6 +70,7 @@ function useShellValue() {
   const [pairingOpen, setPairingOpen] = useState(false);
   useEffect(() => { if (!remoteControlEnabled) setPairingOpen(false); }, [remoteControlEnabled]);
   const [onlineRequest, setOnlineRequest] = useState<{ item: ProviderItem; revision: number } | null>(null);
+  useEffect(() => { if (section !== "Find") setOnlineRequest(null); }, [section]);
   const playCredentials = useRef(credentials);
   const playAttempt = useRef(0);
   playCredentials.current = credentials;
@@ -80,6 +83,8 @@ function useShellValue() {
 
   const at = location.pathname + location.searchStr;
   const changePage = (name: string) => {
+    if (name === "Find" && section === "Find" && onlineRequest) { setOnlineRequest(null); return; }
+    if (section === "Find" && name !== "Find") setOnlineRequest(null);
     // Big-picture behavior: while playing, any navigation opens the browsing
     // layer over the player instead of floating the controls above the page.
     const to = name === "Find" ? searchLocation(rememberedSearch.current) : pathForSection(name);
@@ -115,6 +120,7 @@ function useShellValue() {
   useEffect(() => {
     registerBackHandler(() => {
       if (remoteOpen) { setRemoteOpen(false); return; }
+      if (onlineRequest) { setOnlineRequest(null); changeSection("Saved"); return; }
       if (section === "Now") leavePlayer();
       else if (section === "Find" && readSearchState(location.searchStr).query) changeSearch({ query: "", source: "All" });
       else if (section === "Find" && state?.currentEntryId) changeSection("Now");
@@ -215,12 +221,14 @@ export function AppShell() {
 
 export function ShellChrome({ children }: PropsWithChildren) {
   const shell = useShell();
+  const { pathname } = useLocation();
   const device = usePlaybackDevice();
   const { nativeHost, localHost, tvPresentation, credentials, state, status, details, identity, pairingRequired, connected, run, reconnect, host, booting, error, setError, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled } = shell;
   const { undoNotice, undoAction, dismissUndo } = shell;
   const { section, statusLabel, available, active, current } = shell;
   const { pairing, pairingCode, setPairingCode, remoteName, setRemoteName, pair } = shell;
   const { setupSource, sourcesOpen, setSourcesOpen } = shell;
+  useEffect(() => { window.scrollTo(0, 0); }, [section]);
   useEffect(() => {
     if (!tvPresentation) return;
     const onHome = () => shell.changeSection("Find");
@@ -256,10 +264,10 @@ export function ShellChrome({ children }: PropsWithChildren) {
         {error && <Alert variant="destructive" className="mx-[var(--shell-gutter)] my-3 w-auto rounded-none border-0 border-l-2 bg-transparent p-3"><AlertDescription className="flex items-center justify-between gap-4 text-sm"><span>{error}</span><Button variant="ghost" size="icon" className="icon-button" aria-label="Dismiss error" onClick={() => setError(null)}><Icon name="close" /></Button></AlertDescription></Alert>}
         <div className="tv-browser" data-tv-navigation-scope={tvPresentation ? "" : undefined}>
       <header className="app-header">
-        <nav className="section-nav" aria-label="Main navigation">{navItems.map(({ name, label }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined}>{label}</Link></Button>)}</nav>
+        <nav className="section-nav" aria-label="Main navigation">{navItems.map(({ name, label }) => <Button key={name} asChild variant="ghost"><Link to={name === "Find" ? shell.sectionUrl(name) : pathForSection(name)} aria-current={section === name ? "page" : undefined} onClick={() => { if (name === "Find") shell.closeOnlineRequest(); }}>{label}</Link></Button>)}</nav>
         <div className="header-status">
-          {(!nativeHost || tvPresentation) && <PlaybackStatus credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} localHost={localHost} state={state} run={run} />}
-          {nativeHost && !tvPresentation && <PlaybackDevice credentials={credentials} connected={connected} installationName={state?.installationName ?? details?.name} state={state} run={run} />}
+          {!nativeHost && <PlaybackStatus key={pathname} credentials={credentials} connected={connected} status={statusLabel} installationName={state?.installationName ?? details?.name} localHost={localHost} state={state} run={run} />}
+          {nativeHost && <PlaybackDevice key={pathname} credentials={credentials} connected={connected} installationName={state?.installationName ?? details?.name} state={state} run={run} />}
           {nativeHost && !localHost && !tvPresentation && <InstallationUpdates />}
           {host && remoteControlEnabled && <Button ref={pairingRef} variant="ghost" className="pair-shortcut text-[.95rem]" aria-label="Pair a remote" onClick={() => shell.setPairingOpen(true)}>Pair a remote</Button>}
           <span role="status" className={connected ? "sr-only" : undefined}>{statusLabel}</span>
@@ -299,14 +307,6 @@ export function ShellChrome({ children }: PropsWithChildren) {
             </div>
             <SourceSetupDialog localOnly={localHost} source={setupSource} open={sourcesOpen} onOpenChange={setSourcesOpen} credentials={credentials} connected={connected} canManage={localHost || identity?.authority === "administrator"} />
             {current && (active || player?.status === "error") && section !== "Now" && state && <MiniPlayer state={state} connected={connected} run={run} localHost={localHost} onOpen={() => shell.changeSection("Now")} />}
-            {/* Saved provider collections open here: Find stays search-first, and
-                Open gives the collection its own browsable trail. */}
-            <Dialog open={shell.onlineRequest !== null} onOpenChange={open => { if (!open) shell.closeOnlineRequest(); }}>
-              <DialogContent className="sm:max-w-3xl">
-                <DialogHeader><DialogTitle>{shell.onlineRequest?.item.title ?? "Saved source"}</DialogTitle><DialogDescription>Browse this saved source.</DialogDescription></DialogHeader>
-                {shell.onlineRequest && <ProviderPanel key={shell.onlineRequest.revision} showHeading={false} active initialItem={shell.onlineRequest.item} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} version={state?.providerVersion ?? 0} defaultQuality={videoQualityPreference.quality} onPlayHistory={shell.playHistory} onEnqueue={shell.enqueueProvider} />}
-              </DialogContent>
-            </Dialog>
             <Dialog open={shell.remoteOpen} onOpenChange={shell.setRemoteOpen}><DialogContent><DialogHeader><DialogTitle>TV remote</DialogTitle><DialogDescription>Control the TV screen with directional buttons.</DialogDescription></DialogHeader><RemotePad connected={connected} onNavigate={key => run({type:"navigate", key})} run={run} state={state} credentials={credentials} /></DialogContent></Dialog>
           </>
         )}

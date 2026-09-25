@@ -49,7 +49,10 @@ for (const inline of [false, true]) test(`${inline ? "Saved page" : "Queue dialo
   await flush();
   if (inline) expect(document.querySelector('[role="dialog"]')).toBeNull();
   else { expect(request).not.toHaveBeenCalled(); await click(button("Saved lists")); }
+  expect(document.querySelector('[data-playlist-id="friday"]')?.closest("li")?.hasAttribute("data-nav-row")).toBe(true);
   await click(document.querySelector<HTMLButtonElement>('[data-playlist-id="friday"]')!);
+  expect(button("Add to Up next").closest("[data-nav-row]")?.getAttribute("aria-label")).toBe("Load list");
+  expect(button("Remove Evening movie from list").closest("li")?.hasAttribute("data-nav-row")).toBe(true);
   expect(document.querySelector('[data-slot="badge"]')).toBeNull();
   expect(writes).toEqual([]);
   await click(button("Add to Up next"));

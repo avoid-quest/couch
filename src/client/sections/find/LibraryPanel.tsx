@@ -114,7 +114,7 @@ export function LibraryPanel({ origin, token, host, connected = true, canPlay = 
     {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
     {!connected && <p className="text-sm text-muted-foreground" role="status">Reconnect to browse and play your library.</p>}
     {!loading && !error && results.items.length === 0 && <p className="border-t border-border py-4 text-sm leading-relaxed text-muted-foreground">{query ? "No matching media. Try another title or artist." : sources.length ? "No media found yet. Scans include supported audio and video files." : "An administrator can add TV folders in Settings > Sources to start your collection."}</p>}
-    <ul className="aria-busy:opacity-70" aria-busy={loading}>{results.items.map(item => <li key={item.id}>
+    <ul className="aria-busy:opacity-70" aria-busy={loading}>{results.items.map(item => <li key={item.id} data-nav-row>
       <div className="space-y-3 border-b border-border py-3">
         <div className="flex min-w-0 items-center gap-3">
           {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind === "video"} className={`library-kind ${item.kind} size-11`} /> : <span className={`library-kind ${item.kind} grid size-11 shrink-0 place-items-center text-muted-foreground`} aria-label={item.kind}>{item.kind === "audio" ? <Music2 aria-hidden="true" className="size-5" /> : <Video aria-hidden="true" className="size-5" />}</span>}

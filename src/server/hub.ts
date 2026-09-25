@@ -86,6 +86,13 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const tauriOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
 const validOriginDomain = (domain: string) => domain.length <= 253 && !isIP(domain) && !/^\d+(?:\.\d+)*$/.test(domain)
   && domain.split(".").every(label => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
+const originDomainUrl = (value: string, port: number, legacy = false) => {
+  const match = /^(?:http:\/\/)?([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?::(\d{1,5}))?\/?$/i.exec(value);
+  if (!match || !validOriginDomain(match[1]!.toLowerCase()) || match[2] && ![80, port].includes(Number(match[2]))) throw new ControllerError("Enter an HTTP hostname, optionally with Couch's port, without a path.");
+  const url = new URL(`http://${match[1]!.toLowerCase()}${match[2] ? `:${match[2]}` : legacy ? `:${port}` : ""}`);
+  if (url.hostname !== match[1]!.toLowerCase()) throw new ControllerError("Enter a DNS hostname for this computer.");
+  return url.origin;
+};
 type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
@@ -454,18 +461,22 @@ export function createHub(options: HubOptions) {
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/settings/origin-domain") {
-        if (!options.managedLan || !trusted) return cors(request, json({ error: "Change the LAN origin domain on the playback computer." }, 403));
+        if (!options.managedLan || caller.authority === "controller") return cors(request, json({ error: "An administrator is required." }, 403));
         if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
         if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
         try {
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
           const value = await settingField(request, "domain");
-          const domain = typeof value === "string" ? value.trim().toLowerCase() : null;
-          if (domain === null || domain && !validOriginDomain(domain)) throw new ControllerError("Enter a DNS hostname, such as couch.home, without a scheme or port.");
+          if (typeof value !== "string") throw new ControllerError("Enter a network address.");
+          const domain = value.trim();
+          const alias = domain ? originDomainUrl(domain, server.port!) : "";
+          if (alias) try { await lan?.validateAlias(alias); }
+          catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
-          store.saveOriginDomain(domain);
+          if (identity()?.authority === "controller" || !identity()) throw new ControllerError("Administrator access changed.", 403);
+          store.saveOriginDomain(alias);
           await lan?.refresh().catch(() => {});
-          return cors(request, json({ domain }));
+          return cors(request, json({ domain: alias }));
         } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save the LAN origin domain." }, error instanceof ControllerError ? error.status : 500)); }
       }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
@@ -618,7 +629,7 @@ export function createHub(options: HubOptions) {
   if (options.managedLan) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
-      advertised: () => [...options.advertisedUrls ?? [], ...(store.originDomain() ? [`http://${store.originDomain()}:${port}`] : [])],
+      advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...options.advertisedUrls ?? []],
       start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;

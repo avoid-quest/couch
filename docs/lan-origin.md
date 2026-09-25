@@ -34,21 +34,25 @@ around playback.
 ## Add an optional DNS name
 
 Configure a LAN DNS name that resolves only to the selected Couch IPv4 address.
-The name must work from the TV and each phone that will use it. On the playback
-computer, open **Settings → Connections → Local network domain**, enter the
-hostname without a scheme or port (for example, `couch.home`), and save. Couch
-uses its current HTTP port and keeps the direct IP address available.
+The name must work from the TV and each phone that will use it. From the
+playback computer or a paired Administrator, open **Settings → Connections →
+Local network address**. Enter `http://couch.home` for port 80, or
+`http://couch.home:4100` when port 80 is unavailable. A bare `couch.home` also
+uses port 80. Couch checks DNS and the port 80 bind before saving. The direct
+IP address stays available. Controllers cannot change this setting.
 
-For multiple names or a bare name on port 80, add HTTP origins through the
-launching environment instead:
+For additional names managed with the machine's configuration, add HTTP origins
+through the launching environment:
 
 ```sh
 COUCH_ADVERTISE_URLS=http://couch.home:4100
 ```
 
 Set this in the launching environment or TV environment file and restart Couch.
-Multiple names can be comma-separated and work alongside the name saved in
-Settings. Origins cannot contain credentials,
+Multiple names can be comma-separated and work alongside the address saved in
+Settings. They remain active when that Settings field changes or is cleared;
+remove them from the environment and restart Couch if they should no longer be
+admitted. Origins cannot contain credentials,
 paths, queries or fragments. HTTPS and names on any other port are unsupported
 by this listener. Setting an origin does not create a DNS or mDNS record.
 
@@ -73,8 +77,9 @@ The operating system must permit the bind:
   Include Couch's port in the name there, for example
   `http://couch.home:4100`.
 
-When port 80 cannot be bound, the bare name is ignored with a warning and the
-direct port keeps working. The sysctl change is the administrator's decision;
+When port 80 cannot be bound, saving a bare name in Settings fails. A bare name
+from `COUCH_ADVERTISE_URLS` is ignored with a warning; the direct port keeps
+working. The sysctl change is the administrator's decision;
 Couch never asks for privileges or installs it.
 
 Couch checks each name before admitting its Host and Origin or adding it to

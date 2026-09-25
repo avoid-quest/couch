@@ -358,7 +358,7 @@ if (import.meta.main) {
         }
         release = JSON.parse(cn(["show", application, releaseId!, ...channels]));
       }
-      verifyCloud(release, manifest, channel, operation === "upload" && channel === "preview" && packageFormat(manifest.format) === "appimage");
+      verifyCloud(release, manifest, channel, operation === "upload" && channel === "preview");
       if (operation === "publish") {
         await assertIncreasing(manifest.version, channel, releasePlatforms(packageFormat(manifest.format)).update);
         cn(["publish", application, releaseId!, ...channels]);
