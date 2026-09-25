@@ -95,7 +95,7 @@ export class UiDriver {
     // WebKitGTK element-click misses fractional-DPI targets; pointer actions take device pixels.
     const element = selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id };
     let point = "";
-    await this.waitFor("Click target is enabled and unobstructed", async () => {
+    try { await this.waitFor("Click target is enabled and unobstructed", async () => {
       point = await this.execute(`
         const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
         element.scrollIntoView({ block: 'center', inline: 'nearest' });
@@ -104,7 +104,14 @@ export class UiDriver {
         return !element.matches(':disabled') && rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y)) ? JSON.stringify([x, y]) : '';
       `, [element, selector]);
       return !!point;
-    });
+    }); } catch (error) {
+      const details = await this.execute(`
+        const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0];
+        const rect = element.getBoundingClientRect();
+        return { disabled: element.matches(':disabled'), rect: rect.toJSON(), hit: document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.outerHTML.slice(0, 300) };
+      `, [element, selector]);
+      throw new Error(`Click target is blocked: ${JSON.stringify(details)}`, { cause: error });
+    }
     const [x, y] = JSON.parse(point);
     await this.request(`/session/${this.session()}/actions`, { actions: [{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", duration: 0, origin: "viewport", x: Math.round(x * scale), y: Math.round(y * scale) },

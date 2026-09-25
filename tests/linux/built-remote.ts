@@ -164,6 +164,7 @@ try {
   receipt = JSON.stringify({ revision: build.revision, build, simulatedNative: true, hardwareVerified: false, checks, assets }, null, 2);
 } finally {
   let cleanupError: unknown;
+  if (!receipt) await remote?.screenshot("journey-failure").catch(() => {});
   try { await remote?.close(); } catch (error) { cleanupError = error; }
   try { socket?.close(); } catch (error) { cleanupError ??= error; }
   try { send({ type: "shutdown" }); } catch { /* The process may already have failed. */ }
