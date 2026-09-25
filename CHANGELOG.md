@@ -8,6 +8,16 @@
 
 - [#529](https://github.com/avoid-quest/couch/pull/529) [`cb239c0`](https://github.com/avoid-quest/couch/commit/cb239c0e4b525e6b9e878ca2a456a3fe5ac3fac0) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Clear the Mac video view when playback ends so it cannot cover the controls and library.
 
+- [#531](https://github.com/avoid-quest/couch/pull/531) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Show verified Preview downloads for Debian, AppImage, Mac, and Windows on the website.
+
+- [#534](https://github.com/avoid-quest/couch/pull/534) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Play local video inside the Windows Full app with native libmpv controls.
+
+- [#535](https://github.com/avoid-quest/couch/pull/535) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Package the Windows Full runtime and fix the desktop video stage, dark background, and native Close behavior.
+
+- [#538](https://github.com/avoid-quest/couch/pull/538) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Discover and pair Windows Bluetooth devices, select a sound output, and control its effective volume and mute.
+
+- [#540](https://github.com/avoid-quest/couch/pull/540) Thanks [@fcastrovilli](https://github.com/fcastrovilli)! - Bring the accepted Couch design to Find, Saved, Settings, first run, and the player, with buffering feedback and Undo for supported actions.
+
 ## 0.2.0-preview.12
 
 ### Minor Changes
