@@ -16,7 +16,7 @@ function inside(...args: string[]) {
   return child.stdout.toString().trim();
 }
 async function driver(path: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
-  const args = ["curl", "--fail", "--silent", "--show-error", "--max-time", "30", "-X", method, "-H", "Content-Type: application/json"];
+  const args = ["curl", "--silent", "--show-error", "--max-time", "30", "-X", method, "-H", "Content-Type: application/json"];
   if (body !== undefined) args.push("--data-binary", JSON.stringify(body));
   const response = JSON.parse(inside(...args, `http://127.0.0.1:44444${path}`));
   assert.ok(!response.value?.error, JSON.stringify(response.value));
@@ -55,7 +55,6 @@ try {
   const bundledUrl = await request("/url") as string;
   assert.match(bundledUrl, /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost)(?:\/|$)/, "The app loads its bundled frontend");
   await Bun.write(`${evidence}/first-launch.png`, Buffer.from(await request("/screenshot"), "base64"));
-  await click('//button[normalize-space(.)="Another Couch"]');
   const address = await element('//label[normalize-space(.)="Couch address"]/following::input[1]');
   assert.ok(address, "Remote address field is labelled");
   await request(`/element/${address}/value`, { text: "127.0.0.1:44101" });
@@ -72,7 +71,7 @@ try {
     return result === true;
   });
   assert.equal(inside("sh", "-c", "pgrep -x couch-server | wc -l"), "2", "One selected host and one private maintenance coordinator must run");
-  await until("Selected host appears in the bundled window", () => element('//button[contains(normalize-space(.),"Play on: http://127.0.0.1:44101")]'));
+  await until("Selected host appears in the bundled window", () => element('//button[.//span[starts-with(normalize-space(.),"Playing on ")]]'));
   assert.equal((await request("/window/handles") as string[]).length, 1, "The desktop has one WebDriver window");
   assert.equal(await request("/url"), bundledUrl, "Selecting a host keeps the bundled frontend");
   assert.equal(inside("sh", "-c", "xdotool search --onlyvisible --name '^Couch remote$' || true"), "", "No second remote OS window opens");
@@ -100,9 +99,9 @@ try {
   assert.equal((await request("/window/handles") as string[]).length, 1, "Pairing opens no second window");
   assert.deepEqual(build, JSON.parse(inside("cat", "/evidence/server-build.json")));
 
-  await click('//button[contains(normalize-space(.),"Play on: http://127.0.0.1:44101")]');
-  await until("Playback device menu offers this computer", () => element('//button[normalize-space(.)="This computer"]'));
-  await click('//button[normalize-space(.)="This computer"]');
+  await click('//button[.//span[starts-with(normalize-space(.),"Playing on ")]]');
+  await until("Playback device menu offers this computer", () => element('//button[@role="radio" and @aria-label="This computer"]'));
+  await click('//button[@role="radio" and @aria-label="This computer"]');
   await until("Same AppImage starts its local playback host", async () => {
     const mode = await asyncExecute("return (await window.__TAURI_INTERNALS__.invoke('playback_device')).mode").catch(() => null);
     return mode === "local";
@@ -110,8 +109,8 @@ try {
   await until("Local setup offers private sharing", () => element('//button[normalize-space(.)="Keep private"]'));
   await click('//button[normalize-space(.)="Keep private"]');
   await until("Private local setup completes", async () => !await element('//button[normalize-space(.)="Keep private"]'));
-  await until("Local navigation loads", () => element('//nav[@aria-label="Main navigation"]//a[@aria-label="Now"]'));
-  await click('//nav[@aria-label="Main navigation"]//a[@aria-label="Now"]');
+  await until("Local navigation loads", () => element('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Up next"]'));
+  await click('//nav[@aria-label="Main navigation"]//a[normalize-space(.)="Up next"]');
   await until("Local app shows Open file", () => element('//button[normalize-space(.)="Open file"]'));
   const local = await asyncExecute(`
     const connection = await window.__TAURI_INTERNALS__.invoke('connection_info');

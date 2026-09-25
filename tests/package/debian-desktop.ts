@@ -11,7 +11,7 @@ function inside(...args: string[]) {
   return child.stdout.toString().trim();
 }
 async function driver(path: string, body?: unknown, method = body === undefined ? "GET" : "POST") {
-  const args = ["curl", "--fail", "--silent", "--show-error", "--max-time", "30", "-X", method, "-H", "Content-Type: application/json"];
+  const args = ["curl", "--silent", "--show-error", "--max-time", "30", "-X", method, "-H", "Content-Type: application/json"];
   if (body !== undefined) args.push("--data-binary", JSON.stringify(body));
   const response = JSON.parse(inside(...args, `http://127.0.0.1:44444${path}`));
   assert.ok(!response.value?.error, JSON.stringify(response.value));
@@ -33,7 +33,7 @@ const asyncExecute = (script: string) => driver(`/session/${native}/execute/asyn
 try {
   await until("Fresh native installation opens its playback-device choice", () => execute("return document.body.innerText.includes('Where do you want to play?')"));
   await Bun.write(`${evidence}/first-launch.png`, Buffer.from(await driver(`/session/${native}/screenshot`), "base64"));
-  await execute("Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'This computer').click(); return true");
+  await execute("document.querySelector('button[aria-label=\"This computer\"]').click(); return true");
   await until("Choosing this computer starts the packaged backend", async () => inside("sh", "-c", "pgrep -x couch-server >/dev/null && echo ready || true") === "ready");
   const connected = await asyncExecute(`
     const connection = await window.__TAURI_INTERNALS__.invoke('connection_info');
