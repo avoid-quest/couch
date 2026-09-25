@@ -52,11 +52,11 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: null,
-      includeAssets: ["icons/pwa-192.png", "icons/pwa-512.png"],
+      includeAssets: ["favicon.svg", "icons/apple-touch-icon.png", "icons/pwa-192.png", "icons/pwa-512.png"],
       manifest: {
         name: "Couch",
         short_name: "Couch",
-        description: "A media player for your library and online sources",
+        description: "Shared media player for your TV, controlled from any phone",
         theme_color: darkSurface,
         background_color: darkSurface,
         display: "standalone",

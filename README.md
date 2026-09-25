@@ -1,10 +1,11 @@
 # couch.avoid.quest
 
-Your media. One TV. Everyone gets a remote.
+Your files, streams and radio on one screen. Every phone is a remote.
 
-Couch is the living-room player in the **avoid.quest** ecosystem. Run it on a
-Linux mini PC connected to your TV, pair your phones and laptops, and build the
-queue together. Movies, music, radio, and online video play on the same screen.
+Couch is a shared media player for the living room, part of **avoid.quest**.
+Run it on the computer connected to your TV, or on your own Mac or PC. Pair
+phones and laptops as remotes and build one queue together: local and NAS
+files, Jellyfin, online video, music and radio all play on the same screen.
 
 ## Take a seat
 
