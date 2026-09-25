@@ -39,11 +39,12 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
   const [state, setState] = useState<ListedBluetoothState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirm, setConfirm] = useState<{ address: string; op: "disconnect" | "forget" } | null>(null);
   const [answer, setAnswer] = useState("");
   const operation = useRef<string | null>(null);
 
   useEffect(() => {
-    setState(null); setError(null); setPending(false); operation.current = null;
+    setState(null); setError(null); setPending(false); setConfirm(null); operation.current = null;
   }, [credentials.origin, credentials.token, connected]);
   useEffect(() => {
     if (!connected || !bluetooth.data) return;
@@ -70,6 +71,7 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       if (!["cancel", "answer"].includes(action.op)) { action.token = createId().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5"); operation.current = action.token; }
       const result = await send(action);
       setState(previous => updateDevices(previous, result, action.op === "scan"));
+      setConfirm(null);
       await queryClient.invalidateQueries({ queryKey: bluetoothKey });
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Bluetooth request failed."); }
     finally { setPending(false); }
@@ -101,7 +103,8 @@ export function BluetoothSettings({ credentials, connected }: { credentials: Api
       const selected = sound.data?.routing?.selectedBluetoothAddress === device.address || outputs.some(output => output.id === sound.data?.routing?.selectedOutput);
       return <li key={device.address} className="flex flex-wrap items-center justify-between gap-3 rounded border p-3">
         <div className="min-w-0 break-words"><p>{device.name}</p><p className="text-sm text-muted-foreground"><span className="block min-h-10">{!device.available ? "Unavailable" : device.connected ? "Connected" : device.paired ? "Paired · Disconnected" : "Not paired"}{selected ? " · Selected for sound" : ""}</span><span className="block">{device.address}</span></p></div>
-        <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => change({ op: device.connected ? "disconnect" : device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => change({ op: "forget", device: device.address })}>Forget</Button>}</div>
+        <div className="flex flex-wrap gap-2"><Button disabled={deviceDisabled || !device.available} aria-label={`${device.connected ? "Disconnect" : "Connect"} ${device.name}`} onClick={() => device.connected ? setConfirm({ address: device.address, op: "disconnect" }) : change({ op: device.paired ? "connect" : "pair", device: device.address })}>{device.connected ? "Disconnect" : "Connect"}</Button>{device.paired && <Button variant="outline" disabled={deviceDisabled || !device.available} aria-label={`Forget ${device.name}`} onClick={() => setConfirm({ address: device.address, op: "forget" })}>Forget</Button>}</div>
+        {confirm?.address === device.address && <div role="group" aria-label={`Confirm ${confirm.op} ${device.name}`} className="flex w-full flex-wrap items-center gap-2 border-t pt-3"><p className="mr-auto">{confirm.op === "forget" ? `Forget ${device.name} and remove its pairing?` : `Disconnect ${device.name} from sound?`}</p><Button variant="destructive" disabled={deviceDisabled} onClick={() => void change({ op: confirm.op, device: device.address })}>{confirm.op === "forget" ? "Forget device" : "Disconnect device"}</Button><Button variant="outline" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button></div>}
       </li>;
     })}</ul>
     <p className="text-sm text-muted-foreground">Search again to find unavailable devices. For speakers and headphones, check Sound for the connected output before playback. Connecting does not start playback.</p>

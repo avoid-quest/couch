@@ -107,7 +107,7 @@ try {
   await until("first local item plays on the native TV", () => state?.player.status === "playing" && state.player.position > 0.5 && state.queue.some(entry => entry.id === state!.currentEntryId && entry.source.startsWith("library:")), 30_000);
   await phone.minimize(); await tv.watching();
   await assertNativeVideoPixels(tv.execute, artifacts, "onboarding-first-local-video", [0, 0, 255]);
-  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop playback", ".player-controls");
+  await phone.restore(); await phone.ui.controls(); await phone.ui.button("Stop playback", ".player-band");
   await until("phone stops its first local item", () => state?.player.status === "idle" && !state.currentEntryId);
   socket.close(); socket = undefined;
   await restart();

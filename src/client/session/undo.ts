@@ -1,4 +1,4 @@
-import type { Action, QueueEntry, SessionState } from "../../shared/protocol";
+import type { Action, SessionState } from "../../shared/protocol";
 
 type Resume = { entryId: string; playbackId: string | null; position: number; paused: boolean; seekable: boolean } | null;
 
@@ -7,7 +7,7 @@ export type UndoPlan = {
   expectedCurrent: string | null;
   expectedQueueIds: string[];
   resume: Resume;
-  removed?: { entry: QueueEntry; beforeEntryId: string | null };
+  removed?: { entryId: string; token: string; beforeEntryId: string | null };
   addedIds?: string[];
   moved?: { entryId: string; beforeEntryId: string | null };
 };
@@ -23,14 +23,13 @@ export function undoPlan(action: Action, before: SessionState, after: SessionSta
   if (action.type === "stop" && resume(before) && !after.currentEntryId) return { text: "Playback stopped", expectedCurrent: null, expectedQueueIds, resume: resume(before) };
   if (action.type === "remove") {
     const index = before.queue.findIndex(entry => entry.id === action.entryId);
-    if (index < 0 || after.queue.some(entry => entry.id === action.entryId)) return null;
+    if (index < 0 || after.queue.some(entry => entry.id === action.entryId) || after.queueRemoval?.entryId !== action.entryId) return null;
     return {
       text: `Removed ${before.queue[index]!.title}`,
       expectedCurrent: before.currentEntryId === action.entryId ? null : before.currentEntryId,
       expectedQueueIds,
       resume: before.currentEntryId === action.entryId ? resume(before) : null,
-      removed: { entry: before.queue[index]!, beforeEntryId: before.queue[index + 1]?.id ?? null },
-      ...(before.currentEntryId === action.entryId ? { moved: { entryId: action.entryId, beforeEntryId: before.queue[index + 1]?.id ?? null } } : {}),
+      removed: { entryId: action.entryId, token: after.queueRemoval.token, beforeEntryId: before.queue[index + 1]?.id ?? null },
     };
   }
   if (action.type === "play" && action.entryId !== before.currentEntryId && after.currentEntryId === action.entryId && resume(before)) {
@@ -92,16 +91,14 @@ export async function applyUndo(plan: UndoPlan, command: (action: Action) => Pro
   if (!state || state.currentEntryId !== plan.expectedCurrent || !same(ids(state), plan.expectedQueueIds)) throw changed();
   if (plan.removed) {
     const prior = ids(state);
-    if (prior.includes(plan.removed.entry.id)) throw changed();
+    if (prior.includes(plan.removed.entryId)) throw changed();
+    const restored = [...prior];
+    const before = plan.removed.beforeEntryId ? restored.indexOf(plan.removed.beforeEntryId) : restored.length;
+    if (before < 0) throw changed();
+    restored.splice(before, 0, plan.removed.entryId);
     assertCurrent(current, state);
-    await command({ type: "enqueue", entry: plan.removed.entry });
-    state = await observe(current, prior, state.currentEntryId, [...prior, plan.removed.entry.id], state.currentEntryId);
-    if (plan.removed.beforeEntryId) {
-      const reordered = reorderedForMove(ids(state), plan.removed.entry.id, plan.removed.beforeEntryId);
-      assertCurrent(current, state);
-      await command({ type: "move", entryId: plan.removed.entry.id, beforeEntryId: plan.removed.beforeEntryId });
-      state = await observe(current, ids(state), state.currentEntryId, reordered, state.currentEntryId);
-    }
+    await command({ type: "restoreRemoved", token: plan.removed.token });
+    state = await observe(current, prior, state.currentEntryId, restored, state.currentEntryId);
   }
   for (const entryId of plan.addedIds ?? []) {
     const prior = ids(state);

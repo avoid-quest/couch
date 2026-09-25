@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ArrowLeft, Bookmark, ListMusic, Play, Plus, Trash2, X } from "lucide-react";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Item } from "@/components/ui/item";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SortableRow, useDndSensors } from "@/lib/dnd";
@@ -28,11 +30,9 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   const [playlists, setPlaylists] = useState<SavedPlaylistSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playlist, setPlaylist] = useState<SavedPlaylist | null>(null);
-  const [name, setName] = useState("");
   const [rename, setRename] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"saveQueue" | null>(null);
-  const [undo, setUndo] = useState<{ token: string; name: string } | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToast = useRef<string | number | null>(null);
   const sensors = useDndSensors();
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -43,12 +43,11 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
   const listRef = useRef<HTMLUListElement>(null);
   const entriesRef = useRef<HTMLOListElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setPending(false);
-    setUndo(null);
-    return () => { mutation.current?.abort(); if (undoTimer.current) clearTimeout(undoTimer.current); };
+    return () => { mutation.current?.abort(); if (undoToast.current != null) toast.dismiss(undoToast.current); };
   }, [origin, token, connected, open]);
 
   useEffect(() => {
@@ -65,7 +64,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         if (response.status === 404 && selectedId && !controller.signal.aborted) {
           setSelectedId(null);
           setPlaylist(null);
-          requestAnimationFrame(() => (listRef.current?.querySelector<HTMLButtonElement>("button") ?? nameRef.current)?.focus());
+          requestAnimationFrame(() => (listRef.current?.querySelector<HTMLButtonElement>("button") ?? keepRef.current)?.focus());
         }
         throw new Error(result.error || "Could not load saved lists.");
       }
@@ -130,15 +129,15 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       if (id) backRef.current?.focus();
       else {
         const buttons = [...listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []];
-        (buttons.find(button => button.dataset.playlistId === previousId) ?? buttons[0] ?? nameRef.current)?.focus();
+        (buttons.find(button => button.dataset.playlistId === previousId) ?? buttons[0] ?? keepRef.current)?.focus();
       }
     });
   };
   const path = playlist ? `/api/playlists/${encodeURIComponent(playlist.id)}` : "";
   const disabled = !connected || pending;
-  const create = async (event: FormEvent) => {
-    event.preventDefault();
-    if (await update("/api/playlists", { name: name.trim() }, `Kept ${name.trim()}.`)) setName("");
+  const create = () => {
+    const name = `Up next, ${new Date().toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+    void update("/api/playlists", { name, scope: "upNext" }, `Kept ${name} in Saved.`);
   };
   const load = (mode: PlaylistLoadMode) => playlist && update(`${path}/load`, { revision: playlist.revision, mode },
     mode === "append" ? `Added ${playlist.name} to Up next.` : mode === "play" ? `Starting ${playlist.name} on the TV.` : `Loaded ${playlist.name}. Press Play to start.`);
@@ -148,19 +147,17 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
     const result = await update(path, { revision: playlist.revision }, `Deleted ${name}.`, "DELETE");
     if (!result?.undoToken) return;
     select(null);
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndo({ token: result.undoToken, name });
-    undoTimer.current = setTimeout(() => setUndo(null), 6_000);
+    if (undoToast.current != null) toast.dismiss(undoToast.current);
+    undoToast.current = toast(`Deleted ${name}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restoreList(result.undoToken, name) } });
   };
-  const restoreList = async () => {
-    if (!undo) return;
-    const result = await update("/api/playlists/restore", { token: undo.token }, `Restored ${undo.name}.`);
-    if (result) { setUndo(null); if (undoTimer.current) clearTimeout(undoTimer.current); }
+  const restoreList = async (token: string, name: string) => {
+    const result = await update("/api/playlists/restore", { token }, `Restored ${name}.`);
+    if (result && undoToast.current != null) { toast.dismiss(undoToast.current); undoToast.current = null; }
   };
 
   const content = <>
       {inline ? <header className="saved-playlist-heading">
-        <div><h2 className="text-xl font-semibold tracking-tight">{playlist?.name ?? "Lists"}</h2><p className="text-sm text-muted-foreground">Shared on this TV. Keep the current Up next to play it again.</p></div>
+        <h2 className="text-xl font-semibold tracking-tight">{playlist?.name ?? "Lists"}</h2>
       </header> : <DialogHeader>
         <DialogTitle className="break-words pr-12">{playlist?.name ?? "Saved lists"}</DialogTitle>
         <DialogDescription>{selectedId ? "Edit this list or load it into Up next." : "Lists are shared on this TV and stay available when the watching profile changes. Keep the current Up next to reuse it later."}</DialogDescription>
@@ -169,33 +166,28 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
       {!connected && <Alert><AlertDescription>Reconnect to load or edit lists.</AlertDescription></Alert>}
       {error && <Alert variant="destructive" className="gap-2"><AlertDescription>{error}</AlertDescription><Button variant="outline" className="justify-self-start" disabled={disabled} onClick={() => { setError(null); setRefresh(value => value + 1); }}>Reload lists</Button></Alert>}
       {notice && <p className="text-sm text-primary" role="status">{notice}</p>}
-      {undo && <div className="saved-undo-notice" role="status"><span>Deleted {undo.name}.</span><Button variant="ghost" disabled={disabled} onClick={() => void restoreList()}>Undo</Button></div>}
       {loading && <p className="text-sm text-muted-foreground" role="status">Loading lists…</p>}
       {!selectedId ? <>
-        <form className="grid gap-2" onSubmit={event => void create(event)}>
-          <Label htmlFor="saved-playlist-name" className="sr-only">Name the current Up next</Label>
-          <div className="flex flex-wrap gap-2">
-            <Input ref={nameRef} id="saved-playlist-name" className="min-h-11 min-w-0 flex-1" value={name} onChange={event => setName(event.target.value)} placeholder="List name" maxLength={80} required autoComplete="off" disabled={disabled} />
-            <Button type="submit" disabled={disabled || !name.trim() || !queueCount || playlists.length >= 100}><Bookmark aria-hidden="true" />Keep</Button>
-          </div>
-          <p className="text-sm text-muted-foreground">{queueCount ? `${queueCount} ${queueCount === 1 ? "item" : "items"} in Up next.` : "Add something to Up next before keeping it."}{playlists.length >= 100 && " Delete a list before keeping another."}</p>
-        </form>
+        <div className="grid gap-2">
+          <Button ref={keepRef} className="justify-self-start" disabled={disabled || !queueCount || playlists.length >= 100} onClick={create}><Bookmark aria-hidden="true" />Keep Up next as a list</Button>
+          {(!queueCount || playlists.length >= 100) && <p className="text-sm text-muted-foreground">{!queueCount ? "Add something to Up next before keeping it." : "Delete a list before keeping another."}</p>}
+        </div>
         <Separator />
         {!loading && !playlists.length && <p className="text-sm text-muted-foreground">Your kept lists will appear here.</p>}
-        <ul ref={listRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <li key={item.id}>
+        <ul ref={listRef} className="grid max-h-80 gap-2 overflow-y-auto p-1" aria-label="Saved lists" aria-busy={loading}>{playlists.map(item => <Item asChild key={item.id} variant="outline"><li>
           <Button variant="outline" className="h-auto min-h-11 w-full justify-between gap-3 py-3 text-left whitespace-normal" data-playlist-id={item.id} disabled={disabled} onClick={() => select(item.id)}>
             <span className="min-w-0 break-words">{item.name}</span>
             <span className="flex shrink-0 items-center gap-2">
               {item.source && <Badge variant="secondary">{providerLabels[item.source.provider]}</Badge>}
-              <span className="text-sm text-muted-foreground">{item.entryCount} {item.entryCount === 1 ? "item" : "items"}</span>
+              <span className="text-sm text-muted-foreground">{item.entryCount} {item.entryCount === 1 ? "item" : "items"}, {item.totalDuration == null ? "unknown length" : `${Math.floor(item.totalDuration / 3_600)}:${String(Math.floor(item.totalDuration % 3_600 / 60)).padStart(2, "0")}`}</span>
             </span>
           </Button>
-        </li>)}</ul>
+        </li></Item>)}</ul>
       </> : playlist && <>
         <div className="flex flex-wrap gap-2" aria-label="Load list">
           <Button disabled={disabled || !canPlay || !playlist.entries.length} onClick={() => void load("play")}><Play aria-hidden="true" />Play</Button>
-          <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("append")}><Plus aria-hidden="true" />Up next</Button>
-          <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("replace")}>Replace</Button>
+          <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("append")}><Plus aria-hidden="true" />Add to Up next</Button>
+          <Button variant="outline" disabled={disabled || !playlist.entries.length} onClick={() => void load("replace")}>Replace Up next</Button>
         </div>
         <p className="text-sm text-muted-foreground">Play replaces Up next and starts the first item. Replace stops playback and loads these items.</p>
         <form className="grid gap-2" onSubmit={event => {
@@ -234,7 +226,7 @@ export function SavedPlaylists({ origin, token, connected, canPlay, version, que
         <Separator />
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={disabled || !queueCount} onClick={() => setConfirm("saveQueue")}><Bookmark aria-hidden="true" />Update from Up next</Button>
-          <Button variant="ghost" disabled={disabled} onClick={() => void deleteList()}><Trash2 aria-hidden="true" />Delete list</Button>
+          <Button variant="ghost" disabled={disabled} onClick={() => void deleteList()}><Trash2 aria-hidden="true" />Delete</Button>
         </div>
         {confirm && <div className="grid gap-3 rounded-lg border p-3">
           <p className="text-sm">Replace the kept contents of {playlist.name} with the current {queueCount} Up next items?</p>

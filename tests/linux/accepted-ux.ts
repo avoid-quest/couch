@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { musicControls, restoreQueue, type MusicContext } from "./music";
-import { assertResponsive, keys } from "./ui";
+import { assertResponsive } from "./ui";
 
 // Runs in the existing disposable Search fixture, against native libmpv and its paired HTTP browser.
 export async function verifyAcceptedUx(context: MusicContext) {
@@ -22,15 +22,11 @@ export async function verifyAcceptedUx(context: MusicContext) {
     for (const [name, driver] of [["TV", ui], ["phone", httpRemote.ui]] as const) {
       if (name === "phone") await httpRemote.restore(); else await httpRemote.minimize();
       await driver.section("Queue");
-      await until(`${name} separates current, next and collapsed previous queue entries`, () => driver.execute(`
+      await until(`${name} separates current, next and played queue entries`, () => driver.execute(`
         const ids = label => [...document.querySelectorAll('.queue-panel [aria-label="' + label + '"] [data-queue-entry-id]')].map(row => row.dataset.queueEntryId);
-        return JSON.stringify([ids('Current item'), ids('Up next'), ids('Previously queued')]) === JSON.stringify([[arguments[0]], [arguments[1]], [arguments[2]]])
-          && document.querySelectorAll('.queue-panel [data-queue-entry-id]').length === 3
-          && !!document.querySelector('.queue-previous:not([open])');
-      `, [ids[1], ids[2], ids[0]]));
-      await driver.click(".queue-previous summary");
-      await until(`${name} expands previous entries through visible input`, () => driver.execute("return !!document.querySelector('.queue-previous[open]')"));
-      await driver.click(".queue-previous summary");
+        return document.querySelector('.player-band-heading h1')?.textContent === 'Search local video'
+          && JSON.stringify([ids('Up next'), ids('Played')]) === JSON.stringify([[arguments[0]], [arguments[1]]]);
+      `, [ids[2], ids[0]]));
       if (name === "phone") { await assertResponsive(driver, "Phone current session"); await httpRemote.screenshot("accepted-current-session"); }
     }
     await httpRemote.minimize();
@@ -50,17 +46,13 @@ export async function verifyAcceptedUx(context: MusicContext) {
     await until("both controllers pause the same resumed native playback", () => all(state => state.player.playbackId === resumed.player.playbackId && state.currentEntryId === resumed.currentEntryId && state.player.status === "paused"));
     await Bun.write(`${artifactDir}/accepted-resume.json`, JSON.stringify({ checkpointSource, checkpointPlaybackId, firstPlaying: resumed.player, resumedEntryId: resumed.currentEntryId }, null, 2));
     await stop();
-    await ui.section("Queue");
-    if (await ui.execute("return !!document.querySelector('.queue-previous:not([open])')")) await ui.click(".queue-previous summary");
-    await ui.click(`[data-queue-entry-id="${ids[0]}"] button[aria-label^="Queue options"]`);
-    await ui.button("Save Search local video for later", ".queue-actions");
+    await ui.section("Library");
+    await ui.type("#media-search", "Search local video");
+    await ui.button("Save Search local video for later", '[aria-label="Search results"]');
     await until("native For later save reaches the paired HTTP API", async () => (await api("/api/for-later", undefined, 1)).items.some((saved: any) => saved.title === item.title));
-    await ui.key(keys.escape);
-    await ui.button("Saved playlists");
-    await ui.type("#saved-playlist-name", "Accepted shared queue");
-    await ui.button("Save queue", ".saved-playlists");
-    await until("native playlist save reaches the paired HTTP API", async () => (await api("/api/playlists", undefined, 1)).playlists.some((saved: any) => saved.name === "Accepted shared queue"));
-    await ui.key(keys.escape);
+    await ui.section("Queue");
+    await ui.button("Keep as a list", ".queue-panel");
+    await until("native playlist save reaches the paired HTTP API", async () => (await api("/api/playlists", undefined, 1)).playlists.some((saved: any) => saved.name.startsWith("Up next,")));
     const savedItems = await api("/api/for-later"), savedPlaylists = await api("/api/playlists");
     const queueIds = first().queue.map(entry => entry.id);
     profile = (await api("/api/profiles", { name: `Accepted UX ${crypto.randomUUID().slice(0, 8)}` })).profile;
@@ -74,13 +66,11 @@ export async function verifyAcceptedUx(context: MusicContext) {
       await driver.section("For later");
       await until(`${name} sees the saved item under the alternate profile`, () => driver.execute("return document.querySelector('[aria-label=\"Saved for later\"]')?.textContent.includes('Search local video')"));
       await driver.button("Settings");
-      await until(`${name} offers all three Settings ownership groups`, () => driver.execute("return JSON.stringify([...document.querySelectorAll('[data-settings-group]')].map(group => group.dataset.settingsGroup)) === JSON.stringify(['profile', 'device', 'tv'])"));
+      await until(`${name} offers grouped Settings pages`, () => driver.execute("return !!document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=playback]') && !!document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=general]')"));
       for (const section of ["playback", "appearance", "general"]) await driver.settingsSection(section);
-      await driver.button("All settings", '[role="dialog"]');
       if (name === "phone") { await assertResponsive(driver, "Phone Settings ownership groups"); await httpRemote.screenshot("accepted-settings-groups"); }
-      await driver.key(keys.escape);
     }
-    await Bun.write(`${artifactDir}/accepted-ux.json`, JSON.stringify({ nativePlayback: "saved local checkpoint resumed", queue: "current/up next/collapsed previous on TV and HTTP phone", shared: { forLater: savedItems, playlists: savedPlaylists }, settings: ["Watching profile", "This device", "TV & sources"], browser: "Linux WebKitGTK at 390px; physical Mac and phone remain separate acceptance" }, null, 2));
+    await Bun.write(`${artifactDir}/accepted-ux.json`, JSON.stringify({ nativePlayback: "saved local checkpoint resumed", queue: "current/up next/played on TV and HTTP phone", shared: { forLater: savedItems, playlists: savedPlaylists }, settings: ["Playback", "Library", "Connections", "System"], browser: "Linux WebKitGTK at 390px; physical Mac and phone remain separate acceptance" }, null, 2));
   } finally {
     await httpRemote.minimize();
     await stop();

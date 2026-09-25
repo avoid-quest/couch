@@ -127,12 +127,11 @@ export async function verifyAppearance(context: Context) {
   assert.equal(differingCoordinates, 0, "Interface scaling leaves every captured subtitle glyph pixel at the same screen coordinate");
   const maskSha256 = createHash("sha256").update(largestMask).digest("hex");
   await ui.home();
-  await ui.section("Queue");
-  await ui.execute("document.querySelector('.primary-nav [data-source=Now]').focus()");
-  await clients[1]!.command({ type: "navigate", key: "down" });
-  await until("directional focus reaches Find in the vertical TV navigation", () => ui.execute("return document.activeElement?.getAttribute('data-source') === 'Find'"));
+  await ui.execute("document.querySelector('.section-nav a[href^=\"/find\"]').focus()");
+  await clients[1]!.command({ type: "navigate", key: "right" });
+  await until("directional focus reaches Saved in the TV navigation", () => ui.execute("return document.activeElement?.getAttribute('href') === '/saved'"));
   await clients[1]!.command({ type: "navigate", key: "select" });
-  await until("directional focus selects the next source at the largest TV size", () => ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.getAttribute('data-source') === 'Find'"));
+  await until("directional focus selects Saved at the largest TV size", () => ui.execute("return document.querySelector('.section-nav [aria-current=page]')?.getAttribute('href') === '/saved'"));
   await clients[0]!.command({ type: "stop" });
   await until("appearance verification restores idle playback and the original queue", () => all(state => state.player.status === "idle" && JSON.stringify(state.queue.map(entry => entry.id)) === JSON.stringify(queue)));
   await Bun.write(`${artifactDir}/appearance.json`, JSON.stringify({ nativeViewport: [1600, 1000], physical: false, nativeGeometry: original, remoteSizes: [1.3, 1.15], subtitlePixels: largest, subtitleGeometry: { differingCoordinates, maskSha256 }, checks: ["immediate browser size", "browser reload", "two separate HTTP browsers", "administrator scope", "TV timeout", "TV confirmation", "physical pointer reset", "ordinary remote navigation boundary", "directional focus", "native pattern", "identical subtitle screen-coordinate masks"] }, null, 2));

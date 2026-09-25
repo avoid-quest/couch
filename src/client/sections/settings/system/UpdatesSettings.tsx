@@ -5,6 +5,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { readUpdateRequest, saveUpdateRequest, clearUpdateRequest } from "../../../update-request";
@@ -130,7 +132,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       {state.error && <Alert variant="destructive"><AlertDescription>Update for {target}: {ownApp && state.status === "unavailable" ? "In-app updates are unavailable on this installation. Use a compatible Couch installer for this computer without deleting its data." : state.error}</AlertDescription></Alert>}
       {!retry && !installing && confirming === "install" && <div className="space-y-2">
           <p>Install {candidate?.version} on {target} and restart it. Its remotes will disconnect; viewing data is preserved.</p>
-          <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
+          <Field orientation="horizontal" className="min-h-11"><Checkbox id="install-interrupt" checked={interrupt} onCheckedChange={checked => setInterrupt(checked === true)} /><FieldLabel htmlFor="install-interrupt">Stop playback if it is running</FieldLabel></Field>
           <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={!canInstall} onClick={() => void install()}>Install on {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
       </div>}
       <div className="flex flex-wrap gap-2">
@@ -148,7 +150,7 @@ export function UpdatesSettings({ credentials, connected, target = "selected hos
       <p className="text-muted-foreground">Reinstall Couch {state.installation.current.version} without changing your data.</p>
       {confirming === "repair" ? <>
         <p>Repair {state.installation.current.version} on {target} and restart it. Its remotes will disconnect.</p>
-        <Label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={interrupt} onChange={event => setInterrupt(event.target.checked)} /> Stop playback if it is running</Label>
+        <Field orientation="horizontal" className="min-h-11"><Checkbox id="repair-interrupt" checked={interrupt} onCheckedChange={checked => setInterrupt(checked === true)} /><FieldLabel htmlFor="repair-interrupt">Stop playback if it is running</FieldLabel></Field>
         <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => void install()}>Repair {target} and restart</Button><Button variant="outline" className="min-h-11" onClick={() => setConfirming(false)}>Cancel</Button></div>
         </> : <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={busy} onClick={() => setConfirming("repair")}>Repair current release on {target}</Button></div>}
     </Card>}

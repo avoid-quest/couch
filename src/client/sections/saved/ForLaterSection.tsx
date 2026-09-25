@@ -2,10 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Play, Plus, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Item } from "@/components/ui/item";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
@@ -28,8 +30,8 @@ function sourceLabel(item: ForLaterItem) {
   } catch { return ""; }
 }
 
-export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind, showHeading = true }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void; showHeading?: boolean;
+export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind, showHeading = true, mediaOnly = false }: {
+  origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void; showHeading?: boolean; mediaOnly?: boolean;
 }) {
   // For later reads through Query; the session invalidates ["for-later"] on
   // socket revisions, replacing the version prop this section drilled down.
@@ -38,7 +40,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
   // The optimistic order shows the drop immediately; the server reply and
   // refetch take over once the reorder sticks, and a failure reverts it.
   const [orderIds, setOrderIds] = useState<string[] | null>(null);
-  const items = useMemo(() => applyIdOrder(connected ? data?.items ?? [] : [], orderIds ?? undefined, item => item.id), [data, connected, orderIds]);
+  const items = useMemo(() => applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], orderIds ?? undefined, item => item.id), [data, connected, orderIds, mediaOnly]);
   const loading = connected && isPending;
   const error = connected && loadError ? loadError instanceof Error ? loadError.message : "Could not load For later." : "";
   const [detail, setDetail] = useState<ForLaterItem | null>(null);
@@ -46,13 +48,12 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
-  const [undo, setUndo] = useState<{ token: string; title: string } | null>(null);
-  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoToast = useRef<string | number | null>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const mutation = useRef<AbortController | null>(null);
   const sensors = useDndSensors();
-  useEffect(() => { setPending(false); setDetail(null); setNotice(""); setActionError(""); setOrderIds(null); setUndo(null); return () => { mutation.current?.abort(); if (undoTimer.current) clearTimeout(undoTimer.current); }; }, [origin, token, connected]);
+  useEffect(() => { setPending(false); setDetail(null); setNotice(""); setActionError(""); setOrderIds(null); return () => { mutation.current?.abort(); if (undoToast.current != null) toast.dismiss(undoToast.current); }; }, [origin, token, connected]);
   const saveOrder = async (order: string[]) => {
     setOrderIds(order);
     try {
@@ -80,9 +81,8 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
       setNotice(body.notice ?? (mode === "remove" ? `Removed ${item.title} from For later.` : mode === "play" ? `Starting ${item.title} on the TV.` : `Added ${item.title} to Up next.`));
       if (mode === "remove") {
         if (body.undoToken) {
-          if (undoTimer.current) clearTimeout(undoTimer.current);
-          setUndo({ token: body.undoToken, title: item.title });
-          undoTimer.current = setTimeout(() => setUndo(null), 6_000);
+          if (undoToast.current != null) toast.dismiss(undoToast.current);
+          undoToast.current = toast(`Removed ${item.title}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restore(body.undoToken, item.title) } });
           setNotice("");
         }
         setDetail(null);
@@ -95,26 +95,25 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
     } catch (reason) { if (!controller.signal.aborted) setActionError(reason instanceof Error ? reason.message : "Could not use this saved item."); }
     finally { if (!controller.signal.aborted) setPending(false); }
   };
-  const restore = async () => {
-    if (!undo || !connected || pending) return;
+  const restore = async (undoToken: string, title: string) => {
+    if (!connected || pending) return;
     const controller = new AbortController();
     mutation.current = controller;
     setPending(true); setActionError("");
     try {
-      const response = await fetch(`${origin}/api/for-later/restore`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ token: undo.token }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
+      const response = await fetch(`${origin}/api/for-later/restore`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ token: undoToken }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Could not restore this item.");
       if (controller.signal.aborted) return;
-      setNotice(`Restored ${undo.title} to For later.`);
-      setUndo(null);
-      if (undoTimer.current) clearTimeout(undoTimer.current);
+      setNotice(`Restored ${title} to For later.`);
+      if (undoToast.current != null) { toast.dismiss(undoToast.current); undoToast.current = null; }
       await queryClient.invalidateQueries({ queryKey: ["for-later"] });
     } catch (reason) { if (!controller.signal.aborted) setActionError(reason instanceof Error ? reason.message : "Could not restore this item."); }
     finally { if (!controller.signal.aborted) setPending(false); }
   };
   const actions = (item: ForLaterItem, index: number) => <div className={`${showHeading ? "" : "saved-media-actions "}flex flex-wrap gap-2`}>
     <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => void update(item, "play", index)}><Play aria-hidden="true" />Play</Button>
-    <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Add ${item.title} to Up next`} onClick={() => void update(item, "append", index)}><Plus aria-hidden="true" />Up next</Button>
+    <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => void update(item, "append", index)}><Plus aria-hidden="true" />Queue</Button>
     <Button className="min-h-11" variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title} from For later`} onClick={() => void update(item, "remove", index)}><X aria-hidden="true" />Remove</Button>
   </div>;
   return <section className="space-y-4" aria-labelledby="for-later-title">
@@ -124,11 +123,10 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
     {error && <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => void refetch()}>Refresh For later</Button></div>}
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
-    {undo && <div className="saved-undo-notice" role="status"><span>Removed {undo.title}.</span><Button variant="ghost" disabled={!connected || pending} onClick={() => void restore()}>Undo</Button></div>}
     {connected && !loading && !error && !items.length && <div className="space-y-2"><p>{showHeading ? "No saved titles." : "Nothing saved. Use Save on any result."}</p>{onFind && <Button variant="outline" onClick={onFind}>{showHeading ? "Search" : "Find something"}</Button>}</div>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
       <ul ref={list} className={`list-none p-0 ${showHeading ? "space-y-2" : "for-later-list"}`} aria-label="Saved for later" aria-busy={loading}><SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
-        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`} editing>{(drag: RowDrag) => <li ref={drag.setNodeRef} style={drag.style} className={`${showHeading ? "" : "for-later-row "}flex flex-wrap items-center gap-3 border-b py-3`}>
+        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`} editing>{(drag: RowDrag) => <Item asChild><li ref={drag.setNodeRef} style={drag.style} className={`${showHeading ? "" : "for-later-row "}flex flex-wrap items-center gap-3 border-b py-3`}>
           {inspect ? <>
             {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="for-later-art h-[54px] w-[46px] rounded-md" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="for-later-art h-[54px] w-[46px] rounded-md" />}
             <Button variant="ghost" className="for-later-main h-auto min-h-11 min-w-0 flex-1 flex-col items-start justify-start gap-1.5 p-0 text-left whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}>
@@ -138,7 +136,7 @@ export function ForLaterSection({ origin, token, connected, canPlay, inspect = f
             {actions(item, index)}
           </> : <><strong className="min-w-0 flex-1 break-words">{item.title}</strong>{actions(item, index)}</>}
           <span className={showHeading ? "" : "for-later-drag"}>{drag.handle}</span>
-        </li>}</SortableRow>)}
+        </li></Item>}</SortableRow>)}
       </SortableContext></ul>
     </DndContext>
     {inspect && <Dialog open={detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus(); }}>

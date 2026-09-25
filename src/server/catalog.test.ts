@@ -283,6 +283,21 @@ test("history replay validates current playback settings and keeps durable sourc
   expect(store.progress("household", mediaId)?.position).toBe(0);
 });
 
+test("history can queue a saved online source while the player is unavailable", async () => {
+  const { request, session, store } = fixture();
+  const { playbackMediaId } = await import("./progress");
+  const entry = { id: "saved-web", title: "Saved episode", source: "web:https://video.example/episode", thumbnail: "https://video.example/art.jpg", duration: 1800 };
+  const mediaId = playbackMediaId(entry)!;
+  store.saveProgress("household", { mediaId, title: entry.title, libraryItemId: null, position: 20, duration: 1800, watched: false, lastPlayedAt: 100 }, entry);
+  const endpoint = `/api/progress/${encodeURIComponent(mediaId)}/queue`;
+  expect((await request(endpoint)).status).toBe(405);
+  expect((await request(endpoint, "POST", { profileId: "other" })).status).toBe(409);
+  expect((await request(endpoint, "POST", { profileId: "household", source: entry.source })).status).toBe(400);
+  expect((await request(endpoint, "POST", { profileId: "household" })).status).toBe(200);
+  expect(session.state.queue).toMatchObject([{ title: entry.title, source: entry.source, thumbnail: entry.thumbnail, duration: entry.duration }]);
+  expect(session.state.currentEntryId).toBeNull();
+});
+
 test("history removal clears every profile's row and refuses entries that are playing or unknown", async () => {
   const { request, session, store } = fixture();
   const mediaId = `library:${"a".repeat(40)}`;

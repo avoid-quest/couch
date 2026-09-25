@@ -132,8 +132,8 @@ try {
   await capture("native-collection-preview");
   await ui.button("Play preview", panel);
   await until("native collection play commits visible order to both controllers", () => all(state => state.player.status === "playing" && state.queue.map(item => item.title).join(",") === "Red,Blue" && state.currentEntryId === state.queue[0]?.id));
-  await ui.button("Show playback");
-  await until("native browser closes before video pixel sampling", () => ui.execute("return !!document.querySelector('.tv-browser[hidden]')"));
+  await ui.controls();
+  await until("native player opens before video pixel sampling", () => ui.execute("return !!document.querySelector('.player-page .video-stage')"));
   await assertNativeVideoPixels(ui.execute, artifactDir, "native-collection-playing", [253, 0, 0]);
   await assertNativeUiPixels(ui.execute, artifactDir);
   await stop();

@@ -41,14 +41,13 @@ export async function lanUrls(network: LanNetwork, port: number, advertised: str
 }
 
 export function createLanListener<T extends { stop(close: boolean): Promise<void> }>(options: {
-  port: number; enabled: boolean; selected?: string; address?: string; advertised: string[];
+  port: number; enabled: boolean; selected?: string; address?: string; advertised: string[] | (() => string[]);
   start: (network: LanNetwork, port: number) => T;
   changed: (urls: string[], error: string | null) => void;
   interfaces?: typeof networkInterfaces;
   resolve?: typeof lookup;
 }) {
   let enabled = options.enabled, closed = false, active: T | null = null, port80: T | null = null, network: LanNetwork | null = null;
-  const wantsPort80 = options.port !== 80 && options.advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
   let pending: Promise<void> = Promise.resolve();
   let last = "";
   const stopAll = async () => { await Promise.all([active?.stop(true), port80?.stop(true)]); active = port80 = null; };
@@ -58,6 +57,8 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
   };
   const refresh = () => pending = pending.catch(() => {}).then(async () => {
     if (closed) return;
+    const advertised = typeof options.advertised === "function" ? options.advertised() : options.advertised;
+    const wantsPort80 = options.port !== 80 && advertised.some(value => { try { const url = new URL(value); return url.protocol === "http:" && !url.port; } catch { return false; } });
     try {
       const next = selectLan((options.interfaces ?? networkInterfaces)(), options.selected, options.address);
       const moved = JSON.stringify(next) !== JSON.stringify(network);
@@ -72,7 +73,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
       // keep the direct port and drop only the bare-name aliases.
       if (enabled && wantsPort80 && !port80) { try { port80 = options.start(next, 80); } catch { port80 = null; } }
       if (moved) changed([`http://${next.address}:${options.port}`], null);
-      const { urls, error } = await lanUrls(next, options.port, options.advertised, options.resolve, !!port80);
+      const { urls, error } = await lanUrls(next, options.port, advertised, options.resolve, !!port80);
       if (!closed) changed(urls, error);
     } catch (error) {
       await stopAll().catch(() => {});

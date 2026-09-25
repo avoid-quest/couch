@@ -34,9 +34,8 @@ export function SettingsSources({ source, setupOnly = false, ...props }: SourceS
   return <SourcesOverview setupOnly={setupOnly} {...props} />;
 }
 
-function SourcesOverview({ credentials, connected, canManage, setupOnly }: SourceSettingsProps & { setupOnly: boolean }) {
+function SourcesOverview({ credentials, connected, canManage }: SourceSettingsProps & { setupOnly: boolean }) {
   const shell = useOptionalShell();
-  const redesigned = shell?.standardLayout;
   const available = connected && !!credentials;
   const empty = { origin: "", token: "" };
   const folders = useQuery({ ...librarySourcesQuery(credentials ?? empty), enabled: available });
@@ -56,19 +55,18 @@ function SourcesOverview({ credentials, connected, canManage, setupOnly }: Sourc
   };
 
   return (
-    <nav aria-label="Sources" className={redesigned ? "settings-source-list" : "max-w-2xl space-y-4"}>
+    <nav aria-label="Sources" className="settings-source-list">
       {sourcePages.map(([id, label]) => (
-        id === "iptv" ? redesigned ? <div key={id} className="border-t border-border"><Button variant="ghost" className="settings-source-row grid min-h-14 w-full grid-cols-[16rem_minmax(0,1fr)_auto] items-center gap-4 rounded-none px-0 py-3 text-left text-base font-normal max-[900px]:grid-cols-[minmax(0,1fr)_auto]" onClick={() => shell?.openSources("iptv") }><span>{label}</span><span className="text-sm text-muted-foreground max-[900px]:col-start-1">{details[id]}</span><span aria-hidden="true">→</span></Button></div> : null :
-        <div key={id} className={redesigned ? "border-t border-border" : "border-b border-border pb-4"}>
-          <Link className={redesigned ? "settings-source-row grid min-h-14 grid-cols-[16rem_minmax(0,1fr)_auto] items-center gap-4 py-3 max-[900px]:grid-cols-[minmax(0,1fr)_auto]" : "flex min-h-11 items-center justify-between gap-3 rounded-md px-3 py-3 hover:bg-muted"} to={settingsPagePath(`source-${id}` as SettingsPage)}>
+        id === "iptv" ? <div key={id} className="border-t border-border"><Button variant="ghost" className="settings-source-row grid min-h-14 w-full grid-cols-[16rem_minmax(0,1fr)_auto] items-center gap-4 rounded-none px-0 py-3 text-left text-base font-normal max-[900px]:grid-cols-[minmax(0,1fr)_auto]" onClick={() => shell?.openSources("iptv") }><span>{label}</span><span className="text-sm text-muted-foreground max-[900px]:col-start-1">{details[id]}</span><span aria-hidden="true">→</span></Button></div> :
+        <div key={id} className="border-t border-border">
+          <Link className="settings-source-row grid min-h-14 grid-cols-[16rem_minmax(0,1fr)_auto] items-center gap-4 py-3 max-[900px]:grid-cols-[minmax(0,1fr)_auto]" to={settingsPagePath(`source-${id}` as SettingsPage)}>
             <span>{label}</span>
-            {redesigned && <span className="text-sm text-muted-foreground max-[900px]:col-start-1">{details[id] ?? "Open settings"}</span>}
+            <span className="text-sm text-muted-foreground max-[900px]:col-start-1">{details[id] ?? "Open settings"}</span>
             <span aria-hidden="true">→</span>
           </Link>
         </div>
       ))}
-      {!redesigned && !setupOnly && <p className="px-3 text-sm text-muted-foreground">IPTV is set up from the source dialog on Find or Now.</p>}
-      {redesigned && !connected && <p className="mt-4 text-sm text-muted-foreground">Reconnect to see source states.</p>}
+      {!connected && <p className="mt-4 text-sm text-muted-foreground">Reconnect to see source states.</p>}
     </nav>
   );
 }

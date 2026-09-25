@@ -7,7 +7,7 @@ import { useOptionalShell } from "@/sections/shell/shell-context";
 
 // The one search field every page shares: same markup, same look, same
 // clear affordance. Page-specific behavior arrives through the callbacks.
-export function SearchBar({ id, value, onValueChange, onSubmit, onClear, ariaLabel = "Search or paste a link", placeholder = ariaLabel, className, inputRef }: {
+export function SearchBar({ id, value, onValueChange, onSubmit, onClear, ariaLabel = "Search or paste a link", placeholder = ariaLabel, className, inputRef, pageFirst = false }: {
   id: string;
   value: string;
   onValueChange: (value: string) => void;
@@ -17,12 +17,13 @@ export function SearchBar({ id, value, onValueChange, onSubmit, onClear, ariaLab
   placeholder?: string;
   className?: string;
   inputRef?: Ref<HTMLInputElement>;
+  pageFirst?: boolean;
 }) {
   const { tvPresentation } = useOptionalShell() ?? { tvPresentation: false };
   return <form role="search" aria-label={ariaLabel} className={className} onSubmit={event => { event.preventDefault(); onSubmit(); }}>
     <InputGroup className={cn("rounded-2xl border bg-card shadow-[0_1px_0_rgb(0_0_0/0.2)] focus-within:border-primary", tvPresentation ? "h-16 px-5 text-2xl" : "py-1 text-lg")}>
       <InputGroupAddon align="inline-start"><Search aria-hidden="true" className="size-[1.25em] shrink-0 text-muted-foreground" /></InputGroupAddon>
-      <InputGroupInput ref={inputRef} id={id} aria-label={ariaLabel} type="search" maxLength={4096} className="[&::-webkit-search-cancel-button]:hidden" value={value} onChange={event => onValueChange(event.target.value)} placeholder={placeholder} />
+      <InputGroupInput ref={inputRef} id={id} data-page-first={pageFirst || undefined} aria-label={ariaLabel} type="search" maxLength={4096} className="[&::-webkit-search-cancel-button]:hidden" value={value} onChange={event => onValueChange(event.target.value)} placeholder={placeholder} />
       {onClear && value ? <InputGroupAddon align="inline-end"><Button variant="ghost" size="icon" type="button" aria-label="Clear search" onClick={onClear}><X aria-hidden="true" /></Button></InputGroupAddon> : null}
     </InputGroup>
   </form>;

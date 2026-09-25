@@ -24,7 +24,7 @@ beforeEach(async () => {
   calls.length = 0;
   request = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ path: new URL(String(input)).pathname, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
-    return Response.json({ origin: init?.method === "POST" ? JSON.parse(String(init.body)).origin : "https://streamingcommunityz.academy" });
+    return Response.json({ origin: init?.method === "POST" ? JSON.parse(String(init.body)).origin : "https://streamingcommunityz.photos" });
   }) as unknown as typeof fetch);
   const { createRoot } = await import("react-dom/client");
   root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -41,6 +41,7 @@ afterEach(async () => {
 test("StreamingCommunity origin loads through Query and saves the normalized origin", async () => {
   await render();
   expect(calls).toEqual([{ path: "/api/settings/streamingcommunity", method: "GET", body: null }]);
+  expect(document.body.textContent).toContain("Browse and search StreamingCommunity in Find");
   const input = document.getElementById("streamingcommunity-origin") as HTMLInputElement;
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, "https://streamingcommunity.example/");

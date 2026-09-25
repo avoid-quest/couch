@@ -139,8 +139,11 @@ export function createPlaylists({ databasePath, onChange, queue, upNext, loadQue
       try {
         if (pathname === "/api/playlists") {
           if (request.method === "GET") {
-            const playlists = db.query<Omit<Row, "entries"> & { entryCount: number }, []>("SELECT id, name, revision, updatedAt, source, json_array_length(entries) AS entryCount FROM saved_playlists ORDER BY name_key, id").all()
-              .map(({ source, ...summary }): SavedPlaylistSummary => ({ ...summary, source: sourceOf(source) }));
+            const playlists = db.query<Row, []>(`SELECT ${columns} FROM saved_playlists ORDER BY name_key, id`).all()
+              .map(({ source, entries, ...summary }): SavedPlaylistSummary => {
+                const items = JSON.parse(entries) as QueueEntry[];
+                return { ...summary, source: sourceOf(source), entryCount: items.length, totalDuration: items.every(item => !item.live && Number.isFinite(item.duration)) ? items.reduce((total, item) => total + item.duration!, 0) : null };
+              });
             return Response.json({ playlists });
           }
           if (request.method !== "POST") return methods("GET, POST");

@@ -12,6 +12,7 @@ import { createUpdates } from "./updates";
 import type { UpdateFeed, UpdateRelease } from "./update-feed";
 import { createToolHealth } from "./tool-health";
 import { networkInterfaces } from "node:os";
+import { isIP } from "node:net";
 import type { Action, PlaybackActor, PlaybackCommand, QueueEntry, ServerMessage } from "../shared/protocol";
 import type { ProviderId, ProviderPage, VideoQuality } from "../shared/providers";
 import { createSession } from "./session";
@@ -83,6 +84,8 @@ type HubOptions = {
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const tauriOrigins = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+const validOriginDomain = (domain: string) => domain.length <= 253 && !isIP(domain) && !/^\d+(?:\.\d+)*$/.test(domain)
+  && domain.split(".").every(label => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
 type SocketData = { trusted: boolean; controllerId: string | null; authorize: () => void; window: number; count: number };
 const providerListEntries = (page: ProviderPage, quality?: VideoQuality): QueueEntry[] => page.items.map(item => ({ id: crypto.randomUUID(), title: item.title, source: `web:${item.url}`, ...(quality ? { quality } : {}), ...(item.thumbnail ? { thumbnail: item.thumbnail } : {}), ...(item.duration === undefined ? {} : { duration: item.duration }) }));
 
@@ -450,6 +453,21 @@ export function createHub(options: HubOptions) {
           return cors(request, json({ enabled }));
         } catch (error) { return cors(request, json({ error: error instanceof Error ? error.message : "Could not save remote control settings." }, error instanceof ControllerError ? error.status : 500)); }
       }
+      if (url.pathname === "/api/settings/origin-domain") {
+        if (!options.managedLan || !trusted) return cors(request, json({ error: "Change the LAN origin domain on the playback computer." }, 403));
+        if (request.method === "GET") return cors(request, json({ domain: store.originDomain() }));
+        if (request.method !== "POST") return cors(request, new Response(null, { status: 405, headers: { Allow: "GET, POST" } }));
+        try {
+          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          const value = await settingField(request, "domain");
+          const domain = typeof value === "string" ? value.trim().toLowerCase() : null;
+          if (domain === null || domain && !validOriginDomain(domain)) throw new ControllerError("Enter a DNS hostname, such as couch.home, without a scheme or port.");
+          if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
+          store.saveOriginDomain(domain);
+          await lan?.refresh().catch(() => {});
+          return cors(request, json({ domain }));
+        } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save the LAN origin domain." }, error instanceof ControllerError ? error.status : 500)); }
+      }
       if (url.pathname === "/api/build" && request.method === "GET") return cors(request, json(buildInfo));
       if (url.pathname === "/api/maintenance/frontend" && request.method === "POST" && options.frontendReady) {
         if (!trusted) return cors(request, json({ error: "The native frontend is required." }, 403));
@@ -573,7 +591,7 @@ export function createHub(options: HubOptions) {
             const label = action.type === "pause" ? action.paused ? "paused" : "resumed"
               : action.type === "stop" ? "stopped playback"
               : action.type === "remove" ? `removed ${before.queue.find(entry => entry.id === action.entryId)?.title || "an item"}`
-              : added ? `added ${action.type === "enqueue" ? action.entry.title : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? action.title || "media" : "media"}`
+              : added ? `added ${action.type === "enqueue" ? action.entry.title : action.type === "enqueueProvider" || action.type === "enqueueWeb" ? action.title || "media" : "entryId" in action ? session.state.queue.find(entry => entry.id === action.entryId)?.title || "media" : "media"}`
               : action.type === "play" ? `started ${session.state.queue.find(entry => entry.id === action.entryId)?.title || "media"}` : null;
             if (label) session.notice(playedBy, `${playedBy.name} ${label}`);
           }
@@ -599,7 +617,8 @@ export function createHub(options: HubOptions) {
 
   if (options.managedLan) {
     lan = createLanListener({
-      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS, advertised: options.advertisedUrls ?? [],
+      port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
+      advertised: () => [...options.advertisedUrls ?? [], ...(store.originDomain() ? [`http://${store.originDomain()}:${port}`] : [])],
       start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;

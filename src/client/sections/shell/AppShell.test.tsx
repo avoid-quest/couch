@@ -107,25 +107,24 @@ async function render(status: "playing" | "unavailable", remoteOffline = false) 
   await act(async () => { await router.load(); root.render(<RouterProvider router={router} />); });
 }
 
-test("local desktop playback retains a measured video area outside TV presentation", async () => {
+test("the shared browsing shell leaves video to the player page", async () => {
   await render("playing");
-  expect(screen.getByLabelText("Video playback")).toBeDefined();
+  expect(screen.queryByLabelText("Video playback")).toBeNull();
   expect(screen.getByText("Find view")).toBeDefined();
+  expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeDefined();
 });
 
-test("completed playback removes the native video rectangle with its stage", async () => {
+test("browsing does not allocate a native video rectangle", async () => {
   await render("playing");
-  expect(screen.getByLabelText("Video playback")).toBeDefined();
-  const callsBeforeUnmount = videoRects.length;
+  expect(videoRects).toHaveLength(0);
   await act(async () => root.render(<></>));
-  expect(videoRects.length).toBeGreaterThan(callsBeforeUnmount);
-  expect(videoRects.at(-1)).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  expect(videoRects).toHaveLength(0);
 });
 
 test("a playback backend error remains visible while browsing Find", async () => {
   await render("unavailable");
   expect(screen.queryByLabelText("Video playback")).toBeNull();
-  expect(screen.getByRole("button", { name: "Play on: This computer" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Playing here" })).toBeDefined();
   expect(screen.getByRole("alert").textContent).toContain("Video backend missing");
   expect(screen.getByText("Find view")).toBeDefined();
 });
@@ -133,7 +132,7 @@ test("a playback backend error remains visible while browsing Find", async () =>
 test("a Client-only app keeps offline recovery on the selected remote", async () => {
   buildInfo.clientOnly = true;
   await render("unavailable", true);
-  expect(screen.getByText("The selected Couch is offline. Its address stays selected.")).toBeDefined();
+  expect(screen.getByText("Reconnecting to Desk Couch. Browsing and the queue come back when it answers.")).toBeDefined();
   expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
   expect(screen.queryByRole("button", { name: "Use this computer" })).toBeNull();
 });

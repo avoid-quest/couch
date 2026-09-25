@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, type ApiCredentials } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DelayControl } from "./DelayControl";
 import type { SoundOutput, SoundProfile, SoundState } from "../../../../shared/sound";
@@ -73,23 +74,22 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
   const observedOutput = state?.outputs.find(output => output.id === state.routing?.observedOutput);
   const unavailableSelected = selected && !selectedChoice;
   return <section className="space-y-4" aria-label={`Sound on ${hostName}`}>
-    <div className="space-y-1">
-      <h3 className="font-medium">Sound output</h3>
-      <p className="text-sm text-muted-foreground">Choose where {hostName} plays sound. Volume and mute beside playback control this output.</p>
+    <div className="settings-choice-row grid grid-cols-[16rem_minmax(0,1fr)] items-start gap-4 border-t border-border py-3 max-[900px]:grid-cols-1">
+      <div className="space-y-1"><h3 className="font-medium">Sound output</h3><p className="text-sm text-muted-foreground">Choose where {hostName} plays sound.</p></div>
+      <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state?.routing || !state.choices.length} onValueChange={key => {
+        const choice = state?.choices.find(choice => choice.key === key);
+        if (choice) void ("output" in choice ? change("output", { output: choice.output.id }) : change("profile", { profile: { card: choice.profile.card, profile: choice.profile.id } }));
+      }}>
+        <SelectTrigger aria-label="Sound output" className="min-h-11 w-full"><SelectValue placeholder={unavailableSelected ? `${selectedOutput?.name ?? "Previously selected output"} · Unavailable` : "Choose a sound output"} /></SelectTrigger>
+        <SelectContent position="popper">{state?.choices.map(choice => <SelectItem key={choice.key} value={choice.key} className="min-h-11">
+          {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
+        </SelectItem>)}</SelectContent>
+      </Select>
     </div>
     {(error || readError) && <div className="space-y-2"><p role="alert">{hostName}: {error || readError}</p><Button variant="outline" disabled={!connected || pending} onClick={() => void queryClient.invalidateQueries({ queryKey })}>Refresh outputs</Button></div>}
     {!connected && <p>Reconnect to choose a sound output.</p>}
     {connected && !state && !readError && <p role="status">Loading sound outputs…</p>}
     {state?.routing?.error && <p role="status">{hostName}: {state.routing.error}</p>}
-    <Select value={selectedChoice?.key ?? ""} disabled={!connected || pending || !!active || !state?.routing || !state.choices.length} onValueChange={key => {
-      const choice = state?.choices.find(choice => choice.key === key);
-      if (choice) void ("output" in choice ? change("output", { output: choice.output.id }) : change("profile", { profile: { card: choice.profile.card, profile: choice.profile.id } }));
-    }}>
-      <SelectTrigger aria-label="Sound output" className="min-h-11 w-full"><SelectValue placeholder={unavailableSelected ? `${selectedOutput?.name ?? "Previously selected output"} · Unavailable` : "Choose a sound output"} /></SelectTrigger>
-      <SelectContent position="popper">{state?.choices.map(choice => <SelectItem key={choice.key} value={choice.key} className="min-h-11">
-        {"output" in choice ? choice.output.name : `${choice.profile.name} · Pauses playback`}
-      </SelectItem>)}</SelectContent>
-    </Select>
     {unavailableSelected && <p className="text-sm text-muted-foreground">Selected output unavailable. Reconnect it or choose another output.</p>}
     {observedOutput && <p className="text-sm text-muted-foreground">Playing on {observedOutput.name}{observedOutput.muted ? " · Muted" : observedOutput.volume !== null ? ` · Volume ${observedOutput.volume}%` : ""}</p>}
     {selectedOutput?.volumeWritable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} has no writable output volume. Check in System Settings on {hostName}.</p>}
@@ -97,15 +97,15 @@ export function SoundSettings({ credentials, connected, hostName }: { credential
     {selectedOutput?.configurationAvailable === false && <p className="text-sm text-muted-foreground">{selectedOutput.name} exposes no selectable output-only data source to Couch. Check in System Settings on {hostName} for other hardware settings.</p>}
     {state && !state.choices.length && <p>No available sound outputs found.</p>}
     <p className="text-sm text-muted-foreground">Pair a speaker in Bluetooth to add it here.</p>
-    <details className="rounded-lg border p-4">
-      <summary tabIndex={0} className="min-h-11 cursor-pointer content-center rounded-md font-medium focus-visible:outline-2 focus-visible:outline-ring">Sound test and audio delay</summary>
-      <div className="space-y-4 pt-3">
+    <Collapsible className="rounded-sm border p-4">
+      <CollapsibleTrigger asChild><Button variant="ghost" className="min-h-11 w-full justify-start px-0 font-medium">Sound test and audio delay</Button></CollapsibleTrigger>
+      <CollapsibleContent className="space-y-4 pt-3">
         {state?.audioDelay !== undefined && <DelayControl id="sound-audio-delay" label="Audio delay" value={state.audioDelay} disabled={!connected || pending} onApply={delay => change("delay", { delay })} />}
         <p className="text-sm text-muted-foreground">Play a three-second left/right tone on an output. This does not select it for playback or change its volume.</p>
         {state && !state.canTest && !active && <p>{state.testUnavailableReason || "Stop playback before testing sound."}</p>}
         {state?.test && <div role="status" className="space-y-2"><p>{state.test.status === "starting" ? "Starting test; routing has not been confirmed." : state.test.status === "playing" ? "Playing the test tone. Check that you can hear it." : state.test.message}</p>{active && <Button disabled={!connected || pending} onClick={() => change("stop", { testId: state.test!.id })}>Stop sound test</Button>}</div>}
         <div className="flex flex-wrap gap-2">{state?.outputs.map(output => <Button key={output.id} variant="outline" disabled={!connected || pending || !state.canTest || !!active || !!output.testBlocked || output.availability === "unavailable" || output.muted} onClick={() => change("test", { output: output.id })}>Test {output.name}</Button>)}</div>
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   </section>;
 }

@@ -33,24 +33,29 @@ function controls({ clients, until }: Pick<Context, "clients" | "until">) {
   return { first, all, track, stop };
 }
 
-async function settings(ui: UiDriver, until: Wait) {
-  const native = await ui.execute("return !!window.__TAURI_INTERNALS__");
-  if (native) await ui.controls();
-  await ui.button("Playback settings", native ? ".tv-playback-controls:not([hidden])" : "");
-  await until("playback settings exposes its subtitle upload control", async () => await ui.execute("return !!document.querySelector('[role=dialog] #playback-subtitle-file')"));
+async function settings(ui: UiDriver, until: Wait, panel: "tracks" | "settings" = "tracks") {
+  await ui.controls();
+  await ui.button(panel === "tracks" ? "Audio & subtitles" : "Settings", ".player-band-right");
+  await until("playback panel opens", async () => await ui.execute("return !!document.querySelector('.player-sheet')"));
 }
 
 async function closeSettings(ui: UiDriver, until: Wait) {
   await ui.key(keys.escape);
   await until("Escape closes playback settings and restores its trigger", async () => await ui.execute(`
-    return !document.querySelector('[role=dialog]') && document.activeElement?.getAttribute('aria-label') === 'Playback settings';
+    return !document.querySelector('.player-sheet') && !!document.activeElement?.closest('.player-band-right');
   `));
 }
 
 async function uploadFile(ui: UiDriver, path: string) {
-  const input = await ui.element("#playback-subtitle-file");
+  const input = await ui.element(".player-sheet input[type=file]");
   // The W3C file-input command uses the browser's real File and change event.
   await ui.request(`/session/${ui.session()}/element/${input}/value`, { text: path });
+}
+
+async function panelChoice(ui: UiDriver, group: string, label: string) {
+  const matches = await ui.execute("return [...document.querySelectorAll('.player-sheet section')].filter(section => section.querySelector('h3')?.textContent === arguments[0]).flatMap(section => [...section.querySelectorAll('button')].filter(button => button.textContent.trim() === arguments[1]))", [group, label]);
+  assert.equal(matches.length, 1, `One ${label} choice exists in ${group}`);
+  await ui.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
 }
 
 async function uploadedFiles() {
@@ -126,9 +131,9 @@ export async function verifyExternalSubtitles(context: Context & { origin: strin
   await uploadFile(httpRemote.ui, "/mnt/fixtures/external-phone.ass");
   await until("HTTP phone file input uploads real ASS bytes to the selected native track", () => all(state => state.player.tracks?.some(track => track.kind === "subtitle" && track.selected && track.label.includes("external-phone.ass")) === true));
   const ass = first().player.tracks!.find(track => track.label.includes("external-phone.ass"))!;
-  await httpRemote.ui.select("#playback-subtitles", "Off");
+  await panelChoice(httpRemote.ui, "Subtitles", "Off");
   await until("phone Subtitles Off is observed by both remotes", () => all(state => !state.player.tracks?.some(track => track.kind === "subtitle" && track.selected)));
-  await httpRemote.ui.select("#playback-subtitles", srt.label || srt.language || `Subtitle ${srt.index + 1}`);
+  await panelChoice(httpRemote.ui, "Subtitles", srt.label || srt.language || `Subtitle ${srt.index + 1}`);
   await until("phone can reselect the subtitle uploaded from the TV", () => all(state => state.player.tracks?.some(track => track.kind === "subtitle" && track.index === srt.index && track.selected) === true));
   await closeSettings(httpRemote.ui, until);
   await httpRemote.minimize();
@@ -182,7 +187,7 @@ async function savePreferences(ui: UiDriver, until: Wait, preferences: ProfilePl
 const previousPages = new WeakMap<UiDriver, string>();
 
 async function savedSettings(ui: UiDriver, until: Wait) {
-  previousPages.set(ui, await ui.execute('return document.querySelector(".primary-nav [aria-current=page]")?.getAttribute("data-source") || "Now"'));
+  previousPages.set(ui, await ui.execute("return location.pathname === '/saved' ? 'Saved' : location.pathname === '/find' ? 'Find' : 'Now'"));
   await ui.button("Settings");
   await ui.settingsSection("playback");
   await until("Settings Playback shows the watching profile and saved choices", () => ui.execute("return !!document.querySelector('#preferred-audio-language')"));
@@ -272,27 +277,33 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
     await until("independent HTTP form saves retain both language and speed changes", () => all(state => state.preferences?.profile.audioLanguage === "en" && state.preferences.profile.speed === 1.5));
     await httpRemote.screenshot("preferences-first-http");
     await closeSavedSettings(httpRemote.ui, until);
-    await until("saved defaults never move either HTTP remote's independent browsing", async () => await httpRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent") === "Find" && await otherRemote.ui.execute("return document.querySelector('.primary-nav [aria-current=page]')?.textContent") === "Saved");
+    await until("saved defaults never move either HTTP remote's independent browsing", async () => await httpRemote.ui.execute("return location.pathname") === "/find" && await otherRemote.ui.execute("return location.pathname") === "/saved");
     await savePreferences(httpRemote.ui, until, householdPreferences, true);
     await httpRemote.minimize();
   }
   await assertPreferencesLoad(context, householdPreferences, first().preferences!.device.audioDelay, "saved Household audio, subtitle mode and speed apply to the next native load");
   await httpRemote.restore();
-  await settings(httpRemote.ui, until);
+  await settings(httpRemote.ui, until, "settings");
   const previousPlayback = first().player.playbackId!;
   const englishAudio = first().player.tracks!.find(track => track.kind === "audio" && track.language === "eng")!;
   const englishSubtitle = first().player.tracks!.find(track => track.kind === "subtitle" && track.language === "eng")!;
-  await httpRemote.ui.select("#playback-speed", "1.5×");
+  await httpRemote.ui.button("1.5×", ".player-sheet");
   await until("temporary phone speed reaches native playback", () => all(state => state.player.speed === 1.5));
-  await httpRemote.ui.select("#playback-audio", englishAudio.label);
+  await closeSettings(httpRemote.ui, until);
+  await settings(httpRemote.ui, until);
+  await panelChoice(httpRemote.ui, "Audio", englishAudio.label);
   await until("temporary phone audio track reaches native playback", () => all(state => state.player.tracks?.some(track => track.kind === "audio" && track.selected && track.language === "eng") === true));
-  await httpRemote.ui.select("#playback-subtitles", englishSubtitle.label);
+  await panelChoice(httpRemote.ui, "Subtitles", englishSubtitle.label);
   await until("phone track and speed changes remain temporary on both remotes", () => all(state => state.player.speed === 1.5 && state.player.tracks?.some(track => track.kind === "audio" && track.selected && track.language === "eng") === true && state.player.tracks.some(track => track.kind === "subtitle" && track.selected && track.language === "eng") && JSON.stringify(state.preferences?.profile) === JSON.stringify(householdPreferences)));
-  await httpRemote.ui.button("Save speed as default", "[role=dialog]");
+  await closeSettings(httpRemote.ui, until);
+  await settings(httpRemote.ui, until, "settings");
+  await httpRemote.ui.button("Save speed as default", ".player-sheet");
   await until("explicit speed save records only the observed native speed", () => all(state => state.preferences?.profile.speed === 1.5 && state.preferences.profile.audioLanguage === "it" && state.preferences.profile.subtitles === "off"));
-  await httpRemote.ui.button("Save audio language as default", "[role=dialog]");
+  await closeSettings(httpRemote.ui, until);
+  await settings(httpRemote.ui, until);
+  await httpRemote.ui.button("Save audio language as default", ".player-sheet");
   await until("explicit audio default records the current track's language", () => all(state => state.preferences?.profile.audioLanguage === "eng"));
-  await httpRemote.ui.button("Save subtitles as default", "[role=dialog]");
+  await httpRemote.ui.button("Save subtitles as default", ".player-sheet");
   const explicitPreferences: ProfilePlaybackPreferences = { replayGain: "off", audioLanguage: "eng", subtitleLanguage: "eng", subtitles: "auto", speed: 1.5 };
   await until("explicit defaults save observed languages without changing the current item", () => all(state => state.player.playbackId === previousPlayback && state.player.status === "paused" && JSON.stringify(state.preferences?.profile) === JSON.stringify(explicitPreferences)));
   await assertResponsive(httpRemote.ui, "Phone current playback and explicit defaults");
@@ -306,11 +317,8 @@ export async function verifyPlaybackPreferences(context: PreferenceContext & { o
   await savePreferences(ui, until, householdPreferences);
   await assertPreferencesLoad(context, householdPreferences, first().preferences!.device.audioDelay, "Settings restores defaults for the following item");
   await httpRemote.restore();
-  await settings(httpRemote.ui, until);
-  await httpRemote.ui.click("[role=dialog] details summary");
-  await httpRemote.ui.type("#playback-audio-delay", String(audioDelay));
-  const apply = await httpRemote.ui.execute("return document.querySelector('#playback-audio-delay').closest('form').querySelector('button')");
-  await httpRemote.ui.clickElement(apply["element-6066-11e4-a52e-4f735466cecf"]);
+  await settings(httpRemote.ui, until, "settings");
+  for (let step = 0; step < Math.round(audioDelay * 10); step++) await httpRemote.ui.button("Audio timing later", ".player-sheet");
   await until("phone audio-delay control updates native playback and the persistent TV preference", () => all(state => Math.abs((state.player.audioDelay ?? 0) - audioDelay) < 1e-6 && state.preferences?.device.audioDelay === audioDelay));
   await closeSettings(httpRemote.ui, until);
   await clients[0]!.command({ type: "subtitleDelay", playbackId: first().player.playbackId!, delay: 0.8 });

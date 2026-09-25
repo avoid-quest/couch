@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { formatDuration, formatEndTime } from "@/time-format";
+import { Progress } from "@/components/ui/progress";
 
 // All lengths use the same logarithmic horizon, from now to four hours out.
 export const durationScale = (seconds: number) => Math.max(.03, Math.min(1, Math.log1p(Math.max(0, seconds) / 60) / Math.log1p(240)));
@@ -34,5 +35,7 @@ function TimedDurationBar({ duration, position }: { duration: number; position: 
   const now = useDurationClock();
   const left = Math.max(0, duration - position);
   const width = `${durationScale(duration) * 100}%`;
-  return <span className="duration-bar"><span className="duration-bar-track"><span className="duration-bar-fill" style={{ width }}>{position > 0 && <span className="duration-bar-watched" style={{ width: `${Math.min(100, position / duration * 100)}%` }} />}</span><span className="duration-bar-label" style={{ left: width }}>{position > 0 ? `Resume at ${formatDuration(position)}, ${formatDuration(left)} left, ends ${formatEndTime(left, now)}` : `${formatDuration(duration)}, ends ${formatEndTime(duration, now)}`}</span></span></span>;
+  const label = position > 0 ? `Resume at ${formatDuration(position)}, ${formatDuration(left)} left, ends ${formatEndTime(left, now)}` : `${formatDuration(duration)}, ends ${formatEndTime(duration, now)}`;
+  // Bar width encodes total runtime; Progress only encodes the watched portion within it.
+  return <span className="duration-bar"><span className="duration-bar-track"><Progress className="duration-bar-fill rounded-none [&_[data-slot=progress-indicator]]:bg-[#555]" style={{ width }} value={duration > 0 ? Math.max(0, Math.min(100, position / duration * 100)) : 0} aria-label={label} /><span className="duration-bar-label" style={{ left: width }}>{label}</span></span></span>;
 }

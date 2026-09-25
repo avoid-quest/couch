@@ -1,40 +1,31 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "@tanstack/react-router";
-import { Check, PencilLine } from "lucide-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { BrowseHome } from "./BrowseHome";
 import { SearchPanel } from "./SearchPanel";
-import { Button } from "@/components/ui/button";
 import { readSearchState } from "../../search";
-import { moveFindSection, readFindSections, saveFindSections, type FindSectionId } from "../../find-sections";
+import { apiFetch } from "@/api/client";
 import { useShell } from "@/sections/shell/AppShell";
 
 export function FindPage() {
   const shell = useShell();
-  const { tvPresentation, credentials, identity, state, connected, run, available, active, tv, section, browseSection, changeSearch, openSources, playHistory, enqueueCatalog, enqueueRadio, enqueueProvider, recentRadio, videoQualityPreference } = shell;
+  const { credentials, identity, state, connected, run, available, active, section, browseSection, changeSearch, playHistory, enqueueCatalog, videoQualityPreference } = shell;
   const canManageMetadata = identity?.authority === "host" || identity?.authority === "administrator";
+  const navigate = useNavigate();
   const location = useLocation();
   const searchState = readSearchState(location.searchStr);
   const [homeQuery, setHomeQuery] = useState(searchState.query);
-  const [editing, setEditing] = useState(false);
-  const [layout, setLayout] = useState(readFindSections);
-  const toggleSection = (id: FindSectionId) => {
-    const hidden = layout.hidden.includes(id) ? layout.hidden.filter(entry => entry !== id) : [...layout.hidden, id];
-    const next = { ...layout, hidden };
-    setLayout(next); saveFindSections(next);
-  };
-  const moveSection = (activeId: string, overId: string) => {
-    const order = moveFindSection(layout.order, activeId, overId);
-    if (order) { const next = { ...layout, order }; setLayout(next); saveFindSections(next); }
-  };
   useEffect(() => setHomeQuery(searchState.query), [searchState.query]);
-  const onStage = section === "Find" && (!tvPresentation || shell.standardLayout || tv.browsing);
-  return (
-    <section data-page="Find">
-      <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
-      {!shell.standardLayout && !homeQuery.trim() && <div className="flex justify-end"><Button variant="ghost" size="icon" aria-label={editing ? "Done customizing" : "Customize this page"} aria-pressed={editing} onClick={() => setEditing(value => !value)}>{editing ? <Check aria-hidden="true" /> : <PencilLine aria-hidden="true" />}</Button></div>}
-      <div hidden={!!homeQuery.trim()}>
-        <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} playing={active} active={onStage && !homeQuery.trim()} editing={editing} hiddenSections={shell.standardLayout ? ["recent", "folders", "radio"] : layout.hidden} order={shell.standardLayout ? ["continue", "forlater", "sources"] : layout.order} onToggleSection={toggleSection} onMoveSection={moveSection} onBrowse={browseSection} onAddSource={() => openSources()} onPlay={playHistory} onAdd={item => item.libraryItemId ? enqueueCatalog("enqueueLibrary", item.libraryItemId) : Promise.resolve(false)} recentRadio={recentRadio} onRadio={station => enqueueRadio(station, true)} />
-      </div>
-    </section>
-  );
+  const onStage = section === "Find";
+  const openSources = () => void navigate({ to: "/settings/sources" });
+  return <section data-page="Find">
+    <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={setHomeQuery} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onBrowse={browseSection} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
+    <div hidden={!!homeQuery.trim()}>
+      <BrowseHome state={state} credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} playing={active} active={onStage && !homeQuery.trim()} onBrowse={browseSection} onAddSource={openSources} onPlay={playHistory} onAdd={async item => {
+        if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId);
+        if (!state || !item.playable) return false;
+        await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });
+        return true;
+      }} />
+    </div>
+  </section>;
 }

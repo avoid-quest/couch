@@ -34,21 +34,15 @@ export class UiDriver {
     return code;
   }
 
-  async typeByLabel(label: string, text: string) {
-    const [input] = await this.elements("xpath", `//label[normalize-space(.)="${label}"]/following::input[1]`);
-    assert.ok(input, `${label} input exists`);
-    return this.typeElement(input["element-6066-11e4-a52e-4f735466cecf"], text);
-  }
-
-  async addDirectMedia(url: string, title: string) {
-    await this.addMedia();
-    await this.typeByLabel("Direct media URL", url);
-    await this.typeByLabel("Title optional", title);
-    await this.button("Up next", '[role="dialog"]');
+  async addDirectMedia(url: string) {
+    await this.section("Find");
+    await this.type("#media-search", url);
+    await this.waitFor("Pasted link offers direct media", () => this.execute("return !!document.querySelector('.find-link-card')"));
+    await this.button("Direct media", ".find-link-choice");
+    await this.button("Queue", ".find-link-actions");
   }
 
   async element(selector: string) {
-    if (/^#media-(url|title|kind|quality)$/.test(selector)) await this.addMedia();
     return (await this.request(`/session/${this.session()}/element`, { using: "css selector", value: selector }))["element-6066-11e4-a52e-4f735466cecf"] as string;
   }
 
@@ -61,48 +55,28 @@ export class UiDriver {
   }
 
   async home() {
-    if (!await this.execute("return !!document.querySelector('.tv-browser[hidden]')")) return;
-    if (await this.execute("return !!document.querySelector('.tv-playback-controls[hidden]')")) await this.key("i");
-    await this.waitFor("TV Home or its playback navigation becomes visible", () => this.execute("return !!document.querySelector('.tv-browser:not([hidden]), .tv-playback-controls:not([hidden])')"));
-    // An observed Stop can open Home while its navigation is being revealed.
-    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) return;
-    await this.button("Show TV home");
-    await this.waitFor("TV Home becomes visible", () => this.execute("return !!document.querySelector('.tv-browser:not([hidden])')"));
+    await this.section("Find");
   }
 
   async browse() {
-    await this.home();
-    if (await this.execute("return !!document.querySelector('.remote-control') && innerWidth < 960")) await this.button("Browse", ".mode-switch");
+    if (await this.execute("return !!document.querySelector('.player-page')")) await this.home();
   }
 
   async controls() {
-    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.button("Show TV controls");
-    else if (await this.execute("return !!document.querySelector('.tv-playback-controls[hidden]')")) await this.key("i");
-    else if (await this.execute("return !!document.querySelector('.remote-control') && innerWidth < 960")) await this.button("Remote", ".mode-switch");
-    await this.waitFor("Playback controls become visible", () => this.execute("const native = document.querySelector('.tv-playback-controls:not([hidden]) .player-controls'); const remote = !document.querySelector('.tv-shell') && (document.querySelector('.remote-pad') || document.querySelector('.player-controls')); return !!(native || remote) && (native ?? remote).getClientRects().length > 0 && !(native ?? remote).closest('[hidden]')"));
+    await this.section("Now");
+    if (await this.execute("return !!document.querySelector('.player-band-hidden')")) await this.key("i");
+    await this.waitFor("Playback controls become visible", () => this.execute("return !!document.querySelector('.player-band:not(.player-band-hidden)')"));
   }
 
   async watching() {
-    if (!await this.execute("return !!document.querySelector('.tv-shell')")) return;
-    if (await this.execute("return !!document.querySelector('.tv-browser:not([hidden])')")) await this.key(keys.escape);
-    if (await this.execute("return !!document.querySelector('.tv-playback-controls:not([hidden])')")) await this.button("Hide playback controls");
-    await this.waitFor("TV browser and playback overlay close before native pixel capture", () => this.execute("return !!document.querySelector('.tv-browser[hidden]') && !!document.querySelector('.tv-playback-controls[hidden]') && !document.querySelector('[role=dialog], [role=listbox], [data-slot=popover-content]')"));
+    await this.controls();
+    await this.waitFor("Player dialogs close before native pixel capture", () => this.execute("return !document.querySelector('[role=dialog], [role=listbox], [data-slot=popover-content]')"));
     await Bun.sleep(350);
   }
 
-  async addMedia() {
-    await this.browse();
-    if (await this.execute("return !!document.querySelector('[role=dialog] #media-url')")) return;
-    if (await this.execute("const input = document.querySelector('#media-url'); return !!input && input.getClientRects().length > 0 && !input.closest('[hidden]')")) return;
-    await this.section("Now");
-    await this.button("Add media");
-    await this.waitFor("Add media dialog opens", () => this.execute("return !!document.querySelector('[role=dialog] #media-url')"));
-  }
-
   async revealElement(id: string, selector?: string) {
-    const location = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; const visible = element.getClientRects().length > 0 && getComputedStyle(element).visibility === 'visible' && !element.closest('[hidden]'); return { browser: !!element.closest('.tv-browser[hidden]'), controls: !visible && !!element.closest('.player-controls'), pad: !visible && !!element.closest('.remote-pad') };", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
-    if (location.browser) await this.home();
-    if (location.controls || location.pad) await this.controls();
+    const hiddenPlayer = await this.execute("const element = arguments[1] ? document.querySelector(arguments[1]) : arguments[0]; return !!element?.closest('.player-band-hidden')", [selector ? null : { "element-6066-11e4-a52e-4f735466cecf": id }, selector]);
+    if (hiddenPlayer) await this.key("i");
   }
 
   async click(selector: string) {
@@ -160,7 +134,7 @@ export class UiDriver {
   }
 
   async button(label: string, scope = "") {
-    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')")) return this.section("Settings");
+    if (!scope && label === "Settings" && await this.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')")) return this.section("Settings");
     const matches = () => this.execute(`return [...document.querySelectorAll(arguments[0] + ' button')].filter(button =>
       button.getAttribute('aria-label') === arguments[1] || button.textContent.trim() === arguments[1]);`, [scope, label]);
     await this.waitFor(`One ${label} button exists in ${scope || "the page"}`, async () => (await matches()).length === 1);
@@ -169,26 +143,36 @@ export class UiDriver {
   }
 
   async section(label: string) {
-    await this.browse();
-    if (await this.execute("return !!document.querySelector('.primary-nav')")) {
-      const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
-      const destination = source || label === "Online" ? "Find" : label === "For later" ? "Saved" : label === "Queue" ? "Now" : label;
-      const target = `.primary-nav a[data-source="${destination}"]`;
-      await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
-      await this.click(target);
-      if (source) {
-        await this.type("#media-search", "");
-        await this.key(keys.enter);
-        await this.button(source, '[aria-label="Filter search results"]');
-        await this.waitFor(`${source} filter is selected`, () => this.execute("return document.querySelector('[data-search-scopes] [aria-pressed=true]')?.getAttribute('aria-label') === arguments[0]", [source]));
+    const source = ({ Files: "TV folders", Library: "TV folders", Radio: "Radio playlists", Jellyfin: "Jellyfin" } as Record<string, string>)[label];
+    const destination = label === "Queue" || label === "Now" ? "Now" : label === "For later" ? "Saved" : source || ["Online", "Home", "Search"].includes(label) ? "Find" : label;
+    if (destination === "Now") {
+      if (!await this.execute("return !!document.querySelector('.player-page')")) {
+        await this.click('.section-nav a[href="/"]');
       }
-      await this.waitFor(`${label} page opens`, () => this.execute('return !!document.querySelector(arguments[0])', [`[data-page="${destination}"]:not([hidden])`]));
+      await this.waitFor("Now or Up next opens", () => this.execute("return !!document.querySelector('.player-page, .player-idle')"));
+      if (label === "Queue" && !await this.execute("return !!document.querySelector('.queue-panel')")) {
+        if (await this.execute("return !!document.querySelector('.player-sheet')")) await this.key(keys.escape);
+        await this.click('[data-panel="queue"]');
+      }
       return;
     }
-    // The installed update fixture still exercises the retained older release.
-    const matches = await this.execute("return [...document.querySelectorAll('.source-nav [role=tab]')].filter(tab => tab.getAttribute('data-source') === arguments[0])", [label === "Files" ? "Library" : label]);
-    assert.equal(matches.length, 1, `One ${label} source tab exists`);
-    await this.clickElement(matches[0]["element-6066-11e4-a52e-4f735466cecf"]);
+    if (await this.execute("return !!document.querySelector('.player-page:not(.player-idle)')")) {
+      if (await this.execute("return !!document.querySelector('.player-sheet')")) await this.key(keys.escape);
+      await this.click(".player-back");
+    }
+    else if (await this.execute("return !!document.querySelector('.player-idle')")) await this.request(`/session/${this.session()}/url`, { url: new URL(`/${destination.toLowerCase()}`, await this.execute("return location.href")).href });
+    const target = `.section-nav a[href^="/${destination.toLowerCase()}"]`;
+    await this.waitFor(`${label} navigation is rendered`, () => this.execute("return !!document.querySelector(arguments[0])", [target]));
+    await this.click(target);
+    await this.waitFor(`${label} page opens`, () => this.execute("return !!document.querySelector(arguments[0])", [`[data-page="${destination}"]`]));
+    if (label === "Home" && await this.execute("return !!location.search")) await this.request(`/session/${this.session()}/url`, { url: new URL("/find", await this.execute("return location.href")).href });
+    if (source) {
+      const url = new URL(await this.execute("return location.href"));
+      url.searchParams.set("source", source);
+      await this.request(`/session/${this.session()}/url`, { url: url.href });
+      await this.waitFor(`${source} filter is selected`, () => this.execute("return new URLSearchParams(location.search).get('source') === arguments[0] && !!document.querySelector('#media-search')", [source]));
+    }
+    return;
   }
 
   async settingsSection(section: string): Promise<void> {
@@ -238,7 +222,6 @@ export class UiDriver {
   }
 
   async select(selector: string, label: string) {
-    if (/^#media-(kind|quality)$/.test(selector)) await this.addMedia();
     await this.click(selector);
     const deadline = Date.now() + 5_000;
     let options: any[] = [];

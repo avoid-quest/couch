@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import { fireEvent, screen } from "../../../testing";
 
 let root: Root, window: Window, request: ReturnType<typeof spyOn>;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -50,4 +51,17 @@ test("metadata provider reads through Query and invalidates by saving without a 
   await act(async () => { document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); await new Promise(resolve => setTimeout(resolve, 0)); });
   expect(calls[1]).toEqual({ path: "/api/metadata/provider", method: "POST", body: { token: "tmdb-token" } });
   expect(document.body.textContent).toContain("TMDB token saved on the TV");
+});
+
+test("clearing the TMDB token requires inline confirmation", async () => {
+  request.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ path: new URL(String(input)).pathname, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
+    return Response.json({ configured: !init?.method });
+  }) as unknown as typeof fetch);
+  await render();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Clear TMDB token" })));
+  expect(calls.filter(call => call.method === "POST")).toHaveLength(0);
+  expect(screen.getByRole("group", { name: "Confirm clearing TMDB token" })).toBeDefined();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Clear token" })); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(calls.find(call => call.method === "POST")?.body).toEqual({ token: "" });
 });

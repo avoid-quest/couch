@@ -125,6 +125,24 @@ export function createCatalog({ library, radio, jellyfin, viewing }: Services) {
           progressUndo.delete(changes.token);
           return Response.json({ ok: true });
         }
+        const historyQueue = /^\/api\/progress\/([^/]+)\/queue$/.exec(pathname);
+        if (viewing && historyQueue) {
+          if (request.method !== "POST") return methodNotAllowed("POST");
+          const changes = await body(request);
+          authorize();
+          if (Object.keys(changes).length !== 1 || typeof changes.profileId !== "string") throw new RequestError("Choose the current watching profile.");
+          if (changes.profileId !== viewing.session.state.activeProfile.id) throw new RequestError("Playback settings changed. Try again.", 409);
+          let mediaId: string;
+          try { mediaId = decodeURIComponent(historyQueue[1]!); }
+          catch { throw new RequestError("Invalid media identity."); }
+          if (!progressIdentity.test(mediaId)) throw new RequestError("Invalid media identity.");
+          if (mediaId.startsWith("recording:")) throw new RequestError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
+          if (!viewing.store.sharedProgress(mediaId)) throw new RequestError("History item not found.", 404);
+          const saved = viewing.session.state.queue.find(entry => playbackMediaId(entry) === mediaId) ?? viewing.store.historySource(mediaId);
+          if (!saved || playbackMediaId(saved) !== mediaId) throw new RequestError("Open this item from its source again.", 409);
+          viewing.session.loadQueue([saved], "append", authorize, playedBy);
+          return Response.json({ ok: true });
+        }
         const historyPlay = /^\/api\/progress\/([^/]+)\/play$/.exec(pathname);
         if (viewing && historyPlay) {
           if (request.method !== "POST") return methodNotAllowed("POST");

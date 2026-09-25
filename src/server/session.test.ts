@@ -1,9 +1,76 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { createSession, type MediaSource } from "./session";
 import { openStore } from "./store";
+import { parseCommand } from "./validation";
 import type { PlaybackCommand, PlayerState } from "../shared/protocol";
 
 const idle: PlayerState = { playbackId: null, status: "idle", position: 0, duration: null, volume: 80, seekable: false, error: null };
+
+test("removed server-owned queue entries restore with their metadata and only once", () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {});
+  const entries = ["library:item", "jellyfin:server:item", "radio:station", "iptv:channel"].map((source, index) => ({
+    id: `item-${index}`, title: "A".repeat(250), source, artworkId: "cover", duration: 123, live: source.startsWith("radio:") || source.startsWith("iptv:"),
+  }));
+  for (const entry of entries) session.command({ type: "enqueue", entry });
+  for (const entry of entries) {
+    expect(() => parseCommand(JSON.stringify({ type: "command", requestId: "request", action: { type: "enqueue", entry } }), true)).toThrow();
+    session.command({ type: "remove", entryId: entry.id });
+    const token = session.state.queueRemoval?.token;
+    expect(token).toBeString();
+    const action = parseCommand(JSON.stringify({ type: "command", requestId: "request", action: { type: "restoreRemoved", token } }), false).action;
+    session.command(action);
+    expect(session.state.queue).toEqual(entries);
+    expect(() => session.command(action)).toThrow("Undo expired");
+  }
+  store.close();
+});
+
+test("removed entry restore rejects a changed queue without consuming its token", () => {
+  const store = openStore(":memory:");
+  const session = createSession(store, () => {}, () => {});
+  const entry = { id: "one", title: "One", source: "library:one", artworkId: "cover" };
+  session.command({ type: "enqueue", entry });
+  session.command({ type: "remove", entryId: "one" });
+  const token = session.state.queueRemoval!.token;
+  session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://example.com/two" } });
+  expect(() => session.command({ type: "restoreRemoved", token })).toThrow("shared queue or playback changed");
+  expect(session.state.queue).toHaveLength(1);
+  session.command({ type: "remove", entryId: "two" });
+  session.command({ type: "restoreRemoved", token });
+  expect(session.state.queue).toEqual([entry]);
+  store.close();
+});
+
+test("removed entry restore token expires after six seconds", () => {
+  const clock = spyOn(Date, "now");
+  const store = openStore(":memory:");
+  try {
+    const session = createSession(store, () => {}, () => {});
+    session.command({ type: "enqueue", entry: { id: "one", title: "One", source: "library:one" } });
+    session.command({ type: "remove", entryId: "one" });
+    const token = session.state.queueRemoval!.token;
+    clock.mockReturnValue(Date.now() + 6_000);
+    expect(() => session.command({ type: "restoreRemoved", token })).toThrow("Undo expired");
+    expect(session.state.queue).toEqual([]);
+  } finally {
+    clock.mockRestore();
+    store.close();
+  }
+});
+
+test("activity notices publish once without lingering in session snapshots", () => {
+  const store = openStore(":memory:");
+  const published: string[] = [];
+  const session = createSession(store, () => {}, state => published.push(JSON.stringify(state)));
+  const actor = { deviceId: "remote", name: "Kitchen" };
+  session.notice(actor, "Kitchen added First track");
+  expect(JSON.parse(published[0]!)?.activity).toMatchObject({ actor, text: "Kitchen added First track" });
+  expect(session.state.activity).toBeUndefined();
+  session.invalidate("library");
+  expect(JSON.parse(published[1]!)?.activity).toBeUndefined();
+  store.close();
+});
 
 test("failed database operations do not publish or accept queue, volume, profile, preferences or progress changes", () => {
   const store = openStore(":memory:");

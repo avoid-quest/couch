@@ -43,13 +43,10 @@ export function TvNameSettings({ credentials, connected, canWrite, host }: Props
   return (
     <section className="space-y-3">
       {canWrite ? (
-        <form className="space-y-3" onSubmit={event => void save(event)}>
-          <div className="space-y-2">
+        <form className="settings-choice-row grid grid-cols-[16rem_minmax(0,1fr)] items-start gap-4 border-t border-border py-3 max-[900px]:grid-cols-1" onSubmit={event => void save(event)}>
             <Label htmlFor="tv-name">Playback device name</Label>
-            <Input id="tv-name" className="min-h-11" value={draft} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={!connected || pending} aria-describedby="tv-name-help" />
-          </div>
-          <p id="tv-name-help" className="text-muted-foreground">Name shown for the selected playback computer.</p>
-          <Button type="submit" className="min-h-11" disabled={!connected || pending || !draft.trim() || draft.trim() === savedName}>{pending ? "Saving…" : "Save playback device name"}</Button>
+          <div className="flex flex-wrap items-center gap-2"><Input id="tv-name" className="min-h-11 min-w-48 flex-1" value={draft} onChange={event => setDraft(event.target.value)} maxLength={60} required disabled={!connected || pending} aria-describedby="tv-name-help" /><Button type="submit" className="min-h-11" disabled={!connected || pending || !draft.trim() || draft.trim() === savedName}>{pending ? "Saving…" : "Save"}</Button></div>
+          <div className="col-start-2 max-[900px]:col-start-1"><p id="tv-name-help" className="text-muted-foreground">Name shown for the selected playback computer.</p></div>
         </form>
       ) : (
         <div className="space-y-1">

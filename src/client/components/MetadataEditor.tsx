@@ -5,6 +5,8 @@ import { isNativeHost } from "@/session/native-context";
 import { usePlaybackDevice } from "@/sections/shell/PlaybackDevice";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field as FormField, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -135,9 +137,9 @@ export function MetadataEditor({ origin, token, id, connected, onSaved }: Props)
                 : <Input aria-describedby={`${prefix}-${key}-origin`} className="min-h-11" data-metadata-field={key} disabled={busy} id={`${prefix}-${key}`} max={key === "season" ? 999 : 9999} maxLength={300} min={key === "year" ? 1000 : 0} onChange={event => setDraft({ ...draft, [key]: event.target.value })} required={key === "title" || key === "showTitle"} type={["year", "season", "episode"].includes(key) ? "number" : key === "premiered" ? "date" : "text"} value={draft[key]} />}
             </div>)}
             <div className="space-y-1"><Label htmlFor={`${prefix}-artwork`}>Replace artwork</Label><p className="text-xs text-muted-foreground">Origin: {metadata.origins.artworkId}. PNG or JPEG, up to 2 MiB.</p><Input accept="image/png,image/jpeg" className="min-h-11" data-metadata-artwork disabled={busy} id={`${prefix}-artwork`} onChange={event => selectArtwork(event.target.files?.[0])} ref={artworkInput} type="file" />{artwork && <p className="text-sm">Artwork selected. Save corrections to apply it.</p>}</div>
-            <label className="flex min-h-11 items-center gap-2 text-sm"><input checked={clearArtwork} disabled={busy} onChange={event => { setClearArtwork(event.target.checked); clearSelectedArtwork(); }} type="checkbox" />Remove the current artwork</label>
+            <FormField orientation="horizontal" className="min-h-11"><Checkbox id={`${prefix}-clear-artwork`} checked={clearArtwork} disabled={busy} onCheckedChange={checked => { setClearArtwork(checked === true); clearSelectedArtwork(); }} /><FieldLabel htmlFor={`${prefix}-clear-artwork`}>Remove the current artwork</FieldLabel></FormField>
             <p className="break-words text-sm">Saved match: {metadata.match ? `TMDB ${metadata.match.title} (${metadata.match.id})` : "No chosen TMDB match"}</p>
-            <label className="flex min-h-11 items-center gap-2 text-sm"><input checked={clearMatch} disabled={busy} onChange={event => setClearMatch(event.target.checked)} type="checkbox" />Clear the TMDB match and its exported ID</label>
+            <FormField orientation="horizontal" className="min-h-11"><Checkbox id={`${prefix}-clear-match`} checked={clearMatch} disabled={busy} onCheckedChange={checked => setClearMatch(checked === true)} /><FieldLabel htmlFor={`${prefix}-clear-match`}>Clear the TMDB match and its exported ID</FieldLabel></FormField>
             <Button className="min-h-11" disabled={busy} type="submit">Save corrections</Button>
           </form>
           <form className="space-y-3 border-t pt-3" onSubmit={event => { event.preventDefault(); void update("search", { query }); }}>

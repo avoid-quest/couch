@@ -25,28 +25,23 @@ export async function verifySearch(context: MusicContext) {
     for (const [name, driver] of [["TV", ui], ["phone", httpRemote.ui]] as const) {
       if (name === "TV") await httpRemote.minimize(); else await httpRemote.restore();
       for (const [source, item] of [["Library", local], ["Jellyfin", jellyfin]] as const) {
-        const scope = `[aria-label="${source} search results"]`;
-        const opener = `${scope} [aria-label=${JSON.stringify(`Details for ${item.title}`)}]`;
+        const scope = '[aria-label="Search results"]';
+        const opener = `${scope} [aria-label=${JSON.stringify(`Details: ${item.title}`)}]`;
         await query(driver, item.title);
-        await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && document.querySelector(arguments[1])?.getAttribute('aria-busy') === 'false'", [opener, scope]));
+        await until(`${name} finds ${source} item by title in shared Search`, () => driver.execute("return !!document.querySelector(arguments[0]) && !document.querySelector('.find-searching')", [opener]));
         await driver.click(opener);
         const scrollPosition = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
         const count = first().queue.length;
         const prefix = source === "Library" ? `library:${item.id}` : `:${item.id}`;
-        await driver.button(`Add ${item.title} to queue`, '[role="dialog"]');
+        await driver.button(`Up next: ${item.title}`, '[role="dialog"]');
         await until(`${name} Search queue appends the ${source} item for both controllers`, () => all(state => state.queue.length === count + 1 && state.queue.at(-1)?.source.endsWith(prefix) === true));
         const previous = first().player.playbackId;
-        await driver.click('[role="dialog"] button[aria-label^="Play "], [role="dialog"] button[aria-label^="Resume "]');
+        await driver.click('[role="dialog"] button[aria-label^="Play: "], [role="dialog"] button[aria-label^="Resume: "]');
         await until(`${name} Search ${source} play reaches native player and both controllers`, () => all(state => state.player.status === "playing" && state.player.playbackId !== previous && state.queue.find(entry => entry.id === state.currentEntryId)?.source.endsWith(prefix) === true));
         await context.clients[1]!.command({ type: "pause", playbackId: first().player.playbackId!, paused: true });
         await until(`${name} Search playback pauses through the other paired controller`, () => all(state => state.player.status === "paused"));
-        if (name === "TV") {
-          await until("TV playback closes Search details", () => driver.execute("return !document.querySelector('[role=dialog]')"));
-          await driver.home();
-        } else {
-          await until("phone Search details survive the playback progress broadcast", () => driver.execute("return document.querySelector('[role=dialog]')?.textContent.includes(arguments[0])", [item.title]));
-          await driver.key(keys.escape);
-        }
+        await until(`${name} Search details survive the playback progress broadcast`, () => driver.execute("return document.querySelector('[role=dialog]')?.textContent.includes(arguments[0])", [item.title]));
+        await driver.key(keys.escape);
         await until(`${name} Search details return directional focus to ${source} result`, () => driver.execute("return !document.querySelector('[role=dialog]') && document.activeElement === document.querySelector(arguments[0])", [opener]));
         const returnedScroll = await driver.execute("const panel = document.querySelector('[aria-label=\"Search media\"]'); const scroller = panel.closest('.tv-browser') || document.scrollingElement; return [scroller.scrollTop, scroller.scrollLeft]") as number[];
         assert.deepEqual(returnedScroll, scrollPosition, `${name} details retain actual WebKit scroll offsets`);

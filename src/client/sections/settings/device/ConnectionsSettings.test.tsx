@@ -11,6 +11,7 @@ const calls: Array<{ path: string; method: string; body: unknown }> = [];
 const self: Controller = { id: "self", name: "Browser", role: "administrator", createdAt: 1, lastSeenAt: 2 };
 let devices: Controller[];
 let sharingFailure = false;
+let originDomain = "";
 let setSharingFromHost: ((enabled: boolean) => void) | undefined;
 const sharingChanges: boolean[] = [];
 const button = (label: string) => screen.getByRole("button", { name: label });
@@ -24,7 +25,7 @@ async function render(identity: ControllerIdentity = { authority: "administrator
     setSharingFromHost = setSharing;
     return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ConnectionsSettings credentials={{ origin: "http://localhost", token: "admin" }} connected
-        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} setRemoteControlEnabled={enabled => { sharingChanges.push(enabled); setSharing(enabled); }} administratorClaimed />
+        urls={["http://localhost:4100"]} identity={identity} remoteControlEnabled={sharing} setRemoteControlEnabled={enabled => { sharingChanges.push(enabled); setSharing(enabled); }} administratorClaimed managedLan />
       </QueryClientProvider>;
   }
   await act(async () => root.render(<SettingsHarness />));
@@ -35,6 +36,7 @@ beforeEach(async () => {
   calls.length = 0;
   sharingChanges.length = 0;
   sharingFailure = false;
+  originDomain = "";
   setSharingFromHost = undefined;
   devices = [self, { id: "other", name: "Phone", role: "controller", createdAt: 1, lastSeenAt: 2 }];
   window = new Window({ url: "http://localhost" });
@@ -49,6 +51,10 @@ beforeEach(async () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin");
     if (path === "/api/controllers/pairing-code") return Response.json({ code: "246810" });
     if (path === "/api/settings/sharing" && method === "POST") return sharingFailure ? Response.json({ error: "Unavailable" }, { status: 503 }) : Response.json({ enabled: JSON.parse(String(init?.body)).enabled });
+    if (path === "/api/settings/origin-domain") {
+      if (method === "POST") originDomain = JSON.parse(String(init?.body)).domain;
+      return Response.json({ domain: originDomain });
+    }
     if (path === "/api/controllers" && method === "GET") return Response.json({ controllers: devices });
     if (/^\/api\/controllers\/other\/role$/.test(path)) {
       const device = devices.find(entry => entry.id === "other")!;
@@ -105,6 +111,15 @@ test("the host can change whether this computer accepts remotes", async () => {
   expect(button("Pair a remote").disabled).toBe(false);
 });
 
+test("the host can save a local network domain", async () => {
+  await render({ authority: "host", controller: null, claimAvailable: false });
+  await act(async () => { fireEvent.change(screen.getByRole("textbox", { name: "Domain name" }), { target: { value: "couch.home" } }); });
+  await act(async () => { fireEvent.click(button("Save domain")); });
+  await flush();
+  expect(calls.some(call => call.path === "/api/settings/origin-domain" && call.method === "POST" && JSON.stringify(call.body) === JSON.stringify({ domain: "couch.home" }))).toBe(true);
+  expect((screen.getByRole("textbox", { name: "Domain name" }) as HTMLInputElement).value).toBe("couch.home");
+});
+
 test("a failed sharing save keeps pairing disabled and reports the error", async () => {
   sharingFailure = true;
   await render({ authority: "host", controller: null, claimAvailable: false }, false);
@@ -147,6 +162,8 @@ test("promoting a controller writes the role and reloads the list", async () => 
 
 test("removing a device deletes it and drops the row", async () => {
   await render();
+  await act(async () => { fireEvent.click(button("Remove")); });
+  expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(false);
   await act(async () => { fireEvent.click(button("Remove")); });
   await flush();
   expect(calls.some(call => call.method === "DELETE" && call.path === "/api/controllers/other")).toBe(true);

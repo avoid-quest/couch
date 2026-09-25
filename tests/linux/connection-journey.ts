@@ -36,7 +36,7 @@ async function openNative() {
 
 async function connections(ui: UiDriver, description: string) {
   if (!await ui.execute("return location.pathname.startsWith('/settings')")) {
-    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('.primary-nav a[data-source=Settings]')"));
+    await until("native or browser navigation is ready", () => ui.execute("return !!document.querySelector('.section-nav a[href^=\"/settings\"]')"));
     await ui.section("Settings");
   }
   if (!await ui.execute("return document.querySelector('[aria-label=\"Settings pages\"] [data-settings-page=connection]')?.getAttribute('aria-current') === 'page'")) await ui.settingsSection("connection");

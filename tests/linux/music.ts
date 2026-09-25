@@ -198,7 +198,7 @@ export async function assertMusicAfterRestart(context: MusicContext, expected: S
   await closePlaylists(httpRemote.ui, until);
   await httpRemote.ui.section("Library");
   await httpRemote.ui.type("#media-search", expected.tracks[0]!.title);
-  await until("reconnected phone decodes persisted embedded artwork after desktop restart", () => httpRemote.ui.execute("return [...document.querySelectorAll('[aria-label=\"Library search results\"] img')].some(img => img.complete && img.naturalWidth === 96)"));
+  await until("reconnected phone decodes persisted embedded artwork after desktop restart", () => httpRemote.ui.execute("return [...document.querySelectorAll('[aria-label=\"Search results\"] img')].some(img => img.complete && img.naturalWidth === 96)"));
   await httpRemote.ui.section("Queue");
   await httpRemote.minimize();
 }

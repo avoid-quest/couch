@@ -2,10 +2,13 @@ import { Check, Minus, Plus, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { WatchingProfile } from "../../shared/library";
 import type { Action, PlaybackPreferences as Preferences, PlayerState, QueueEntry, ReplayGainMode } from "../../shared/protocol";
 import type { Credentials } from "@/session/session";
@@ -130,17 +133,19 @@ function PanelGroup({ label, children }: { label: string; children: ReactNode })
   return <section className="mt-6"><h3 className="mb-2 px-3 text-sm font-normal text-muted-foreground">{label}</h3>{children}</section>;
 }
 
-function PanelOption({ selected, children, disabled, onClick }: { selected: boolean; children: ReactNode; disabled: boolean; onClick: () => void }) {
-  return <Button variant="ghost" className="min-h-11 w-full justify-start gap-3 px-3 text-left font-normal" aria-pressed={selected} disabled={disabled} onClick={onClick}>
+function PanelOption({ value, selected, children, disabled, onClick }: { value: string; selected: boolean; children: ReactNode; disabled: boolean; onClick: () => void }) {
+  return <ToggleGroupItem value={value} className="min-h-11 w-full justify-start gap-3 px-3 text-left font-normal" disabled={disabled} onClick={onClick}>
     <Check className={`size-4 shrink-0 ${selected ? "" : "invisible"}`} aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{children}</span>
-  </Button>;
+  </ToggleGroupItem>;
 }
 
 function PanelStepper({ label, value, disabled, onStep }: { label: string; value: string; disabled: boolean; onStep: (direction: -1 | 1) => void }) {
   return <div className="flex min-h-11 items-center gap-1 px-3"><span className="mr-auto">{label}</span>
+    <ButtonGroup aria-label={`${label} adjustment`}>
     <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={`${label} earlier`} disabled={disabled} onClick={() => onStep(-1)}><Minus className="size-4" aria-hidden="true" /></Button>
     <span className="w-16 text-center tabular-nums">{value}</span>
     <Button variant="ghost" size="icon" className="size-11 shrink-0" aria-label={`${label} later`} disabled={disabled} onClick={() => onStep(1)}><Plus className="size-4" aria-hidden="true" /></Button>
+    </ButtonGroup>
   </div>;
 }
 
@@ -225,31 +230,33 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
       {panel === "tracks" ? <>
         <PanelGroup label="Subtitles">
           {subtitles.length ? <>
-            <PanelOption selected={!subtitles.some(track => track.selected)} disabled={disabled} onClick={() => selectTrack("subtitle", -1)}>Off</PanelOption>
-            {subtitles.map(track => <PanelOption key={track.id} selected={track.selected} disabled={disabled} onClick={() => selectTrack("subtitle", track.index)}>{track.label || track.language || `Subtitle ${track.index + 1}`}</PanelOption>)}
+            <ToggleGroup type="single" value={String(subtitles.find(track => track.selected)?.index ?? -1)} orientation="vertical" aria-label="Subtitles" className="w-full gap-0">
+            <PanelOption value="-1" selected={!subtitles.some(track => track.selected)} disabled={disabled} onClick={() => selectTrack("subtitle", -1)}>Off</PanelOption>
+            {subtitles.map(track => <PanelOption key={track.id} value={String(track.index)} selected={track.selected} disabled={disabled} onClick={() => selectTrack("subtitle", track.index)}>{track.label || track.language || `Subtitle ${track.index + 1}`}</PanelOption>)}
+            </ToggleGroup>
           </> : <p className="px-3 py-2 text-sm text-muted-foreground">No embedded subtitles</p>}
           <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} compact />
           {saveDefault("subtitles", "subtitles")}
         </PanelGroup>
         <PanelGroup label="Audio">
-          {audio.length ? audio.map(track => <PanelOption key={track.id} selected={track.selected} disabled={disabled} onClick={() => selectTrack("audio", track.index)}>{track.label || track.language || `Audio ${track.index + 1}`}</PanelOption>)
+          {audio.length ? <ToggleGroup type="single" value={String(audio.find(track => track.selected)?.index ?? "")} orientation="vertical" aria-label="Audio" className="w-full gap-0">{audio.map(track => <PanelOption key={track.id} value={String(track.index)} selected={track.selected} disabled={disabled} onClick={() => selectTrack("audio", track.index)}>{track.label || track.language || `Audio ${track.index + 1}`}</PanelOption>)}</ToggleGroup>
             : <p className="px-3 py-2 text-sm text-muted-foreground">No alternate audio tracks</p>}
           {saveDefault("audio", "audio language")}
         </PanelGroup>
         <PanelGroup label="Timing"><PanelStepper label="Subtitles" value={seconds(player.subtitleDelay ?? 0)} disabled={disabled || !player.playbackId} onStep={direction => adjustDelay("subtitleDelay", player.subtitleDelay ?? 0, direction)} /></PanelGroup>
       </> : <>
-        {chapters.length > 0 && player.seekable && <PanelGroup label="Chapters">{chapters.map((chapter, index) =>
-          <PanelOption key={`${chapter.position}-${index}`} selected={index === chapterIndex} disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "seek", playbackId: player.playbackId, position: chapter.position }); }}>
+        {chapters.length > 0 && player.seekable && <PanelGroup label="Chapters"><ToggleGroup type="single" value={String(chapterIndex)} orientation="vertical" aria-label="Chapters" className="w-full gap-0">{chapters.map((chapter, index) =>
+          <PanelOption key={`${chapter.position}-${index}`} value={String(index)} selected={index === chapterIndex} disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "seek", playbackId: player.playbackId, position: chapter.position }); }}>
             <span className="flex w-full justify-between gap-4"><span className="truncate">{chapter.title || `Chapter ${index + 1}`}</span><span className="tabular-nums text-muted-foreground">{Math.floor(chapter.position / 60)}:{String(Math.floor(chapter.position % 60)).padStart(2, "0")}</span></span>
-          </PanelOption>)}</PanelGroup>}
-        {player.seekable && !entry?.live && <PanelGroup label="Speed"><div className="flex flex-wrap gap-1 px-2">{[...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, player.speed ?? 1])].sort((a, b) => a - b).map(speed =>
-          <Button key={speed} variant="ghost" className="min-h-11 gap-2 px-3" aria-pressed={(player.speed ?? 1) === speed} disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "speed", playbackId: player.playbackId, speed }); }}>
-            {(player.speed ?? 1) === speed && <Check className="size-4" aria-hidden="true" />}{speed}×
-          </Button>)}</div>{saveDefault("speed", "speed")}</PanelGroup>}
-        {showQuality && <PanelGroup label="Quality">{(Object.entries(videoQualityLabels) as [NonNullable<QueueEntry["quality"]>, string][]).map(([quality, label]) =>
-          <PanelOption key={quality} selected={(entry?.quality ?? "auto") === quality} disabled={disabled || !qualityAvailable || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }); }}>{label}</PanelOption>)}</PanelGroup>}
-        {player.replayGain !== undefined && <PanelGroup label="Volume levelling">{(["off", "track", "album"] as ReplayGainMode[]).map(mode =>
-          <PanelOption key={mode} selected={player.replayGain === mode} disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "replayGain", playbackId: player.playbackId, mode }); }}>{mode[0]!.toUpperCase() + mode.slice(1)}</PanelOption>)}
+          </PanelOption>)}</ToggleGroup></PanelGroup>}
+        {player.seekable && !entry?.live && <PanelGroup label="Speed"><ToggleGroup type="single" value={String(player.speed ?? 1)} aria-label="Speed" className="flex-wrap justify-start gap-1 px-2">{[...new Set([0.5, 0.75, 1, 1.25, 1.5, 2, player.speed ?? 1])].sort((a, b) => a - b).map(speed =>
+          <ToggleGroupItem key={speed} value={String(speed)} className="min-h-11 gap-2 px-3" disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "speed", playbackId: player.playbackId, speed }); }}>
+            <Check className={`size-4 ${(player.speed ?? 1) === speed ? "" : "invisible"}`} aria-hidden="true" />{speed}×
+          </ToggleGroupItem>)}</ToggleGroup>{saveDefault("speed", "speed")}</PanelGroup>}
+        {showQuality && <PanelGroup label="Quality"><ToggleGroup type="single" value={entry?.quality ?? "auto"} orientation="vertical" aria-label="Quality" className="w-full gap-0">{(Object.entries(videoQualityLabels) as [NonNullable<QueueEntry["quality"]>, string][]).map(([quality, label]) =>
+          <PanelOption key={quality} value={quality} selected={(entry?.quality ?? "auto") === quality} disabled={disabled || !qualityAvailable || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "videoQuality", playbackId: player.playbackId, quality }); }}>{label}</PanelOption>)}</ToggleGroup></PanelGroup>}
+        {player.replayGain !== undefined && <PanelGroup label="Volume levelling"><ToggleGroup type="single" value={player.replayGain} orientation="vertical" aria-label="Volume levelling" className="w-full gap-0">{(["off", "track", "album"] as ReplayGainMode[]).map(mode =>
+          <PanelOption key={mode} value={mode} selected={player.replayGain === mode} disabled={disabled || !player.playbackId} onClick={() => { if (player.playbackId) void run({ type: "replayGain", playbackId: player.playbackId, mode }); }}>{mode[0]!.toUpperCase() + mode.slice(1)}</PanelOption>)}</ToggleGroup>
           {saveDefault("replayGain", "volume normalization")}</PanelGroup>}
         <PanelGroup label="Sound">
           <PanelStepper label="Volume" value={String(player.volume)} disabled={!connected || pending} onStep={direction => { void run({ type: "volume", volume: Math.max(0, Math.min(100, player.volume + direction * 5)) }); }} />
@@ -322,14 +329,14 @@ export function PlaybackSettingsPanel({ entry, player, ready, connected, credent
               </Select>
               {saveDefault("replayGain", "volume normalization")}
             </div>}
-            {video ? <details key={player.playbackId} className="sm:col-span-2">
-              <summary tabIndex={0} className="min-h-11 cursor-pointer content-center">Subtitles and timing</summary>
-              <div className="grid gap-4 pt-3">
+            {video ? <Collapsible key={player.playbackId} className="sm:col-span-2">
+              <CollapsibleTrigger asChild><Button variant="ghost" className="min-h-11 px-0">Subtitles and timing</Button></CollapsibleTrigger>
+              <CollapsibleContent className="grid gap-4 pt-3">
                 <SubtitleUpload playbackId={player.playbackId} credentials={credentials} connected={connected} disabled={disabled} />
                 {audio.length > 0 && <DelayControl id="playback-audio-delay" label="Host audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
                 {subtitles.length > 0 && <DelayControl id="playback-subtitle-delay" label="Subtitle delay" value={player.subtitleDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "subtitleDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
-              </div>
-            </details> : audio.length > 0 && <DelayControl key={player.playbackId} id="playback-audio-delay" label="Host audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
+              </CollapsibleContent>
+            </Collapsible> : audio.length > 0 && <DelayControl key={player.playbackId} id="playback-audio-delay" label="Host audio delay" value={player.audioDelay ?? 0} disabled={disabled} onApply={delay => player.playbackId ? run({ type: "audioDelay", playbackId: player.playbackId, delay }) : Promise.resolve(false)} />}
             {pending && <p role="status" className="sm:col-span-2">Applying…</p>}
             {defaultError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{defaultError}</AlertDescription></Alert>}
             {player.subtitleError && <Alert variant="destructive" className="sm:col-span-2"><AlertDescription>{player.subtitleError}</AlertDescription></Alert>}

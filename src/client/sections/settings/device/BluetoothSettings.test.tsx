@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import { screen } from "../../../testing";
+import { fireEvent, screen } from "../../../testing";
 
 let root: Root, window: Window;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -43,4 +43,26 @@ test("an initial Bluetooth permission error tells the administrator where to ena
   </QueryClientProvider>));
   await act(async () => { await Bun.sleep(20); });
   expect(screen.getByRole("alert").textContent).toContain("Allow Couch to use Bluetooth in System Settings");
+});
+
+test("disconnecting a paired speaker asks inline before changing sound", async () => {
+  const actions: string[] = [];
+  (globalThis.fetch as ReturnType<typeof spyOn>).mockImplementation((async (input, init) => {
+    if (new URL(String(input)).pathname === "/api/bluetooth") {
+      if (init?.method === "POST") actions.push(JSON.parse(String(init.body)).action.op);
+      return Response.json({ adapter: "available", operation: null, devices: [{ address: "AA:BB:CC:DD:EE:FF", name: "Speaker", paired: true, connected: true }] });
+    }
+    return Response.json({ outputs: [], routing: {} });
+  }) as typeof fetch);
+  const { BluetoothSettings } = await import("./BluetoothSettings");
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  await act(async () => root.render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <BluetoothSettings credentials={{ origin: "http://localhost", token: "admin" }} connected />
+  </QueryClientProvider>));
+  await act(async () => { await Bun.sleep(20); });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Disconnect Speaker" })));
+  expect(actions).toEqual([]);
+  expect(screen.getByRole("group", { name: "Confirm disconnect Speaker" })).toBeDefined();
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Disconnect device" })));
+  expect(actions).toEqual(["disconnect"]);
 });

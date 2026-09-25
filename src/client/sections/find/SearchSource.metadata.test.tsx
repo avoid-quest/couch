@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Window } from "happy-dom";
 import { act } from "react";
 import type { Root } from "react-dom/client";
-import { fireEvent, screen } from "@/testing";
 
 const globals = new Map<string, PropertyDescriptor | undefined>();
 let window: Window, root: Root, request: ReturnType<typeof spyOn>;
@@ -33,12 +32,16 @@ afterEach(async () => {
 
 test("current Find details offer metadata actions only to an authorized local-video user", async () => {
   const { SearchSource } = await import("./SearchSource");
+  let summary: import("./SearchOnlineResults").SearchResultSummary | undefined;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const draw = (canManageMetadata: boolean) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source="Library" query="Proof" attempt={0} origin="http://localhost" token="paired" connected canPlay active canManageMetadata={canManageMetadata} onBrowse={() => {}} onEnqueue={async () => true} onResults={() => {}} onChooseSource={() => {}} /></QueryClientProvider>));
+  const draw = (canManageMetadata: boolean) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source="Library" query="Proof" attempt={0} origin="http://localhost" token="paired" connected canPlay active canManageMetadata={canManageMetadata} onBrowse={() => {}} onEnqueue={async () => true} onResults={(_, result) => { summary = result; }} /></QueryClientProvider>));
   await draw(false);
   await act(async () => { await Bun.sleep(10); });
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Details for Proof movie" })));
-  expect(screen.queryByRole("button", { name: "Edit metadata" })).toBeNull();
+  expect(summary?.hits?.map(hit => hit.title)).toEqual(["Proof movie"]);
+  await act(async () => summary?.hits?.[0]?.actions.find(action => action.label === "Details")?.run?.());
+  const edit = () => [...document.querySelectorAll("button")].find(button => button.textContent === "Edit metadata");
+  expect(edit()).toBeUndefined();
   await draw(true);
-  expect(screen.getByRole("button", { name: "Edit metadata" })).toBeDefined();
+  await act(async () => { await Bun.sleep(20); });
+  expect(edit()).toBeDefined();
 });

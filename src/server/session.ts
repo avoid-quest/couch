@@ -22,6 +22,7 @@ type SessionOptions = {
 };
 
 export function createSession(store: Store, sendPlayer: (command: PlaybackCommand) => void, publish: (state: SessionState) => void, options: SessionOptions = {}) {
+  const removedEntries = new Map<string, { entry: QueueEntry; index: number; queueIds: string[]; currentEntryId: string | null; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
   let desiredVolume = store.volume;
   let audioInterrupted = false;
   let resolution: AbortController | null = null;
@@ -87,6 +88,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     const cursorEntryId = state.queue.slice(0, cursor + 1).findLast(entry => retained.has(entry.id))?.id ?? null;
     store.saveQueue(queue, cursorEntryId);
     state.queue = queue;
+    state.queueRemoval = undefined;
     state.queueCursorEntryId = cursorEntryId;
     state.queueError = null;
     cancelWebRecovery();
@@ -451,7 +453,10 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       broadcast();
     },
     updateAppearance(appearance: TvAppearance) { state.appearance = appearance; broadcast(); },
-    notice(actor: PlaybackActor, text: string) { state.activity = { id: crypto.randomUUID(), actor, text }; broadcast(); },
+    notice(actor: PlaybackActor, text: string) {
+      state.activity = { id: crypto.randomUUID(), actor, text };
+      try { broadcast(); } finally { state.activity = undefined; }
+    },
     get state() { return structuredClone(state); },
     enrichEntry,
     loadQueue(entries: QueueEntry[], mode: "append" | "replace" | "play", authorize = () => {}, playedBy?: PlaybackActor, placement?: "next") {
@@ -602,9 +607,28 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         case "remove": {
           const index = state.queue.findIndex(entry => entry.id === action.entryId);
           if (index === -1) throw new Error("That queue entry no longer exists.");
+          const entry = state.queue[index]!;
           saveQueue(state.queue.filter(entry => entry.id !== action.entryId));
+          const token = crypto.randomUUID();
+          const expiresAt = Date.now() + 6_000;
+          const timer = setTimeout(() => removedEntries.delete(token), 6_000);
+          timer.unref?.();
+          removedEntries.set(token, { entry, index, queueIds: state.queue.map(entry => entry.id), currentEntryId: state.currentEntryId === action.entryId ? null : state.currentEntryId, expiresAt, timer });
+          state.queueRemoval = { entryId: action.entryId, token };
           if (state.currentEntryId === action.entryId) stop();
           else broadcast();
+          break;
+        }
+        case "restoreRemoved": {
+          const removed = removedEntries.get(action.token);
+          if (!removed || Date.now() >= removed.expiresAt) throw new Error("Undo expired. Check the current queue.");
+          if (state.currentEntryId !== removed.currentEntryId || state.queue.length !== removed.queueIds.length || state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) || state.queue.length >= 500) throw new Error("The shared queue or playback changed. Check its current state before trying again.");
+          const queue = [...state.queue];
+          queue.splice(removed.index, 0, removed.entry);
+          saveQueue(queue);
+          clearTimeout(removed.timer);
+          removedEntries.delete(action.token);
+          broadcast();
           break;
         }
         case "move": {

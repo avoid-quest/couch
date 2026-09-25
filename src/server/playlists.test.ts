@@ -57,9 +57,21 @@ test("saves named household playlists, lists summaries, and restores them after 
   opened.delete(first.service);
   const second = fixture({ databasePath: path });
   expect(await detail(second.service, saved.id)).toEqual(saved);
-  expect(await (await request(second.service)).json()).toEqual({ playlists: [{ id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source: null, entryCount: 1 }] });
+  expect(await (await request(second.service)).json()).toEqual({ playlists: [{ id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source: null, entryCount: 1, totalDuration: null }] });
   expect(second.loaded).not.toHaveBeenCalled();
   expect(second.changed).not.toHaveBeenCalled();
+});
+
+test("playlist summaries total known durations and withhold estimates for live or unknown entries", async () => {
+  const { service, setQueue } = fixture();
+  setQueue([{ ...track, duration: 60 }, { ...track, id: "second", duration: 90 }]);
+  await create(service, "Timed");
+  setQueue([{ ...track, live: true, duration: 60 }]);
+  await create(service, "Live");
+  setQueue([{ ...track }]);
+  await create(service, "Unknown");
+  const { playlists } = await (await request(service)).json() as { playlists: Array<{ name: string; totalDuration: number | null }> };
+  expect(Object.fromEntries(playlists.map(({ name, totalDuration }) => [name, totalDuration]))).toEqual({ Timed: 150, Live: null, Unknown: null });
 });
 
 test("keeps only Up next when requested", async () => {
@@ -142,7 +154,7 @@ test("saves a source list through the shared entry point without touching the qu
     { id: "yt-one", title: "First video", thumbnail: "https://i.ytimg.com/vi/one/hqdefault.jpg", duration: 90, quality: "1080p" },
     { id: "yt-two", title: "Second video" },
   ]);
-  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" }, entryCount: 2 }] });
+  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source: { provider: "youtube", url: "https://www.youtube.com/playlist?list=PL1234567890" }, entryCount: 2, totalDuration: null }] });
   expect(changed).toHaveBeenCalledTimes(1);
   expect(loaded).not.toHaveBeenCalled();
 });
@@ -162,15 +174,15 @@ test("keeps the source hint on the summary across restart and migrates databases
   expect(response.status).toBe(201);
   const saved = (await response.json() as { playlist: SavedPlaylist }).playlist;
   expect(await (await request(first.service)).json()).toEqual({ playlists: [
-    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1 },
-    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1 },
+    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1, totalDuration: null },
+    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1, totalDuration: null },
   ] });
   first.service.close();
   opened.delete(first.service);
   const second = fixture({ databasePath: path });
   expect(await (await request(second.service)).json()).toEqual({ playlists: [
-    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1 },
-    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1 },
+    { id: "old", name: "Old queue save", revision: 1, updatedAt: 1, source: null, entryCount: 1, totalDuration: null },
+    { id: saved.id, name: saved.name, revision: 1, updatedAt: saved.updatedAt, source, entryCount: 1, totalDuration: null },
   ] });
 });
 
@@ -185,7 +197,7 @@ test.each(["youtube", "raiplay", "bandcamp", "streamingcommunity"] as const)("ke
   const { playlist } = await response.json() as { playlist: SavedPlaylist };
   expect(playlist.source).toEqual(source);
   expect(await detail(service, playlist.id)).toEqual(playlist);
-  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source, entryCount: 1 }] });
+  expect(await (await request(service)).json()).toEqual({ playlists: [{ id: playlist.id, name: playlist.name, revision: 1, updatedAt: playlist.updatedAt, source, entryCount: 1, totalDuration: null }] });
 });
 
 test.each([

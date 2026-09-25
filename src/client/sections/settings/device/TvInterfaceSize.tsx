@@ -39,7 +39,7 @@ export function TvInterfaceSize({ appearance, credentials, connected, administra
         <p className="text-muted-foreground">Shared by everyone watching {hostName}'s TV screen. Try a size there, then confirm it within 20 seconds.</p>
       </>}
       {administrator
-        ? <InterfaceSizeChoices label="TV interface size" value={seconds || !appearance.preview ? appearance.size : appearance.confirmedSize} disabled={!canWrite} onChange={size => void change("", { size })} />
+        ? <div className="settings-choice-row grid grid-cols-[16rem_minmax(0,1fr)] items-center gap-4 border-t border-border py-3 max-[900px]:grid-cols-1"><span>Size</span><InterfaceSizeChoices label="TV interface size" value={seconds || !appearance.preview ? appearance.size : appearance.confirmedSize} disabled={!canWrite} onChange={size => void change("", { size })} /></div>
         : <p className="text-muted-foreground">{interfaceSizes.find(size => size.value === appearance.confirmedSize)?.label}. An administrator can change this TV's interface size.</p>}
       {appearance.preview && seconds > 0 && (
         <div className="space-y-3">

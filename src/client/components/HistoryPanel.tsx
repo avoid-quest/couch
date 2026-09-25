@@ -58,12 +58,12 @@ export function ProgressActions({ origin, token, connected, mediaId, title, prog
     setPending(true);
     setError(null);
     try {
-      const { undoToken } = await (await (inContinue ? removeFromContinue({ origin, token }, mediaId) : removeHistory({ origin, token }, mediaId))).json() as { undoToken?: string };
+      const { undoToken, expiresAt } = await (await (inContinue ? removeFromContinue({ origin, token }, mediaId) : removeHistory({ origin, token }, mediaId))).json() as { undoToken?: string; expiresAt?: number };
       onUpdated();
-      if (undoToken) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
+      if (undoToken && expiresAt && expiresAt > Date.now()) session?.offerUndo(`Removed ${title} from ${inContinue ? "Continue" : "history"}`, async () => {
         await undoProgressAction({ origin, token }, undoToken);
         onUpdated();
-      });
+      }, expiresAt - Date.now());
       setOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not remove this history item.");
@@ -149,7 +149,7 @@ export function HistoryPanel({ origin, token, connected, canPlay, onPlay, active
           <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-primary">{station.logoUrl ? <MediaArtwork thumbnail={station.logoUrl} title={station.name} className="size-full object-cover" /> : <Radio aria-hidden="true" />}</span>
           <div className="min-w-0 flex-1"><strong className="break-words text-base font-medium">{station.name}</strong><p className="mt-1 text-sm text-muted-foreground">Radio station</p></div>
         </div>
-        {onRadio && <div className="catalog-row-actions flex flex-wrap gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
+        {onRadio && <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" disabled={!connected || !canPlay || radioPending !== null} aria-label={`Play: ${station.name}`} onClick={() => void playStation(station)}><Play aria-hidden="true" />{radioPending === station.id ? "Starting…" : "Play"}</Button></div>}
       </Card></li>; }
       const item = entry.item;
       const available = !!(item.playable || item.libraryItemId || item.queueEntryId);

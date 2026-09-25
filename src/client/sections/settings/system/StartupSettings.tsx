@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { apiFetch } from "@/api/client";
 import type { StartupState } from "../../../../shared/startup";
 import type { ApiCredentials } from "@/api/client";
@@ -47,7 +48,7 @@ export function StartupSettings({ credentials, connected }: Props) {
         </>
       )}
       {!state && !startup.error && <p className="text-muted-foreground">{connected ? "Reading TV startup…" : "Reconnect to read TV startup."}</p>}
-      <details><summary className="min-h-11 cursor-pointer content-center" tabIndex={0}>Startup recovery</summary><p className="text-muted-foreground">After disabling, launch Couch again from SSH with your administrator account: run <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. The second command ends the current graphical session. For app recovery, use <code>sudo couch-session logs</code> and <code>sudo couch-session restart</code> from SSH.</p></details>
+      <Collapsible><CollapsibleTrigger asChild><Button variant="ghost" className="min-h-11 px-0">Startup recovery</Button></CollapsibleTrigger><CollapsibleContent><p className="text-muted-foreground">After disabling, launch Couch again from SSH with your administrator account: run <code>sudo couch-session autostart enable</code>, then <code>sudo systemctl restart lightdm</code>. The second command ends the current graphical session. For app recovery, use <code>sudo couch-session logs</code> and <code>sudo couch-session restart</code> from SSH.</p></CollapsibleContent></Collapsible>
       {notice && <p role="status">{notice}</p>}
       {(startup.error || error) && <Alert variant="destructive"><AlertDescription>{error ?? "Could not read TV startup."}</AlertDescription></Alert>}
       <Button variant="outline" className="min-h-11" disabled={!connected} onClick={() => void queryClient.invalidateQueries({ queryKey: ["settings", "startup"] })}>Refresh startup</Button>

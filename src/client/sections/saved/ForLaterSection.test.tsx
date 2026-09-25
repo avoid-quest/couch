@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { Window } from "happy-dom";
 import { act } from "react";
+import { toast } from "sonner";
 import type { Root } from "react-dom/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fireEvent, screen } from "../../testing";
@@ -9,16 +10,24 @@ let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof
 const originals = new Map<string, PropertyDescriptor | undefined>();
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 let missing = false, canceled = false, undoResponses = false;
-let items = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
+let items: Array<{ id: string; title: string; kind?: "radio"; live?: boolean }> = [{ id: "saved", title: "Evening movie" }, { id: "second", title: "Evening song" }];
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => screen.getByRole("button", { name: label });
 const click = async (label: string) => { await act(async () => fireEvent.click(button(label))); await flush(); };
-async function render(connected = true, canPlay = true, inspect = false) {
+const undo = async () => {
+  const latest = toast.getToasts().at(-1);
+  const action = latest && "action" in latest ? latest.action : undefined;
+  expect(latest && "duration" in latest ? latest.duration : null).toBe(6_000);
+  expect(action && typeof action === "object" && "label" in action ? action.label : null).toBe("Undo");
+  await act(async () => { if (action && typeof action === "object" && "onClick" in action) action.onClick({} as React.MouseEvent<HTMLButtonElement>); });
+  await flush();
+};
+async function render(connected = true, canPlay = true, inspect = false, mediaOnly = false) {
   const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
   forLaterOrder = order;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} mediaOnly={mediaOnly} /></QueryClientProvider>));
   await flush();
 }
 beforeEach(async () => {
@@ -45,7 +54,7 @@ beforeEach(async () => {
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container);
 });
 afterEach(async () => {
-  await act(async () => root.unmount()); fetchSpy.mockRestore(); await window.happyDOM.abort();
+  await act(async () => root.unmount()); toast.dismiss(); fetchSpy.mockRestore(); await window.happyDOM.abort();
   for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
   originals.clear();
 });
@@ -53,9 +62,17 @@ afterEach(async () => {
 test("saved shared items display without queue writes; explicit actions retain the saved entry", async () => {
   await render();
   expect(calls).toEqual([{ path: "/api/for-later", method: "GET", body: undefined }]);
-  await click("Add Evening movie to Up next"); await click("Play Evening movie");
+  await click("Queue Evening movie"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
+});
+
+test("Find home limits For later to video and music", async () => {
+  items.push({ id: "station", title: "Evening station", kind: "radio", live: true }, { id: "live", title: "Live stream", live: true });
+  await render(true, true, false, true);
+  expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  expect(document.body.textContent).not.toContain("Evening station");
+  expect(document.body.textContent).not.toContain("Live stream");
 });
 
 test("failed source keeps its saved item removable and removal returns focus to the next item", async () => {
@@ -75,7 +92,7 @@ test("removed For later item offers Undo and restores the original row", async (
   await render();
   await click("Remove Evening movie from For later");
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
-  await click("Undo");
+  await undo();
   expect(calls.at(-2)).toEqual({ path: "/api/for-later/restore", method: "POST", body: { token: "restore-token" } });
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
@@ -83,7 +100,7 @@ test("removed For later item offers Undo and restores the original row", async (
 test("unavailable native playback still allows append and remove; disconnected controllers cannot mutate", async () => {
   await render(true, false);
   expect((button("Play Evening movie") as HTMLButtonElement).disabled).toBe(true);
-  expect(button("Add Evening movie to Up next").disabled).toBe(false);
+  expect(button("Queue Evening movie").disabled).toBe(false);
   expect(button("Remove Evening movie from For later").disabled).toBe(false);
   const count = calls.length; await render(false);
   expect(document.body.textContent).toContain("Reconnect to see your saved items");

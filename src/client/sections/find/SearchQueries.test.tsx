@@ -12,8 +12,9 @@ const originals = new Map<string, PropertyDescriptor | undefined>();
 let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>;
 let requests: Array<{ path: string; token: string | null; signal?: AbortSignal | null }>;
 let delayed: ReturnType<typeof Promise.withResolvers<Response>> | undefined;
-let favorite = false, pageFails = false, raiFails = false;
+let favorite = false, savedWeb = false, pageFails = false, raiFails = false;
 let query = "first", provider: ProviderId = "youtube", token = "paired";
+let summary: import("./SearchOnlineResults").SearchResultSummary;
 const flush = () => act(async () => { await Bun.sleep(15); });
 async function until(predicate: () => boolean) {
   const deadline = Date.now() + 2_000;
@@ -23,7 +24,7 @@ async function render() {
   const { SearchOnlineResults } = await import("./SearchOnlineResults");
   await act(async () => root.render(<QueryClientProvider client={client}><SearchOnlineResults
     origin="http://localhost" token={token} provider={provider} query={query} quality="auto" connected canPlay active
-    onCommand={async () => true} onEnqueued={() => {}} />
+    onCommand={async () => true} onEnqueued={() => {}} onResults={(_, next) => { summary = next; }} />
   </QueryClientProvider>));
   await flush();
 }
@@ -40,7 +41,7 @@ beforeEach(async () => {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: typeof value === "function" && /^[a-z]/.test(key) ? value.bind(window) : value });
   }
   query = "first"; provider = "youtube"; token = "paired";
-  favorite = pageFails = raiFails = false; requests = []; delayed = undefined;
+  favorite = savedWeb = pageFails = raiFails = false; requests = []; delayed = undefined;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -50,6 +51,8 @@ beforeEach(async () => {
       return Response.json({ favorites: favorite ? [item("first")] : [] });
     }
     if (url.pathname.startsWith("/api/providers/favorites/")) { favorite = false; return new Response(null, { status: 204 }); }
+    if (url.pathname === "/api/for-later") { if (init?.method === "POST") savedWeb = true; return Response.json({ items: savedWeb ? [{ id: "saved-first", url: item("first").url, title: "first" }] : [] }); }
+    if (url.pathname.startsWith("/api/for-later/")) { savedWeb = false; return new Response(null, { status: 204 }); }
     if (url.searchParams.get("q") === "slow" && delayed) return delayed.promise;
     if (provider === "raiplay") {
       if (url.searchParams.has("url")) return Response.json({ items: [{ ...item("rai1", "Rai 1"), provider: "raiplay", live: true }] });
@@ -73,105 +76,63 @@ afterEach(async () => {
   originals.clear();
 });
 
-test("a rapid query change cancels the old read and never displays its late results", async () => {
-  query = "slow"; delayed = Promise.withResolvers<Response>();
-  await render();
-  const request = requests.find(request => request.path.includes("q=slow"));
-  expect(request).toBeDefined();
+
+const hit = (title: string) => summary.hits?.find(item => item.title === title);
+const run = async (action?: () => void) => { await act(async () => action?.()); await flush(); };
+
+test("a rapid query change cancels the old provider request and reports only current hits", async () => {
+  query = "slow"; delayed = Promise.withResolvers<Response>(); await render();
+  const old = requests.find(request => request.path.includes("q=slow"));
   query = "new"; await render();
-  expect(request?.signal?.aborted).toBe(true);
+  await until(() => !!hit("new"));
   delayed.resolve(Response.json({ items: [item("retired", "Retired result")] }));
-  await until(() => !!screen.queryByRole("button", { name: "Play: new" }));
-  expect(screen.queryByRole("button", { name: "Play: Retired result" })).toBeNull();
+  await flush();
+  expect(old?.signal?.aborted).toBe(true);
+  expect(hit("Retired result")).toBeUndefined();
 });
 
-test("switching provider cancels old results without borrowing another source's cache", async () => {
+test("provider pagination preserves first-page hits and retries a failed next page", async () => {
+  await render(); await until(() => !!hit("first"));
+  pageFails = true; await run(summary.more);
+  await until(() => !!summary.error);
+  expect(summary.errorMessage).toContain("Second page unavailable");
+  expect(hit("first")).toBeDefined();
+  pageFails = false; await run(summary.retry);
+  await until(() => !!hit("Second page"));
+  expect(summary.hits?.filter(item => item.title === "first")).toHaveLength(1);
+  expect(summary.more).toBeUndefined();
+});
+
+test("a collection exposes its opener and returns to the original provider hits", async () => {
+  await render(); await until(() => !!hit("A collection"));
+  await run(hit("A collection")?.primary.run);
+  await until(() => !!hit("Collection episode"));
+  expect(summary.collection?.title).toBe("A collection");
+  expect(summary.collection?.openerId).toBe("youtube:collection");
+  await run(summary.collection?.back);
+  await until(() => !!hit("A collection"));
+  expect(summary.collection).toBeUndefined();
+});
+
+test("favorite changes refresh saved status through the shared provider cache", async () => {
+  await render(); await until(() => !!hit("first"));
+  await run(hit("first")?.actions.find(action => action.label === "Save")?.run);
+  await until(() => !!hit("first")?.actions.find(action => action.label === "Saved"));
+  expect(savedWeb).toBe(true);
+  await run(hit("first")?.actions.find(action => action.label === "Saved")?.run);
+  await until(() => !!hit("first")?.actions.find(action => action.label === "Save"));
+  expect(savedWeb).toBe(false);
+});
+
+test("provider reads use current credentials after client retirement", async () => {
   query = "slow"; delayed = Promise.withResolvers<Response>(); await render();
-  const request = requests.find(request => request.path.includes("q=slow"));
-  provider = "twitch"; query = "broadcast"; await render();
-  delayed.resolve(Response.json({ items: [item("retired", "Retired result")] }));
-  await until(() => !!screen.queryByRole("button", { name: "Play: broadcast" }));
-  expect(request?.signal?.aborted).toBe(true);
-  expect(screen.getByRole("region", { name: "Twitch search results" })).toBeDefined();
-  expect(screen.queryByRole("button", { name: "Play: Retired result" })).toBeNull();
-});
-
-test("pagination failure retains the first page and retry appends a deduplicated next page", async () => {
-  await render(); await until(() => !!screen.queryByRole("button", { name: "Play: first" }));
-  pageFails = true;
-  await click("Show more YouTube");
-  await until(() => !!screen.queryByRole("alert"));
-  expect(screen.getByRole("button", { name: "Play: first" })).toBeDefined();
-  expect(screen.getByRole("alert").textContent).toContain("Second page unavailable");
-  pageFails = false; await click("Retry YouTube");
-  await until(() => !!screen.queryByRole("button", { name: "Play: Second page" }));
-  expect(screen.getAllByRole("button", { name: "Play: first", exact: true })).toHaveLength(1);
-  expect(screen.queryByRole("button", { name: "Show more YouTube" })).toBeNull();
-});
-
-test("favorite invalidation updates the shared kept status without resetting the browse trail", async () => {
-  await render(); await until(() => !!screen.queryByRole("button", { name: "Keep first" }));
-  await click("Keep first");
-  await until(() => !!screen.queryByRole("button", { name: "Remove first" }));
-  favorite = false;
-  await act(async () => { await client.invalidateQueries({ queryKey: ["providers", "favorites"] }); });
-  await until(() => !!screen.queryByRole("button", { name: "Keep first" }));
-  await click("Open A collection");
-  await until(() => !!screen.queryByRole("button", { name: "Play: Collection episode" }));
-  await act(async () => { await client.invalidateQueries({ queryKey: ["providers", "favorites"] }); });
-  expect(screen.getByRole("button", { name: "Back to results" })).toBeDefined();
-  expect(screen.getByRole("button", { name: "Play: Collection episode" })).toBeDefined();
-});
-
-test("back navigation restores the opener, visible results and scroll without a second cache", async () => {
-  await render(); await until(() => !!screen.queryByRole("button", { name: "Open A collection" }));
-  Object.defineProperty(document, "scrollingElement", { configurable: true, value: document.documentElement });
-  document.documentElement.scrollTop = 420;
-  const opener = screen.getByRole("button", { name: "Open A collection" });
-  opener.focus(); await click("Open A collection");
-  await until(() => !!screen.queryByRole("button", { name: "Play: Collection episode" }));
-  document.documentElement.scrollTop = 0;
-  await click("Back to results");
-  await until(() => document.activeElement === screen.queryByRole("button", { name: "Open A collection" }));
-  expect(document.documentElement.scrollTop).toBe(420);
-});
-
-test("RaiPlay preserves live partial results and their warning when catalogue search fails", async () => {
-  provider = "raiplay"; query = "Rai 1"; raiFails = true;
-  await render(); await until(() => !!screen.queryByRole("button", { name: "Play: Rai 1" }));
-  const region = within(screen.getByRole("region", { name: "RaiPlay search results" }));
-  expect(region.getByText("Some RaiPlay results could not be loaded. Try this search again to refresh them.")).toBeDefined();
-});
-
-test("retiring a connection client cancels its browse while new credentials use only the new cache", async () => {
-  query = "slow"; delayed = Promise.withResolvers<Response>(); await render();
+  const old = requests.find(request => request.path.includes("q=slow"));
   const previous = client;
-  const request = requests.find(request => request.path.includes("q=slow"));
   previous.clear(); client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   token = "new-pairing"; query = "new-household"; await render();
   delayed.resolve(Response.json({ items: [item("retired", "Retired result")] }));
-  await until(() => !!screen.queryByRole("button", { name: "Play: new-household" }));
-  expect(request?.signal?.aborted).toBe(true);
+  await until(() => !!hit("new-household"));
+  expect(old?.signal?.aborted).toBe(true);
   expect(requests.some(request => request.path.includes("q=new-household") && request.token === "Bearer new-pairing")).toBe(true);
-  expect(screen.queryByRole("button", { name: "Play: Retired result" })).toBeNull();
-  expect(previous.getQueryCache().getAll()).toEqual([]);
-});
-
-for (const source of ["Library", "Jellyfin"] as const) test(`${source} repeats the same search after a failed attempt`, async () => {
-  const { SearchSource } = await import("./SearchSource");
-  let fails = true;
-  fetchSpy.mockImplementation((async (input) => {
-    const path = new URL(String(input)).pathname;
-    if (path === "/api/jellyfin") return Response.json({ connected: true });
-    if (path === "/api/library/sources") return Response.json({ sources: [{ name: "Movies", status: "ready" }] });
-    return fails ? Response.json({ error: "Search unavailable" }, { status: 503 }) : Response.json({ total: 0, items: [] });
-  }) as typeof fetch);
-  const renderSource = (attempt: number) => act(async () => root.render(<QueryClientProvider client={client}><SearchSource source={source} query="same" attempt={attempt} origin="http://localhost" token="paired" connected canPlay active onEnqueue={async () => true} onBrowse={() => {}} onResults={() => {}} onChooseSource={() => {}} /></QueryClientProvider>));
-  await renderSource(0);
-  await until(() => !!screen.queryByRole("alert"));
-  expect(screen.getByRole("alert").textContent).toContain("Search unavailable");
-  fails = false;
-  await renderSource(1);
-  await until(() => !!screen.queryByText("0 results"));
-  expect(screen.queryByRole("alert")).toBeNull();
+  expect(hit("Retired result")).toBeUndefined();
 });

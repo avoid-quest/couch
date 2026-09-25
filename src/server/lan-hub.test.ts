@@ -1,6 +1,9 @@
 import { expect, spyOn, test } from "bun:test";
 import * as dns from "node:dns/promises";
 import { networkInterfaces } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHub } from "./hub";
 import { selectLan } from "./lan-listener";
 let available = false;
@@ -26,6 +29,44 @@ test.skipIf(!available)("the native hub keeps loopback while sharing opens and c
     await expect(fetch(`${urls[0]}/api/connection`)).rejects.toThrow();
     expect((await fetch(`${hub.origin}/api/health`)).status).toBe(200);
   } finally { await hub.close(); }
+});
+
+test.skipIf(!available)("a saved origin domain admits its LAN hostname and can be cleared", async () => {
+  const network = selectLan(networkInterfaces());
+  const directory = mkdtempSync(join(tmpdir(), "couch-origin-domain-"));
+  const databasePath = join(directory, "state.sqlite");
+  const token = "local-host-token-with-at-least-32-characters";
+  const lookup = spyOn(dns, "lookup").mockImplementation((async () => [{ address: network.address, family: 4 }]) as never);
+  const start = () => {
+    const addresses = Promise.withResolvers<string[]>();
+    const hub = createHub({ managedLan: true, remoteControlEnabled: true, port: 0, databasePath, hostToken: token, sendPlayer: () => {}, onAddresses: urls => { if (urls.length) addresses.resolve(urls); } });
+    return { hub, addresses: addresses.promise };
+  };
+  let current = start();
+  try {
+    await current.addresses;
+    const endpoint = () => `${current.hub.origin}/api/settings/origin-domain`;
+    const get = () => fetch(endpoint(), { headers: { Authorization: `Bearer ${token}` } });
+    const save = (domain: unknown) => fetch(endpoint(), { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ domain }) });
+    expect((await fetch(endpoint())).status).toBe(401);
+    expect(await (await get()).json()).toEqual({ domain: "" });
+    for (const domain of ["https://couch.home", "couch.home:4100", "192.168.1.20", "bad..home", "bad_home", 42]) expect((await save(domain)).status).toBe(400);
+    expect(await (await save("COUCH.home")).json()).toEqual({ domain: "couch.home" });
+    const alias = `http://couch.home:${new URL(current.hub.origin).port}`;
+    const ip = `http://${network.address}:${new URL(current.hub.origin).port}`;
+    expect((await fetch(`${ip}/api/connection`, { headers: { Host: new URL(alias).host, Origin: alias } })).status).toBe(200);
+    expect((await fetch(`${ip}/api/connection`, { headers: { Host: "unrelated.home", Origin: alias } })).status).toBe(403);
+    await current.hub.close();
+    current = start();
+    await current.addresses;
+    expect(await (await get()).json()).toEqual({ domain: "couch.home" });
+    const restoredAlias = `http://couch.home:${new URL(current.hub.origin).port}`;
+    const restoredIp = `http://${network.address}:${new URL(current.hub.origin).port}`;
+    expect((await fetch(`${restoredIp}/api/connection`, { headers: { Host: new URL(restoredAlias).host, Origin: restoredAlias } })).status).toBe(200);
+    expect(await (await save("")).json()).toEqual({ domain: "" });
+    expect((await fetch(`${restoredIp}/api/connection`, { headers: { Host: new URL(restoredAlias).host, Origin: restoredAlias } })).status).toBe(403);
+    expect((await fetch(`${restoredIp}/api/connection`)).status).toBe(200);
+  } finally { await current.hub.close(); lookup.mockRestore(); rmSync(directory, { recursive: true, force: true }); }
 });
 
 test.skipIf(!available)("alias DNS failure preserves IP admission and recovery restores only the validated Host and Origin", async () => {

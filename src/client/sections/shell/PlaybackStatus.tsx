@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { AudioLines, Bluetooth, Check, MonitorSmartphone, Settings2 } from "lucide-react";
+import { AudioLines, Bluetooth, MonitorSmartphone, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SoundState } from "../../../shared/sound";
 import type { BluetoothState } from "../../../shared/bluetooth";
@@ -78,11 +80,11 @@ export function SoundControls({ credentials, connected, open, installationName, 
     const changeVolume = (step: number) => { if (volumeReady && volume !== null) void run({ type: "volume", volume: Math.max(0, Math.min(100, Math.round(volume + step))) }); };
     return <div className="device-sound-controls">
       <p className="device-section-label">Sound on {installationName || "this Couch"}</p>
-      {outputs.length ? <div className="device-output-list">{outputs.map(output => <Button key={output.id} variant="ghost" className="device-row" aria-pressed={selected === output.id} disabled={pending || !connected} onClick={() => void selectOutput(output.id)}><span>{selected === output.id && <Check aria-hidden="true" />} {output.name || output.id}</span></Button>)}</div> : <p className="device-muted">{unavailable}</p>}
+      {outputs.length ? <RadioGroup aria-label="Sound output" value={selected ?? ""} disabled={pending || !connected} onValueChange={value => void selectOutput(value)} className="gap-1">{outputs.map((output, index) => <div key={output.id} className="flex min-h-11 items-center gap-2"><RadioGroupItem id={`quick-output-${index}`} value={output.id} /><label htmlFor={`quick-output-${index}`} className="min-w-0 flex-1 cursor-pointer truncate">{output.name || output.id}</label></div>)}</RadioGroup> : <p className="device-muted">{unavailable}</p>}
       {observed && observed.id !== selected && <p className="device-muted">Now playing on {observed.name || observed.id}.</p>}
-      <div className="device-volume" role="group" aria-label="Volume"><span>Volume</span><div className="device-volume-steps"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></div></div>
+      <div className="device-volume" role="group" aria-label="Volume"><span>Volume</span><ButtonGroup aria-label="Volume adjustment"><Button variant="ghost" size="icon" aria-label="Decrease volume" disabled={!volumeReady || volume === 0} onClick={() => changeVolume(-5)}>−</Button><span className="min-w-8 self-center text-center" aria-live="polite">{volume === null ? "—" : Math.round(volume)}</span><Button variant="ghost" size="icon" aria-label="Increase volume" disabled={!volumeReady || volume === 100} onClick={() => changeVolume(5)}>+</Button></ButtonGroup></div>
       {outputError && <p role="alert" className="text-sm text-destructive">{outputError}</p>}
-      {credentials && <Button variant="ghost" className="device-settings-link" asChild><Link to="/settings/sound" onClick={onClose}><Settings2 aria-hidden="true" />Sound settings</Link></Button>}
+      {credentials && <Button variant="ghost" className="device-settings-link" asChild><Link to="/settings/sound" onClick={onClose}>Sound settings</Link></Button>}
     </div>;
   }
   return <>
@@ -109,13 +111,14 @@ export function SoundControls({ credentials, connected, open, installationName, 
 
 // Quick check of where playback runs and where its sound comes out.
 // Wi-Fi signal lives in the OS, not here; the LAN address and the audio route are what Couch knows.
-export function PlaybackStatus({ credentials, connected, status, installationName, standardLayout = false, localHost = false }: {
+export function PlaybackStatus({ credentials, connected, status, installationName, localHost = false, state, run }: {
   credentials: Credentials | null;
   connected: boolean;
   status: string;
   installationName?: string;
-  standardLayout?: boolean;
   localHost?: boolean;
+  state?: SessionState | null;
+  run?: (action: Action) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState(false);
   const name = installationName || "Couch";
@@ -123,7 +126,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
     <PopoverTrigger asChild>
       <Button variant="ghost" className="playback-status" aria-label={`Playback on ${name}: ${status}`}>
         <span className={`connection-dot ${connected ? "online" : ""}`} aria-hidden="true" />
-        <span className="playback-status-name">{standardLayout ? localHost ? "Playing here" : `Playing on ${name}` : name}</span>
+        <span className="playback-status-name">{localHost ? "Playing here" : `Playing on ${name}`}</span>
       </Button>
     </PopoverTrigger>
     <PopoverContent align="end" className="w-80 gap-3">
@@ -135,7 +138,7 @@ export function PlaybackStatus({ credentials, connected, status, installationNam
         <MonitorSmartphone className="size-5 text-muted-foreground" aria-hidden="true" />
       </div>
       {credentials?.origin && <p className="flex items-center gap-2 text-muted-foreground"><span className="sr-only">Connection</span><AudioLines className="size-4" aria-hidden="true" />{new URL(credentials.origin).host}</p>}
-      <SoundControls credentials={credentials} connected={connected} open={open} onClose={() => setOpen(false)} />
+      <SoundControls credentials={credentials} connected={connected} open={open} installationName={name} compact state={state} run={run} onClose={() => setOpen(false)} />
     </PopoverContent>
   </Popover>;
 }

@@ -38,6 +38,7 @@ export type PlayerState = {
 
 export type SessionState = {
   queue: QueueEntry[];
+  queueRemoval?: { entryId: string; token: string };
   currentEntryId: string | null;
   presentationId?: string | null;
   playedBy?: PlaybackActor;
@@ -76,6 +77,7 @@ export type Action =
   | { type: "enqueueRadio"; stationId: string; entryId: string; playNow?: boolean; placement?: "next" }
   | { type: "enqueueWeb"; entryId: string; url: string; title?: string; thumbnail?: string; quality?: VideoQuality; playNow?: boolean; fromStart?: boolean; placement?: "next" }
   | { type: "remove"; entryId: string }
+  | { type: "restoreRemoved"; token: string }
   | { type: "move"; entryId: string; beforeEntryId: string | null }
   | { type: "play"; entryId: string; fromStart?: boolean }
   | { type: "videoQuality"; playbackId: string; quality: VideoQuality }

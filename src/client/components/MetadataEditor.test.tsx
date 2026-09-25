@@ -106,3 +106,16 @@ test("browser export keeps its download action", async () => {
     create.mockRestore(); click.mockRestore();
   }
 });
+
+test("artwork and match removal checkboxes submit the selected corrections", async () => {
+  request.mockImplementation((async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "POST" ? Response.json(metadata) : Response.json(metadata)) as typeof fetch);
+  await openEditor("Save corrections");
+  const artwork = screen.getByRole("checkbox", { name: "Remove the current artwork" });
+  const match = screen.getByRole("checkbox", { name: "Clear the TMDB match and its exported ID" });
+  await act(async () => { fireEvent.click(artwork); fireEvent.click(match); });
+  expect(artwork.getAttribute("aria-checked")).toBe("true");
+  expect(match.getAttribute("aria-checked")).toBe("true");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save corrections" })));
+  const post = request.mock.calls.find((call: unknown[]) => (call[1] as RequestInit | undefined)?.method === "POST");
+  expect(JSON.parse(String((post?.[1] as RequestInit | undefined)?.body))).toMatchObject({ changes: { artworkId: null }, clearMatch: true });
+});

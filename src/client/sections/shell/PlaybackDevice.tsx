@@ -1,13 +1,14 @@
 import { Fragment, createContext, useContext, useEffect, useRef, useState, type FormEvent, type PropsWithChildren } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Monitor, ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle, PopoverDescription } from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { isNativeHost } from "@/session/native-context";
 import type { Credentials } from "@/session/session";
@@ -163,8 +164,7 @@ function DeviceForm() {
   </div>;
 }
 
-export function PlaybackDevice({ standardLayout = false, credentials = null, connected = false, installationName, state = null, run }: {
-  standardLayout?: boolean;
+export function PlaybackDevice({ credentials = null, connected = false, installationName, state = null, run }: {
   credentials?: Credentials | null;
   connected?: boolean;
   installationName?: string;
@@ -193,20 +193,22 @@ export function PlaybackDevice({ standardLayout = false, credentials = null, con
   const targets = [...new Set([...device.targets, ...(device.address ? [device.address] : [])])];
   return <>
     <Popover open={open} onOpenChange={value => { setOpen(value); if (value) device.show(); else if (!dialog) device.dismiss(); }}>
-      <PopoverTrigger asChild><Button ref={trigger} variant={standardLayout ? "ghost" : "outline"} size="sm" className={standardLayout ? "playback-device-trigger max-w-full" : "max-w-full"}><Monitor aria-hidden="true" /><span className="truncate">{standardLayout ? device.mode === "local" ? "Playing here" : `Playing on ${label}` : `Play on: ${label}`}</span><ChevronDown aria-hidden="true" /></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button ref={trigger} variant="ghost" size="sm" className="playback-device-trigger max-w-full"><span className="truncate">{device.mode === "local" ? "Playing here" : `Playing on ${label}`}</span></Button></PopoverTrigger>
       <PopoverContent align="end" onCloseAutoFocus={event => { if (dialog) event.preventDefault(); }} className="device-menu w-[min(26rem,calc(100vw-2rem))] gap-2" onInteractOutside={event => { if (device.pending) event.preventDefault(); }}>
-        {standardLayout ? <p className="device-section-label">Play on</p> : <PopoverHeader><PopoverTitle>Playback device</PopoverTitle><PopoverDescription>Each computer keeps its own queue and saved items.</PopoverDescription></PopoverHeader>}
-        {!buildInfo.clientOnly && (standardLayout ? <Button variant="ghost" className="device-row" aria-pressed={device.mode === "local"} disabled={device.pending} onClick={() => void select("local")}><span>{device.mode === "local" && <Check aria-hidden="true" />} {device.mode === "local" ? installationName || "This computer" : "This computer"}</span>{device.mode === "local" && <span className="device-row-hint">Here</span>}</Button> : <Button variant="ghost" className="justify-between" aria-pressed={device.mode === "local"} disabled={device.pending} onClick={() => void select("local")}><span>This computer</span>{device.mode === "local" && <Check aria-label="Selected" />}</Button>)}
-        {targets.map(target => standardLayout ? <Button key={target} variant="ghost" className="device-row" aria-pressed={device.mode === "remote" && device.address === target} disabled={device.pending} onClick={() => void select("remote", target)}><span className="truncate">{device.mode === "remote" && device.address === target && <Check aria-hidden="true" />} {device.mode === "remote" && device.address === target && installationName ? installationName : target}</span><span className="device-row-hint truncate">{target}</span></Button> : <Button key={target} variant="ghost" className="justify-between" aria-pressed={device.mode === "remote" && device.address === target} disabled={device.pending} onClick={() => void select("remote", target)}><span className="truncate">{target}</span>{device.mode === "remote" && device.address === target && <Check aria-label="Selected" />}</Button>)}
-        {standardLayout ? <form className="device-address" onSubmit={event => { event.preventDefault(); void select("remote", address); }}><Input aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><Button type="submit" variant="ghost" disabled={device.pending || !address.trim()}>Connect</Button></form> : <Button variant="outline" disabled={device.pending} onClick={() => { setAddress(""); setDialog("address"); setOpen(false); }}>Another Couch</Button>}
-        <SoundControls credentials={credentials} connected={connected} open={open} installationName={installationName || label} compact={standardLayout} state={state} run={run} onClose={close} />
+        <p className="device-section-label">Play on</p>
+        <RadioGroup aria-label="Play on" value={device.mode === "local" ? "local" : device.mode === "remote" ? `remote:${device.address}` : ""} disabled={device.pending} onValueChange={value => { if (value === "local") void select("local"); else void select("remote", value.slice(7)); }} className="gap-1">
+          {!buildInfo.clientOnly && <div className="flex min-h-11 items-center gap-2"><RadioGroupItem id="play-on-local" value="local" aria-label="This computer" /><Label htmlFor="play-on-local" className="flex min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span>{device.mode === "local" ? installationName || "This computer" : "This computer"}</span><span className="text-muted-foreground">Here</span></Label></div>}
+          {targets.map((target, index) => <div key={target} className="flex min-h-11 items-center gap-2"><RadioGroupItem id={`play-on-remote-${index}`} value={`remote:${target}`} aria-label={target} /><Label htmlFor={`play-on-remote-${index}`} className="flex min-w-0 flex-1 cursor-pointer justify-between gap-2 font-normal"><span className="truncate">{device.mode === "remote" && device.address === target && installationName ? installationName : target}</span><span className="truncate text-muted-foreground">{target}</span></Label></div>)}
+        </RadioGroup>
+        <form className="mt-2" onSubmit={event => { event.preventDefault(); void select("remote", address); }}><InputGroup><InputGroupInput aria-label="Another Couch address" value={address} onChange={event => setAddress(event.target.value)} placeholder="Another Couch address" autoComplete="url" spellCheck={false} disabled={device.pending} /><InputGroupAddon align="inline-end"><InputGroupButton type="submit" disabled={device.pending || !address.trim()}>Connect</InputGroupButton></InputGroupAddon></InputGroup></form>
+        <SoundControls credentials={credentials} connected={connected} open={open} installationName={installationName || label} compact state={state} run={run} onClose={close} />
         {device.error && !device.error.startsWith("confirmation-required:") && <p role="alert" className="text-destructive">{device.error}</p>}
       </PopoverContent>
     </Popover>
     <Dialog open={dialog !== null} onOpenChange={value => { if (!value) close(); }}>
       <DialogContent showCloseButton={!device.pending} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }} onInteractOutside={event => { if (device.pending) event.preventDefault(); }} onEscapeKeyDown={event => { if (device.pending) event.preventDefault(); }}>
         <DialogHeader><DialogTitle>{dialog === "confirmation" ? "Switch playback device?" : "Another Couch"}</DialogTitle><DialogDescription>{dialog === "confirmation" ? warning === "playback,sharing" ? "Switching stops playback on this computer and disconnects its remotes." : warning === "playback" ? "Switching stops playback on this computer." : "Switching turns off this computer's remote control until you return to local mode." : "Enter the LAN address shown on the playback computer, then pair there. A custom domain must point to that LAN."}</DialogDescription></DialogHeader>
-        {dialog === "confirmation" ? <DialogFooter><Button variant="outline" onClick={close} disabled={device.pending}>Keep this computer</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></DialogFooter> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
+        {dialog === "confirmation" ? <DialogFooter><Button variant="outline" onClick={close} disabled={device.pending}>Keep {installationName || "this computer"}</Button><Button onClick={() => void select("remote", address, true)} disabled={device.pending}>Stop and switch</Button></DialogFooter> : <form className="space-y-4" onSubmit={event => { event.preventDefault(); void select("remote", address); }}>
           <div className="space-y-2"><Label htmlFor="another-couch-address">Couch address</Label><Input id="another-couch-address" autoFocus value={address} onChange={event => setAddress(event.target.value)} placeholder="192.168.1.10:4100" autoComplete="url" spellCheck={false} required disabled={device.pending} /></div>
           {device.error && !device.error.startsWith("confirmation-required:") && <Alert variant="destructive"><AlertDescription>{device.error}</AlertDescription></Alert>}
           <DialogFooter><Button type="button" variant="outline" onClick={close} disabled={device.pending}>Cancel</Button><Button type="submit" disabled={device.pending || !address.trim()}>{device.pending ? "Connecting…" : "Connect"}</Button></DialogFooter>
@@ -233,6 +235,7 @@ export function LocalSharingPrompt({ credentials, onRemoteControlChange }: { cre
     finally { active.current = false; setPending(false); }
   };
   if (!device || device.mode !== "local" || device.localSetupComplete || !credentials) return null;
+  // The first-run decision fills the screen, so it must override DialogContent's centered modal geometry.
   return <Dialog open><DialogContent showCloseButton={false} onEscapeKeyDown={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()} className="!inset-0 !m-0 !flex !h-dvh !max-h-none !w-screen !max-w-none !translate-x-0 !translate-y-0 !flex-col !justify-center !gap-0 !rounded-none !bg-black !px-[clamp(2rem,10vw,8rem)] !py-12 !text-white !shadow-none !ring-0" style={{ fontFamily: "'Inter Tight Variable', sans-serif" }}>
     <DialogHeader className="max-w-[48rem]"><DialogTitle className="text-[clamp(2.3rem,4vw,3rem)] font-semibold tracking-[-.03em]">Allow remote control?</DialogTitle><DialogDescription className="mt-3 max-w-[40rem] text-xl text-white/70">Phones and computers on this network can pair and control playback. You can change this in Settings, Connections.</DialogDescription></DialogHeader>
     {error && <Alert variant="destructive" className="mt-6 max-w-[40rem]"><AlertDescription>{error}</AlertDescription></Alert>}

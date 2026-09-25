@@ -11,7 +11,6 @@ import { pairingCodeFromHash } from "./pairing-link";
 import { useSession, type Credentials } from "./session";
 import { useIdleCursor } from "../useIdleCursor";
 import { useInterfaceSize } from "../interface-size";
-import { useTvPresentation } from "../useTvPresentation";
 import { useUpdateActivity } from "../update-activity";
 import { useVideoQualityPreference } from "../video-quality";
 import { usePlaybackDevice } from "../sections/shell/PlaybackDevice";
@@ -44,6 +43,16 @@ function storedCredentials(selectedOrigin?: string): Credentials | null {
 
 function storedRemoteName() {
   try { return localStorage.getItem(remoteNameKey) || "My remote"; } catch { return "My remote"; }
+}
+
+export function dispatchTvRoute(key: "home" | "info") {
+  const dispatch = (remaining: number) => {
+    const portals = '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [data-slot="popover-content"]';
+    const open = [...document.querySelectorAll<HTMLElement>(portals)].some(element => element.getAttribute("data-state") !== "closed" && element.getClientRects().length > 0);
+    if (open && remaining > 0) { applyTvNavigation("back"); requestAnimationFrame(() => dispatch(remaining - 1)); }
+    else window.dispatchEvent(new Event(`couch-${key}`));
+  };
+  dispatch(3);
 }
 
 export function errorText(error: unknown) {
@@ -79,7 +88,6 @@ type SessionGateValue = SessionBag & {
   videoQualityPreference: ReturnType<typeof useVideoQualityPreference>;
   remoteControlEnabled: boolean;
   setRemoteControlEnabled: (enabled: boolean) => void;
-  tv: ReturnType<typeof useTvPresentation>;
   registerBackHandler: (handler: () => void) => void;
 };
 
@@ -125,27 +133,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   function handleNavigation(key: NavigationKey) {
     if (!tvPresentation) return;
     document.documentElement.setAttribute("data-keyboard", "");
-    if (nativeHost) {
-      if (key === "home" || key === "info") window.dispatchEvent(new Event(`couch-${key}`));
-      else requestAnimationFrame(() => applyTvNavigation(key));
-      return;
-    }
-    if (key === "home") {
-      const goHome = (remaining: number) => {
-        if (document.querySelector('[role="dialog"], [role="listbox"], [data-slot="popover-content"]') && remaining) {
-          applyTvNavigation("back");
-          requestAnimationFrame(() => goHome(remaining - 1));
-        } else tv.openHome();
-      };
-      goHome(3);
-      return;
-    }
-    if (key === "info") { tv.showControls({ keyboard: true, fromHome: true }); return; }
-    if (!tv.browsing && key !== "back") {
-      tv.showControls({ keyboard: true });
-      if (!tv.controlsVisible) return;
-    }
-    requestAnimationFrame(() => applyTvNavigation(key));
+    if (key !== "home" && key !== "info") { requestAnimationFrame(() => applyTvNavigation(key)); return; }
+    dispatchTvRoute(key);
   }
 
   const { state, status, details, identity, playerStatus, pairingRequired, reachable, connected, command, reconnect } = useSession(credentials, handleNavigation, selectedOrigin, selectedOrigin ? desktopClientProtocol : undefined);
@@ -189,12 +178,8 @@ export function SessionGate({ children }: PropsWithChildren) {
   }, [state, connected, queryClient]);
 
   useInterfaceSize(tvPresentation, state?.appearance);
-  const tv = useTvPresentation({ enabled: tvPresentation && !nativeHost, presentationId: state?.presentationId, playbackId: state?.player.playbackId ?? null, phase: state?.player.status });
   useIdleCursor(tvPresentation);
-  useNavigation(() => {
-    if (tvPresentation && !nativeHost && tv.dismissLayer()) return;
-    backHandler.current();
-  });
+  useNavigation(() => backHandler.current());
 
   useEffect(() => {
     if (!localHost || !credentials) return;
@@ -262,6 +247,7 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const currentCredentials = useRef(credentials);
   const commandAttempt = useRef(0);
+  const noticeSequence = useRef(0);
   const currentState = useRef(state);
   const undoPlanRef = useRef<{ plan: UndoPlan } | { undo: () => Promise<void> } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -288,7 +274,7 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const offerUndo = (text: string, undo: () => Promise<void>, duration = 6_000) => {
     dismissUndo();
-    const id = ++commandAttempt.current;
+    const id = ++noticeSequence.current;
     undoPlanRef.current = { undo };
     setUndoNotice({ id, text });
     undoTimer.current = setTimeout(dismissUndo, duration);
@@ -296,6 +282,7 @@ export function SessionGate({ children }: PropsWithChildren) {
 
   const run = async (action: Action) => {
     if (credentials !== currentCredentials.current) return false;
+    const started = performance.now();
     const before = currentState.current;
     dismissUndo();
     const attempt = ++commandAttempt.current;
@@ -311,8 +298,12 @@ export function SessionGate({ children }: PropsWithChildren) {
         }
         if (plan && credentials === currentCredentials.current && attempt === commandAttempt.current) {
           undoPlanRef.current = { plan };
-          setUndoNotice({ id: attempt, text: plan.text });
-          undoTimer.current = setTimeout(dismissUndo, 8_000);
+          const remaining = 6_000 - (performance.now() - started);
+          if (remaining <= 0) dismissUndo();
+          else {
+            setUndoNotice({ id: ++noticeSequence.current, text: plan.text });
+            undoTimer.current = setTimeout(dismissUndo, remaining);
+          }
         }
       }
       return credentials === currentCredentials.current;
@@ -367,7 +358,7 @@ export function SessionGate({ children }: PropsWithChildren) {
     queryClient, nativeHost, localHost, tvPresentation, credentials, setCredentials, host, retryHost: () => setHostAttempt(attempt => attempt + 1), booting, error, setError, command,
     state, status, details, identity, playerStatus, pairingRequired, reachable, connected, run, undoNotice, undoAction, dismissUndo, offerUndo, reconnect, pair, unpair,
     pairing, pairingCode, setPairingCode, remoteName, setRemoteName, videoQualityPreference, remoteControlEnabled, setRemoteControlEnabled,
-    tv, registerBackHandler: handler => { backHandler.current = handler; },
+    registerBackHandler: handler => { backHandler.current = handler; },
   };
   return <SessionGateContext.Provider value={value}><QueryClientProvider key={cache.id} client={queryClient}>{children}</QueryClientProvider></SessionGateContext.Provider>;
 }

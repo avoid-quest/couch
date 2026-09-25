@@ -580,11 +580,12 @@ async function delayedCatalog(kind: "library" | "jellyfin") {
 }
 
 test.each([false, true])("Jellyfin play-now forwards fromStart=%s through host resolution", async fromStart => {
-  const { first, action, entered, release, waitForCommand } = await delayedCatalog("jellyfin");
+  const { first, second, action, entered, release, waitForCommand } = await delayedCatalog("jellyfin");
   const pending = first.command({ ...action(), fromStart });
   await entered;
   release();
   expect(await pending).toMatchObject({ ok: true });
+  await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added First") === true);
   const load = await waitForCommand(command => command.type === "load");
   expect(load).toMatchObject({ type: "load" });
   if (fromStart) expect(load).not.toHaveProperty("startPosition");
@@ -896,6 +897,7 @@ test("catalog HTTP authenticates native CORS requests and shares only approved l
   const { items } = await (await api("/api/library/items?q=Local", token)).json() as { items: { id: string }[] };
   expect(items).toHaveLength(1);
   expect(await remote.command({ type: "enqueueLibrary", itemId: items[0]!.id, entryId: "library-song" })).toMatchObject({ ok: true });
+  await host.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added Local song") === true);
   await host.waitFor(message => message.type === "state" && message.state.queue[0]?.id === "library-song");
   expect(host.state.queue[0]?.title).toBe("Local song");
   expect(host.state.queue[0]?.source).toBe(`library:${items[0]!.id}`);
@@ -948,6 +950,7 @@ test("an administrator manages a durable radio playlist while ordinary remotes b
     expect((await api(initial.hub, "favorites", "POST", { station }, guestToken)).status).toBe(200);
     expect(await first.command({ type: "enqueueRadio", stationId: "missing", entryId: "missing-radio" })).toMatchObject({ ok: false });
     expect(await first.command({ type: "enqueueRadio", stationId: station!.id, entryId: "curated-radio" })).toMatchObject({ ok: true });
+    await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added Sygma Radio") === true);
     await second.waitFor(message => message.type === "state" && message.state.queue.some(entry => entry.id === "curated-radio"));
     expect(second.state.queue[0]).toMatchObject({ source: `radio:${station!.id}`, thumbnail: station!.logoUrl, kind: "radio", live: true });
     const version = second.state.radioVersion ?? 0;
