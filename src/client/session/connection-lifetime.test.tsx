@@ -151,6 +151,15 @@ test("storage-disabled pairing supplies live administrator authority and authent
   expect(requests.some(request => request.path === "/api/progress/history" && request.token === "Bearer new-secret")).toBe(true);
 });
 
+test("an older paired remote keeps its token when Couch reads the current installation ID", async () => {
+  localStorage.removeItem("couch.remote-token");
+  localStorage.setItem("modern-kodi.remote-token", "old-secret");
+  await mount(); await connected();
+  expect(gate.credentials?.token).toBe("old-secret");
+  expect(localStorage.getItem("couch.remote-token")).toBe("old-secret");
+  expect(localStorage.getItem("modern-kodi.remote-token")).toBeNull();
+});
+
 test("a role change retires administrator data and immediately changes route authority", async () => {
   await mount(); await connected();
   const previous = client;

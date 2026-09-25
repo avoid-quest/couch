@@ -46,7 +46,10 @@ const searchable = sourceOrder.filter(source => source !== "Bandcamp");
 const kinds: SearchKind[] = ["Video", "Music", "Live", "Radio", "Channels"];
 const lengths: SearchLength[] = ["Under 10 min", "10–60 min", "Over 1 hr"];
 const radioSources = ["avoid radio", "Radio playlists", "Radio directory"] as const;
-const isLink = (value: string) => /^https?:\/\//i.test(value);
+const isLink = (value: string) => {
+  try { return /^https?:\/\//i.test(value) && !!new URL(value).hostname; }
+  catch { return false; }
+};
 
 export function SearchPanel(props: Props) {
   const gate = useOptionalSessionGate();
@@ -230,7 +233,7 @@ export function SourceProblems({ summaries }: { summaries: Entry[] }) {
   return <>
     {failed.length > 0 && <Alert variant="destructive">
       <AlertTitle>Couldn't reach {names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.</AlertTitle>
-      <AlertDescription><ul>{failed.map(([source, summary]) => <li key={source} className="truncate">{failed.length > 1 && `${source}: `}{summary.errorMessage || "Didn't respond."}</li>)}</ul></AlertDescription>
+      <AlertDescription><ul>{failed.map(([source, summary]) => <li key={source} className="break-words">{failed.length > 1 && `${source}: `}{summary.errorMessage || "Didn't respond."}</li>)}</ul></AlertDescription>
       <AlertAction><Button variant="ghost" size="sm" onClick={() => failed.forEach(([, summary]) => summary.retry?.())}>Try again</Button></AlertAction>
     </Alert>}
     {notes.length > 0 && <Alert><AlertDescription><ul>{notes.map(([source, summary]) => <li key={source}>{source}: {summary.warning}</li>)}</ul></AlertDescription></Alert>}

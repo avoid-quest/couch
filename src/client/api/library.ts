@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { HistoryItem, LibraryItem, LibrarySource } from "../../shared/library";
+import type { HistoryItem, LibraryItem, LibrarySource, MusicAlbums, MusicArtists, MusicAlbum } from "../../shared/library";
 import type { FolderBrowse, ManagedFolder } from "../../shared/folders";
 import type { MetadataView } from "../../shared/metadata";
 import { apiFetch, apiJson, apiSend, type ApiCredentials } from "./client";
@@ -14,6 +14,23 @@ export const libraryFoldersQuery = (credentials: ApiCredentials, manage = true) 
   });
 
 export const librarySourcesQuery = (credentials: ApiCredentials) => libraryFoldersQuery(credentials, false);
+
+export const musicPageSize = 24;
+export const musicArtistsQuery = (credentials: ApiCredentials, offset: number) =>
+  queryOptions({
+    queryKey: ["library", "music", "artists", offset] as const,
+    queryFn: ({ signal }) => apiJson<MusicArtists>(credentials, `/api/library/music/artists?offset=${offset}&limit=${musicPageSize}`, { signal }),
+  });
+export const musicAlbumsQuery = (credentials: ApiCredentials, offset: number, artistId?: string) =>
+  queryOptions({
+    queryKey: ["library", "music", "albums", artistId, offset] as const,
+    queryFn: ({ signal }) => apiJson<MusicAlbums>(credentials, `/api/library/music/albums?${new URLSearchParams({ offset: String(offset), limit: String(musicPageSize), ...(artistId ? { artistId } : {}) })}`, { signal }),
+  });
+export const musicAlbumQuery = (credentials: ApiCredentials, albumId: string) =>
+  queryOptions({
+    queryKey: ["library", "music", "album", albumId] as const,
+    queryFn: ({ signal }) => apiJson<{ album: MusicAlbum; items: LibraryItem[] }>(credentials, `/api/library/music/albums/${encodeURIComponent(albumId)}`, { signal }),
+  });
 
 export const folderBrowseQuery = (credentials: ApiCredentials, path: string | null, offset = 0) =>
   queryOptions({

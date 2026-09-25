@@ -18,7 +18,7 @@ const saved: ForLaterItem[] = [
 ];
 const originals = new Map<string, PropertyDescriptor | undefined>();
 let root: Root, window: Window, client: QueryClient, request: ReturnType<typeof spyOn>;
-let historyItems: HistoryItem[], savedItems: ForLaterItem[], historyError: boolean;
+let historyItems: HistoryItem[], savedItems: ForLaterItem[], historyError: boolean, laterError: boolean;
 const played: unknown[] = [], queued: HistoryItem[] = [], openedSources: number[] = [], requests: string[] = [];
 
 function button(label: string, scope: ParentNode = document) {
@@ -39,7 +39,7 @@ async function renderHome({ connected = true, active = true, canPlay = true, can
 
 beforeEach(async () => {
   historyItems = [unfinished, online, unplayable, { ...unfinished, mediaId: "finished", title: "Finished film", watched: true }, { ...unfinished, mediaId: "started", title: "No progress", position: 0 }];
-  savedItems = saved; historyError = false;
+  savedItems = saved; historyError = laterError = false;
   played.length = 0; queued.length = 0; openedSources.length = 0; requests.length = 0;
   window = new Window({ url: "http://localhost" });
   for (const key of ["CSS", "window", "document", "navigator", "location", "localStorage", "sessionStorage", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLFormElement", "Element", "Node", "NodeFilter", "DocumentFragment", "MutationObserver", "ResizeObserver", "CustomEvent", "Event", "MouseEvent", "PointerEvent", "KeyboardEvent", "getComputedStyle", "requestAnimationFrame", "cancelAnimationFrame", "IS_REACT_ACT_ENVIRONMENT"]) {
@@ -52,7 +52,7 @@ beforeEach(async () => {
     const url = new URL(String(input)); requests.push(url.pathname);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     if (url.pathname === "/api/progress/history") return historyError ? Response.json({ error: "History unavailable" }, { status: 503 }) : Response.json({ items: historyItems });
-    if (url.pathname === "/api/for-later") return Response.json({ items: savedItems });
+    if (url.pathname === "/api/for-later") return laterError ? Response.json({ error: "Saved items unavailable" }, { status: 503 }) : Response.json({ items: savedItems });
     if (url.pathname === "/api/library/sources") return Response.json({ sources: [] });
     if (url.pathname === "/api/jellyfin/connection") return Response.json({ configured: false });
     if (url.pathname === "/api/progress/library%3Amovie" && init?.method === "POST") {
@@ -141,6 +141,17 @@ test("history failure offers retry independently of saved media", async () => {
   await act(async () => button("Try again").click());
   await flush();
   expect(document.body.textContent).toContain("Halfway home");
+});
+
+test("a failed For later read explains the gap and can be retried", async () => {
+  historyItems = []; savedItems = []; laterError = true;
+  await renderHome();
+  expect(document.body.textContent).toContain("Couldn't load For later.");
+  expect(document.body.textContent).not.toContain("Find something to play");
+  laterError = false; savedItems = saved;
+  await act(async () => button("Try again").click());
+  await flush();
+  expect(document.body.textContent).toContain("Saved film");
 });
 
 test("empty Find home says what Couch searches and opens source settings for an administrator", async () => {

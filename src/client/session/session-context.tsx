@@ -33,7 +33,8 @@ function storedCredentials(selectedOrigin?: string): Credentials | null {
       const value = JSON.parse(localStorage.getItem(pairingKey(selectedOrigin)) ?? "null") as { token?: string; installationId?: string } | null;
       return value?.token && value.installationId ? { origin: selectedOrigin, token: value.token, installationId: value.installationId } : null;
     }
-    const token = localStorage.getItem(tokenKey);
+    const token = localStorage.getItem(tokenKey) ?? localStorage.getItem("modern-kodi.remote-token");
+    if (token) { localStorage.setItem(tokenKey, token); localStorage.removeItem("modern-kodi.remote-token"); }
     const installationId = localStorage.getItem(installationKey);
     return token && installationId ? { origin: location.origin, token, installationId } : null;
   } catch {

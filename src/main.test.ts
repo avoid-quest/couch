@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { version } from "../package.json";
+import { selectLan } from "./server/lan-listener";
 import type { HostMessage, SidecarMessage } from "./shared/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -11,6 +12,11 @@ afterEach(async () => {
 });
 
 test.each(["stdin close", "shutdown message", "AppImage admission"])("the sidecar accepts native observations, protects its data, and exits on %s", async reason => {
+  const interfaces = networkInterfaces();
+  const lan = Object.entries(interfaces).flatMap(([name, entries]) => (entries ?? []).map(({ address }) => ({ name, address }))).find(({ name, address }) => {
+    try { return !!selectLan(interfaces, name, address); } catch { return false; }
+  });
+  if (!lan) throw new Error("This test needs a private IPv4 LAN address.");
   const dir = await mkdtemp(join(tmpdir(), "couch-sidecar-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
   await chmod(dir, 0o755);
@@ -23,6 +29,8 @@ test.each(["stdin close", "shutdown message", "AppImage admission"])("the sideca
       COUCH_APPIMAGE: reason === "AppImage admission" ? "1" : "0",
       COUCH_HOST: "127.0.0.1",
       COUCH_PORT: "0",
+      COUCH_LAN_INTERFACE: lan.name,
+      COUCH_LAN_ADDRESS: lan.address,
       COUCH_HOST_TOKEN: token,
       COUCH_DATA_DIR: dir,
     },

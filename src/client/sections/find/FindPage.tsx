@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { BrowseHome } from "./BrowseHome";
+import { BrowseMusic } from "./BrowseMusic";
+import { BrowseRadio } from "./BrowseRadio";
 import { CollectionHeader, HitList, MoreResults, SearchPanel, SourceProblems } from "./SearchPanel";
 import { SearchOnlineResults, type SearchResultSummary } from "./SearchOnlineResults";
 import { readSearchState } from "../../search";
@@ -17,6 +19,7 @@ export function FindPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchState = readSearchState(location.searchStr);
+  const browse = new URLSearchParams(location.searchStr).get("browse");
   // The typed query follows the route until the next edit.
   const [draft, setDraft] = useState({ route: searchState.query, query: searchState.query });
   if (draft.route !== searchState.query) setDraft({ route: searchState.query, query: searchState.query });
@@ -25,10 +28,14 @@ export function FindPage() {
   const openSources = () => void navigate({ to: "/settings/sources" });
   const opened = shell.onlineRequest;
   return <section data-page="Find">
-    {opened ? <OpenedCollection key={opened.revision} item={opened.item} onBack={() => { shell.closeOnlineRequest(); shell.changeSection("Saved"); }} /> : <>
+    {opened ? <OpenedCollection key={opened.revision} item={opened.item} onBack={() => { shell.closeOnlineRequest(); shell.changeSection("Saved"); }} />
+    : browse === "music" ? <BrowseMusic credentials={credentials} connected={connected} canPlay={available} active={onStage} onBack={() => void navigate({ href: "/find" })}
+      onAlbum={(albumId, playNow) => run({ type: "enqueueAlbum", albumId, playNow })}
+      onTrack={(id, playNow) => enqueueCatalog("enqueueLibrary", id, { playNow })} />
+    : browse === "radio" ? <BrowseRadio origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onCommand={run} onBack={() => void navigate({ href: "/find" })} /> : <>
       <SearchPanel draftQuery={homeQuery} onManageSources={openSources} canManageMetadata={canManageMetadata} searchState={searchState} onSearchChange={changeSearch} onQueryChange={query => setDraft(current => ({ ...current, query }))} onCommand={run} defaultQuality={videoQualityPreference.quality} origin={credentials.origin} token={credentials.token} connected={connected} canPlay={available} active={onStage} onEnqueue={(source, itemId, options) => enqueueCatalog(source === "Library" ? "enqueueLibrary" : "enqueueJellyfin", itemId, options)} />
       <div hidden={!!homeQuery.trim()} className="mt-8">
-        <BrowseHome credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} active={onStage && !homeQuery.trim()} onAddSource={openSources} onPlay={playHistory} onAdd={async item => {
+        <BrowseHome credentials={credentials} connected={connected} canPlay={available} canManageMetadata={canManageMetadata} active={onStage && !homeQuery.trim()} onAddSource={openSources} onBrowse={source => void navigate({ href: `/find?browse=${source}` })} onPlay={playHistory} onAdd={async item => {
           if (item.libraryItemId) return enqueueCatalog("enqueueLibrary", item.libraryItemId);
           if (!state || !item.playable) return false;
           await apiFetch(credentials, `/api/progress/${encodeURIComponent(item.mediaId)}/queue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: state.activeProfile.id }) });

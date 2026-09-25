@@ -174,6 +174,12 @@ test("a pasted direct-media link queues an entry with a server-safe title", asyn
   const entry = (commands.at(-1) as Extract<Action, { type: "enqueue" }>).entry;
   expect(entry.title.length).toBeLessThanOrEqual(200);
 });
+test("an unfinished link stays editable without crashing Find", async () => {
+  await render();
+  await search("http://");
+  expect(document.querySelector<HTMLInputElement>("#media-search")?.value).toBe("http://");
+  expect(document.querySelector('[aria-label="Pasted link"]')).toBeNull();
+});
 test("controlled search drafts change only through the owner and never report route updates as edits", async () => {
   const { SearchPanel } = await import("./SearchPanel");
   const client = new QueryClient();

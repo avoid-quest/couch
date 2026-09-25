@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioStation } from "../../shared/radio";
+import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioProgrammeDetails, type RadioStation } from "../../shared/radio";
 import { apiFetch, type ApiCredentials } from "./client";
 
 const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
@@ -15,6 +15,13 @@ export const radioSourcesQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["radio", "sources"],
     queryFn: ({ signal }) => radioRequest(credentials, "sources", { signal }).then(response => response.json() as Promise<{ sources: RadioPlaylist[] }>),
+  });
+
+export const radioProgrammesQuery = (credentials: ApiCredentials) =>
+  queryOptions({
+    queryKey: ["radio", "avoid", "programmes"] as const,
+    queryFn: ({ signal }) => radioRequest(credentials, "avoid/programmes", { signal }).then(response => response.json() as Promise<{ programmes: Record<string, RadioProgrammeDetails> }>).then(result => result.programmes),
+    staleTime: 30_000,
   });
 
 export const radioSearchQuery = (credentials: ApiCredentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>

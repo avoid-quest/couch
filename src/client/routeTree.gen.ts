@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as FindRouteImport } from './routes/find'
+import { Route as MusicRouteImport } from './routes/music'
+import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -62,6 +64,16 @@ const BrowseRoute = BrowseRouteImport.update({
 const FindRoute = FindRouteImport.update({
   id: '/find',
   path: '/find',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MusicRoute = MusicRouteImport.update({
+  id: '/music',
+  path: '/music',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadioRoute = RadioRouteImport.update({
+  id: '/radio',
+  path: '/radio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SavedRoute = SavedRouteImport.update({
@@ -221,6 +233,8 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
+  '/music': typeof MusicRoute
+  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -257,6 +271,8 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
+  '/music': typeof MusicRoute
+  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/up-next': typeof UpNextRoute
@@ -292,6 +308,8 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
+  '/music': typeof MusicRoute
+  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -330,6 +348,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
+    | '/music'
+    | '/radio'
     | '/saved'
     | '/search'
     | '/settings'
@@ -366,6 +386,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
+    | '/music'
+    | '/radio'
     | '/saved'
     | '/search'
     | '/up-next'
@@ -400,6 +422,8 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
+    | '/music'
+    | '/radio'
     | '/saved'
     | '/search'
     | '/settings'
@@ -437,6 +461,8 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   BrowseRoute: typeof BrowseRouteWithChildren
   FindRoute: typeof FindRoute
+  MusicRoute: typeof MusicRoute
+  RadioRoute: typeof RadioRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -471,6 +497,20 @@ declare module '@tanstack/react-router' {
       path: '/find'
       fullPath: '/find'
       preLoaderRoute: typeof FindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/music': {
+      id: '/music'
+      path: '/music'
+      fullPath: '/music'
+      preLoaderRoute: typeof MusicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radio': {
+      id: '/radio'
+      path: '/radio'
+      fullPath: '/radio'
+      preLoaderRoute: typeof RadioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saved': {
@@ -773,6 +813,8 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   BrowseRoute: BrowseRouteWithChildren,
   FindRoute: FindRoute,
+  MusicRoute: MusicRoute,
+  RadioRoute: RadioRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRouteWithChildren,

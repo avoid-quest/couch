@@ -26,13 +26,14 @@ const status = (count: number, noun: string, note?: string) => count ? [plural(c
 // a fresh install, what Couch searches and (for admins) which sources exist.
 export type HistoryPlayback = (item: HistoryItem, options: { fromStart?: boolean }) => Promise<boolean>;
 
-export function BrowseHome({ credentials, connected, canPlay, canManageMetadata = false, active, onAddSource, onPlay, onAdd }: {
+export function BrowseHome({ credentials, connected, canPlay, canManageMetadata = false, active, onAddSource, onBrowse, onPlay, onAdd }: {
   credentials: Credentials;
   connected: boolean;
   canPlay: boolean;
   canManageMetadata?: boolean;
   active: boolean;
   onAddSource?: () => void;
+  onBrowse?: (source: "music" | "radio") => void;
   onPlay: HistoryPlayback;
   onAdd: (item: HistoryItem) => Promise<boolean>;
 }) {
@@ -42,7 +43,7 @@ export function BrowseHome({ credentials, connected, canPlay, canManageMetadata 
   const [pending, setPending] = useState(false);
   const unfinished = (history.data?.items ?? []).filter(item => item.position > 0 && !item.watched);
   const savedMedia = later.data?.items.filter(item => item.kind !== "radio" && !item.live) ?? [];
-  const fresh = !history.isPending && !later.isPending && !unfinished.length && !savedMedia.length;
+  const fresh = !history.isPending && !later.isPending && !history.error && !later.error && !unfinished.length && !savedMedia.length;
   const playable = (item: HistoryItem) => connected && canPlay && !pending && !!(item.playable || item.libraryItemId || item.queueEntryId);
   async function act(item: HistoryItem, action: "resume" | "start" | "queue" | "remove") {
     if (pending) return;
@@ -65,6 +66,7 @@ export function BrowseHome({ credentials, connected, canPlay, canManageMetadata 
   }
   return <section className="space-y-12 [--duration-width:6rem] sm:[--duration-width:14rem] lg:[--duration-width:18rem]" aria-label="Home">
     {history.error && <Alert variant="destructive"><AlertDescription>{history.error.message || "Couldn't load Continue."}</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void history.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
+    {later.error && <Alert variant="destructive"><AlertDescription>Couldn't load For later.</AlertDescription><AlertAction><Button variant="ghost" size="sm" onClick={() => void later.refetch()}>{TRY_AGAIN}</Button></AlertAction></Alert>}
     {!!unfinished.length && <section aria-label="Continue">
       <h2 className="mb-2 text-base font-medium">Continue</h2>
       <MediaList>{unfinished.map(item => <MediaRow key={item.mediaId} title={item.title} meta={item.sourceLabel || (item.libraryItemId ? "Folders" : undefined)}
@@ -79,6 +81,13 @@ export function BrowseHome({ credentials, connected, canPlay, canManageMetadata 
       </MediaRow>)}</MediaList>
     </section>}
     {!!savedMedia.length && <ForLaterSection origin={credentials.origin} token={credentials.token} connected={connected} canPlay={canPlay} mediaOnly />}
+    {onBrowse && <section aria-label="Browse">
+      <h2 className="mb-2 text-base font-medium">Browse</h2>
+      <MediaList>
+        <MediaRow title="Radio" meta="Stations and playlists" primary={{ label: "Open", onClick: () => onBrowse("radio") }} />
+        <MediaRow title="Music" meta="Artists and albums in your folders" primary={{ label: "Open", onClick: () => onBrowse("music") }} />
+      </MediaList>
+    </section>}
     {fresh && <Empty className="py-0">
       <EmptyHeader><EmptyTitle><h2>Find something to play</h2></EmptyTitle><EmptyDescription>Couch searches YouTube, Twitch, RaiPlay, radio and your folders at once. You can also paste a link.</EmptyDescription></EmptyHeader>
       {canManageMetadata && <SourcesStatus credentials={credentials} connected={connected} active={active} onAddSource={onAddSource} />}
