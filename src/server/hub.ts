@@ -146,7 +146,7 @@ export function createHub(options: HubOptions) {
     if (!closed) {
       const message = JSON.stringify({ type: "state", state } satisfies ServerMessage);
       server.publish("session", message);
-      lan?.server?.publish("session", message);
+      for (const listener of lan?.servers ?? []) listener.publish("session", message);
     }
   }, {
     admitted, systemAudio,
@@ -288,7 +288,7 @@ export function createHub(options: HubOptions) {
   let pairWindow = Date.now();
   let pairAttempts = 0;
 
-  const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.server?.requestIP(request)?.address ?? "";
+  const peer = (request: Request): string => server.requestIP(request)?.address ?? lan?.servers.map(listener => listener.requestIP(request)?.address).find(Boolean) ?? "";
   const allowed = (request: Request, requireOrigin: boolean): boolean => {
     if (options.managedLan && !loopbackPeer(peer(request)) && (!store.remoteControlEnabled() || !lan?.network || !lanPeer(lan.network, peer(request)))) return false;
     const host = request.headers.get("host");
@@ -469,12 +469,18 @@ export function createHub(options: HubOptions) {
           const value = await settingField(request, "domain");
           if (typeof value !== "string") throw new ControllerError("Enter a network address.");
           const domain = value.trim();
-          const alias = domain ? originDomainUrl(domain, server.port!) : "";
+          const alias = domain ? originDomainUrl(domain, port) : "";
           if (alias) try { await lan?.validateAlias(alias); }
           catch (error) { throw new ControllerError(error instanceof Error ? error.message : "The network address is unavailable."); }
           if (!admitted()) throw new ControllerError("The TV is preparing an update. Controls are paused.", 503);
           if (identity()?.authority === "controller" || !identity()) throw new ControllerError("Administrator access changed.", 403);
+          const previous = store.originDomain();
+          const previousAlias = previous ? originDomainUrl(previous, port, !previous.startsWith("http://")) : "";
           store.saveOriginDomain(alias);
+          // Keep only the address used by this administrator until Couch restarts.
+          // Its browser can finish the save and continue using its paired session.
+          const usingPreviousAlias = previousAlias && (request.headers.get("host")?.toLowerCase() === new URL(previousAlias).host || request.headers.get("origin") === previousAlias);
+          if (usingPreviousAlias && previousAlias !== alias) retainedOrigins.add(previousAlias);
           await lan?.refresh().catch(() => {});
           return cors(request, json({ domain: alias }));
         } catch (error) { return cors(request, json({ error: error instanceof ControllerError ? error.message : "Could not save the LAN origin domain." }, error instanceof ControllerError ? error.status : 500)); }
@@ -586,8 +592,10 @@ export function createHub(options: HubOptions) {
             await enqueued;
             if (closed) return;
           } else if (action.type === "navigate") {
-            if (server.subscriberCount("navigation") === 0) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
-            server.publish("navigation", JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage));
+            const listeners = [server, ...lan?.servers ?? []];
+            if (!listeners.some(listener => listener.subscriberCount("navigation"))) throw new Error("The TV interface is disconnected. Try again when it reconnects.");
+            const navigation = JSON.stringify({ type: "navigation", key: action.key } satisfies ServerMessage);
+            for (const listener of listeners) listener.publish("navigation", navigation);
           } else {
             if (action.type === "remove") inspections.get(action.entryId)?.abort();
             if (soundRouting && action.type === "volume") await soundRouting.volume(action.volume, authorize);
@@ -625,19 +633,23 @@ export function createHub(options: HubOptions) {
     : [origin];
   if (urls.length === 0) urls.push(origin);
   const connectionUrls: string[] = options.publishedLan ? [...urls] : [...new Set([...urls, ...(hostname === "0.0.0.0" || hostname === "::" ? [...lanAddresses].filter(address => hostname === "::" || !address.includes(":")).map(address => urlFor(address, port)) : [origin])])];
+  const retainedOrigins = new Set<string>();
 
   if (options.managedLan) {
     lan = createLanListener({
       port, enabled: store.remoteControlEnabled(), selected: process.env.COUCH_LAN_INTERFACE, address: process.env.COUCH_LAN_ADDRESS,
-      advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...options.advertisedUrls ?? []],
+      advertised: () => [...(store.originDomain() ? [originDomainUrl(store.originDomain(), port, !store.originDomain().startsWith("http://"))] : []), ...retainedOrigins, ...options.advertisedUrls ?? []],
       start: (network, port) => Bun.serve({ ...serveOptions, hostname: network.address, port }),
       changed: (next, error) => {
         lanError = error;
-        urls.splice(0, urls.length, ...next);
-        connectionUrls.splice(0, connectionUrls.length, ...next);
+        const current = store.originDomain();
+        const currentAlias = current ? originDomainUrl(current, port, !current.startsWith("http://")) : "";
+        const published = next.filter(url => !retainedOrigins.has(url) || url === currentAlias || options.advertisedUrls?.includes(url));
+        urls.splice(0, urls.length, ...published);
+        connectionUrls.splice(0, connectionUrls.length, ...published);
         allowedHosts.clear(); allowedOrigins.clear();
         for (const url of [origin, ...next]) { allowedHosts.add(new URL(url).host); allowedOrigins.add(new URL(url).origin); }
-        options.onAddresses?.(next);
+        options.onAddresses?.(published);
       },
     });
   }

@@ -175,13 +175,16 @@ test("port 80 aliases get their own best-effort listener, drop out when the bind
     await listener.refresh();
     expect(ports.filter(port => port === 4100)).toEqual([4100]);
     expect(listener.server).not.toBeNull();
+    expect(listener.servers).toHaveLength(1);
     expect(changes.at(-1)).toEqual({ urls: ["http://192.168.1.20:4100"], error: expect.stringContaining("cannot listen on port 80") });
     refuse80 = false; await listener.refresh();
     expect(ports).toContain(80);
+    expect(listener.servers).toHaveLength(2);
     expect(changes.at(-1)).toEqual({ urls: ["http://couch.home", "http://192.168.1.20:4100"], error: null });
     await listener.setEnabled(false);
     expect([...stops].sort((a, b) => a - b)).toEqual([80, 4100]);
     expect(listener.server).toBeNull();
+    expect(listener.servers).toEqual([]);
   } finally { await listener.close(); }
 });
 test("a listener that already owns port 80 does not start a second one", async () => {
@@ -193,7 +196,7 @@ test("a listener that already owns port 80 does not start a second one", async (
     start: (_network, port) => { ports.push(port); return { stop: async () => {} }; },
     changed: () => {},
   });
-  try { await listener.refresh(); expect(ports).toEqual([80]); } finally { await listener.close(); }
+  try { await listener.refresh(); expect(ports).toEqual([80]); expect(listener.servers).toHaveLength(1); } finally { await listener.close(); }
 });
 test("a proposed alias must resolve to the selected LAN address and obtain its HTTP port before save", async () => {
   let refuse80 = true;

@@ -56,6 +56,11 @@ admitted. Origins cannot contain credentials,
 paths, queries or fragments. HTTPS and names on any other port are unsupported
 by this listener. Setting an origin does not create a DNS or mDNS record.
 
+When an administrator changes or clears the Settings address while using that
+address, Couch keeps the old address admitted until it restarts so the current
+browser and pairing continue working. The old address is no longer offered in
+Connection links or QR codes. Restart Couch to retire it.
+
 ### Port 80
 
 A name without a port, such as `http://couch.home`, reaches port 80. When such

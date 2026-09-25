@@ -89,6 +89,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
   void refresh().catch(() => {});
   return {
     get server() { return active; },
+    get servers() { return [active, port80].filter((server): server is T => server !== null); },
     get network() { return network; },
     refresh,
     validateAlias: (value: string) => pending = pending.catch(() => {}).then(async () => {

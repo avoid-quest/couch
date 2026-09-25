@@ -239,7 +239,7 @@ describe("native package delivery", () => {
     }
   });
 
-  test.skipIf(!Bun.which("minisign"))("a qualified native upload reuses signed receipts but cannot publish Preview alone", async () => {
+  test.skipIf(!Bun.which("minisign"))("a qualified native upload resumes a shared Preview draft but cannot publish it alone", async () => {
     const directory = await mkdtemp(join(tmpdir(), "couch-native-cloud-"));
     // The child's publish rechecks the live feed; stage a version newer than whatever it serves.
     const feed = await fetch(`${cdn}/update/${application}/linux-x86_64-deb/0.0.0?channel=preview`).then(response => response.ok ? response.json() as Promise<{ version: string }> : null).catch(() => null);
@@ -296,6 +296,11 @@ console.log(JSON.stringify(operation === "list" ? [] : state));
       expect(uploaded.assets).toHaveLength(1);
       expect(uploaded.assets[0].signature).toBe(manifest.files[name]!.signature);
       expect(uploaded.assets[0].updatePlatform).toBe("linux-x86_64-deb");
+      const macName = publicFiles(manifest.version, "dmg")[0]!;
+      const macPlatforms = assetPlatforms(manifest.version, "dmg", macName);
+      uploaded.assets.push({ id: "C".repeat(26), filename: macName, size: "7", signature: "signed", publicPlatform: macPlatforms.public, updatePlatform: macPlatforms.update });
+      await Bun.write(stateFile, JSON.stringify(uploaded));
+      await Bun.write(join(directory, "receipts/upload-preview.json"), JSON.stringify(uploaded));
       await rm(join(directory, "public"), { recursive: true });
       await execute(command("resume"), env);
       const direct = Bun.spawnSync(command("publish"), { env, stderr: "pipe" });
