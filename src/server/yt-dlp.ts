@@ -45,11 +45,11 @@ async function readOutput(stream: ReadableStream<Uint8Array>, limit: number, kil
 
 function extractionError(stderr: string): Error {
   if (/\bDRM\b|digital rights/i.test(stderr)) return new Error("This item requires DRM playback, which is not supported.");
-  if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This media is unavailable in the player's region.");
+  if (/not available in your country|geo.?restrict|geographic|geo.?block/i.test(stderr)) return new Error("This isn't available in your region.");
   if (/sign.?in|log.?in|authentication|cookies|private video|members.only|subscriber.only/i.test(stderr)) return new Error("This website requires an account or browser session. Website sign-in is not supported yet.");
   if (/not (?:currently )?live|offline|upcoming|premiere|scheduled/i.test(stderr)) return new Error("This live stream is offline or has not started yet.");
-  if (/JavaScript|JS runtime|challenge|EJS/i.test(stderr)) return new Error("This website needs a supported JavaScript runtime. Update Couch on the playback computer.");
-  return new Error("yt-dlp could not open this webpage. Check the link and update yt-dlp; this site or item may be unsupported.");
+  if (/JavaScript|JS runtime|challenge|EJS/i.test(stderr)) return new Error("This website needs a JavaScript runtime. Update Couch.");
+  return new Error("Couldn't open this page. It may be unsupported.");
 }
 
 async function extract(command: string, args: string[], signal: AbortSignal): Promise<string> {
@@ -61,7 +61,7 @@ async function extract(command: string, args: string[], signal: AbortSignal): Pr
       cmd: [command, "--ignore-config", "--no-config-locations", "--no-plugin-dirs", "--no-warnings", "--skip-download", "--no-cache-dir", "--no-remote-components", "--color", "never", "--socket-timeout", "10", "--retries", "1", "--extractor-retries", "1", ...(deno ? ["--js-runtimes", `deno:${deno}`] : []), ...args],
       stdin: "ignore", stdout: "pipe", stderr: "pipe", signal, killSignal: "SIGKILL",
     });
-  } catch { throw new Error("yt-dlp could not be started. Check its installation on the player."); }
+  } catch { throw new Error("yt-dlp won't start. Reinstall Couch."); }
   const kill = () => { if (child.exitCode === null) child.kill("SIGKILL"); };
   try {
     const [stdout, stderr, exitCode] = await Promise.all([readOutput(child.stdout, 8 * 1024 * 1024, kill), readOutput(child.stderr, 64 * 1024, kill), child.exited]);
@@ -74,8 +74,8 @@ async function extract(command: string, args: string[], signal: AbortSignal): Pr
 export async function runYtDlp(args: string[], { signal, timeoutMs = 30_000, executable, plugin }: YtDlpOptions = {}): Promise<string> {
   signal?.throwIfAborted();
   const command = executable ?? process.env.COUCH_YT_DLP ?? (buildInfo.packaged ? null : Bun.which("yt-dlp"));
-  if (!command) throw new Error("The bundled extractor is unavailable. Reinstall a verified Couch package for this computer.");
-  if (command.includes("/") && !await Bun.file(command).exists()) throw new Error("yt-dlp could not be started. Check its installation on the player.");
+  if (!command) throw new Error("yt-dlp won't start. Reinstall Couch.");
+  if (command.includes("/") && !await Bun.file(command).exists()) throw new Error("yt-dlp won't start. Reinstall Couch.");
   const deadline = AbortSignal.timeout(timeoutMs);
   const cancellation = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {

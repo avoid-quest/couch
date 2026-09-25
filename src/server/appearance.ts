@@ -2,6 +2,7 @@ import { isInterfaceSize, type TvAppearance } from "../shared/appearance";
 import type { ControllerIdentity } from "../shared/controllers";
 import { ControllerError, settingField } from "./controllers";
 import type { Store } from "./store";
+import { ADMIN_ONLY, STORAGE_ERROR } from "./messages";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -18,8 +19,8 @@ export function createAppearance(store: Store, publish: (appearance: TvAppearanc
     async handle(request: Request, identity: () => ControllerIdentity | null) {
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (request.method !== "GET" && caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (request.method !== "GET" && caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       try {
         authorize();
@@ -47,7 +48,7 @@ export function createAppearance(store: Store, publish: (appearance: TvAppearanc
         }
         return json(state());
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "Could not save TV interface size. Check the TV's storage and try again." }, error instanceof ControllerError ? error.status : 500);
+        return json({ error: error instanceof ControllerError ? error.message : STORAGE_ERROR("TV text size") }, error instanceof ControllerError ? error.status : 500);
       }
     },
     close() { clearTimeout(timer); },

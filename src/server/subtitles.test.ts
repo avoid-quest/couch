@@ -102,7 +102,7 @@ test("provider subtitles download with private headers, keep upstream order and 
     expect(requests).toEqual(["private-token", "private-token", "private-token"]);
     expect(result.subtitles).toHaveLength(2);
     expect(result.subtitles!.every(subtitle => !subtitle.source.startsWith("http"))).toBe(true);
-    expect(result.subtitleWarning).toContain("could not be loaded");
+    expect(result.subtitleWarning).toContain("Couldn't load some subtitles");
     for (const subtitle of result.subtitles!) expect(await Bun.file(subtitle.source).text()).toBe(srt);
     subtitles.observe(replace(null, "idle"));
     expect(result.subtitles!.every(subtitle => !existsSync(subtitle.source))).toBe(true);
@@ -150,7 +150,7 @@ test("PGS downloads preserve all bytes privately and reject corrupt, missing, ov
     expect(Buffer.from(await Bun.file(file).arrayBuffer())).toEqual(framedPgs);
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(result.subtitleWarning).toContain("Known timing limitation.");
-    expect(result.subtitleWarning).toContain("could not be loaded");
+    expect(result.subtitleWarning).toContain("Couldn't load some subtitles");
     subtitles.observe(replace("second", "loading"));
     expect(existsSync(file)).toBe(true);
     subtitles.observe(replace("second"));

@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { GuideChannel, GuidePage, GuideProgram, GuideSource } from "../shared/iptv";
 import { boundedBytes, GuideError, guideFetch, guideLimits, guideText, guideUrl, liveHlsPlaylist, parseGuideChannels, parseGuidePrograms, record, type PrivateChannel } from "./iptv-feeds";
+import { ADMIN_ONLY } from "./messages";
 
 type Definition = { id: string; name: string; playlistUrl: string; guideUrl: string };
 type Identity = () => ControllerIdentity | null;
@@ -93,7 +94,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
       assertOpen();
       guard();
       if (controller.signal.aborted || signal.aborted) throw new GuideError("This refresh was canceled by a newer request.", 409);
-      const message = `${error instanceof GuideError ? error.message : "The source could not be read."} Saved channels and guide data were kept.`;
+      const message = `${error instanceof GuideError ? error.message : "Couldn't read the source."} Saved channels and guide data were kept.`;
       // Never copy parser, fetch, or upstream response text into public errors.
       if (!replacing) { db.query("UPDATE iptv_sources SET error = ? WHERE id = ?").run(message, source.id); onChange(); }
       if (error instanceof GuideError && error.status === 409) throw error;
@@ -165,12 +166,12 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         return { source: item.streamUrl, goLive: true };
       } catch (error) {
         if (error instanceof GuideError) throw error;
-        throw new GuideError("Could not check this channel's live playlist. Use Play.", 502);
+        throw new GuideError("Couldn't check this channel's live playlist. Use Play.", 502);
       }
     },
     async handle(req: Request, identity: Identity, playedBy?: PlaybackActor): Promise<Response> {
-      const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this device before connecting.", 401); return value; };
-      const administrator = () => { if (caller().authority === "controller") throw new GuideError("An administrator is required to manage guide sources.", 403); };
+      const caller = () => { assertOpen(); const value = identity(); if (!value) throw new GuideError("Pair this remote first.", 401); return value; };
+      const administrator = () => { if (caller().authority === "controller") throw new GuideError(ADMIN_ONLY, 403); };
       try {
         caller();
         const { pathname: path, searchParams: query } = new URL(req.url);
@@ -260,7 +261,7 @@ export function createGuide({ databasePath, fetch: request = globalThis.fetch, o
         }
         return json({ error: "Not found." }, 404);
       } catch (error) {
-        return json({ error: error instanceof GuideError ? error.message : "Could not complete the guide request." }, error instanceof GuideError ? error.status : 500);
+        return json({ error: error instanceof GuideError ? error.message : "Couldn't complete the guide request." }, error instanceof GuideError ? error.status : 500);
       }
     },
     close() {

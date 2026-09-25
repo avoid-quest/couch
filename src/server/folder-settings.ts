@@ -2,6 +2,7 @@ import type { ControllerIdentity } from "../shared/controllers";
 import type { ManagedFolder } from "../shared/folders";
 import { ControllerError } from "./controllers";
 import { FolderError, type FolderIdentity, type MediaFolders } from "./media-folders";
+import { ADMIN_ONLY } from "./messages";
 
 type FolderLibrary = {
   managedSources(): ManagedFolder[];
@@ -41,8 +42,8 @@ export function createFolderSettings(library: FolderLibrary, folders: MediaFolde
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage TV folders.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       try {
         authorize();
@@ -94,7 +95,7 @@ export function createFolderSettings(library: FolderLibrary, folders: MediaFolde
         return json({ error: "Not found." }, 404);
       } catch (error) {
         if (error instanceof FolderError || error instanceof ControllerError) return json({ error: error.message }, error.status);
-        return json({ error: "Could not update TV folders. The saved sources and media files have been kept." }, 500);
+        return json({ error: "Couldn't update folders. Your sources and files are kept." }, 500);
       }
     },
   };

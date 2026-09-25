@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 import type { LibraryItem, LibrarySearch, LibrarySource, MusicAlbum, MusicAlbums, MusicArtist, MusicArtists, VideoMetadata, VideoSeason, VideoShow, VideoShows } from "../shared/library";
 import { musicArtistId, musicMetadataVersion, readMusicMetadata } from "./music-metadata";
 import { readVideoMetadata, videoExtensions, videoMetadataVersion, type OriginalVideoNfo, type VideoArtwork } from "./video-metadata";
+const CONFIRM_FOLDER = "Confirm this folder in Settings → Sources first.";
 
 type SourceRow = LibrarySource & { path: string };
 type Metadata = { title: string | null; duration: number | null; artist: string | null; album: string | null };
@@ -93,7 +94,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
   const saveIdentity = (id: string, identity: FolderIdentity) => db.query("INSERT INTO library_folder_identities VALUES (?, ?, ?, ?)").run(id, identity.filesystem, identity.directory, identity.mountRoot);
   async function verifySource(source: SourceRow) {
     const identity = savedIdentity(source.id);
-    if (!identity) throw new FolderError("Verify that this is the original TV folder in Settings > Sources before scanning or playing it.", 409);
+    if (!identity) throw new FolderError(CONFIRM_FOLDER, 409);
     await folders.verify(source.path, identity);
     assertOpen();
   }
@@ -217,7 +218,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         try { album = await readCueAlbum(root, relative(root, path), source.id); }
         catch (error) {
           cueFailures++;
-          if (cueErrors.length < 3) cueErrors.push(`${basename(path)}: ${error instanceof Error && !("code" in error) ? error.message : "Could not read cue sheet. Check that the file is available and readable."}`);
+          if (cueErrors.length < 3) cueErrors.push(`${basename(path)}: ${error instanceof Error && !("code" in error) ? error.message : "Couldn't read the cue sheet."}`);
           continue;
         }
         await verifySource(source);
@@ -315,7 +316,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         )`).run();
         db.query("UPDATE library_sources SET status = 'ready', lastScanned = ?, error = NULL, warning = ? WHERE id = ?")
           .run(Date.now(), [videosWithoutProbe ? "Install ffprobe to read video durations and tags. Files are still playable." : null,
-            metadataFailures ? `Could not read metadata from ${metadataFailures} file${metadataFailures === 1 ? "" : "s"}. Audio metadata is limited to 512 MiB files.` : null,
+            metadataFailures ? `Couldn't read metadata from ${metadataFailures} file${metadataFailures === 1 ? "" : "s"}. Audio metadata is limited to 512 MiB files.` : null,
             cueFailures ? `Skipped ${cueFailures} cue sheet${cueFailures === 1 ? "" : "s"}. ${cueErrors.join(" ")}` : null,
             sidecarFailures ? `Skipped ${sidecarFailures} invalid or oversized NFO/artwork sidecar read${sidecarFailures === 1 ? "" : "s"}. Media is still playable.` : null].filter(Boolean).join(" ") || null, source.id);
       })();
@@ -340,7 +341,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
     async addSource(path: string, authorize: () => void = () => {}, selectedIdentity?: FolderIdentity): Promise<LibrarySource> {
       assertOpen();
       authorize();
-      if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || /[\0\r\n]/.test(path)) throw new FolderError("Choose an absolute folder path on the player.");
+      if (typeof path !== "string" || !isAbsolute(path) || path.length > 4096 || /[\0\r\n]/.test(path)) throw new FolderError("Choose a full folder path.");
       const root = await realpath(path).catch(() => { throw new FolderError("The selected folder cannot be opened."); });
       const identity = selectedIdentity ?? await folders.identify(root);
       await folders.verify(root, identity);
@@ -377,7 +378,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
         db.query("UPDATE library_sources SET status = ?, error = NULL WHERE id = ?").run(source.lastScanned === null ? "idle" : "ready", sourceId);
       } catch (error) {
         assertIdle();
-        db.query("UPDATE library_sources SET status = 'unavailable', error = ? WHERE id = ?").run(error instanceof FolderError ? error.message : "Could not read this TV folder. The saved catalog has been kept.", sourceId);
+        db.query("UPDATE library_sources SET status = 'unavailable', error = ? WHERE id = ?").run(error instanceof FolderError ? error.message : "Couldn't read this folder. The saved catalog is kept.", sourceId);
         throw error;
       } finally { notify(); }
       return getSource(sourceId)!;
@@ -406,7 +407,7 @@ export function createLibrary(options: { databasePath: string; onChange?: () => 
       if (existing) return existing;
       const source = getSource(sourceId);
       if (!source) throw new FolderError("Library folder not found.", 404);
-      if (!savedIdentity(sourceId)) throw new FolderError("Verify the original TV folder in Settings > Sources before scanning.", 409);
+      if (!savedIdentity(sourceId)) throw new FolderError(CONFIRM_FOLDER, 409);
       db.query("UPDATE library_sources SET status = 'scanning', error = NULL WHERE id = ?").run(sourceId);
       scannedItems.set(sourceId, 0);
       const job = scanQueue.then(() => runScan(source, authorize)).finally(() => scans.delete(sourceId));

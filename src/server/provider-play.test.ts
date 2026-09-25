@@ -104,7 +104,7 @@ for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement
     await entered.promise;
     expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
     output.resolve(page);
-    expect(await pending).toMatchObject({ ok: false, error: "Added to the queue. Playback was canceled by a newer control." });
+    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
     expect(hub.session.state.queue.map(entry => entry.title)).toEqual(["Replacement", "Episode 1", "Episode 2"]);
     expect(hub.session.state.currentEntryId).toBe(replacement === "stop" ? null : "replacement");
     expect(commands.filter(command => command.type === "load")).toHaveLength(replacement === "stop" ? 0 : 1);

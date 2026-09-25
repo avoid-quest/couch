@@ -166,7 +166,7 @@ for (const unavailableProbe of ["absent", "failing"]) for (const previouslyProbe
   await chmod(executable, 0o755);
   const scanned = createLibrary({ folders, databasePath, ffprobePath: unavailableProbe === "absent" ? null : executable });
   cleanups.push(() => scanned.close());
-  expect(() => scanned.scan(sourceId)).toThrow("Verify");
+  expect(() => scanned.scan(sourceId)).toThrow("Confirm this folder");
   await scanned.testSource(sourceId, () => {}, true);
   for (let scan = 0; scan < 2; scan++) {
     expect((await scanned.scan(sourceId)).status).toBe("ready");

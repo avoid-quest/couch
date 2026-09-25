@@ -99,7 +99,7 @@ export function createSoundRouting(options: Options) {
     if (busy || closed) return;
     busy = true;
     try { await refresh(); }
-    catch { lost("Cannot verify the selected audio output. Playback stopped. Check sound on the playback host, then resume."); }
+    catch { lost("Couldn't verify the audio output. Playback stopped."); }
     finally { busy = false; }
   };
   const mutate = async (work: () => Promise<void>) => {

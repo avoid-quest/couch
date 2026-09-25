@@ -37,7 +37,7 @@ export function createDiagnosticLog(secrets: readonly string[] = [], databasePat
       try {
         db.query("INSERT INTO diagnostic_history VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET entries = excluded.entries").run(JSON.stringify(entries));
         error = null;
-      } catch { error = "Recent errors could not be saved. They may be lost on restart."; }
+      } catch { error = "Couldn't save recent errors. They may be lost on restart."; }
     }
     clearTimeout(timer);
     // Expire even while Advanced is closed. Failed writes retry without logging themselves.
@@ -66,7 +66,7 @@ export function createDiagnosticLog(secrets: readonly string[] = [], databasePat
     try { db?.close(); } catch {}
     db = undefined;
     entries = [];
-    error = "Retained errors could not be read. Only this session is available; restart Couch to retry storage.";
+    error = "Couldn't read saved errors. Showing this session only.";
   }
 
   return {

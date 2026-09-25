@@ -96,7 +96,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
   const now = options.now ?? Date.now;
   const status = (): JellyfinStatus => ({ connected: configuration !== null, serverName: configuration?.serverName ?? null, username: configuration?.username ?? null });
   const connection = () => {
-    if (closed || !configuration || !api) throw new Error("Connect Jellyfin in Settings > Sources first.");
+    if (closed || !configuration || !api) throw new Error("Connect Jellyfin in Settings → Sources first.");
     return { configuration, api };
   };
   // Serialize authentication and logout so a late logout cannot revoke a newly reused device token.
@@ -111,7 +111,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
     await getSessionApi(previous).reportSessionEnded().catch(() => undefined);
   };
   const report = (send: () => Promise<unknown>) => {
-    reporting = reporting.then(send).then(() => { if (!closed) options.onProgress?.(); }).catch(() => { options.onWarning?.("Jellyfin could not save playback progress. Check the server connection."); });
+    reporting = reporting.then(send).then(() => { if (!closed) options.onProgress?.(); }).catch(() => { options.onWarning?.("Jellyfin couldn't save your progress. Check the server connection."); });
     return reporting;
   };
   const deactivate = () => {
@@ -181,7 +181,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
       } catch (error) {
         if (current.api !== api) throw new Error("The Jellyfin connection changed. Test it again.");
         if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) throw new Error("Jellyfin rejected the saved connection. Reconnect with your username and password.");
-        throw new Error("Could not reach the Jellyfin account. Check that the server is running, then reconnect if needed.");
+        throw new Error("Couldn't reach Jellyfin. Check that the server is running.");
       }
       return status();
     },
@@ -202,7 +202,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
           candidate.accessToken = result.data.AccessToken;
           const scope = new Bun.CryptoHasher("sha256").update(JSON.stringify([candidate.basePath, info.data.Id, result.data.User.Id])).digest("hex").slice(0, 24);
           next = { url: candidate.basePath, userId: result.data.User.Id, username: (result.data.User.Name || input.username.trim()).slice(0, 200), accessToken: result.data.AccessToken, serverName: (info.data.ServerName || "Jellyfin").slice(0, 200), scope };
-        } catch { throw new Error("Could not connect to Jellyfin. Check the server address, username, and password."); }
+        } catch { throw new Error("Couldn't connect to Jellyfin. Check the address, username and password."); }
         try {
           authorize();
           if (requestGeneration === configurationGeneration) await deactivate();
@@ -246,7 +246,7 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
           : await getItemsApi(current.api).getItems({ ...parameters, recursive: true, sortBy: ["SortName"], sortOrder: ["Ascending"] });
         if (api !== current.api) throw new Error();
         return { items: (data.Items ?? []).map(itemView).filter((item): item is JellyfinItem => item !== null), total: data.TotalRecordCount ?? 0, startIndex };
-      } catch { throw new Error("Could not load the Jellyfin library. Check the server connection."); }
+      } catch { throw new Error("Couldn't load the Jellyfin library. Check the server connection."); }
     },
     async entry(itemId: string, entryId: string): Promise<QueueEntry> {
       const current = connection();
@@ -275,11 +275,11 @@ export function createJellyfin(databasePath: string, options: { now?: () => numb
           EnableDirectStream: false, EnableTranscoding: false, AutoOpenLiveStream: false,
           StartTimeTicks: Math.round(startPosition * ticksPerSecond),
         } }, { signal }));
-      } catch { signal?.throwIfAborted(); throw new Error("Jellyfin could not prepare this item for playback."); }
+      } catch { signal?.throwIfAborted(); throw new Error("Jellyfin couldn't prepare this item."); }
       signal?.throwIfAborted();
       if (generation !== requestGeneration || api !== current.api) throw new Error("The playing item changed.");
       const media = data.MediaSources?.find(source => source.SupportsDirectPlay && !source.RequiresOpening && !source.IsInfiniteStream && source.Id);
-      if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("This item needs a playback format that is not supported yet. Jellyfin direct play is currently supported; remuxing and transcoding are not enabled.");
+      if (data.ErrorCode || !media?.Id || !data.PlaySessionId) throw new Error("Jellyfin can't play this format yet.");
       const { subtitles, subtitleWarning } = externalSubtitles(current.api, itemId, media);
       const playback = { api: current.api, playbackId, itemId, mediaSourceId: media.Id, playSessionId: data.PlaySessionId, started: false, last: null, observedAt: 0, reportedAt: 0 };
       if (preparing) {

@@ -1,13 +1,14 @@
 import type { ControllerIdentity } from "../shared/controllers";
 import type { DisplayAction, DisplayState } from "../shared/display";
 import { ControllerError, settingField } from "./controllers";
+import { ADMIN_ONLY } from "./messages";
 
 export async function displaySettings(request: Request, identity: () => ControllerIdentity | null, invoke?: (action: DisplayAction) => Promise<DisplayState>) {
   const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
   const authorize = () => {
     const caller = identity();
-    if (!caller) throw new ControllerError("Pair this remote before connecting.", 401);
-    if (caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
+    if (!caller) throw new ControllerError("Pair this remote first.", 401);
+    if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
   };
   try {
     authorize();
@@ -21,7 +22,7 @@ export async function displaySettings(request: Request, identity: () => Controll
       action = preview ? { op: "preview", output: value } : { op: path.endsWith("/confirm") ? "confirm" : "cancel", token: value };
     } else return json({ error: "Not found." }, 404);
     authorize();
-    if (!invoke) return json({ error: "Display selection requires the native Ubuntu appliance." }, 503);
+    if (!invoke) return json({ error: "Only on Couch for Linux TVs." }, 503);
     return json(await invoke(action));
   } catch (error) { return json({ error: error instanceof Error ? error.message : "Display selection failed." }, error instanceof ControllerError ? error.status : 503); }
 }

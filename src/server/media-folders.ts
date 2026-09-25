@@ -17,7 +17,7 @@ function mounts(text: string): Mount[] {
   return text.trim().split("\n").filter(Boolean).map(line => {
     const [before, after] = line.split(" - ");
     const fields = before?.split(" "), filesystem = after?.split(" ");
-    if (!fields || fields.length < 6 || !filesystem || filesystem.length < 3) throw new FolderError("Could not inspect the TV's mounted filesystems.");
+    if (!fields || fields.length < 6 || !filesystem || filesystem.length < 3) throw new FolderError("Couldn't read the mounted drives.");
     return { id: fields[0]!, parent: fields[1]!, device: fields[2]!, target: unescapeMount(fields[4]!), root: unescapeMount(fields[3]!), type: filesystem[0]!, source: unescapeMount(filesystem[1]!), options: [...fields[5]!.split(","), ...filesystem[2]!.split(",")] };
   });
 }
@@ -85,7 +85,7 @@ export function createMediaFolders(options: {
       if (table === null) return { filesystem: `device:${info.dev}`, directory: String(info.ino), mountRoot: "" };
       const mounted = visibleMounts(mounts(table));
       const mount = mounted.filter(candidate => within(candidate.target, path)).sort((a, b) => b.target.length - a.target.length)[0];
-      if (!mount || mount.device !== linuxDevice(info.dev)) throw new FolderError("Could not identify this folder's filesystem.");
+      if (!mount || mount.device !== linuxDevice(info.dev)) throw new FolderError("Couldn't identify this folder's drive.");
       if (mounted.some(candidate => candidate.target !== path && within(path, candidate.target))) throw new FolderError("This folder contains another mounted filesystem. Add the mounted folder as its own source instead.");
       let filesystem: string;
       if (mount.source.startsWith("/dev/")) {

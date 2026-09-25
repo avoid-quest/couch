@@ -56,7 +56,7 @@ test("browse summaries conceal feed URLs and raw errors while cached stations an
   const summary = await response.json();
   expect(summary.playlists[0]).toMatchObject({ id: playlist.id, name: source.name, stationCount: 1, updatedAt: playlist.updatedAt });
   expect(summary.playlists[0].url).toBeUndefined();
-  expect(summary.playlists[0].error).toContain("Cached stations are still available");
+  expect(summary.playlists[0].error).toContain("Saved stations still work");
   expect(JSON.stringify(summary)).not.toContain("source-secret");
   expect(f.radio.playlistStations({ playlistId: playlist.id })).toEqual([station]);
   expect(f.radio.favorites()).toEqual([station]);

@@ -124,7 +124,7 @@ test("cue filesystem failures do not expose host paths in source payloads", asyn
   });
   try {
     const result = await library.scan(source.id);
-    expect(result.warning).toContain("album.cue: Could not read cue sheet");
+    expect(result.warning).toContain("album.cue: Couldn't read the cue sheet");
     // Paired controllers receive sources without the host-only path field.
     const payload = library.listSources().map(({ path: _path, ...source }) => source);
     expect(JSON.stringify(payload)).not.toContain(media);

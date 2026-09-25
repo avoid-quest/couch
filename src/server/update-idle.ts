@@ -21,7 +21,7 @@ export function createUpdateIdle(now = () => performance.now()) {
       otherBusy = !!otherWork;
       let active = work.values().next().value ?? otherWork;
       if (reconnecting) active = "Waiting for radio reconnect to stop.";
-      else if (playback === "unavailable") active = "Waiting for the native player to connect.";
+      else if (playback === "unavailable") active = "Waiting for the Couch app to connect.";
       else if (!["idle", "ended", "error"].includes(playback)) active = playback === "paused" ? "Waiting for playback to stop. Paused playback is still active." : "Waiting for playback to stop.";
       if (active) { activity(); return active; }
       const remaining = Math.max(0, idleWindow - (now() - since));

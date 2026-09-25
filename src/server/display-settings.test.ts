@@ -59,5 +59,5 @@ test("private display replies require matching request IDs and reject overlap", 
   await expect(failed).rejects.toThrow("disconnected");
   const closed = native.request({ op: "read" });
   native.close();
-  await expect(closed).rejects.toThrow("closed");
+  await expect(closed).rejects.toThrow("disconnected");
 });

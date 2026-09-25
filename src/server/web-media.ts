@@ -122,13 +122,13 @@ export function createWebMediaResolver(options: ResolverOptions = {}) {
       media.expiry = { at, recover: async cancellation => {
         if (Date.now() < at) return null;
         cancellation.throwIfAborted();
-        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Could not confirm stream expiry. Play the track to try again."); });
+        const response = await fetch(media.source, { headers: { ...media.headers, Range: "bytes=0-0" }, redirect: "error", signal: AbortSignal.any([cancellation, AbortSignal.timeout(5000)]) }).catch(() => { throw new Error("Couldn't confirm the stream expired. Play it again."); });
         await response.body?.cancel();
         cancellation.throwIfAborted();
         if (response.status !== 410) return null;
         const fresh = await resolveWebMedia(source, cancellation, quality, streamingCommunityOrigin);
         const replacement = new URL(fresh.source);
-        if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("The website did not return a fresh transport for the same track. Play it again to retry.");
+        if (replacement.origin !== transport.origin || replacement.pathname !== transport.pathname || fresh.metadata?.duration !== media.metadata?.duration || fresh.source === media.source || !fresh.expiry || fresh.expiry.at <= Date.now()) throw new Error("Stream expired. Play it again.");
         return fresh;
       } };
     }

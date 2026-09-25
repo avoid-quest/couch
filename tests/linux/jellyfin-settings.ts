@@ -101,7 +101,7 @@ export async function verifyJellyfinSettings({ origin, httpRemote, clients, unti
     await saved(config.username);
     await proxy.stop(true);
     await phone.button("Test connection", settings);
-    await until("phone shows an inline unavailable-server error when the configured listener is stopped", () => phone.execute("return document.querySelector(arguments[0] + ' [role=alert]')?.textContent.includes('Could not reach')", [settings]), 30_000);
+    await until("phone shows an inline unavailable-server error when the configured listener is stopped", () => phone.execute("return document.querySelector(arguments[0] + ' [role=alert]')?.textContent.includes('reach Jellyfin')", [settings]), 30_000);
     await httpRemote.screenshot("jellyfin-phone-unavailable-server");
     proxy = startProxy();
     await phone.button("Change account", settings);

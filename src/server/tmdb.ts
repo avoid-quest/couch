@@ -26,7 +26,7 @@ export function createTmdb(fetcher: typeof fetch = fetch) {
   const closing = new AbortController();
   let pending = 0;
   async function operation<T>(token: string, signal: AbortSignal, run: (read: (path: string) => Promise<Json>, image: (path: string, still: boolean) => Promise<VideoArtwork>) => Promise<T>) {
-    if (!token) throw new MetadataError("Add an authorized TMDB API Read Access Token in Settings > Sources first.", 409);
+    if (!token) throw new MetadataError("Add a TMDB API Read Access Token in Settings → Sources first.", 409);
     if (pending >= 2) throw new MetadataError("Two metadata requests are already running. Try again shortly.", 429);
     pending++;
     const bounded = AbortSignal.any([signal, closing.signal, AbortSignal.timeout(10_000)]);

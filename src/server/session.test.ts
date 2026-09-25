@@ -34,7 +34,7 @@ test("removed entry restore rejects a changed queue without consuming its token"
   session.command({ type: "remove", entryId: "one" });
   const token = session.state.queueRemoval!.token;
   session.command({ type: "enqueue", entry: { id: "two", title: "Two", source: "https://example.com/two" } });
-  expect(() => session.command({ type: "restoreRemoved", token })).toThrow("shared queue or playback changed");
+  expect(() => session.command({ type: "restoreRemoved", token })).toThrow("Up next or playback changed");
   expect(session.state.queue).toHaveLength(1);
   session.command({ type: "remove", entryId: "two" });
   session.command({ type: "restoreRemoved", token });
@@ -64,8 +64,8 @@ test("activity notices publish once without lingering in session snapshots", () 
   const published: string[] = [];
   const session = createSession(store, () => {}, state => published.push(JSON.stringify(state)));
   const actor = { deviceId: "remote", name: "Kitchen" };
-  session.notice(actor, "Kitchen added First track");
-  expect(JSON.parse(published[0]!)?.activity).toMatchObject({ actor, text: "Kitchen added First track" });
+  session.notice(actor, "Kitchen queued First track");
+  expect(JSON.parse(published[0]!)?.activity).toMatchObject({ actor, text: "Kitchen queued First track" });
   expect(session.state.activity).toBeUndefined();
   session.invalidate("library");
   expect(JSON.parse(published[1]!)?.activity).toBeUndefined();
@@ -176,7 +176,7 @@ test("repeated EOF observations cannot autoplay a canceled catalog addition or c
   const ended: PlayerState = { ...idle, playbackId: session.state.player.playbackId, status: "ended" };
   session.observe(ended);
   enqueue("late");
-  expect(() => session.playIfCurrent(pending, "late")).toThrow("Playback was canceled");
+  expect(() => session.playIfCurrent(pending, "late")).toThrow("Another action canceled playback");
   session.observe(ended);
   expect(session.state.currentEntryId).toBe("one");
   expect(commands.filter(command => command.type === "load")).toHaveLength(1);
@@ -201,7 +201,7 @@ test("rejected stale controls preserve pending play intent, which is consumed on
   expect(() => session.command({ type: "next", playbackId: "stale" })).toThrow("changed");
   session.playIfCurrent(pending, "one", true);
   expect(fromStarts).toEqual([true]);
-  expect(() => session.playIfCurrent(pending, "one")).toThrow("Playback was canceled");
+  expect(() => session.playIfCurrent(pending, "one")).toThrow("Another action canceled playback");
   store.close();
 });
 
@@ -215,9 +215,9 @@ test.each(["player loss", "profile change", "shutdown"])("%s cancels pending cat
   if (transition === "profile change") session.selectProfile(session.createProfile("Guest").id);
   if (transition === "shutdown") session.close();
   const enqueue = () => session.command({ type: "enqueue", entry: { id: "late", title: "Late", source: "https://media.example/late" } });
-  if (transition === "shutdown") expect(enqueue).toThrow("update");
+  if (transition === "shutdown") expect(enqueue).toThrow("Updating");
   else enqueue();
-  expect(() => session.playIfCurrent(pending, "late")).toThrow("Playback was canceled");
+  expect(() => session.playIfCurrent(pending, "late")).toThrow("Another action canceled playback");
   expect(commands.filter(command => command.type === "load")).toEqual([]);
   store.close();
 });
@@ -241,8 +241,8 @@ test("maintenance saves the last observation and suppresses later EOF, controls 
     session.observe({ ...player, status: "ended", position: 100 });
     session.observe({ ...idle, status: "unavailable" });
     expect([commands.length, observations]).toEqual(previous);
-    expect(() => session.command({ type: "volume", volume: 1 })).toThrow("update");
-    expect(() => session.createProfile("Late")).toThrow("update");
+    expect(() => session.command({ type: "volume", volume: 1 })).toThrow("Updating");
+    expect(() => session.createProfile("Late")).toThrow("Updating");
   } finally { session.close(); store.close(); }
 });
 
@@ -257,8 +257,8 @@ test("maintenance propagates a failed progress checkpoint and keeps callbacks st
     session.observe({ ...player, position: 17 });
     const save = store.saveProgress;
     store.saveProgress = () => { throw new Error("disk full"); };
-    expect(() => session.quiesce()).toThrow("Could not save viewing progress");
-    expect(() => session.command({ type: "stop" })).toThrow("update");
+    expect(() => session.quiesce()).toThrow("Couldn't save your progress");
+    expect(() => session.command({ type: "stop" })).toThrow("Updating");
     session.observe({ ...player, position: 99 });
     store.saveProgress = save;
     session.quiesce();

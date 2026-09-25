@@ -117,7 +117,7 @@ test("a failed explicit cursor write leaves the current item and its progress tr
   f.session.observe({ ...idle, playbackId, status: "playing", position: 10, duration: 100 });
   const save = spyOn(f.store, "saveQueueCursor").mockImplementation(() => { throw new Error("Disk full"); });
   try {
-    expect(() => f.session.command({ type: "play", entryId: "two" })).toThrow("Could not save the queue position");
+    expect(() => f.session.command({ type: "play", entryId: "two" })).toThrow("Couldn't save your place in Up next");
     f.session.observe({ ...idle, playbackId, status: "paused", position: 40, duration: 100 });
     expect(f.session.state).toMatchObject({ currentEntryId: "local", queueCursorEntryId: "local", player: { playbackId, position: 40 } });
     expect(f.store.progress("household", "library:local")?.position).toBe(40);
@@ -156,7 +156,7 @@ test("a failed transaction commit restores the old tracker and its last persiste
     throw new Error("Commit I/O failure");
   });
   try {
-    expect(() => f.session.command({ type: "play", entryId: "two" })).toThrow("Could not save the queue position");
+    expect(() => f.session.command({ type: "play", entryId: "two" })).toThrow("Couldn't save your place in Up next");
     expect(f.session.state).toMatchObject({ currentEntryId: "local", queueCursorEntryId: "local", player: { playbackId } });
     const checkpoint = spyOn(f.store, "saveProgress");
     try {

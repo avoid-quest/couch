@@ -188,7 +188,7 @@ test("rejects unusable extracted sources, DRM, playlists and header injection", 
 });
 
 test("classifies extractor failures without exposing private URLs or raw logs", async () => {
-  for (const [stderr, message] of [["ERROR: DRM protected", "DRM playback"], ["ERROR: Sign in required", "account or browser session"], ["ERROR: not available in your country", "player's region"], ["ERROR: channel is not live", "offline"], ["ERROR: The channel is not currently live", "offline"], ["ERROR: JavaScript challenge failed", "Update Couch"], ["ERROR: network failure", "could not open"]]) {
+  for (const [stderr, message] of [["ERROR: DRM protected", "DRM playback"], ["ERROR: Sign in required", "account or browser session"], ["ERROR: not available in your country", "your region"], ["ERROR: channel is not live", "offline"], ["ERROR: The channel is not currently live", "offline"], ["ERROR: JavaScript challenge failed", "Update Couch"], ["ERROR: network failure", "Couldn't open this page"]]) {
     const { resolve } = await fixture(`console.error(${JSON.stringify(`${stderr}: https://private.example/?token=never-share`)}); process.exit(1);`);
     try { await resolve(page); throw new Error("Expected rejection"); }
     catch (error) {
@@ -226,7 +226,7 @@ test("times out stalled extraction and bounds stdout and stderr", async () => {
 test("reports invalid output and an unavailable executable", async () => {
   const { resolve } = await fixture("console.log('not json');");
   await expect(resolve(page)).rejects.toThrow("invalid media information");
-  await expect(createWebMediaResolver({ executable: "/missing-couch-test/yt-dlp" })(page)).rejects.toThrow("installation");
+  await expect(createWebMediaResolver({ executable: "/missing-couch-test/yt-dlp" })(page)).rejects.toThrow("Reinstall Couch");
 });
 
 test.skipIf(!Bun.which("yt-dlp"))("actual yt-dlp selects audio-only HTML sources at every quality", async () => {
@@ -305,11 +305,11 @@ test("Bandcamp recovery requires an aged selected MP3, HTTP 410, and fresh ident
       expect(await media.expiry!.recover(new AbortController().signal)).toBeNull();
     }
     fetcher.mockRejectedValue(new Error(old.url));
-    await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("Could not confirm stream expiry");
+    await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("Couldn't confirm the stream expired");
     fetcher.mockResolvedValue(new Response("Gone", { status: 410 }));
     for (const changed of [{ ...fresh, url: fresh.url.replace("/track/", "/different/") }, { ...fresh, duration: 200 }, old]) {
       await Bun.write(join(directory, "info.json"), JSON.stringify(changed));
-      await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("same track");
+      await expect(media.expiry!.recover(new AbortController().signal)).rejects.toThrow("Stream expired");
     }
     const cancelled = new AbortController();
     cancelled.abort();
@@ -345,7 +345,7 @@ test("loads only the embedded extractor for the configured StreamingCommunity or
   expect(args).toContain("--flat-playlist");
   expect(existsSync(args[args.indexOf("--plugin-dirs") + 1]!)).toBeFalse();
   expect(await inspect(page)).toEqual({ title: "Episode" });
-  await expect(resolve(page, undefined, "auto", "https://streamingcommunity.example")).rejects.toThrow("Saved links are not retargeted");
+  await expect(resolve(page, undefined, "auto", "https://streamingcommunity.example")).rejects.toThrow("StreamingCommunity moved");
   expect((await resolve("https://streamingcommunity.example/it/watch/7989", undefined, "auto", "https://streamingcommunity.example")).metadata?.title).toBe("Episode");
   for (const invalid of ["https://streamingcommunityz.photos/", "https://streamingcommunityz.photos/it/titles/7989-show/season-1", `${page}&url=https://private.example`, `${page}#private`, "https://streamingcommunityz.photos.evil.com/it/watch/7989", "http://streamingcommunityz.photos/it/watch/7989"]) await expect(resolve(invalid)).rejects.toThrow(/StreamingCommunity/);
 });
@@ -363,6 +363,6 @@ test("normal webpage sources never load plugins, and embedded extraction cleans 
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   expect(existsSync(await Bun.file(join(delayed.directory, "plugin")).text())).toBeFalse();
   const failure = await fixture("const args = process.argv.slice(2); await Bun.write(import.meta.dir + '/plugin', args[args.indexOf('--plugin-dirs') + 1]); console.error('https://private.example/?token=secret'); process.exit(1);");
-  await expect(failure.resolve("https://streamingcommunityz.photos/it/watch/7989")).rejects.toThrow("could not open");
+  await expect(failure.resolve("https://streamingcommunityz.photos/it/watch/7989")).rejects.toThrow("Couldn't open this page");
   expect(existsSync(await Bun.file(join(failure.directory, "plugin")).text())).toBeFalse();
 });

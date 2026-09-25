@@ -5,12 +5,12 @@ export function createNativeBluetooth(send?: (requestId: string, action: Bluetoo
   const fail = (id: string, message: string) => { const item = pending.get(id); if (item) { clearTimeout(item.timer); pending.delete(id); item.reject(new Error(message)); } };
   return {
     request(action: BluetoothAction): Promise<BluetoothState> {
-      if (!send) return Promise.reject(new Error("Bluetooth requires a native playback host."));
+      if (!send) return Promise.reject(new Error("Bluetooth isn't available on this Couch."));
       if (pending.size >= 16 && action.op !== "cancel") return Promise.reject(new Error("Bluetooth is busy. Try again."));
       return new Promise((resolve, reject) => {
         const id = crypto.randomUUID();
-        pending.set(id, { resolve, reject, timer: setTimeout(() => fail(id, "Bluetooth did not answer. Discovery and pairing still expire on the TV."), 6_000) });
-        try { send(id, action); } catch { fail(id, "The native Bluetooth connection is unavailable."); }
+        pending.set(id, { resolve, reject, timer: setTimeout(() => fail(id, "Bluetooth didn't answer. Try again."), 6_000) });
+        try { send(id, action); } catch { fail(id, "Bluetooth isn't available right now."); }
       });
     },
     receive(message: { requestId: string; state?: BluetoothState; error?: string }) {
@@ -19,6 +19,6 @@ export function createNativeBluetooth(send?: (requestId: string, action: Bluetoo
       if (message.error || !message.state) { fail(message.requestId, message.error ?? "Invalid Bluetooth reply."); return; }
       clearTimeout(item.timer); pending.delete(message.requestId); item.resolve(message.state);
     },
-    close() { for (const id of pending.keys()) fail(id, "The native connection closed."); },
+    close() { for (const id of pending.keys()) fail(id, "The Couch app disconnected."); },
   };
 }

@@ -155,7 +155,7 @@ test("a queue-position write failure still adopts the track already started by t
     if (command?.type !== "prepare" || !command.next) throw new Error("Missing prepared successor");
     f.session.observe({ ...idle, playbackId: command.next.playbackId, status: "playing", position: 0.1, duration: 3 });
     expect(f.session.state).toMatchObject({ currentEntryId: "second", queueCursorEntryId: "second", player: { playbackId: command.next.playbackId, status: "playing" } });
-    expect(f.session.state.queueError).toContain("Could not save the queue position");
+    expect(f.session.state.queueError).toContain("Couldn't save your place in Up next");
     save.mockRestore();
     f.session.command({ type: "stop" });
     f.session.command({ type: "play", entryId: "second" });
@@ -184,7 +184,7 @@ test("failed predecessor completions survive consecutive prepared transitions an
     expect(() => f.session.observe({ ...idle, playbackId: thirdId, status: "playing", position: 0.1, duration: 3 })).not.toThrow();
     expect(f.store.progress("household", "library:first")).toMatchObject({ watched: false, position: 2 });
     expect(f.store.progress("household", "library:second")).toBeNull();
-    expect(f.session.state).toMatchObject({ currentEntryId: "third", progressError: "Could not save viewing progress. Check the TV's storage." });
+    expect(f.session.state).toMatchObject({ currentEntryId: "third", progressError: "Couldn't save your progress. Couch may be out of space." });
     unavailable = false;
     f.session.checkpoint();
     expect(f.store.progress("household", "library:first")).toMatchObject({ watched: true, position: 0 });

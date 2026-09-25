@@ -95,7 +95,7 @@ test("canceled album Play now stays appended without changing playback or pendin
   const intent = f.session.reservePlay();
   f.session.command({ type: "stop" });
   const album = f.session.loadQueue(["first", "second"].map(id => ({ id, title: id, source: `library:${id}` })), "append");
-  expect(() => f.session.playIfCurrent(intent, album[0]!.id, true, undefined, undefined, album.map(entry => entry.id))).toThrow("Playback was canceled");
+  expect(() => f.session.playIfCurrent(intent, album[0]!.id, true, undefined, undefined, album.map(entry => entry.id))).toThrow("Another action canceled playback");
   expect(f.session.state.currentEntryId).toBeNull();
   expect(f.upcoming()).toEqual(["waiting", ...album.map(entry => entry.id)]);
 });

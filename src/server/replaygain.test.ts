@@ -82,14 +82,14 @@ test("saved gain is captured at Play and unresolved, replaced, stopped and nonmu
   f.session.command({ type: "preferences", profileId: "household", preferences: { replayGain: "album" } });
   f.session.command({ type: "play", entryId: "music" });
   const id = f.session.state.player.playbackId!;
-  expect(() => f.session.command({ type: "replayGain", playbackId: id, mode: "track" })).toThrow("loading");
+  expect(() => f.session.command({ type: "replayGain", playbackId: id, mode: "track" })).toThrow("music only");
   f.session.command({ type: "preferences", profileId: "household", preferences: { replayGain: "off" } });
   pending.resolve({ source: "https://private.example/signed", headers: { Authorization: "private-token" } });
   await Bun.sleep(0);
   expect(f.commands.at(-1)).toMatchObject({ type: "load", playbackId: id, preferences: { replayGain: "album" } });
   expect(JSON.stringify(f.session.state)).not.toContain("private");
   f.session.observe({ ...idle, playbackId: id, status: "playing" });
-  expect(() => f.session.command({ type: "replayGain", playbackId: id, mode: "track" })).toThrow("Radio and video");
+  expect(() => f.session.command({ type: "replayGain", playbackId: id, mode: "track" })).toThrow("music only");
   expect(playbackDefault(f.session.state.player, "replayGain")).toBeNull();
   pending = Promise.withResolvers<MediaSource>();
   f.session.command({ type: "play", entryId: "music" });

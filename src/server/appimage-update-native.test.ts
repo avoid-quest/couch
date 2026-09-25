@@ -43,7 +43,7 @@ test("interrupted request stays exclusive until native completion and shutdown r
   await expect(native.feed.check("stable", new AbortController().signal)).rejects.toThrow("already running");
   native.receive({ requestId: id, candidate: null });
   const next = native.feed.check("stable", new AbortController().signal);
-  native.close(); await expect(next).rejects.toThrow("connection closed");
+  native.close(); await expect(next).rejects.toThrow("disconnected");
 });
 
 test("installation uses opaque identities and preserves idle and Couch-only repair intent", async () => {
@@ -123,7 +123,7 @@ test("pending phone statuses allow a mutation and shutdown rejects every caller"
   native.close();
   for (const result of await closed) {
     expect(result.status).toBe("rejected");
-    if (result.status === "rejected") expect(result.reason.message).toContain("connection closed");
+    if (result.status === "rejected") expect(result.reason.message).toContain("disconnected");
   }
 });
 

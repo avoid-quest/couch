@@ -49,7 +49,7 @@ beforeEach(async () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer paired");
     if (method === "GET") return Response.json({ items });
     if (path.endsWith("/load") && missing) return Response.json({ error: "Source unavailable. Retry or remove it from For later." }, { status: 409 });
-    if (path.endsWith("/load") && canceled) return Response.json({ ok: true, notice: "Added to Up next. Playback was canceled by a newer control." });
+    if (path.endsWith("/load") && canceled) return Response.json({ ok: true, notice: "Queued." });
     if (path === "/api/for-later/restore") { items.unshift({ id: "saved", title: "Evening movie" }); return Response.json({ ok: true }); }
     if (method === "DELETE") items = items.filter(item => path !== `/api/for-later/${item.id}`);
     return Response.json({ ok: true, ...(method === "DELETE" && undoResponses ? { undoToken: "restore-token" } : {}) });
@@ -135,7 +135,7 @@ test("saving a library result posts only its catalog identity and never a queue 
 test("a successful append whose Play was canceled reports that outcome instead of a source error or retry", async () => {
   await render(); canceled = true;
   await click("Play Evening movie");
-  expect(toasts()).toEqual(["Added to Up next. Playback was canceled by a newer control."]);
+  expect(toasts()).toEqual(["Queued."]);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);

@@ -208,9 +208,9 @@ test("failed checkpoints never invalidate durable progress and retry before repl
   f.observe(10);
   expect(f.saved()).toBeNull();
   expect(f.session.state.versions?.progress).toBe(version);
-  expect(f.session.state.progressError).toContain("Could not save");
+  expect(f.session.state.progressError).toContain("Couldn't save");
   expect(f.session.state.progressError).not.toContain("Private");
-  expect(() => f.play("two")).toThrow("Could not save");
+  expect(() => f.play("two")).toThrow("Couldn't save");
   expect(f.session.state.currentEntryId).toBe("one");
   f.session.command({ type: "stop" });
   expect(f.session.state.currentEntryId).toBeNull();

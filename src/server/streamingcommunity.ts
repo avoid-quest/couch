@@ -5,12 +5,13 @@ import extractor from "../../vendor/streamingcommunity/streamingcommunity.py" wi
 import type { BrowseRequest, ProviderItem, ProviderPage, StreamingCommunityPreview } from "../shared/providers";
 import { isStreamingCommunityHost, streamingCommunityOrigin, validStreamingCommunityOrigin } from "../shared/streamingcommunity";
 import { ProviderError, providerItemId } from "./providers/http";
+const SC_MOVED = "StreamingCommunity moved. Update its site address in Settings → Sources.";
 
 export function streamingCommunityLink(source: string, origin = streamingCommunityOrigin): boolean {
   const url = new URL(source);
-  if (!validStreamingCommunityOrigin(origin)) throw new Error("StreamingCommunity needs a valid website origin in Settings > Sources.");
+  if (!validStreamingCommunityOrigin(origin)) throw new Error("StreamingCommunity needs a valid site address in Settings → Sources.");
   if (url.origin !== origin) {
-    if (/stream\w*unity/i.test(url.hostname)) throw new Error("This StreamingCommunity website is unavailable. Ask an administrator to update its origin in Settings > Sources, then paste a new item link. Saved links are not retargeted.");
+    if (/stream\w*unity/i.test(url.hostname)) throw new Error(SC_MOVED);
     return false;
   }
   if (url.username || url.password || url.hash || !/^\/(?:[a-z]{2}\/)?(?:watch\/\d+|titles\/\d+(?:-[\w-]+)?)$/.test(url.pathname) || (url.search && !/^\?e=\d+$/.test(url.search))) throw new Error("Paste a StreamingCommunity film or episode link. Browsing, series and season links are not supported.");
@@ -28,9 +29,9 @@ const object = (value: unknown): value is Record<string, unknown> => typeof valu
 const array = (value: unknown): Record<string, unknown>[] => Array.isArray(value) ? value.map(row => object(row) ? row : null).filter((row): row is Record<string, unknown> => !!row) : [];
 const integer = (value: unknown): number | undefined => typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 const clean = (value: unknown, limit = 300) => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, limit) : "";
-const unavailable = () => new ProviderError("This StreamingCommunity website is unavailable. Ask an administrator to update its origin in Settings > Sources, then try again.", 502);
-const changed = () => new ProviderError("StreamingCommunity changed its website. Ask an administrator to check its origin in Settings > Sources, then try again shortly.", 502);
-const needsOrigin = () => new ProviderError("StreamingCommunity needs a valid website origin in Settings > Sources.", 502);
+const unavailable = () => new ProviderError(SC_MOVED, 502);
+const changed = () => new ProviderError(SC_MOVED, 502);
+const needsOrigin = () => new ProviderError("StreamingCommunity needs a valid site address in Settings → Sources.", 502);
 const pad = (value: number) => String(value).padStart(2, "0");
 
 function decodeEntities(value: string): string {
@@ -58,7 +59,7 @@ async function streamingCommunityBody(url: URL, init: RequestInit, signal: Abort
   }
   if (!response.ok) {
     await response.body?.cancel();
-    throw new ProviderError(response.status === 404 ? "StreamingCommunity does not have this page." : "StreamingCommunity did not load this page. Check its origin in Settings > Sources and try again shortly.", response.status === 404 ? 404 : 502);
+    throw new ProviderError(response.status === 404 ? "StreamingCommunity does not have this page." : "StreamingCommunity didn't load this page. Check its site address in Settings → Sources.", response.status === 404 ? 404 : 502);
   }
   const reader = response.body?.getReader();
   if (!reader) throw unavailable();

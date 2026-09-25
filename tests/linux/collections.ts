@@ -220,7 +220,7 @@ try {
   assert.equal((await api(`/api/collections/${manual.id}`, { revision, definition: { ...definition, name: "Renamed by phone" } }, 1)).status, 200);
   await until("native edit keeps its unsaved value and warns about newer committed data", () => ui.execute("return document.querySelector('#collection-name')?.value === 'TV draft' && document.querySelector('.collections-panel')?.textContent.includes('Your draft is still here')"));
   await ui.button("Save collection", panel);
-  await until("native stale save is rejected without replacing the phone edit", () => ui.execute("return document.querySelector('.collections-panel [role=alert]')?.textContent.includes('changed on another controller')"));
+  await until("native stale save is rejected without replacing the phone edit", () => ui.execute("return document.querySelector('.collections-panel [role=alert]')?.textContent.includes('Someone else changed this')"));
   assert.equal((await detail(manual.id)).collection.name, "Renamed by phone");
   await ui.button("Cancel editing", panel);
   await selected(ui, "Renamed by phone");

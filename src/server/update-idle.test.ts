@@ -5,7 +5,7 @@ const minutes = (value: number) => value * 60_000;
 test("ten continuous stopped minutes, without input or active work, are required", () => {
   let now = 0;
   const idle = createUpdateIdle(() => now);
-  expect(idle.reason()).toContain("native player");
+  expect(idle.reason()).toContain("Couch app");
   idle.playback("idle", false);
   now = minutes(10) - 1; expect(idle.reason()).toContain("1 seconds");
   now++; expect(idle.reason()).toBeNull();

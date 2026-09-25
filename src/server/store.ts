@@ -9,6 +9,7 @@ import type { Controller } from "../shared/controllers";
 import { ControllerError, controllerName } from "./controllers";
 import { ViewingError } from "./progress";
 import { isInterfaceSize, type InterfaceSize } from "../shared/appearance";
+import { CHANGED_ELSEWHERE } from "./messages";
 
 type ProgressRow = Omit<HistoryItem, "watched" | "playedBy"> & { watched: number; playedBy: string | null };
 export type ProgressSnapshot = Array<ProgressRow & { profileId: string }>;
@@ -119,7 +120,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
   const unchangedProfile = (id: string, expectedName: string) => {
     const profile = db.query<WatchingProfile, [string]>("SELECT id, name FROM watching_profiles WHERE id = ?").get(id);
     if (!profile) throw new ViewingError("Watching profile not found. It may have been removed on another remote.", 404);
-    if (profile.name !== expectedName) throw new ViewingError("This watching profile was renamed on another remote. Review its current name and try again.", 409);
+    if (profile.name !== expectedName) throw new ViewingError(CHANGED_ELSEWHERE, 409);
     return profile;
   };
 
@@ -193,7 +194,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
         unchangedProfile(id, expectedName);
         if (typeof value !== "string" || !value.trim() || value.trim().length > 60 || /[\u0000-\u001f\u007f]/.test(value)) throw new ViewingError("Enter your name using 1 to 60 characters.");
         const name = value.trim();
-        if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("That name already has a saved history. Choose it under Existing histories or use another name.");
+        if (db.query("SELECT 1 FROM watching_profiles WHERE name = ? AND id != ?").get(name, id)) throw new ViewingError("Name taken. Pick it from Existing histories.");
         db.query("UPDATE watching_profiles SET name = ?, confirmedName = 1 WHERE id = ?").run(name, id);
         return { id, name, personName: name };
       }).immediate();
@@ -321,7 +322,7 @@ export function openStore(path: string, remoteControlEnabled = false) {
       return controller(id)!;
     },
     setControllerRole(id: string, role: unknown) {
-      if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Controller or Administrator.");
+      if (role !== "controller" && role !== "administrator") throw new ControllerError("Choose Remote or Admin.");
       return db.transaction(() => {
         requireController(id);
         db.query("UPDATE devices SET role = ? WHERE id = ?").run(role, id);
@@ -358,11 +359,11 @@ export function openStore(path: string, remoteControlEnabled = false) {
     consumeControllerClaim(id: string, code: string): Controller {
       return db.transaction(() => {
         const device = controller(id);
-        if (!device) throw new ControllerError("Pair this device before connecting.", 401);
-        if (device.role !== "controller") throw new ControllerError("This remote is already an administrator.", 409);
+        if (!device) throw new ControllerError("Pair this remote first.", 401);
+        if (device.role !== "controller") throw new ControllerError("This remote is already an admin.", 409);
         const claim = claimRow(code);
-        if (!claim || claim.consumed || claim.expiresAt <= Date.now()) throw new ControllerError("The administrator code is invalid or expired.", 401);
-        if (!claim.recovery && administratorExists()) throw new ControllerError("This TV already has an administrator.", 409);
+        if (!claim || claim.consumed || claim.expiresAt <= Date.now()) throw new ControllerError("This admin code is wrong or expired.", 401);
+        if (!claim.recovery && administratorExists()) throw new ControllerError("This Couch already has an admin.", 409);
         db.query("UPDATE devices SET role = 'administrator' WHERE id = ?").run(id);
         db.query("UPDATE controller_claims SET consumed = 1 WHERE code_hash = ?").run(hash(code));
         return controller(id)!;

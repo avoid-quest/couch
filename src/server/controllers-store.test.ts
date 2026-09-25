@@ -101,17 +101,17 @@ test("setup claims expire, replace older setup codes and grant only the first ex
   expect(store.createControllerClaim("1111111111", false)).toEqual({ expiresAt: 600_100, consumed: false });
   store.createControllerClaim("2222222222", false);
   expect(store.controllerClaim("1111111111")).toBeNull();
-  expect(() => store.consumeControllerClaim(one.id, "1111111111")).toThrow("invalid or expired");
+  expect(() => store.consumeControllerClaim(one.id, "1111111111")).toThrow("wrong or expired");
   now = 600_100;
-  expect(() => store.consumeControllerClaim(one.id, "2222222222")).toThrow("invalid or expired");
+  expect(() => store.consumeControllerClaim(one.id, "2222222222")).toThrow("wrong or expired");
   const fresh = store.createControllerClaim("3333333333", false);
-  expect(() => store.consumeControllerClaim("removed", "3333333333")).toThrow("Pair this device");
+  expect(() => store.consumeControllerClaim("removed", "3333333333")).toThrow("Pair this remote first");
   expect(store.controllerClaim("3333333333")).toEqual(fresh);
   expect(store.consumeControllerClaim(one.id, "3333333333").role).toBe("administrator");
   expect(store.controllerClaim("3333333333")?.consumed).toBeTrue();
-  expect(() => store.consumeControllerClaim(two.id, "3333333333")).toThrow("invalid or expired");
+  expect(() => store.consumeControllerClaim(two.id, "3333333333")).toThrow("wrong or expired");
   store.createControllerClaim("4444444444", false);
-  expect(() => store.consumeControllerClaim(two.id, "4444444444")).toThrow("already has an administrator");
+  expect(() => store.consumeControllerClaim(two.id, "4444444444")).toThrow("already has an admin");
   expect(store.controllerClaim("4444444444")?.consumed).toBeFalse();
 });
 
@@ -134,8 +134,8 @@ test("recovery expiry and consumption survive restart without retaining plaintex
   const second = open(file);
   expect(second.createControllerClaim(expiredCode, true)).toEqual(expired);
   expect(second.createControllerClaim(consumedCode, true)).toEqual({ expiresAt: expired.expiresAt, consumed: true });
-  expect(() => second.consumeControllerClaim(two.id, expiredCode)).toThrow("invalid or expired");
-  expect(() => second.consumeControllerClaim(two.id, consumedCode)).toThrow("invalid or expired");
+  expect(() => second.consumeControllerClaim(two.id, expiredCode)).toThrow("wrong or expired");
+  expect(() => second.consumeControllerClaim(two.id, consumedCode)).toThrow("wrong or expired");
   second.createControllerClaim(freshCode, true);
   expect(second.consumeControllerClaim(two.id, freshCode).role).toBe("administrator");
   expect(second.controller(one.id)?.role).toBe("administrator");
@@ -187,7 +187,7 @@ test("device management persists names and roles and permits removing the final 
   expect(store.setControllerRole(one.id, "controller").role).toBe("controller");
   expect(store.administratorExists()).toBeFalse();
   expect(store.renameController(two.id, "  Kitchen remote  ").name).toBe("Kitchen remote");
-  expect(() => store.setControllerRole(two.id, "host")).toThrow("Choose Controller or Administrator");
+  expect(() => store.setControllerRole(two.id, "host")).toThrow("Choose Remote or Admin");
   store.setControllerRole(two.id, "administrator");
   store.setControllerRole(one.id, "controller");
   store.revokeController(one.id);

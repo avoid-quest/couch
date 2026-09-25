@@ -210,7 +210,7 @@ test("temporary controls need no preference write and expire when the item chang
   expect(commands.at(-1)).toMatchObject({ type: "load", preferences: { ...italian, audioDelay: 0 } });
   const next = session.state.player.playbackId!;
   expect(() => session.command({ type: "savePlaybackDefault", profileId: "household", playbackId, setting: "speed" })).toThrow("changed");
-  expect(() => session.command({ type: "savePlaybackDefault", profileId: "household", playbackId: next, setting: "speed" })).toThrow("cannot be saved");
+  expect(() => session.command({ type: "savePlaybackDefault", profileId: "household", playbackId: next, setting: "speed" })).toThrow("Can't save this as a default");
   session.observe({ ...idle, playbackId: next, status: "playing", speed: 1.25 });
   store.close();
   session.command({ type: "speed", playbackId: next, speed: 1.5 });
@@ -227,7 +227,7 @@ test("defaults reject stale profiles and unlabelled tracks while profile guards 
     expect(() => session.selectProfile(guest.id)).toThrow("Stop playback");
   }
   session.observe({ ...session.state.player, status: "paused", tracks: [{ id: "audio", kind: "audio", index: 0, label: "Unknown", selected: true, language: "und" }] });
-  expect(() => session.command({ type: "savePlaybackDefault", profileId: "household", playbackId, setting: "audio" })).toThrow("cannot be saved");
+  expect(() => session.command({ type: "savePlaybackDefault", profileId: "household", playbackId, setting: "audio" })).toThrow("Can't save this as a default");
   expect(() => session.command({ type: "savePlaybackDefault", profileId: guest.id, playbackId, setting: "speed" })).toThrow("profile changed");
   session.command({ type: "stop" });
   session.observe(idle);

@@ -48,7 +48,7 @@ test("cancellation crosses the native pipe even while an inventory request is pe
   expect(await read).toEqual(state);
   const late = bridge.request({ op: "answer", owner: "admin", answer: "123456" });
   bridge.close();
-  expect(late).rejects.toThrow("closed");
+  expect(late).rejects.toThrow("disconnected");
 });
 
 test("A2DP output-only profiles retain exact Bluetooth address; hands-free profiles cannot be selected", () => {

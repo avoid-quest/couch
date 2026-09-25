@@ -5,6 +5,7 @@ import type { LibraryItem } from "../shared/library";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError } from "./controllers";
 import type { createLibrary } from "./library";
+import { CHANGED_ELSEWHERE, QUEUE_FULL } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -65,7 +66,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
   };
   const revision = (collection: SavedCollection, value: unknown) => {
     if (!Number.isSafeInteger(value) || Number(value) < 1) throw new CollectionError("Use the current collection revision.");
-    if (collection.revision !== value) throw new CollectionError("This collection changed on another controller. Reload before saving.", 409);
+    if (collection.revision !== value) throw new CollectionError(CHANGED_ELSEWHERE, 409);
   };
   const definition = (input: unknown, previous?: SavedCollection): CollectionDefinition => {
     if (!object(input)) throw new CollectionError("Enter a collection definition.");
@@ -151,7 +152,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
           if (input.digest !== current.digest) throw new CollectionError("The library changed. Review the refreshed preview before loading it.", 409);
           const available = current.items.filter(item => item.available);
           if (!available.length) throw new CollectionError("No available items in this preview.");
-          if (input.mode === "append" && queue().length + available.length > 500) throw new CollectionError("The queue can contain up to 500 entries. Remove some entries first.");
+          if (input.mode === "append" && queue().length + available.length > 500) throw new CollectionError(QUEUE_FULL);
           loadQueue(available.map(item => ({ id: item.id, title: item.title.slice(0, 300), source: `library:${item.id}`, ...(item.artworkId ? { artworkId: item.artworkId } : {}), ...(item.duration !== null ? { duration: item.duration } : {}) })), input.mode, authorize, playedBy);
           return Response.json({ ok: true, loaded: available.length, missing: current.items.length - available.length });
         }
@@ -173,7 +174,7 @@ export function createCollections({ databasePath, library, onChange, queue, load
         onChange();
         return Response.json(collection ? preview(collection) : { ok: true });
       } catch (error) {
-        return Response.json({ error: error instanceof CollectionError || error instanceof ControllerError ? error.message : "Could not update the collection or load the queue." }, { status: error instanceof CollectionError || error instanceof ControllerError ? error.status : 500 });
+        return Response.json({ error: error instanceof CollectionError || error instanceof ControllerError ? error.message : "Couldn't update the collection or load Up next." }, { status: error instanceof CollectionError || error instanceof ControllerError ? error.status : 500 });
       }
     },
     close() { if (!closed) { closed = true; db.close(); } },

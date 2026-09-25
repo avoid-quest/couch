@@ -10,13 +10,13 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
     if (!readOnly && mutation) return Promise.reject(new UpdateError("An app update operation is already running."));
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
-      const aborted = () => { if (readOnly) finish(); reject(new UpdateError("The update operation was interrupted. Use Check now before retrying.")); };
+      const aborted = () => { if (readOnly) finish(); reject(new UpdateError("The update was interrupted. Check again first.")); };
       const finish = () => { signal.removeEventListener("abort", aborted); pending.delete(id); if (mutation === id) mutation = undefined; };
       const current = { progress, resolve: (reply: AppImageUpdateReply) => { finish(); resolve(reply); }, reject: (error: Error) => { finish(); reject(error); } };
       pending.set(id, current);
       if (!readOnly) mutation = id;
       signal.addEventListener("abort", aborted, { once: true });
-      try { send(id, action); } catch { current.reject(new UpdateError("The native app updater is unavailable.")); }
+      try { send(id, action); } catch { current.reject(new UpdateError("Updater unavailable. Reopen Couch.")); }
     });
   };
   const feed: UpdateFeed<UpdateRelease> = {
@@ -24,7 +24,7 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
     async stage(candidate, signal, progress) {
       const reply = await request({ type: "stage", candidateId: candidate.summary.id }, signal, progress);
       if (reply.summary) Object.assign(candidate.summary, reply.summary);
-      if (!reply.staged) throw new UpdateError("The native updater did not confirm a verified download.");
+      if (!reply.staged) throw new UpdateError("The updater didn't confirm the download.");
     },
   };
   return {
@@ -45,6 +45,6 @@ export function createNativeAppImageUpdates(send: (requestId: string, action: Ap
       if (reply.accepted) { current.resolve(reply); mutation = reply.requestId; return; }
       if (reply.error) current.reject(new UpdateError(reply.error)); else current.resolve(reply);
     },
-    close() { for (const current of pending.values()) current.reject(new UpdateError("The native connection closed.")); },
+    close() { for (const current of pending.values()) current.reject(new UpdateError("The Couch app disconnected.")); },
   };
 }

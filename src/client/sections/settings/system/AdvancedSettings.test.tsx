@@ -40,7 +40,7 @@ beforeEach(async () => {
     const url = new URL(String(input));
     if (url.pathname === "/api/diagnostics/export") {
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer selected-token");
-      if (denied) return Response.json({ error: "Administrator access is no longer available." }, { status: 403 });
+      if (denied) return Response.json({ error: "You're no longer an admin." }, { status: 403 });
       if (interrupted) return new Response(new ReadableStream({ start(controller) { controller.error(new Error("Transfer interrupted")); } }));
       return new Response(bytes, { headers: { "Content-Type": "application/json" } });
     }
@@ -98,7 +98,7 @@ test("cancel and denied destination give distinct feedback", async () => {
 test("revoked Administrator access and interrupted transfers never open the save dialog", async () => {
   denied = true;
   await render(); await save();
-  expect(screen.getByText(/Administrator access is no longer available/)).toBeDefined();
+  expect(screen.getByText(/You're no longer an admin/)).toBeDefined();
   expect(invoke).not.toHaveBeenCalled();
   denied = false; interrupted = true;
   await save();

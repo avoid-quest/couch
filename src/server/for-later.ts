@@ -5,6 +5,7 @@ import type { ForLaterReference } from "../shared/for-later";
 import type { PlaybackActor, QueueEntry } from "../shared/protocol";
 import { ControllerError, settingField } from "./controllers";
 import { capturePlaylistEntries } from "./playlists";
+import { CHANGED_ELSEWHERE, PLAY_CANCELED } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -97,7 +98,7 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
             const saved = db.query<{ item: string; expiresAt: number }, [string]>("SELECT item, expiresAt FROM for_later_undo WHERE token = ?").get(token);
             if (!saved || saved.expiresAt <= Date.now()) throw new ControllerError("Undo has expired.", 404);
             const row = JSON.parse(saved.item) as RemovedRow;
-            if (db.query("SELECT 1 FROM for_later WHERE source = ? OR id = ?").get(row.source, row.id)) throw new ControllerError("This item changed on another controller.", 409);
+            if (db.query("SELECT 1 FROM for_later WHERE source = ? OR id = ?").get(row.source, row.id)) throw new ControllerError(CHANGED_ELSEWHERE, 409);
             if (db.query<{ count: number }, []>("SELECT COUNT(*) AS count FROM for_later").get()!.count >= 500) throw new ControllerError("For later can hold 500 items. Remove something before restoring this one.");
             db.query("UPDATE for_later SET position = position + 1 WHERE position >= ?").run(row.position);
             db.query("INSERT INTO for_later (id, source, entry, savedAt, position) VALUES (?, ?, ?, ?, ?)").run(row.id, row.source, row.entry, row.savedAt, row.position);
@@ -137,8 +138,8 @@ export function createForLater({ databasePath, onChange, lookup, prepare, reserv
         return Response.json({ ok: true, ...(undoToken ? { undoToken } : {}) });
       } catch (error) {
         // The session appended the item before a newer control canceled Play.
-        if (error instanceof Error && error.message === "Added to the queue. Playback was canceled by a newer control.") return Response.json({ ok: true, notice: "Added to Up next. Playback was canceled by a newer control." });
-        return Response.json({ error: error instanceof ControllerError ? error.message : "Could not use this saved item. Its source may be unavailable. Retry when connected, or remove it from For later." }, { status: error instanceof ControllerError ? error.status : 409 });
+        if (error instanceof Error && error.message === PLAY_CANCELED) return Response.json({ ok: true, notice: "Queued." });
+        return Response.json({ error: error instanceof ControllerError ? error.message : "Couldn't open this saved item. Its source may be gone." }, { status: error instanceof ControllerError ? error.status : 409 });
       }
     },
     close() { db.close(); },

@@ -2,6 +2,7 @@ import type { ControllerIdentity } from "../shared/controllers";
 import type { RadioPlaylistSummary } from "../shared/radio";
 import { ControllerError } from "./controllers";
 import { RadioError, type createRadio } from "./radio";
+import { ADMIN_ONLY } from "./messages";
 
 export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, "playlists" | "addPlaylist" | "refreshPlaylist" | "removePlaylist" | "avoid" | "avoidProgrammes">) {
   return {
@@ -10,21 +11,21 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
       const browsing = ["/api/radio/playlists", "/api/radio/avoid", "/api/radio/avoid/programmes"].includes(path) && request.method === "GET";
       const authorize = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required to manage radio sources.", 403);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
       };
       const methods = (allow: string) => new Response(null, { status: 405, headers: { Allow: allow } });
       try {
-        if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
+        if (!identity()) throw new ControllerError("Pair this remote first.", 401);
         if (path === "/api/radio/avoid" || path === "/api/radio/avoid/programmes") {
           if (request.method !== "GET") return methods("GET");
           const result = path.endsWith("/programmes") ? { programmes: await radio.avoidProgrammes(request.signal) } : await radio.avoid(new URL(request.url).searchParams.get("refresh") === "true");
-          if (!identity()) throw new ControllerError("Pair this device before connecting.", 401);
+          if (!identity()) throw new ControllerError("Pair this remote first.", 401);
           return Response.json(result);
         }
         if (browsing) {
           const playlists: RadioPlaylistSummary[] = radio.playlists().map(({ id, name, stationCount, updatedAt, error }) => ({
-            id, name, stationCount, updatedAt, error: error ? "This source needs attention in Settings > Sources. Cached stations are still available." : null,
+            id, name, stationCount, updatedAt, error: error ? "This source needs attention in Settings → Sources. Saved stations still work." : null,
           }));
           return Response.json({ playlists });
         }
@@ -60,7 +61,7 @@ export function createRadioSettings(radio: Pick<ReturnType<typeof createRadio>, 
         // have authority before receiving that caller's private failure details.
         if (!browsing) { try { authorize(); } catch (rejected) { error = rejected; } }
         if (error instanceof ControllerError || error instanceof RadioError) return Response.json({ error: error.message }, { status: error.status });
-        return Response.json({ error: "Could not update radio sources. Try again." }, { status: 500 });
+        return Response.json({ error: "Couldn't update radio sources. Try again." }, { status: 500 });
       }
     },
   };

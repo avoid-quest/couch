@@ -246,7 +246,7 @@ for (const replacement of ["stop", "play"] as const) test(`a newer ${replacement
     await started.promise;
     expect(await second.command(replacement === "stop" ? { type: "stop" } : { type: "play", entryId: "replacement" })).toMatchObject({ ok: true });
     output.resolve(bandcampAlbum);
-    expect(await pending).toMatchObject({ ok: false, error: expect.stringContaining("canceled by a newer control") });
+    expect(await pending).toMatchObject({ ok: false, error: expect.stringContaining("Another action canceled playback") });
     expect(hub.session.state.queue.map(item => item.title)).toEqual(["Replacement", "first", "second"]);
     expect(commands.filter(command => command.type === "load")).toHaveLength(replacement === "stop" ? 0 : 1);
     expect(hub.session.state.currentEntryId).toBe(replacement === "stop" ? null : "replacement");
@@ -585,7 +585,7 @@ test.each([false, true])("Jellyfin play-now forwards fromStart=%s through host r
   await entered;
   release();
   expect(await pending).toMatchObject({ ok: true });
-  await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added First") === true);
+  await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" queued First") === true);
   const load = await waitForCommand(command => command.type === "load");
   expect(load).toMatchObject({ type: "load" });
   if (fromStart) expect(load).not.toHaveProperty("startPosition");
@@ -607,7 +607,7 @@ for (const kind of ["library", "jellyfin"] as const) {
     const currentEntryId = hub.session.state.currentEntryId;
     const playbackId = hub.session.state.player.playbackId;
     release();
-    expect(await pending).toMatchObject({ ok: false, error: "Added to the queue. Playback was canceled by a newer control." });
+    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
     await second.waitFor(message => message.type === "state" && message.state.queue.some(entry => entry.id === "delayed-catalog"));
     expect(second.state.currentEntryId).toBe(currentEntryId);
     expect(second.state.player.playbackId).toBe(playbackId);
@@ -897,7 +897,7 @@ test("catalog HTTP authenticates native CORS requests and shares only approved l
   const { items } = await (await api("/api/library/items?q=Local", token)).json() as { items: { id: string }[] };
   expect(items).toHaveLength(1);
   expect(await remote.command({ type: "enqueueLibrary", itemId: items[0]!.id, entryId: "library-song" })).toMatchObject({ ok: true });
-  await host.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added Local song") === true);
+  await host.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" queued Local song") === true);
   await host.waitFor(message => message.type === "state" && message.state.queue[0]?.id === "library-song");
   expect(host.state.queue[0]?.title).toBe("Local song");
   expect(host.state.queue[0]?.source).toBe(`library:${items[0]!.id}`);
@@ -950,7 +950,7 @@ test("an administrator manages a durable radio playlist while ordinary remotes b
     expect((await api(initial.hub, "favorites", "POST", { station }, guestToken)).status).toBe(200);
     expect(await first.command({ type: "enqueueRadio", stationId: "missing", entryId: "missing-radio" })).toMatchObject({ ok: false });
     expect(await first.command({ type: "enqueueRadio", stationId: station!.id, entryId: "curated-radio" })).toMatchObject({ ok: true });
-    await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" added Sygma Radio") === true);
+    await second.waitFor(message => message.type === "state" && message.state.activity?.text.endsWith(" queued Sygma Radio") === true);
     await second.waitFor(message => message.type === "state" && message.state.queue.some(entry => entry.id === "curated-radio"));
     expect(second.state.queue[0]).toMatchObject({ source: `radio:${station!.id}`, thumbnail: station!.logoUrl, kind: "radio", live: true });
     const version = second.state.versions?.radio ?? 0;
@@ -1049,7 +1049,7 @@ test("the local host and administrators can read sanitized diagnostics through H
   const text = await response.text();
   for (const secret of [hub.pairingCode, hostToken, "signature=secret", "user:secret"]) expect(text).not.toContain(secret);
   const report = JSON.parse(text);
-  expect(report.native).toBeNull(); expect(report.nativeError).toContain("not connected");
+  expect(report.native).toBeNull(); expect(report.nativeError).toContain("isn't connected");
   expect(report.recent.some((entry: { source: string }) => entry.source === "Playback")).toBe(true);
   expect(report.configuration.some((fact: { name: string; value: unknown }) => fact.name === "Listen port" && fact.value === hub.server.port)).toBe(true);
   expect((await api(guest, "/api/diagnostics/export")).status).toBe(403);
@@ -1126,14 +1126,14 @@ test.each([false, true])("hub maintenance checkpoint reports its actual SQLite s
     const result = await hub.quiesce().catch(error => error);
     if (failing) {
       expect(result).toBeInstanceOf(Error);
-      expect(result.message).toContain("Could not save viewing progress");
+      expect(result.message).toContain("Couldn't save your progress");
       expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(12);
       hubs.splice(hubs.indexOf(hub), 1);
     } else {
       expect(result).toEqual({ progressSaved: true, admissionClosed: true });
       expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(17);
     }
-    expect(() => hub.session.command({ type: "volume", volume: 10 })).toThrow("update");
+    expect(() => hub.session.command({ type: "volume", volume: 10 })).toThrow("Updating");
   } finally { db.close(); }
 });
 
@@ -1247,15 +1247,15 @@ test("legacy recording state survives startup without backend work or playback a
   expect(hub.updateWork()).toBeNull();
   expect(hub.idleReason()).toBeNull();
   expect((await controllerApi(hub, hostToken, "/api/recordings")).status).toBe(404);
-  expect(() => hub.session.command({ type: "play", entryId: entry.id })).toThrow("Couch recordings are no longer supported");
-  expect(hub.session.state.player.error).toContain("Open the saved media file");
+  expect(() => hub.session.command({ type: "play", entryId: entry.id })).toThrow("Recordings aren't supported");
+  expect(hub.session.state.player.error).toContain("Open the file instead");
   const history = await controllerApi(hub, hostToken, `/api/progress/${encodeURIComponent(source)}/play`, "POST", { profileId: "household" });
   expect(history.status).toBe(410);
-  expect((await history.json()).error).toContain("Couch recordings are no longer supported");
+  expect((await history.json()).error).toContain("Recordings aren't supported");
   hub.session.observe({ ...idle, status: "unavailable" });
   const disconnectedHistory = await controllerApi(hub, hostToken, `/api/progress/${encodeURIComponent(source)}/play`, "POST", { profileId: "household" });
   expect(disconnectedHistory.status).toBe(410);
-  expect((await disconnectedHistory.json()).error).toContain("Open the saved media file");
+  expect((await disconnectedHistory.json()).error).toContain("Open the file instead");
   hub.session.observe(idle);
   expect(hub.session.state.queue).toContainEqual(entry);
   hub.session.command({ type: "enqueue", entry: { id: "file", title: "Retained file", source: new URL(`file://${mediaPath}`).href }, playNow: true });
@@ -1296,7 +1296,7 @@ test("restart checkpoint failure preserves authenticated HTTP, playback and dirt
     db.run("CREATE TRIGGER reject_restart_progress BEFORE INSERT ON viewing_progress BEGIN SELECT RAISE(FAIL, 'fixture disk failure'); END");
     const response = await controllerApi(hub, admin, "/api/settings/restart", "POST", { confirmInterrupt: true });
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: "Could not save viewing progress. Check the TV's storage." });
+    expect(await response.json()).toMatchObject({ error: "Couldn't save your progress. Couch may be out of space." });
     expect((await controllerApi(hub, admin, "/api/settings")).status).toBe(200);
     expect(hub.session.state.player.playbackId).toBe(player.playbackId);
     expect(() => hub.session.command({ type: "volume", volume: 44 })).not.toThrow();
@@ -1306,7 +1306,7 @@ test("restart checkpoint failure preserves authenticated HTTP, playback and dirt
     expect(await accepted.json()).toMatchObject({ ok: true, instanceId: expect.any(String) });
     expect((await controllerApi(hub, admin, "/api/settings/restart")).status).toBe(200);
     expect(db.query<{ position: number }, []>("SELECT position FROM viewing_progress").get()?.position).toBe(17);
-    expect(() => hub.session.command({ type: "volume", volume: 30 })).toThrow("update");
+    expect(() => hub.session.command({ type: "volume", volume: 30 })).toThrow("Updating");
   } finally { db.close(); }
 });
 
@@ -1568,7 +1568,7 @@ test("a later Stop cancels playlist play intent without losing resolved queue en
     await started.promise;
     expect(await remote.command({ type: "stop" })).toMatchObject({ ok: true });
     loading.resolve({ items: [{ id: "first", title: "First", provider: "youtube", kind: "media", url: "https://www.youtube.com/watch?v=abcdefghijk" }] });
-    expect(await pending).toMatchObject({ ok: false, error: "Added to the queue. Playback was canceled by a newer control." });
+    expect(await pending).toMatchObject({ ok: false, error: "Queued. Another action canceled playback." });
     expect(hub.session.state.queue).toHaveLength(1);
     expect(hub.session.state.currentEntryId).toBeNull();
   } finally { loading.resolve({ items: [] }); playlist.mockRestore(); }
@@ -1710,7 +1710,7 @@ test("diagnostic read and write failures leave coordinator commands and restart 
     expect(await remote.command({ type: "volume", volume: 32 })).toMatchObject({ ok: true });
     expect(first.commands).toContainEqual({ type: "volume", volume: 32 });
     const report = await (await controllerApi(first.hub, token, "/api/diagnostics/export")).json();
-    expect(report.historyError).toContain("could not be saved");
+    expect(report.historyError).toContain("Couldn't save recent errors");
     expect(JSON.stringify(report)).not.toContain("private-storage-secret");
     await remote.close(); await first.hub.close();
     db.run("DROP TRIGGER fail_diagnostics; UPDATE diagnostic_history SET entries = 'invalid-json'");
@@ -1718,7 +1718,7 @@ test("diagnostic read and write failures leave coordinator commands and restart 
     const recovered = new Peer(second.hub, token); await recovered.ready();
     expect(await recovered.command({ type: "volume", volume: 40 })).toMatchObject({ ok: true });
     const failedRead = await (await controllerApi(second.hub, token, "/api/diagnostics")).json();
-    expect(failedRead.historyError).toContain("could not be read");
+    expect(failedRead.historyError).toContain("Couldn't read saved errors");
     await recovered.close(); await second.hub.close();
     db.run("UPDATE diagnostic_history SET entries = '[]'");
     const third = fixture(first.databasePath);

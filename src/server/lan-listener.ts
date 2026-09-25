@@ -25,7 +25,7 @@ export async function lanUrls(network: LanNetwork, port: number, advertised: str
       const url = new URL(value);
       const aliasPort = Number(url.port || 80);
       if (url.protocol !== "http:" || (aliasPort !== port && aliasPort !== 80) || url.pathname !== "/" || url.username || url.password || url.search || url.hash || /[\s\\]/.test(value)) throw new Error("Use HTTP and Couch's port, without credentials, a proxy or a path.");
-      if (aliasPort === 80 && port !== 80 && !port80) throw new Error("Couch cannot listen on port 80. Include Couch's port in the name or grant the listener the capability.");
+      if (aliasPort === 80 && port !== 80 && !port80) throw new Error("Couch can't use port 80. Add Couch's port to the address.");
       const answers = await Promise.race([
         resolve(url.hostname, { all: true }),
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("LAN DNS lookup timed out.")), 5_000); }),
@@ -79,7 +79,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
     } catch (error) {
       await stopAll().catch(() => {});
       network = null;
-      const message = error instanceof Error ? error.message : "Could not refresh the LAN address.";
+      const message = error instanceof Error ? error.message : "Couldn't refresh the LAN address.";
       if (!closed) changed([], message);
       throw error;
     }
@@ -103,7 +103,7 @@ export function createLanListener<T extends { stop(close: boolean): Promise<void
           if (enabled) port80 = listener;
           else await listener.stop(true);
         }
-        catch { throw new Error("Couch cannot listen on port 80. Include Couch's port in the name or grant the listener the capability."); }
+        catch { throw new Error("Couch can't use port 80. Add Couch's port to the address."); }
       }
     }),
     async setEnabled(value: boolean) {

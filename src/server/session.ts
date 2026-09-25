@@ -6,6 +6,7 @@ import { playbackDefault } from "../shared/playback-default";
 import type { TvAppearance } from "../shared/appearance";
 import { supportsCurrentVideoQuality } from "../shared/video-quality";
 import type { WebMediaSource } from "./web-media";
+import { UPDATING_PAUSED, RECORDINGS_UNSUPPORTED, QUEUE_FULL, STORAGE_ERROR, PLAY_CANCELED } from "./messages";
 
 type Metadata = Pick<QueueEntry, "thumbnail" | "artworkId" | "duration" | "live" | "kind"> & { title?: string };
 export type MediaSource = { audioOnly?: boolean; source: string; headers?: Record<string, string>; audioSource?: string; maxVideoHeight?: number; startPosition?: number; segment?: { start: number; end: number }; subtitles?: ExternalSubtitle[]; subtitleWarning?: string; metadata?: Metadata; radio?: boolean; goLive?: boolean; eventStart?: boolean; expiry?: WebMediaSource["expiry"] };
@@ -39,7 +40,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   let webRetried = false;
   let quiescing = false;
   const admitted = () => !quiescing && (options.admitted?.() ?? true);
-  const assertAdmitted = () => { if (!admitted()) throw new ViewingError("The TV is preparing an update. Controls are paused.", 503); };
+  const assertAdmitted = () => { if (!admitted()) throw new ViewingError(UPDATING_PAUSED, 503); };
   const radioRetry = createRadioRetry(options.now);
   const activeProfile = store.activeProfile();
   const state: SessionState = {
@@ -53,7 +54,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     appearance: { size: store.tvInterfaceSize(), confirmedSize: store.tvInterfaceSize(), preview: null },
     administratorClaimed: store.administratorExists(),
     preferences: store.playbackPreferences(activeProfile.id),
-    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The desktop player is not connected." },
+    player: { playbackId: null, status: "unavailable", position: 0, duration: null, volume: desiredVolume, seekable: false, error: "The Couch app isn't connected." },
   };
   const broadcast = () => {
     if (state.radioProgramme && (state.radioProgramme.playbackId !== state.player.playbackId || !["playing", "paused"].includes(state.player.status))) state.radioProgramme = null;
@@ -79,7 +80,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   const persistProgress = (save: () => void, required = false) => {
     try { save(); }
     catch {
-      state.progressError = "Could not save viewing progress. Check the TV's storage.";
+      state.progressError = STORAGE_ERROR("your progress");
       if (required) { broadcast(); throw new Error(state.progressError); }
     }
   };
@@ -104,7 +105,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     }); state.queueError = null; }
     catch (error) {
       if (completingProgress) throw error;
-      state.queueError = "Could not save the queue position. Check the TV's storage before restarting.";
+      state.queueError = STORAGE_ERROR("your place in Up next");
       if (required) { broadcast(); throw new Error(state.queueError); }
     }
     state.queue = queue;
@@ -122,7 +123,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
   };
   const available = () => {
     assertAdmitted();
-    if (state.player.status === "unavailable") throw new Error("The desktop player is not connected.");
+    if (state.player.status === "unavailable") throw new Error("The Couch app isn't connected.");
   };
   const currentPlayback = (playbackId: string) => {
     available();
@@ -137,9 +138,9 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       options.deactivate?.();
       finishProgress();
       state.playedBy = undefined;
-      state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: "The desktop player disconnected." };
+      state.player = { ...state.player, playbackId: null, status: "unavailable", nowPlaying: null, error: "The Couch app disconnected." };
       broadcast();
-      throw new Error("The desktop player disconnected.");
+      throw new Error("The Couch app disconnected.");
     }
   };
   const cancelPreparation = () => {
@@ -198,7 +199,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     resolution?.abort();
     qualityResolution?.abort();
     state.webRetry = null;
-    state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", error: "Stream recovery canceled by a newer control. Play the track to try again." };
+    state.player = { ...state.player, playbackId: crypto.randomUUID(), status: "error", error: "Canceled. Play it again." };
     if (loadingNative) send({ type: "stop" });
   };
   const recoverWeb = (failure: PlayerState) => {
@@ -301,7 +302,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
     broadcast();
     const failed = (error: unknown) => {
       if (!admitted() || state.player.playbackId !== playbackId) return;
-      const message = error instanceof Error ? error.message : "This source could not be opened.";
+      const message = error instanceof Error ? error.message : "Couldn't open this source.";
       try { authorize(); if (failRadio(message, authorize, playedBy)) return; } catch { cancelRadioRetry(); }
       resolution?.abort();
       qualityResolution?.abort();
@@ -469,7 +470,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         available();
         if (!entries.length) throw new Error("This playlist is empty. Add items before playing it.");
       }
-      if (entries.length + (mode === "append" ? state.queue.length : 0) > 500) throw new Error("The queue can hold up to 500 items. Remove some items before loading this playlist.");
+      if (entries.length + (mode === "append" ? state.queue.length : 0) > 500) throw new Error(QUEUE_FULL);
       const added = entries.map(entry => ({ ...entry, id: crypto.randomUUID(), ...(playedBy ? { addedBy: { ...playedBy } } : {}) }));
       if (mode !== "append") persistProgress(progress.checkpoint, true);
       const cursor = state.queue.findIndex(entry => entry.id === (state.currentEntryId ?? state.queueCursorEntryId));
@@ -499,12 +500,12 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       return ++playIntent;
     },
     playIfCurrent(intent: number, entryId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor, selectedEntryIds: string[] = []) {
-      if (intent !== playIntent) throw new Error("Added to the queue. Playback was canceled by a newer control.");
+      if (intent !== playIntent) throw new Error(PLAY_CANCELED);
       play(entryId, fromStart, false, authorize, false, playedBy, selectedEntryIds);
     },
     playHistory(mediaId: string, fromStart = false, authorize = () => {}, playedBy?: PlaybackActor) {
       authorize();
-      if (mediaId.startsWith("recording:")) throw new ViewingError("Couch recordings are no longer supported. Open the saved media file through a folder source or Open file.", 410);
+      if (mediaId.startsWith("recording:")) throw new ViewingError(RECORDINGS_UNSUPPORTED, 410);
       available();
       if (!store.sharedProgress(mediaId)) throw new ViewingError("History item not found.", 404);
       const existing = state.queue.find(entry => playbackMediaId(entry) === mediaId);
@@ -512,7 +513,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       if (!saved || playbackMediaId(saved) !== mediaId) throw new ViewingError("Open this item from its source again.", 409);
       const entry = existing ?? { ...saved, id: crypto.randomUUID() };
       if (!existing) {
-        if (state.queue.length >= 500) throw new ViewingError("Up next is full. Remove an item before playing this one.", 409);
+        if (state.queue.length >= 500) throw new ViewingError(QUEUE_FULL, 409);
         saveQueue([...state.queue, entry]);
       }
       play(entry.id, fromStart, false, authorize, false, playedBy);
@@ -599,7 +600,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
       switch (action.type) {
         case "enqueue":
           if (action.playNow) available();
-          if (state.queue.length >= 500) throw new Error("The queue is full. Remove an item before adding another.");
+          if (state.queue.length >= 500) throw new Error(QUEUE_FULL);
           if (state.queue.some(entry => entry.id === action.entry.id)) throw new Error("That queue entry already exists.");
           const entry = { ...action.entry, title: action.entry.title.trim(), addedBy: playedBy ? { ...playedBy } : undefined };
           const cursor = state.queue.findIndex(item => item.id === (state.currentEntryId ?? state.queueCursorEntryId));
@@ -625,7 +626,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         case "restoreRemoved": {
           const removed = removedEntries.get(action.token);
           if (!removed || Date.now() >= removed.expiresAt) throw new Error("Undo expired. Check the current queue.");
-          if (state.currentEntryId !== removed.currentEntryId || state.queue.length !== removed.queueIds.length || state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) || state.queue.length >= 500) throw new Error("The shared queue or playback changed. Check its current state before trying again.");
+          if (state.currentEntryId !== removed.currentEntryId || state.queue.length !== removed.queueIds.length || state.queue.some((entry, index) => entry.id !== removed.queueIds[index]) || state.queue.length >= 500) throw new Error("Up next or playback changed. Try again.");
           const queue = [...state.queue];
           queue.splice(removed.index, 0, removed.entry);
           saveQueue(queue);
@@ -659,7 +660,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           if (action.profileId !== state.activeProfile.id) throw new Error("The watching profile changed. Use the current state and try again.");
           if (action.type === "savePlaybackDefault") currentPlayback(action.playbackId);
           const patch = action.type === "preferences" ? action.preferences : playbackDefault(state.player, action.setting);
-          if (!patch) throw new Error("This playback choice cannot be saved as a default. Choose a default in Settings, Playback.");
+          if (!patch) throw new Error("Can't save this as a default.");
           const profile = { ...state.preferences!.profile, ...patch };
           store.saveProfilePreferences(action.profileId, profile);
           state.preferences = { ...state.preferences!, profile };
@@ -690,7 +691,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           break;
         case "replayGain":
           currentPlayback(action.playbackId);
-          if (!["playing", "paused"].includes(state.player.status) || state.player.replayGain === undefined) throw new Error("ReplayGain is available after supported music finishes loading. Radio and video keep their normal level.");
+          if (!["playing", "paused"].includes(state.player.status) || state.player.replayGain === undefined) throw new Error("Volume leveling works on music only.");
           send(action);
           break;
         case "track":
@@ -706,7 +707,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
           pendingSeek = { playbackId: action.playbackId, position, from: state.player.position };
           progress.seek(position);
           break;
-        case "mute": throw new Error("System mute is unavailable on this player.");
+        case "mute": throw new Error("Mute isn't available on this Couch.");
         case "volume":
           store.saveVolume(action.volume);
           desiredVolume = action.volume;
@@ -790,7 +791,7 @@ export function createSession(store: Store, sendPlayer: (command: PlaybackComman
         && tickMask(player) === tickMask(state.player);
       state.player = { ...player, ...(options.systemAudio ? { volume: state.systemAudio?.volume ?? state.player.volume } : {}), ...(["unavailable", "error", "idle", "ended"].includes(player.status) ? { nowPlaying: null } : {}), ...(subtitleWarning ? { subtitleError: player.subtitleError || subtitleWarning } : {}) };
       try { progress.observe(player); }
-      catch { state.progressError = "Could not save viewing progress. Check the TV's storage."; }
+      catch { state.progressError = STORAGE_ERROR("your progress"); }
       options.observe?.(state.player);
       if (wasUnavailable && player.status !== "unavailable") send({ type: "volume", volume: options.systemAudio ? 100 : desiredVolume });
       if (!liveTick) broadcast();

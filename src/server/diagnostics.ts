@@ -4,6 +4,7 @@ import { createDiagnosticLog } from "./diagnostics-log";
 import { buildInfo } from "./build-info";
 import { diagnosticLimits, redactDiagnosticText } from "./diagnostics-redaction";
 import { configurationFacts, diagnosticBuild, helperFacts, systemFacts } from "./diagnostics-system";
+import { ADMIN_ONLY, NO_LONGER_ADMIN } from "./messages";
 
 type Options = {
   databasePath: string;
@@ -41,13 +42,13 @@ export function createDiagnostics(options: Options) {
     const start = performance.now();
     const [system, native, mediaHelpers] = await Promise.all([
       boundedSystem(),
-      options.native().then(value => ({ value, error: value ? null : "Native host is not connected." })).catch(error => ({ value: null, error: safe(error instanceof Error ? error.message : "Native host is unavailable.") })),
+      options.native().then(value => ({ value, error: value ? null : "The Couch app isn't connected." })).catch(error => ({ value: null, error: safe(error instanceof Error ? error.message : "The Couch app isn't available.") })),
       helpers && Date.now() - helpers.at < diagnosticLimits.helperSeconds * 1_000 ? helpers.values : (options.helpers ?? (() => helperFacts(env)))().then(values => { helpers = { at: Date.now(), values }; return values; }).catch(() => [{ name: "Media helpers", version: null, status: "error" as const, source: "Local helper check", error: "Helper information is unavailable.", checkedAt: new Date().toISOString() }]),
     ]);
     for (const helper of mediaHelpers) if (helper.error) log.add(helper.name, helper.error);
     let sources: Diagnostics["sources"];
     try { sources = options.sources().slice(0, 40).map(source => ({ name: safe(source.name, 100), status: safe(source.status, 60), error: source.error || source.warning ? safe([source.error, source.warning].filter(Boolean).join(" ")) : null })); }
-    catch { sources = [{ name: "Sources", status: "unavailable", error: "Source status could not be read." }]; }
+    catch { sources = [{ name: "Sources", status: "unavailable", error: "Couldn't read source status." }]; }
     for (const source of sources) if (source.error) log.add(source.name, source.error);
     return {
       formatVersion: 2, sessionId: log.sessionId, sessionStartedAt: log.sessionStartedAt, historyError: log.error(), collectedAt: new Date().toISOString(), collectionMs: Math.round(performance.now() - start), build: diagnosticBuild(buildInfo),
@@ -64,7 +65,7 @@ export function createDiagnostics(options: Options) {
       const headers: Record<string, string> = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
       const json = (body: unknown, status: number) => Response.json(body, { status, headers });
       const permitted = () => ["host", "administrator"].includes(identity()?.authority ?? "");
-      if (!permitted()) return json({ error: "An administrator is required to view diagnostics." }, 403);
+      if (!permitted()) return json({ error: ADMIN_ONLY }, 403);
       if (request.method !== "GET") return new Response(null, { status: 405, headers: { ...headers, Allow: "GET" } });
       const path = new URL(request.url).pathname;
       if (path !== "/api/diagnostics" && path !== "/api/diagnostics/export") return json({ error: "Not found." }, 404);
@@ -73,7 +74,7 @@ export function createDiagnostics(options: Options) {
         await pending;
       }
       // Revocation while a helper or the native host answers must take effect.
-      if (!permitted()) return json({ error: "Administrator access is no longer available." }, 403);
+      if (!permitted()) return json({ error: NO_LONGER_ADMIN }, 403);
       const body = JSON.stringify({ ...cached!, recent: log.recent(), historyError: log.error() }, null, 2);
       if (Buffer.byteLength(body) > diagnosticLimits.exportBytes) return json({ error: "Diagnostic report exceeded its size limit." }, 503);
       if (path.endsWith("/export")) headers["Content-Disposition"] = 'attachment; filename="couch-diagnostics.json"';

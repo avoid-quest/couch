@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { ControllerIdentity } from "../shared/controllers";
 import type { Store } from "./store";
+import { ADMIN_ONLY } from "./messages";
 
 export class ControllerError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -33,7 +34,7 @@ export async function settingField(request: Request, field: string) {
     }
   } catch (error) {
     if (error instanceof ControllerError) throw error;
-    throw new ControllerError("Could not read the request.");
+    throw new ControllerError("Couldn't read the request.");
   } finally { reader.releaseLock(); }
   let value: unknown;
   try { value = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw new ControllerError("Invalid JSON body."); }
@@ -42,7 +43,7 @@ export async function settingField(request: Request, field: string) {
 }
 
 export function createControllers({ store, onChange, onRevoke = () => {}, recoveryCode, pairingCode }: { store: Store; onChange: (controller?: import("../shared/controllers").Controller) => void; onRevoke?: (id: string) => void; recoveryCode?: string; pairingCode?: string }) {
-  if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("The administrator recovery code must contain 32 to 256 hexadecimal characters.");
+  if (recoveryCode !== undefined && !/^[a-f\d]{32,256}$/i.test(recoveryCode)) throw new ControllerError("Check the admin code.");
   if (recoveryCode) store.createControllerClaim(recoveryCode, true);
   let setup: { code: string; expiresAt: number } | null = null;
   let claimWindow = Date.now();
@@ -58,12 +59,12 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
     async handle(request: Request, identity: () => ControllerIdentity | null): Promise<Response> {
       const requireIdentity = () => {
         const caller = identity();
-        if (!caller) throw new ControllerError("Pair this device before connecting.", 401);
+        if (!caller) throw new ControllerError("Pair this remote first.", 401);
         return caller;
       };
       const administrator = () => {
         const caller = requireIdentity();
-        if (caller.authority === "controller") throw new ControllerError("An administrator is required.", 403);
+        if (caller.authority === "controller") throw new ControllerError(ADMIN_ONLY, 403);
         return caller;
       };
       try {
@@ -109,7 +110,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
         if (path === "/api/controllers/claim-code") {
           if (request.method !== "GET") return methods("GET");
           if (caller.authority !== "host") throw new ControllerError("The setup code is available on the TV only.", 403);
-          if (store.administratorExists()) throw new ControllerError("This TV already has an administrator.", 409);
+          if (store.administratorExists()) throw new ControllerError("This Couch already has an admin.", 409);
           if (!setup || setup.expiresAt <= Date.now()) {
             const code = String(randomInt(1_000_000_000, 10_000_000_000));
             const claim = store.createControllerClaim(code, false);
@@ -119,13 +120,13 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
         }
         if (path === "/api/controllers/claim") {
           if (request.method !== "POST") return methods("POST");
-          if (caller.authority === "host") throw new ControllerError("Claim administration from a paired remote.");
+          if (caller.authority === "host") throw new ControllerError("Become admin from a paired remote.");
           if (Date.now() - claimWindow >= 60_000) { claimWindow = Date.now(); claimAttempts = 0; }
           if (++claimAttempts > 20) throw new ControllerError("Too many claim attempts. Try again in a minute.", 429);
           const code = await settingField(request, "code");
           const current = requireIdentity();
-          if (!current.controller || current.authority !== "controller") throw new ControllerError("This remote is already an administrator.", 409);
-          if (typeof code !== "string" || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code)) throw new ControllerError("The administrator code is invalid or expired.", 401);
+          if (!current.controller || current.authority !== "controller") throw new ControllerError("This remote is already an admin.", 409);
+          if (typeof code !== "string" || !/^(?:\d{10}|[a-f\d]{32,256})$/i.test(code)) throw new ControllerError("This admin code is wrong or expired.", 401);
           const controller = store.consumeControllerClaim(current.controller.id, code);
           onChange();
           return json({ controller });
@@ -154,7 +155,7 @@ export function createControllers({ store, onChange, onRevoke = () => {}, recove
         }
         return json({ error: "Not found." }, 404);
       } catch (error) {
-        return json({ error: error instanceof ControllerError ? error.message : "Could not update controller settings. Try again." }, error instanceof ControllerError ? error.status : 500);
+        return json({ error: error instanceof ControllerError ? error.message : "Couldn't update remotes. Try again." }, error instanceof ControllerError ? error.status : 500);
       }
     },
   };
