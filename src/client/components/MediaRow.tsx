@@ -17,9 +17,10 @@ type Props = {
   children?: ReactNode;
   /** Shown only while the main button has keyboard focus. */
   description?: string;
-  /** The row's one main verb: Play, Resume or Open. */
-  primary: { label: string; onClick: () => void; disabled?: boolean };
-  /** Secondary verbs, revealed on hover or focus (always shown on touch). */
+  /** The row's one main verb: Play, Resume or Open. Omit for rows with no verb (a list's entries). */
+  primary?: { label: string; onClick: () => void; disabled?: boolean };
+  /** Secondary verbs, revealed on hover or focus on wide screens; below `lg`
+   * and on touch they sit under the title so the title keeps its width. */
   actions?: ReactNode;
 } & Omit<ComponentProps<"li">, "title" | "children">;
 
@@ -28,18 +29,21 @@ type Props = {
  * verb and quiet secondary actions. Used by Find, Saved and Up next.
  */
 export function MediaRow({ art, title, meta, children, description, primary, actions, className, ...props }: Props) {
+  const body = <>
+    <span className="w-full truncate text-base font-medium">{title}</span>
+    {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
+    {children}
+    {description && <span className="hidden max-w-prose text-sm text-muted-foreground group-focus-visible/main:block">{description}</span>}
+  </>;
   return (
-    <Item asChild size="xs" className={cn("grid gap-x-4 gap-y-1 rounded-none border-0 border-b px-0 py-2", art ? "grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[7rem_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]", className)}>
+    <Item asChild size="xs" className={cn("grid gap-x-4 gap-y-1 rounded-none border-0 border-b border-border px-0 py-2", art ? "grid-cols-[5rem_minmax(0,1fr)] sm:grid-cols-[7rem_minmax(0,1fr)] lg:grid-cols-[7rem_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]", className)}>
       <li data-nav-row {...props}>
         {art && <ItemMedia className="aspect-video w-full self-center overflow-hidden bg-muted *:size-full *:rounded-none [&_img]:object-cover">{art}</ItemMedia>}
-        <Button variant="ghost" data-play aria-label={`${primary.label} ${title}`} disabled={primary.disabled} onClick={primary.onClick}
-          className="group/main h-auto min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
-          <span className="w-full truncate text-base font-medium">{title}</span>
-          {meta && <span className="w-full truncate text-sm text-muted-foreground">{meta}</span>}
-          {children}
-          {description && <span className="hidden max-w-prose text-sm text-muted-foreground group-focus-visible/main:block">{description}</span>}
-        </Button>
-        {actions && <ItemActions className={cn("flex-wrap gap-0.5 sm:justify-end sm:opacity-0 sm:group-hover/item:opacity-100 sm:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 sm:col-start-auto")}>{actions}</ItemActions>}
+        {primary ? <Button variant="ghost" data-play aria-label={`${primary.label} ${title}`} disabled={primary.disabled} onClick={primary.onClick}
+          className="group/main h-auto min-w-0 touch:h-auto flex-col items-start justify-center gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal disabled:opacity-100">
+          {body}
+        </Button> : <div className="flex min-w-0 flex-col items-start justify-center gap-0.5 px-2 py-1.5">{body}</div>}
+        {actions && <ItemActions className={cn("flex-wrap gap-0.5 lg:justify-end lg:opacity-0 lg:group-hover/item:opacity-100 lg:group-focus-within/item:opacity-100 [@media(hover:none)]:opacity-100", art && "col-start-2 lg:col-start-auto")}>{actions}</ItemActions>}
       </li>
     </Item>
   );

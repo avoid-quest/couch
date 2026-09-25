@@ -13,8 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as BrowseRouteImport } from './routes/browse'
 import { Route as FindRouteImport } from './routes/find'
-import { Route as MusicRouteImport } from './routes/music'
-import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SavedRouteImport } from './routes/saved'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -41,6 +39,7 @@ import { Route as SettingsUpdatesRouteImport } from './routes/settings/updates'
 import { Route as SettingsSourcesIndexRouteImport } from './routes/settings/sources/index'
 import { Route as SettingsSourcesFoldersRouteImport } from './routes/settings/sources/folders'
 import { Route as SettingsSourcesJellyfinRouteImport } from './routes/settings/sources/jellyfin'
+import { Route as SettingsSourcesLiveTvRouteImport } from './routes/settings/sources/live-tv'
 import { Route as SettingsSourcesMetadataRouteImport } from './routes/settings/sources/metadata'
 import { Route as SettingsSourcesRadioRouteImport } from './routes/settings/sources/radio'
 import { Route as SettingsSourcesStreamingCommunityRouteImport } from './routes/settings/sources/streaming-community'
@@ -63,16 +62,6 @@ const BrowseRoute = BrowseRouteImport.update({
 const FindRoute = FindRouteImport.update({
   id: '/find',
   path: '/find',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MusicRoute = MusicRouteImport.update({
-  id: '/music',
-  path: '/music',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RadioRoute = RadioRouteImport.update({
-  id: '/radio',
-  path: '/radio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SavedRoute = SavedRouteImport.update({
@@ -205,6 +194,11 @@ const SettingsSourcesJellyfinRoute = SettingsSourcesJellyfinRouteImport.update({
   path: '/jellyfin',
   getParentRoute: () => SettingsSourcesRoute,
 } as any)
+const SettingsSourcesLiveTvRoute = SettingsSourcesLiveTvRouteImport.update({
+  id: '/live-tv',
+  path: '/live-tv',
+  getParentRoute: () => SettingsSourcesRoute,
+} as any)
 const SettingsSourcesMetadataRoute = SettingsSourcesMetadataRouteImport.update({
   id: '/metadata',
   path: '/metadata',
@@ -227,8 +221,6 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
-  '/music': typeof MusicRoute
-  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -254,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -264,8 +257,6 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
-  '/music': typeof MusicRoute
-  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/up-next': typeof UpNextRoute
@@ -289,6 +280,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -300,8 +292,6 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/browse': typeof BrowseRouteWithChildren
   '/find': typeof FindRoute
-  '/music': typeof MusicRoute
-  '/radio': typeof RadioRoute
   '/saved': typeof SavedRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRouteWithChildren
@@ -327,6 +317,7 @@ export interface FileRoutesById {
   '/settings/': typeof SettingsIndexRoute
   '/settings/sources/folders': typeof SettingsSourcesFoldersRoute
   '/settings/sources/jellyfin': typeof SettingsSourcesJellyfinRoute
+  '/settings/sources/live-tv': typeof SettingsSourcesLiveTvRoute
   '/settings/sources/metadata': typeof SettingsSourcesMetadataRoute
   '/settings/sources/radio': typeof SettingsSourcesRadioRoute
   '/settings/sources/streaming-community': typeof SettingsSourcesStreamingCommunityRoute
@@ -339,8 +330,6 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
-    | '/music'
-    | '/radio'
     | '/saved'
     | '/search'
     | '/settings'
@@ -366,6 +355,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -376,8 +366,6 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
-    | '/music'
-    | '/radio'
     | '/saved'
     | '/search'
     | '/up-next'
@@ -401,6 +389,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -411,8 +400,6 @@ export interface FileRouteTypes {
     | '/$'
     | '/browse'
     | '/find'
-    | '/music'
-    | '/radio'
     | '/saved'
     | '/search'
     | '/settings'
@@ -438,6 +425,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/settings/sources/folders'
     | '/settings/sources/jellyfin'
+    | '/settings/sources/live-tv'
     | '/settings/sources/metadata'
     | '/settings/sources/radio'
     | '/settings/sources/streaming-community'
@@ -449,8 +437,6 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   BrowseRoute: typeof BrowseRouteWithChildren
   FindRoute: typeof FindRoute
-  MusicRoute: typeof MusicRoute
-  RadioRoute: typeof RadioRoute
   SavedRoute: typeof SavedRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -485,20 +471,6 @@ declare module '@tanstack/react-router' {
       path: '/find'
       fullPath: '/find'
       preLoaderRoute: typeof FindRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/music': {
-      id: '/music'
-      path: '/music'
-      fullPath: '/music'
-      preLoaderRoute: typeof MusicRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/radio': {
-      id: '/radio'
-      path: '/radio'
-      fullPath: '/radio'
-      preLoaderRoute: typeof RadioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saved': {
@@ -683,6 +655,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsSourcesJellyfinRouteImport
       parentRoute: typeof SettingsSourcesRoute
     }
+    '/settings/sources/live-tv': {
+      id: '/settings/sources/live-tv'
+      path: '/live-tv'
+      fullPath: '/settings/sources/live-tv'
+      preLoaderRoute: typeof SettingsSourcesLiveTvRouteImport
+      parentRoute: typeof SettingsSourcesRoute
+    }
     '/settings/sources/metadata': {
       id: '/settings/sources/metadata'
       path: '/metadata'
@@ -731,6 +710,7 @@ const BrowseRouteWithChildren =
 interface SettingsSourcesRouteChildren {
   SettingsSourcesFoldersRoute: typeof SettingsSourcesFoldersRoute
   SettingsSourcesJellyfinRoute: typeof SettingsSourcesJellyfinRoute
+  SettingsSourcesLiveTvRoute: typeof SettingsSourcesLiveTvRoute
   SettingsSourcesMetadataRoute: typeof SettingsSourcesMetadataRoute
   SettingsSourcesRadioRoute: typeof SettingsSourcesRadioRoute
   SettingsSourcesStreamingCommunityRoute: typeof SettingsSourcesStreamingCommunityRoute
@@ -740,6 +720,7 @@ interface SettingsSourcesRouteChildren {
 const SettingsSourcesRouteChildren: SettingsSourcesRouteChildren = {
   SettingsSourcesFoldersRoute: SettingsSourcesFoldersRoute,
   SettingsSourcesJellyfinRoute: SettingsSourcesJellyfinRoute,
+  SettingsSourcesLiveTvRoute: SettingsSourcesLiveTvRoute,
   SettingsSourcesMetadataRoute: SettingsSourcesMetadataRoute,
   SettingsSourcesRadioRoute: SettingsSourcesRadioRoute,
   SettingsSourcesStreamingCommunityRoute:
@@ -792,8 +773,6 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   BrowseRoute: BrowseRouteWithChildren,
   FindRoute: FindRoute,
-  MusicRoute: MusicRoute,
-  RadioRoute: RadioRoute,
   SavedRoute: SavedRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRouteWithChildren,

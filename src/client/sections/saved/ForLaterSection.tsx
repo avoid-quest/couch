@@ -1,20 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef } from "react";
 import { toast } from "sonner";
-import { Play, Plus, X } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-import { Item } from "@/components/ui/item";
 import { AuthArtwork } from "@/components/AuthArtwork";
 import { MediaArtwork } from "@/components/MediaArtwork";
 import { DurationBar } from "@/components/DurationBar";
-import { applyIdOrder, reorderedIds, SortableRow, useDndSensors, type RowDrag } from "@/lib/dnd";
+import { MediaList, MediaRow } from "@/components/MediaRow";
+import { applyIdOrder, reorderedIds, SortableRow, useDndSensors } from "@/lib/dnd";
+import { useOptionalSessionGate } from "@/session/session-context";
 import type { ForLaterItem } from "../../../shared/for-later";
 import { forLaterQuery } from "@/api/for-later";
 import { apiSend } from "@/api/client";
+import { SavedEmpty, SavedError, SavedStatus, useRemovalFocus } from "./SavedStatus";
+import { playNotice, savedNotice } from "@/copy";
 
 // The gesture for one drop, as the ordered ids the server persists.
 export function forLaterOrder(items: ForLaterItem[], activeId: string, overId: string): string[] | null {
@@ -31,102 +31,93 @@ function sourceLabel(item: ForLaterItem) {
   } catch { return ""; }
 }
 
-export function ForLaterSection({ origin, token, connected, canPlay, inspect = false, onFind, showHeading = true, mediaOnly = false }: {
-  origin: string; token: string; connected: boolean; canPlay: boolean; inspect?: boolean; onFind?: () => void; showHeading?: boolean; mediaOnly?: boolean;
+type Mode = "play" | "append" | "remove";
+
+export function ForLaterSection({ origin, token, connected, canPlay, onFind, showHeading = true, mediaOnly = false }: {
+  origin: string; token: string; connected: boolean; canPlay: boolean;
+  /** @deprecated Rows always play; the details dialog is gone. */
+  inspect?: boolean;
+  /** Shown as the empty state's next step. */
+  onFind?: () => void;
+  /** A visible section title (Find). Saved titles the tab with its PageHeader. */
+  showHeading?: boolean;
+  /** Only video and music, for Find's home. */
+  mediaOnly?: boolean;
 }) {
   // The session invalidates ["for-later"] whenever any remote changes the list.
+  const session = useOptionalSessionGate();
   const queryClient = useQueryClient();
   const credentials = { origin, token };
+  const refresh = () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
   const { data, isPending, error: loadError, refetch } = useQuery({ ...forLaterQuery(credentials), enabled: connected });
   const reorder = useMutation({
     mutationFn: (order: string[]) => apiSend(credentials, "/api/for-later/reorder", { order }, "POST", 10_000),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey }),
+    onSettled: refresh,
   });
   const action = useMutation({
-    mutationFn: ({ path, body, method = "POST", timeout }: { path: string; body?: unknown; method?: string; timeout: number }) => apiSend<{ notice?: string; undoToken?: string }>(credentials, path, body, method, timeout),
+    mutationFn: ({ item, mode }: { item: ForLaterItem; mode: Mode }) => {
+      const path = `/api/for-later/${encodeURIComponent(item.id)}`;
+      return apiSend<{ notice?: string; undoToken?: string } | undefined>(credentials, mode === "remove" ? path : `${path}/load`, mode === "remove" ? undefined : { mode }, mode === "remove" ? "DELETE" : "POST", 30_000);
+    },
+    onSuccess: async (body, { item, mode }) => {
+      if (mode !== "remove") {
+        if (body?.notice) toast(body.notice);
+        else if (mode === "append") toast(playNotice(item.title, "queue"));
+        return;
+      }
+      const text = savedNotice(item.title, false);
+      const undoToken = body?.undoToken;
+      if (undoToken && session) session.offerUndo(text, async () => {
+        await apiSend(credentials, "/api/for-later/restore", { token: undoToken }, "POST", 10_000);
+        await refresh();
+      });
+      else toast(text);
+      await refresh();
+    },
   });
   // A pending reorder renders its order so the drop shows immediately.
-  const orderIds = reorder.isPending ? reorder.variables : undefined;
-  const items = useMemo(() => applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], orderIds, item => item.id), [data, connected, orderIds, mediaOnly]);
+  const items = applyIdOrder(connected ? (data?.items ?? []).filter(item => !mediaOnly || item.kind !== "radio" && !item.live) : [], reorder.isPending ? reorder.variables : undefined, item => item.id);
   const loading = connected && isPending;
-  const error = connected && loadError ? loadError instanceof Error ? loadError.message : "Could not load For later." : "";
-  const [detail, setDetail] = useState<ForLaterItem | null>(null);
-  const trigger = useRef<HTMLButtonElement | null>(null);
   const pending = action.isPending;
-  const [actionError, setActionError] = useState("");
-  const [notice, setNotice] = useState("");
-  const undoToast = useRef<string | number | null>(null);
+  const section = useRef<HTMLElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const sensors = useDndSensors();
-  useEffect(() => () => { if (undoToast.current != null) toast.dismiss(undoToast.current); }, []);
+  const removing = useRemovalFocus(items.map(item => item.id), !pending, list, () => section.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? heading.current);
+  const act = (item: ForLaterItem, mode: Mode, index: number) => {
+    if (!connected || pending) return;
+    if (mode === "remove") removing(item.id, index);
+    action.mutate({ item, mode });
+  };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over) return;
-    const order = forLaterOrder(items, String(active.id), String(over.id));
+    const order = over && forLaterOrder(items, String(active.id), String(over.id));
     if (order) reorder.mutate(order);
   };
-  const update = async (item: ForLaterItem, mode: "play" | "append" | "remove", index: number) => {
-    if (!connected || pending) return;
-    setActionError(""); setNotice("");
-    try {
-      const body = await action.mutateAsync(mode === "remove" ? { path: `/api/for-later/${encodeURIComponent(item.id)}`, method: "DELETE", timeout: 30_000 } : { path: `/api/for-later/${encodeURIComponent(item.id)}/load`, body: { mode }, timeout: 30_000 });
-      setNotice(body.notice ?? (mode === "remove" ? `Removed ${item.title} from For later.` : mode === "play" ? `Starting ${item.title} on the TV.` : `Added ${item.title} to Up next.`));
-      if (mode === "remove") {
-        const undoToken = body.undoToken;
-        if (undoToken) {
-          if (undoToast.current != null) toast.dismiss(undoToast.current);
-          undoToast.current = toast(`Removed ${item.title}.`, { duration: 6_000, action: { label: "Undo", onClick: () => void restore(undoToken, item.title) } });
-          setNotice("");
-        }
-        setDetail(null);
-        await queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
-        requestAnimationFrame(() => {
-          const rows = list.current?.children;
-          (rows?.[Math.min(index, rows.length - 1)]?.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? heading.current)?.focus();
-        });
-      }
-    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not use this saved item."); }
-  };
-  const restore = async (undoToken: string, title: string) => {
-    if (!connected || pending) return;
-    setActionError("");
-    try {
-      await action.mutateAsync({ path: "/api/for-later/restore", body: { token: undoToken }, timeout: 10_000 });
-      setNotice(`Restored ${title} to For later.`);
-      if (undoToast.current != null) { toast.dismiss(undoToast.current); undoToast.current = null; }
-      await queryClient.invalidateQueries({ queryKey: forLaterQuery(credentials).queryKey });
-    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "Could not restore this item."); }
-  };
-  const actions = (item: ForLaterItem, index: number) => <div className={`${showHeading ? "" : "saved-media-actions "}flex flex-wrap gap-2`}>
-    <Button className="min-h-11" disabled={!connected || !canPlay || pending} aria-label={`Play ${item.title}`} onClick={() => void update(item, "play", index)}><Play aria-hidden="true" />Play</Button>
-    <Button className="min-h-11" variant="outline" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => void update(item, "append", index)}><Plus aria-hidden="true" />Queue</Button>
-    <Button className="min-h-11" variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title} from For later`} onClick={() => void update(item, "remove", index)}><X aria-hidden="true" />Remove</Button>
-  </div>;
-  return <section className="space-y-4" aria-labelledby="for-later-title">
-    <h2 ref={heading} tabIndex={-1} id="for-later-title" className={showHeading ? "text-xl font-semibold" : "sr-only"}>For later</h2>
-    {!connected && <p role="status">Reconnect to see your saved items.</p>}
-    {loading && <p className="flex items-center gap-2" role="status"><Spinner className="size-3.5" />Loading saved items…</p>}
-    {error && <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" disabled={!connected || loading || pending} onClick={() => void refetch()}>Refresh For later</Button></div>}
-    {(actionError || reorder.error) && <p role="alert">{actionError || reorder.error?.message || "Could not save the new order."}</p>}
-    {notice && <p role="status">{notice}</p>}
-    {connected && !loading && !error && !items.length && <div className="space-y-2"><p>{showHeading ? "No saved titles." : "Nothing saved. Use Save on any result."}</p>{onFind && <Button variant="outline" onClick={onFind}>{showHeading ? "Search" : "Find something"}</Button>}</div>}
+  const failure = action.error ? action.error.message || "Couldn't use this item." : reorder.error ? reorder.error.message || "Couldn't save the order." : "";
+
+  return <section ref={section} aria-labelledby="for-later-title">
+    <h2 ref={heading} tabIndex={-1} id="for-later-title" className={showHeading ? "mb-2 text-base font-medium outline-none" : "sr-only"}>For later</h2>
+    <SavedStatus connected={connected} loading={loading} />
+    {connected && loadError && <SavedError message={loadError.message || "Couldn't load For later."} onRetry={() => void refetch()} />}
+    {connected && failure && <SavedError message={failure} />}
+    {connected && !loading && !loadError && !items.length && <SavedEmpty action={onFind && <Button variant="outline" onClick={onFind}>Find</Button>}>Nothing saved yet. Use Save on anything in Find.</SavedEmpty>}
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <ul ref={list} className={`list-none p-0 ${showHeading ? "space-y-2" : "for-later-list"}`} aria-label="Saved for later" aria-busy={loading}><SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
-        {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`} editing>{(drag: RowDrag) => <Item asChild><li data-nav-row ref={drag.setNodeRef} style={drag.style} className={`${showHeading ? "" : "for-later-row "}flex flex-wrap items-center gap-3 border-b py-3`}>
-          {inspect ? <>
-            {item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="for-later-art h-[54px] w-[46px] rounded-md" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} className="for-later-art h-[54px] w-[46px] rounded-md" />}
-            <Button variant="ghost" className="for-later-main h-auto min-h-11 min-w-0 flex-1 flex-col items-start justify-start gap-1.5 p-0 text-left whitespace-normal" aria-label={`Details for ${item.title}`} onClick={event => { trigger.current = event.currentTarget; setDetail(item); }}>
-              <span className="for-later-title-line"><strong className="text-sm font-semibold [overflow-wrap:anywhere]">{item.title}</strong>{!showHeading && sourceLabel(item) && <small>{sourceLabel(item)}</small>}</span>
-              {!showHeading && (item.duration != null || item.live) ? <DurationBar duration={item.duration} live={item.live} /> : item.live && <small className="text-[11px] text-muted-foreground">Live</small>}
-            </Button>
-            {actions(item, index)}
-          </> : <><strong className="min-w-0 flex-1 break-words">{item.title}</strong>{actions(item, index)}</>}
-          <span className={showHeading ? "" : "for-later-drag"}>{drag.handle}</span>
-        </li></Item>}</SortableRow>)}
-      </SortableContext></ul>
+      {!!items.length && <MediaList ref={list} aria-label="For later">
+        <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
+          {items.map((item, index) => <SortableRow key={item.id} id={item.id} label={`Reorder ${item.title}`}>{drag => <MediaRow ref={drag.setNodeRef} style={drag.style}
+            art={item.artworkId ? <AuthArtwork origin={origin} token={token} id={item.artworkId} video={item.kind !== "radio"} className="size-full rounded-none" /> : <MediaArtwork key={item.thumbnail || item.id} thumbnail={item.thumbnail} title={item.title} />}
+            title={item.title}
+            meta={sourceLabel(item)}
+            primary={{ label: "Play", onClick: () => act(item, "play", index), disabled: !connected || !canPlay || pending }}
+            actions={<>
+              <Button variant="ghost" disabled={!connected || pending} aria-label={`Queue ${item.title}`} onClick={() => act(item, "append", index)}>Queue</Button>
+              <Button variant="ghost" disabled={!connected || pending} aria-label={`Remove ${item.title}`} onClick={() => act(item, "remove", index)}>Remove</Button>
+              {drag.handle}
+            </>}>
+            {(item.duration != null || item.live) && <DurationBar duration={item.duration} live={item.live} />}
+          </MediaRow>}</SortableRow>)}
+        </SortableContext>
+      </MediaList>}
     </DndContext>
-    {inspect && <Dialog open={detail !== null} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent onCloseAutoFocus={event => { event.preventDefault(); if (trigger.current?.isConnected) trigger.current.focus(); }}>
-      {detail && <>{detail.artworkId ? <AuthArtwork origin={origin} token={token} id={detail.artworkId} video={detail.kind !== "radio"} className="aspect-[1.9] w-full" /> : <MediaArtwork key={detail.thumbnail || detail.id} thumbnail={detail.thumbnail} title={detail.title} className="aspect-[1.9] w-full" />}<DialogHeader><DialogTitle>{detail.title}</DialogTitle><DialogDescription>Saved for later</DialogDescription></DialogHeader>{actions(detail, items.findIndex(item => item.id === detail.id))}{notice && <p role="status">{notice}</p>}{actionError && <p role="alert">{actionError}</p>}</>}
-    </DialogContent></Dialog>}
   </section>;
 }

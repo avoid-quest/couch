@@ -1,66 +1,21 @@
-import { queryOptions, type QueryClient } from "@tanstack/react-query";
-import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioProgrammeDetails, type RadioStation } from "../../shared/radio";
+import { queryOptions } from "@tanstack/react-query";
+import { avoidRadioPlaylistId, type AvoidRadioCatalog, type RadioPlaylist, type RadioPlaylistSummary, type RadioStation } from "../../shared/radio";
 import { apiFetch, type ApiCredentials } from "./client";
 
-export const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
+const radioRequest = (credentials: ApiCredentials, path: string, init: RequestInit = {}) =>
   apiFetch(credentials, `/api/radio/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers } });
 
-export const radioCatalogQuery = (credentials: ApiCredentials, refresh = 0) =>
-  queryOptions({
-    queryKey: ["radio", "avoid", refresh] as const,
-    queryFn: ({ signal }) => radioRequest(credentials, `avoid${refresh ? "?refresh=true" : ""}`, { signal }).then(r => r.json() as Promise<AvoidRadioCatalog>),
-    staleTime: 60_000,
-  });
-
-// One response shape per cache key, even when a caller wants only the list.
 export const radioFavoritesListQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["radio", "favorites"],
     queryFn: ({ signal }) => radioRequest(credentials, "favorites", { signal }).then(r => r.json() as Promise<{ favorites: RadioStation[] }>),
   });
 
-export const radioProgrammesQuery = (credentials: ApiCredentials) =>
-  queryOptions({
-    queryKey: ["radio", "avoid", "programmes"],
-    queryFn: ({ signal }) => radioRequest(credentials, "avoid/programmes", { signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]) }).then(r => r.json() as Promise<{ programmes: Record<string, RadioProgrammeDetails> }>).then(({ programmes }) => programmes),
-    staleTime: 30_000,
-  });
-
-export const cancelRadioReads = (client: QueryClient, credentials: ApiCredentials, refresh = 0) =>
-  Promise.all([radioCatalogQuery(credentials, refresh), radioProgrammesQuery(credentials)].map(query => client.cancelQueries({ queryKey: query.queryKey })));
-
-// Administrators see each playlist's source URL.
 export const radioSourcesQuery = (credentials: ApiCredentials) =>
   queryOptions({
     queryKey: ["radio", "sources"],
     queryFn: ({ signal }) => radioRequest(credentials, "sources", { signal }).then(response => response.json() as Promise<{ sources: RadioPlaylist[] }>),
   });
-
-export const radioPlaylistsQuery = (credentials: ApiCredentials) =>
-  queryOptions({
-    queryKey: ["radio", "playlists"],
-    queryFn: ({ signal }) => radioRequest(credentials, "playlists", { signal }).then(response => response.json() as Promise<{ playlists: RadioPlaylistSummary[] }>),
-  });
-
-export const radioPlaylistStationsQuery = (credentials: ApiCredentials, playlistId: string, query: string) =>
-  queryOptions({
-    queryKey: ["radio", "playlists", playlistId, query] as const,
-    queryFn: ({ signal }) => radioRequest(credentials, `playlists/${encodeURIComponent(playlistId)}/stations?${new URLSearchParams({ q: query })}`, { signal }).then(response => response.json() as Promise<{ stations: RadioStation[] }>),
-  });
-
-export const searchRadioStations = async (credentials: ApiCredentials, query: string, country: string, signal: AbortSignal) => {
-  const params = new URLSearchParams({ q: query.trim(), countrycode: country.trim() });
-  const response = await radioRequest(credentials, `stations?${params}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
-  return (await response.json() as { stations: RadioStation[] }).stations;
-};
-
-export const saveRadioFavorite = async (credentials: ApiCredentials, station: RadioStation, saved: boolean, signal: AbortSignal) => {
-  await radioRequest(credentials, saved ? `favorites/${station.id}` : "favorites", {
-    method: saved ? "DELETE" : "POST",
-    body: saved ? undefined : JSON.stringify({ station }),
-    signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
-  });
-};
 
 export const radioSearchQuery = (credentials: ApiCredentials, source: "avoid radio" | "Radio playlists" | "Radio directory", query: string, refresh = false) =>
   queryOptions({

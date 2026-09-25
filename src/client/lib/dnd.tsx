@@ -1,4 +1,4 @@
-import { KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors, type DraggableAttributes } from "@dnd-kit/core";
+import { KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { GripVertical } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
@@ -38,14 +38,12 @@ export type RowDrag = {
 };
 
 // Render-prop wrapper so each surface keeps its own row markup and only adds
-// the ref, transform style and keyboard-reachable drag handle. The handle only
-// exists in edit mode, so it never reaches keyboard or remote navigation
-// outside it.
-export function SortableRow({ id, label, className, editing = false, children }: { id: string; label: string; className?: string; editing?: boolean; children: (drag: RowDrag) => ReactNode }) {
+// the ref, transform style and a keyboard-reachable drag handle.
+export function SortableRow({ id, label, children }: { id: string; label: string; children: (drag: RowDrag) => ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   return <>{children({
     setNodeRef,
     style: { transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined, transition, zIndex: isDragging ? 20 : undefined },
-    handle: editing ? <Button variant="ghost" size="icon" className={`min-h-11 min-w-11 shrink-0 touch-none text-muted-foreground hover:text-foreground ${className ?? ""}`} aria-label={label} {...attributes} {...listeners}><GripVertical aria-hidden="true" /></Button> : null,
+    handle: <Button variant="ghost" size="icon" className="cursor-grab touch-none text-muted-foreground hover:text-foreground" aria-label={label} {...attributes} {...listeners}><GripVertical aria-hidden="true" /></Button>,
   })}</>;
 }

@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { HistoryItem, LibraryItem, LibrarySource, MusicAlbum, MusicAlbums, MusicArtist, MusicArtists } from "../../shared/library";
+import type { HistoryItem, LibraryItem, LibrarySource } from "../../shared/library";
 import type { FolderBrowse, ManagedFolder } from "../../shared/folders";
 import type { MetadataView } from "../../shared/metadata";
 import { apiFetch, apiJson, apiSend, type ApiCredentials } from "./client";
@@ -62,22 +62,3 @@ export const removeHistory = (credentials: ApiCredentials, mediaId: string) =>
 export const removeFromContinue = (credentials: ApiCredentials, mediaId: string) => updateProgress(credentials, mediaId, { clearResume: true });
 export const undoProgressAction = (credentials: ApiCredentials, undoToken: string) =>
   apiSend(credentials, "/api/progress/undo", { token: undoToken });
-
-export type MusicBrowse =
-  | { kind: "artists" | "albums"; artist?: MusicArtist; q: string; offset: number }
-  | { kind: "album"; album: MusicAlbum; q: string; offset: number };
-export type MusicBrowseResult = MusicArtists | MusicAlbums | AlbumTracks;
-export type AlbumTracks = { album: MusicAlbum; items: LibraryItem[] };
-export const musicPageSize = 24;
-
-export const musicBrowseQuery = (credentials: ApiCredentials, browse: MusicBrowse) => {
-  const params = new URLSearchParams({ q: browse.q, offset: String(browse.offset), limit: String(musicPageSize) });
-  if (browse.kind === "albums" && browse.artist) params.set("artistId", browse.artist.id);
-  const path = browse.kind === "album"
-    ? `/api/library/music/albums/${encodeURIComponent(browse.album.id)}`
-    : `/api/library/music/${browse.kind}?${params}`;
-  return queryOptions({
-    queryKey: ["library", "music", browse] as const,
-    queryFn: ({ signal }) => apiJson<MusicBrowseResult>(credentials, path, { signal }),
-  });
-};

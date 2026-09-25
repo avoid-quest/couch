@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { Root } from "react-dom/client";
 import type { QueryClient } from "@tanstack/react-query";
 import { fireEvent, screen } from "../../testing";
+import { SessionGateContext } from "@/session/gate-context";
 
 let root: Root, window: Window, client: QueryClient, fetchSpy: ReturnType<typeof spyOn>, forLaterOrder: typeof import("./ForLaterSection").forLaterOrder;
 const originals = new Map<string, PropertyDescriptor | undefined>();
@@ -14,6 +15,9 @@ let items: Array<{ id: string; title: string; kind?: "radio"; live?: boolean }> 
 const flush = () => act(async () => { await Bun.sleep(15); });
 const button = (label: string) => screen.getByRole("button", { name: label });
 const click = async (label: string) => { await act(async () => fireEvent.click(button(label))); await flush(); };
+const toasts = () => toast.getToasts().map(item => "title" in item ? item.title : "");
+// The session's Undo toast, as SessionGate offers it.
+const session = { state: null, offerUndo: (text: string, undo: () => Promise<void>, duration = 6_000) => toast(text, { duration, action: { label: "Undo", onClick: () => void undo() } }) };
 const undo = async () => {
   const latest = toast.getToasts().at(-1);
   const action = latest && "action" in latest ? latest.action : undefined;
@@ -22,12 +26,12 @@ const undo = async () => {
   await act(async () => { if (action && typeof action === "object" && "onClick" in action) action.onClick({} as React.MouseEvent<HTMLButtonElement>); });
   await flush();
 };
-async function render(connected = true, canPlay = true, inspect = false, mediaOnly = false) {
+async function render(connected = true, canPlay = true, onFind?: () => void, mediaOnly = false) {
   const { ForLaterSection, forLaterOrder: order } = await import("./ForLaterSection");
   forLaterOrder = order;
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await act(async () => root.render(<QueryClientProvider client={client}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} inspect={inspect} mediaOnly={mediaOnly} /></QueryClientProvider>));
+  await act(async () => root.render(<QueryClientProvider client={client}><SessionGateContext.Provider value={session as never}><ForLaterSection origin="http://localhost" token="paired" connected={connected} canPlay={canPlay} onFind={onFind} mediaOnly={mediaOnly} /></SessionGateContext.Provider></QueryClientProvider>));
   await flush();
 }
 beforeEach(async () => {
@@ -67,12 +71,13 @@ test("saved shared items display without queue writes; explicit actions retain t
   expect(firstRow?.contains(button("Queue Evening song"))).toBe(false);
   await click("Queue Evening movie"); await click("Play Evening movie");
   expect(calls.slice(1).map(call => call.body)).toEqual([{ mode: "append" }, { mode: "play" }]);
+  expect(toasts()).toEqual(["Queued Evening movie."]);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("Find home limits For later to video and music", async () => {
   items.push({ id: "station", title: "Evening station", kind: "radio", live: true }, { id: "live", title: "Live stream", live: true });
-  await render(true, true, false, true);
+  await render(true, true, undefined, true);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
   expect(document.body.textContent).not.toContain("Evening station");
   expect(document.body.textContent).not.toContain("Live stream");
@@ -82,19 +87,20 @@ test("failed source keeps its saved item removable and removal returns focus to 
   await render(); missing = true; await click("Play Evening movie");
   expect(screen.getByRole("alert").textContent).toContain("Source unavailable");
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
-  await click("Remove Evening movie from For later");
+  await click("Remove Evening movie");
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
   expect(document.activeElement).toBe(button("Play Evening song"));
-  await click("Remove Evening song from For later");
+  await click("Remove Evening song");
   expect(document.activeElement?.id).toBe("for-later-title");
-  expect(document.body.textContent).toContain("No saved titles");
+  expect(document.body.textContent).toContain("Nothing saved yet. Use Save on anything in Find.");
 });
 
 test("removed For later item offers Undo and restores the original row", async () => {
   undoResponses = true;
   await render();
-  await click("Remove Evening movie from For later");
+  await click("Remove Evening movie");
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
+  expect(toasts().at(-1)).toBe("Removed Evening movie from Saved.");
   await undo();
   expect(calls.at(-2)).toEqual({ path: "/api/for-later/restore", method: "POST", body: { token: "restore-token" } });
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
@@ -104,9 +110,9 @@ test("unavailable native playback still allows append and remove; disconnected c
   await render(true, false);
   expect((button("Play Evening movie") as HTMLButtonElement).disabled).toBe(true);
   expect(button("Queue Evening movie").disabled).toBe(false);
-  expect(button("Remove Evening movie from For later").disabled).toBe(false);
+  expect(button("Remove Evening movie").disabled).toBe(false);
   const count = calls.length; await render(false);
-  expect(document.body.textContent).toContain("Reconnect to see your saved items");
+  expect(document.body.textContent).toContain("Offline. Reconnecting to Couch…");
   expect(screen.queryAllByRole("listitem")).toHaveLength(0); expect(calls).toHaveLength(count);
 });
 
@@ -121,16 +127,15 @@ test("saving a library result posts only its catalog identity and never a queue 
   const { SaveForLater } = await import("@/components/SaveForLater");
   const { QueryClientProvider } = await import("@tanstack/react-query");
   await act(async () => root.render(<QueryClientProvider client={client}><SaveForLater origin="http://localhost" token="paired" connected reference={{ kind: "library", id: "movie" }} title="Evening movie" /></QueryClientProvider>));
-  await click("Save Evening movie for later");
+  await click("Save Evening movie");
   expect(calls).toEqual([{ path: "/api/for-later", method: "POST", body: { reference: { kind: "library", id: "movie" } } }]);
-  expect(document.body.textContent).toContain("Saved for everyone on this TV");
+  expect(toasts()).toEqual(["Saved Evening movie."]);
 });
 
 test("a successful append whose Play was canceled reports that outcome instead of a source error or retry", async () => {
   await render(); canceled = true;
   await click("Play Evening movie");
-  expect(document.body.textContent).toContain("Added to Up next. Playback was canceled by a newer control.");
-  expect(document.body.textContent).not.toContain("Starting Evening movie");
+  expect(toasts()).toEqual(["Added to Up next. Playback was canceled by a newer control."]);
   expect(screen.queryByRole("alert")).toBeNull();
   expect(calls.filter(call => call.method === "POST")).toHaveLength(1);
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
@@ -144,14 +149,12 @@ test("reorder handles are always available and a drop computes the persisted ord
   expect(forLaterOrder(items, "elsewhere", "saved")).toBeNull();
 });
 
-test("Saved opens details without playing and also exposes direct playback actions", async () => {
-  await render(true, true, true);
-  expect(button("Play Evening movie")).toBeDefined();
-  await click("Details for Evening movie");
-  expect(calls.every(call => call.method === "GET")).toBe(true);
-  expect(screen.getByRole("dialog").textContent).toContain("Saved for later");
-  await click("Play Evening movie");
-  expect(calls.at(-1)?.body).toEqual({ mode: "play" });
-  await click("Close");
-  expect(document.activeElement).toBe(button("Details for Evening movie"));
+test("an empty For later leads to Find", async () => {
+  items = [];
+  let found = 0;
+  await render(true, true, () => found++);
+  expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  expect(document.body.textContent).toContain("Nothing saved yet. Use Save on anything in Find.");
+  await click("Find");
+  expect(found).toBe(1);
 });
